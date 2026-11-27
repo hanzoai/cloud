@@ -1,0 +1,180 @@
+package team
+
+// The entitle gate's contract, end to end over the real selectWorkspace route:
+// definitive "no entitlement" → 402 + upgradeUrl; infra errors (commerce or
+// plans down) → admitted (the gate can never brick login mid-rollout); guest
+// logins beyond the plan's team.guests cap → 402; guests within it → admitted.
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"net/http"
+	"sync"
+	"testing"
+
+	"github.com/hanzoai/cloud/internal/planetest"
+
+	luxlog "github.com/luxfi/log"
+	"github.com/zap-proto/zip"
+
+	"github.com/hanzoai/cloud/apps/team/token"
+	"github.com/hanzoai/cloud/internal/sqltest"
+	"github.com/hanzoai/cloud/sdk"
+)
+
+type fakeCommerce struct {
+	ent *cloud.LicenseEntitlement
+	err error
+
+	mu     sync.Mutex
+	checks int // CheckEntitlement call count — lets a test prove the gate actually ran
+}
+
+func (f *fakeCommerce) CheckEntitlement(context.Context, string, string) (*cloud.LicenseEntitlement, error) {
+	f.mu.Lock()
+	f.checks++
+	f.mu.Unlock()
+	return f.ent, f.err
+}
+
+func (f *fakeCommerce) checkCount() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.checks
+}
+
+// gateApp registers the account API directly (no Mount) with a fake commerce +
+// plan client, an isolated store, and no route guard — the gate under test is
+// entitle itself.
+func gateApp(t *testing.T, commerce cloud.CommerceClient, planEnt func(context.Context, string) (map[string]any, error)) (*zip.App, *accountStore) {
+	t.Helper()
+	planetest.ServeIdentity(t)
+	store, err := openAccountStore(t.TempDir())
+	if err != nil {
+		t.Fatalf("openAccountStore: %v", err)
+	}
+	t.Cleanup(func() { _ = store.Close() })
+	g := &api{
+		accounts: store,
+		ident:    testIdent(store),
+		cfg:      config{serverSecret: testSecret},
+		log:      luxlog.New("test"),
+		commerce: commerce,
+		planEnt:  planEnt,
+	}
+	app := zip.New(zip.Config{Logger: luxlog.New("test")})
+	// register builds its own /v1/team group from the app (so cmd/zipdoc can
+	// resolve the typed providers op), exactly as Mount hands it the app.
+	g.register(app, func(h zip.Handler) zip.Handler { return h })
+	return app, store
+}
+
+// selectWS drives the selectWorkspace RPC as `acct` in `org` for `slug`.
+func selectWS(t *testing.T, app *zip.App, org, acct, slug string) (int, []byte) {
+	t.Helper()
+	sess, err := token.Generate(acct, "", map[string]any{"org": org}, expUnix(sessionTokenTTL), testSecret)
+	if err != nil {
+		t.Fatalf("mint session: %v", err)
+	}
+	// The tenant assertion the gateway makes on every admitted request. A plane
+	// call issued while serving one carries THAT assertion, so a harness that sent
+	// only the bearer would reach the peer with no tenant.
+	return call(t, app, http.MethodPost, "/v1/team/account",
+		map[string]string{"Authorization": "Bearer " + sess, "X-Org-Id": org, "X-User-Id": acct},
+		map[string]any{"method": "selectWorkspace", "params": map[string]any{"workspaceUrl": slug}})
+}
+
+const gateOrg = "acme"
+const gateAcct = "550e8400-e29b-41d4-a716-446655440000"
+
+// TestEntitleUnentitledAdmitsObserve: a definitive "no entitlement" ADMITS in
+// observe mode — the blocking 402 form of this gate broke every login live on
+// 2026-07-20 (no org had a subscription row and no self-serve checkout exists
+// to escape the 402). Enforcement returns with the card-on-file subscribe path;
+// when it does, this test flips back to asserting the 402 + upgradeUrl body.
+func TestEntitleUnentitledAdmitsObserve(t *testing.T) {
+	sqltest.Engines(t, func(t *testing.T, _ sqltest.Open) {
+		app, store := gateApp(t, &fakeCommerce{ent: &cloud.LicenseEntitlement{ProductID: productTeam, Active: false}}, nil)
+		ws, _ := store.EnsureSpace(context.Background(), gateOrg, gateAcct, "Ada")
+		code, body := selectWS(t, app, gateOrg, gateAcct, ws.Slug)
+		if code != http.StatusOK {
+			t.Fatalf("status = %d, want 200 — unentitled must admit in observe mode (%s)", code, body)
+		}
+		var out struct {
+			Result *SpaceLoginInfo `json:"result"`
+		}
+		if json.Unmarshal(body, &out) != nil || out.Result == nil || out.Result.Space != ws.UUID {
+			t.Fatalf("observe mode must return a space login: %s", body)
+		}
+	})
+}
+
+// TestEntitleInfraErrorAdmits is the deploy-coupling invariant: an ERRORING
+// commerce (not a definitive no) admits — the gate cannot brick login.
+func TestEntitleInfraErrorAdmits(t *testing.T) {
+	sqltest.Engines(t, func(t *testing.T, _ sqltest.Open) {
+		app, store := gateApp(t, &fakeCommerce{err: fmt.Errorf("commerce not co-resident")}, nil)
+		ws, _ := store.EnsureSpace(context.Background(), gateOrg, gateAcct, "Ada")
+		code, body := selectWS(t, app, gateOrg, gateAcct, ws.Slug)
+		if code != http.StatusOK {
+			t.Fatalf("status = %d, want 200 (%s)", code, body)
+		}
+		var out struct {
+			Result *SpaceLoginInfo `json:"result"`
+		}
+		if json.Unmarshal(body, &out) != nil || out.Result == nil || out.Result.Space != ws.UUID {
+			t.Fatalf("infra error must admit: %s", body)
+		}
+	})
+}
+
+// TestEntitleGuestCap: on an entitled plan carrying team.guests=3, the first 3
+// guests (join order) are admitted and the 4th is 402; a plans-service ERROR
+// admits (infra, not a definitive no); the owner is never capped.
+func TestEntitleGuestCap(t *testing.T) {
+	sqltest.Engines(t, func(t *testing.T, _ sqltest.Open) {
+		entitled := &fakeCommerce{ent: &cloud.LicenseEntitlement{ProductID: productTeam, Active: true, Plan: "pro"}}
+		planEnt := func(_ context.Context, id string) (map[string]any, error) {
+			if id != "pro" {
+				return nil, fmt.Errorf("unknown plan %q", id)
+			}
+			return map[string]any{guestCapKey: float64(3)}, nil // JSON numbers are float64
+		}
+		app, store := gateApp(t, entitled, planEnt)
+		ctx := context.Background()
+		ws, _ := store.EnsureSpace(ctx, gateOrg, gateAcct, "Ada")
+		guest := func(i int) string { return fmt.Sprintf("00000000-0000-4000-8000-00000000000%d", i) }
+		for i := 1; i <= 4; i++ {
+			if err := store.AddMember(ctx, gateOrg, ws.UUID, guest(i), roleGuest); err != nil {
+				t.Fatalf("seed guest %d: %v", i, err)
+			}
+		}
+
+		if code, body := selectWS(t, app, gateOrg, gateAcct, ws.Slug); code != http.StatusOK {
+			t.Fatalf("owner status = %d, want 200 (%s)", code, body)
+		}
+		for i := 1; i <= 3; i++ {
+			if code, body := selectWS(t, app, gateOrg, guest(i), ws.Slug); code != http.StatusOK {
+				t.Fatalf("guest %d status = %d, want 200 (%s)", i, code, body)
+			}
+		}
+		// Guest 4 exceeds the cap but ADMITS in observe mode (denial logged, not
+		// enforced) — flips back to a 402 assertion when enforcement returns.
+		if code, body := selectWS(t, app, gateOrg, guest(4), ws.Slug); code != http.StatusOK {
+			t.Fatalf("guest 4 status = %d, want 200 in observe mode (%s)", code, body)
+		}
+
+		// Plans service down → guest admitted (infra error, never a lockout).
+		appDown, storeDown := gateApp(t, entitled, func(context.Context, string) (map[string]any, error) {
+			return nil, fmt.Errorf("plans not mounted")
+		})
+		wsD, _ := storeDown.EnsureSpace(ctx, gateOrg, gateAcct, "Ada")
+		if err := storeDown.AddMember(ctx, gateOrg, wsD.UUID, guest(1), roleGuest); err != nil {
+			t.Fatal(err)
+		}
+		if code, body := selectWS(t, appDown, gateOrg, guest(1), wsD.Slug); code != http.StatusOK {
+			t.Fatalf("plans-down guest status = %d, want 200 (%s)", code, body)
+		}
+	})
+}

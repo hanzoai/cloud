@@ -1,0 +1,2239 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Hanzo Cloud API",
+    "description": "Package cyber mounts Hanzo Cyber's native cloud control plane at /v1/cyber/*.",
+    "version": "v1"
+  },
+  "servers": [
+    {
+      "url": "https://api.hanzo.ai"
+    }
+  ],
+  "security": [
+    {
+      "bearer": []
+    }
+  ],
+  "tags": [
+    {
+      "name": "cyber"
+    }
+  ],
+  "paths": {
+    "/v1/cyber/approvals": {
+      "get": {
+        "operationId": "get_cyber_approvals",
+        "summary": "Returns Kai risk-scored action approvals for the caller's org.",
+        "description": "Returns Kai risk-scored action approvals for the caller's org.",
+        "tags": [
+          "cyber"
+        ],
+        "parameters": [
+          {
+            "name": "engagementId",
+            "in": "query",
+            "required": false,
+            "description": "EngagementID narrows approvals to one engagement.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "description": "Status narrows approvals to pending, approved, denied, or always_allow.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/cyber.approvalList"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      },
+      "post": {
+        "operationId": "post_cyber_approvals",
+        "summary": "Evaluates a proposed cyber action with Kai deterministic risk scoring and queues it for human approval.",
+        "description": "Evaluates a proposed cyber action with Kai deterministic risk scoring and queues it for human approval.",
+        "tags": [
+          "cyber"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/cyber.submitApprovalReq"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/cyber.approvalView"
+                }
+              }
+            },
+            "description": "created"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/cyber/approvals/{id}/decide": {
+      "post": {
+        "operationId": "post_cyber_approvals_by_id_decide",
+        "summary": "Records a human Approve, Deny, or Always-Allow decision on a queued Kai approval.",
+        "description": "Records a human Approve, Deny, or Always-Allow decision on a queued Kai approval.",
+        "tags": [
+          "cyber"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the approval identifier from the URL path.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/cyber.decideApprovalReq"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/cyber.approvalView"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/cyber/attack": {
+      "get": {
+        "operationId": "get_cyber_attack",
+        "summary": "Projects the org's findings onto MITRE ATT\u0026CK tactics and techniques.",
+        "description": "Projects the org's findings onto MITRE ATT\u0026CK tactics and techniques.",
+        "tags": [
+          "cyber"
+        ],
+        "parameters": [
+          {
+            "name": "engagementId",
+            "in": "query",
+            "required": false,
+            "description": "EngagementID narrows results to one engagement when non-empty.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/cyber.attackMatrixView"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/cyber/coa": {
+      "get": {
+        "operationId": "get_cyber_coa",
+        "summary": "Computes prioritized remediation Courses of Action from active findings.",
+        "description": "Computes prioritized remediation Courses of Action from active findings.",
+        "tags": [
+          "cyber"
+        ],
+        "parameters": [
+          {
+            "name": "engagementId",
+            "in": "query",
+            "required": false,
+            "description": "EngagementID narrows results to one engagement when non-empty.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/cyber.coaView"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/cyber/dashboard": {
+      "get": {
+        "operationId": "get_cyber_dashboard",
+        "summary": "Aggregates engagements, findings, verbatim proof coverage, Kai approvals, and traffic counts for the authenticated org.",
+        "description": "Aggregates engagements, findings, verbatim proof coverage, Kai approvals, and traffic counts for the authenticated org.",
+        "tags": [
+          "cyber"
+        ],
+        "parameters": [
+          {
+            "name": "engagementId",
+            "in": "query",
+            "required": false,
+            "description": "EngagementID narrows results to one engagement when non-empty.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/cyber.dashboardView"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/cyber/engagements": {
+      "get": {
+        "operationId": "get_cyber_engagements",
+        "summary": "Returns every authorized cyber engagement belonging to the caller's org.",
+        "description": "Returns every authorized cyber engagement belonging to the caller's org.",
+        "tags": [
+          "cyber"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/cyber.engagementList"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      },
+      "post": {
+        "operationId": "post_cyber_engagements",
+        "summary": "Creates a new org-scoped cyber engagement workspace with explicit target scope.",
+        "description": "Creates a new org-scoped cyber engagement workspace with explicit target scope.",
+        "tags": [
+          "cyber"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/cyber.createEngagementReq"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/cyber.engagementView"
+                }
+              }
+            },
+            "description": "created"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/cyber/engagements/seed-demo": {
+      "post": {
+        "operationId": "post_cyber_engagements_seed-demo",
+        "summary": "Idempotently seeds a synthetic MDTF Tactical Enclave (Lab) engagement for internal testing and defense demos.",
+        "description": "Idempotently seeds a synthetic MDTF Tactical Enclave (Lab) engagement for internal testing and defense demos.",
+        "tags": [
+          "cyber"
+        ],
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/cyber.seedDemoRes"
+                }
+              }
+            },
+            "description": "created"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/cyber/findings": {
+      "get": {
+        "operationId": "get_cyber_findings",
+        "summary": "Returns org-scoped findings optionally filtered by engagementId, severity, and status.",
+        "description": "Returns org-scoped findings optionally filtered by engagementId, severity, and status.",
+        "tags": [
+          "cyber"
+        ],
+        "parameters": [
+          {
+            "name": "engagementId",
+            "in": "query",
+            "required": false,
+            "description": "EngagementID narrows findings to one engagement.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "severity",
+            "in": "query",
+            "required": false,
+            "description": "Severity narrows findings to critical, high, medium, low, or info.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "description": "Status narrows findings to open, verified, remediated, or false_positive.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/cyber.findingList"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      },
+      "post": {
+        "operationId": "post_cyber_findings",
+        "summary": "Records a security finding inside an authorized engagement.",
+        "description": "Records a security finding inside an authorized engagement.",
+        "tags": [
+          "cyber"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/cyber.createFindingReq"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/cyber.findingView"
+                }
+              }
+            },
+            "description": "created"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/cyber/findings/{id}": {
+      "patch": {
+        "operationId": "patch_cyber_findings_by_id",
+        "summary": "Updates a finding's status, bound traffic, evidence quote, or remediation text.",
+        "description": "Updates a finding's status, bound traffic, evidence quote, or remediation text.",
+        "tags": [
+          "cyber"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the finding identifier from the URL path.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/cyber.updateFindingReq"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/cyber.findingView"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/cyber/findings/{id}/verify": {
+      "post": {
+        "operationId": "post_cyber_findings_by_id_verify",
+        "summary": "Performs deterministic verbatim substring verification of a finding's evidenceQuote against its bound captured HTTP traffic record.",
+        "description": "Performs deterministic verbatim substring verification of a finding's evidenceQuote against its bound captured HTTP traffic record.",
+        "tags": [
+          "cyber"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the finding identifier from the URL path.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/cyber.verifyFindingReq"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/cyber.findingView"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/cyber/hardening": {
+      "get": {
+        "operationId": "get_cyber_hardening",
+        "summary": "Evaluates enclave scope enforcement, verbatim proof coverage, and unresolved critical risk.",
+        "description": "Evaluates enclave scope enforcement, verbatim proof coverage, and unresolved critical risk.",
+        "tags": [
+          "cyber"
+        ],
+        "parameters": [
+          {
+            "name": "engagementId",
+            "in": "query",
+            "required": false,
+            "description": "EngagementID narrows results to one engagement when non-empty.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/cyber.hardeningView"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/cyber/health": {
+      "get": {
+        "operationId": "get_cyber_health",
+        "summary": "Returns liveness status for the native Hanzo Cyber cloud subsystem.",
+        "description": "Returns liveness status for the native Hanzo Cyber cloud subsystem.",
+        "tags": [
+          "cyber"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/cyber.healthView"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/cyber/intercept/rules": {
+      "get": {
+        "operationId": "get_cyber_intercept_rules",
+        "summary": "Returns scope and intercept governance rules for the caller's org.",
+        "description": "Returns scope and intercept governance rules for the caller's org.",
+        "tags": [
+          "cyber"
+        ],
+        "parameters": [
+          {
+            "name": "engagementId",
+            "in": "query",
+            "required": false,
+            "description": "EngagementID narrows results to one engagement when non-empty.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/cyber.ruleList"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      },
+      "post": {
+        "operationId": "post_cyber_intercept_rules",
+        "summary": "Adds a scope or intercept governance rule for the caller's org.",
+        "description": "Adds a scope or intercept governance rule for the caller's org.",
+        "tags": [
+          "cyber"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/cyber.createRuleReq"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/cyber.ruleView"
+                }
+              }
+            },
+            "description": "created"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/cyber/intercept/rules/{id}": {
+      "delete": {
+        "operationId": "delete_cyber_intercept_rules_by_id",
+        "summary": "Removes an org-scoped intercept rule.",
+        "description": "Removes an org-scoped intercept rule.",
+        "tags": [
+          "cyber"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the rule identifier from the URL path.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/cyber.deleteRes"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/cyber/tasks": {
+      "get": {
+        "operationId": "get_cyber_tasks",
+        "summary": "Returns cyber tasks belonging to the caller's org, optionally filtered by engagementId.",
+        "description": "Returns cyber tasks belonging to the caller's org, optionally filtered by engagementId.",
+        "tags": [
+          "cyber"
+        ],
+        "parameters": [
+          {
+            "name": "engagementId",
+            "in": "query",
+            "required": false,
+            "description": "EngagementID narrows results to one engagement when non-empty.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/cyber.taskList"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      },
+      "post": {
+        "operationId": "post_cyber_tasks",
+        "summary": "Creates a cyber task and initializes its root GOAL node in the reasoning graph.",
+        "description": "Creates a cyber task and initializes its root GOAL node in the reasoning graph.",
+        "tags": [
+          "cyber"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/cyber.createTaskReq"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/cyber.taskView"
+                }
+              }
+            },
+            "description": "created"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/cyber/tasks/{id}/graph": {
+      "get": {
+        "operationId": "get_cyber_tasks_by_id_graph",
+        "summary": "Returns a task together with its ordered GOAL -\u003e INTENT -\u003e FINDING -\u003e HINT reasoning graph.",
+        "description": "Returns a task together with its ordered GOAL -\u003e INTENT -\u003e FINDING -\u003e HINT reasoning graph.",
+        "tags": [
+          "cyber"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the task identifier from the URL path.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/cyber.taskGraphView"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/cyber/tasks/{id}/nodes": {
+      "post": {
+        "operationId": "post_cyber_tasks_by_id_nodes",
+        "summary": "Appends an intent, finding, hint, or action node to a task's reasoning graph.",
+        "description": "Appends an intent, finding, hint, or action node to a task's reasoning graph.",
+        "tags": [
+          "cyber"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the task identifier from the URL path.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/cyber.addGraphNodeReq"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/cyber.graphNodeView"
+                }
+              }
+            },
+            "description": "created"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/cyber/traffic": {
+      "get": {
+        "operationId": "get_cyber_traffic",
+        "summary": "Returns captured HTTP exchanges belonging to the caller's org.",
+        "description": "Returns captured HTTP exchanges belonging to the caller's org.",
+        "tags": [
+          "cyber"
+        ],
+        "parameters": [
+          {
+            "name": "engagementId",
+            "in": "query",
+            "required": false,
+            "description": "EngagementID narrows records to one engagement.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "host",
+            "in": "query",
+            "required": false,
+            "description": "Host filters captured exchanges by hostname.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/cyber.trafficList"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      },
+      "post": {
+        "operationId": "post_cyber_traffic",
+        "summary": "Stores a captured HTTP exchange for inspection and verbatim finding proof binding.",
+        "description": "Stores a captured HTTP exchange for inspection and verbatim finding proof binding.",
+        "tags": [
+          "cyber"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/cyber.recordTrafficReq"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/cyber.trafficView"
+                }
+              }
+            },
+            "description": "created"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "cyber.addGraphNodeReq": {
+        "properties": {
+          "detail": {
+            "description": "Detail provides operator or agent rationale.",
+            "type": "string"
+          },
+          "id": {
+            "description": "ID is the task identifier from the URL path.",
+            "type": "string"
+          },
+          "kind": {
+            "description": "Kind is intent, finding, hint, or action.",
+            "type": "string"
+          },
+          "label": {
+            "description": "Label is the short node title shown on the graph.",
+            "type": "string"
+          },
+          "parentId": {
+            "description": "ParentID connects this node to an existing upstream node.",
+            "type": "string"
+          },
+          "severity": {
+            "description": "Severity sets optional severity for finding nodes.",
+            "type": "string"
+          },
+          "status": {
+            "description": "Status sets the node status (defaults to active).",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "label"
+        ],
+        "type": "object"
+      },
+      "cyber.approvalList": {
+        "properties": {
+          "data": {
+            "description": "Data holds approval items ordered newest first.",
+            "items": {
+              "$ref": "#/components/schemas/cyber.approvalView"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "cyber.approvalView": {
+        "properties": {
+          "action": {
+            "description": "Action describes the proposed command, probe, or mutation.",
+            "type": "string"
+          },
+          "createdAt": {
+            "description": "CreatedAt is when the action entered the queue in Unix milliseconds.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "decidedAt": {
+            "description": "DecidedAt records when the decision occurred in Unix milliseconds.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "decidedBy": {
+            "description": "DecidedBy records the authenticated IAM subject who made the decision.",
+            "type": "string"
+          },
+          "engagementId": {
+            "description": "EngagementID links the request to its engagement.",
+            "type": "string"
+          },
+          "id": {
+            "description": "ID uniquely identifies the approval request.",
+            "type": "string"
+          },
+          "kaiRationale": {
+            "description": "KaiRationale explains why Kai assigned the risk score and required review.",
+            "type": "string"
+          },
+          "riskLevel": {
+            "description": "RiskLevel categorizes the score as low, medium, high, or critical.",
+            "type": "string"
+          },
+          "riskScore": {
+            "description": "RiskScore is Kai's deterministic risk score from 0 to 100.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "status": {
+            "description": "Status is pending, approved, denied, or always_allow.",
+            "type": "string"
+          },
+          "target": {
+            "description": "Target names the host or endpoint affected.",
+            "type": "string"
+          },
+          "taskId": {
+            "description": "TaskID links the request to its task when present.",
+            "type": "string"
+          },
+          "tool": {
+            "description": "Tool names the OpenCyber MCP tool or module requesting execution.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "cyber.attackMatrixView": {
+        "properties": {
+          "tactics": {
+            "description": "Tactics lists unique MITRE ATT\u0026CK tactics observed.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "techniques": {
+            "description": "Techniques lists observed ATT\u0026CK techniques ranked by severity.",
+            "items": {
+              "$ref": "#/components/schemas/cyber.attackTechniqueView"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "cyber.attackTechniqueView": {
+        "properties": {
+          "findingCount": {
+            "description": "FindingCount is the number of findings mapped to this technique.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "maxSeverity": {
+            "description": "MaxSeverity is the highest severity observed for this technique.",
+            "type": "string"
+          },
+          "name": {
+            "description": "Name summarizes the observed technique or finding class.",
+            "type": "string"
+          },
+          "tactic": {
+            "description": "Tactic is the parent MITRE ATT\u0026CK tactic.",
+            "type": "string"
+          },
+          "techniqueId": {
+            "description": "TechniqueID is the MITRE ATT\u0026CK technique ID (for example T1190).",
+            "type": "string"
+          },
+          "verifiedCount": {
+            "description": "VerifiedCount is the number of verbatim-verified findings mapped here.",
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "cyber.coaItemView": {
+        "properties": {
+          "effort": {
+            "description": "Effort estimates implementation complexity (low, medium, high).",
+            "type": "string"
+          },
+          "findingIds": {
+            "description": "FindingIDs lists finding identifiers closed by this action.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "id": {
+            "description": "ID identifies the course of action.",
+            "type": "string"
+          },
+          "mitreTechnique": {
+            "description": "MitreTechnique names the ATT\u0026CK technique mitigated.",
+            "type": "string"
+          },
+          "priority": {
+            "description": "Priority is P0, P1, P2, or P3.",
+            "type": "string"
+          },
+          "riskReduction": {
+            "description": "RiskReduction estimates percentage risk reduction (1-100).",
+            "format": "int64",
+            "type": "integer"
+          },
+          "summary": {
+            "description": "Summary describes the concrete operational change.",
+            "type": "string"
+          },
+          "title": {
+            "description": "Title names the remediation action.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "cyber.coaView": {
+        "properties": {
+          "data": {
+            "description": "Data holds prioritized courses of action ordered highest priority first.",
+            "items": {
+              "$ref": "#/components/schemas/cyber.coaItemView"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "cyber.createEngagementReq": {
+        "properties": {
+          "mode": {
+            "description": "Mode sets execution mode: enclave, cloud, hybrid, or airgap.",
+            "type": "string"
+          },
+          "name": {
+            "description": "Name is the engagement display name.",
+            "type": "string"
+          },
+          "scope": {
+            "description": "Scope enumerates authorized targets within Rules of Engagement.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "synthetic": {
+            "description": "Synthetic marks lab/demo engagements explicitly.",
+            "type": "boolean"
+          },
+          "target": {
+            "description": "Target is the primary system or enclave host under test.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "target"
+        ],
+        "type": "object"
+      },
+      "cyber.createFindingReq": {
+        "properties": {
+          "category": {
+            "description": "Category names the weakness class.",
+            "type": "string"
+          },
+          "cwe": {
+            "description": "CWE records the CWE identifier.",
+            "type": "string"
+          },
+          "engagementId": {
+            "description": "EngagementID identifies the engagement.",
+            "type": "string"
+          },
+          "evidenceQuote": {
+            "description": "EvidenceQuote is the exact proof substring to verify against traffic.",
+            "type": "string"
+          },
+          "mitreTactic": {
+            "description": "MitreTactic records the ATT\u0026CK tactic.",
+            "type": "string"
+          },
+          "mitreTechnique": {
+            "description": "MitreTechnique records the ATT\u0026CK technique ID.",
+            "type": "string"
+          },
+          "remediation": {
+            "description": "Remediation records concrete remediation guidance.",
+            "type": "string"
+          },
+          "severity": {
+            "description": "Severity is critical, high, medium, low, or info.",
+            "type": "string"
+          },
+          "target": {
+            "description": "Target names the affected host or endpoint.",
+            "type": "string"
+          },
+          "taskId": {
+            "description": "TaskID optionally binds the finding to a task and appends a graph node.",
+            "type": "string"
+          },
+          "title": {
+            "description": "Title summarizes the finding.",
+            "type": "string"
+          },
+          "trafficId": {
+            "description": "TrafficID binds a captured traffic record for verbatim verification.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "engagementId",
+          "title"
+        ],
+        "type": "object"
+      },
+      "cyber.createRuleReq": {
+        "properties": {
+          "action": {
+            "description": "Action is allow, block, require_approval, or tag.",
+            "type": "string"
+          },
+          "engagementId": {
+            "description": "EngagementID optionally limits the rule to one engagement.",
+            "type": "string"
+          },
+          "matchHost": {
+            "description": "MatchHost sets the target host pattern (defaults to *).",
+            "type": "string"
+          },
+          "matchPath": {
+            "description": "MatchPath sets the target path pattern (defaults to /*).",
+            "type": "string"
+          },
+          "name": {
+            "description": "Name describes the rule.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "type": "object"
+      },
+      "cyber.createTaskReq": {
+        "properties": {
+          "engagementId": {
+            "description": "EngagementID identifies the parent engagement.",
+            "type": "string"
+          },
+          "goal": {
+            "description": "Goal states the desired verification outcome.",
+            "type": "string"
+          },
+          "phase": {
+            "description": "Phase sets the starting operational phase (defaults to recon).",
+            "type": "string"
+          },
+          "title": {
+            "description": "Title names the cyber task.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "engagementId",
+          "title"
+        ],
+        "type": "object"
+      },
+      "cyber.dashboardView": {
+        "properties": {
+          "critical": {
+            "description": "Critical is the count of critical-severity findings.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "engagements": {
+            "description": "Engagements is the total number of authorized engagements in the org.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "findingsTotal": {
+            "description": "FindingsTotal is the total number of recorded security findings.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "findingsVerified": {
+            "description": "FindingsVerified is the number of findings backed by verbatim captured proof.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "high": {
+            "description": "High is the count of high-severity findings.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "low": {
+            "description": "Low is the count of low-severity findings.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "medium": {
+            "description": "Medium is the count of medium-severity findings.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "org": {
+            "description": "Org is the authenticated caller organization.",
+            "type": "string"
+          },
+          "pendingApprovals": {
+            "description": "PendingApprovals is the number of Kai-gated actions waiting on human approval.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "rulesCount": {
+            "description": "RulesCount is the number of active scope and intercept governance rules.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "stage": {
+            "description": "Stage marks the release stage of Hanzo Cyber.",
+            "type": "string"
+          },
+          "tasks": {
+            "description": "Tasks is the number of cyber tasks across the selected scope.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "trafficCount": {
+            "description": "TrafficCount is the number of captured HTTP exchanges available for proof binding.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "verificationRate": {
+            "description": "VerificationRate is the percentage (0-100) of findings verified verbatim against traffic.",
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "cyber.decideApprovalReq": {
+        "properties": {
+          "decision": {
+            "description": "Decision must be approved, denied, or always_allow.",
+            "type": "string"
+          },
+          "id": {
+            "description": "ID is the approval identifier from the URL path.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "decision"
+        ],
+        "type": "object"
+      },
+      "cyber.deleteRes": {
+        "properties": {
+          "deleted": {
+            "description": "Deleted is true when the record was removed.",
+            "type": "boolean"
+          },
+          "id": {
+            "description": "ID is the deleted record identifier.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "cyber.engagementList": {
+        "properties": {
+          "data": {
+            "description": "Data holds the engagements ordered newest first.",
+            "items": {
+              "$ref": "#/components/schemas/cyber.engagementView"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "cyber.engagementView": {
+        "properties": {
+          "createdAt": {
+            "description": "CreatedAt is the creation timestamp in Unix milliseconds.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "id": {
+            "description": "ID uniquely identifies the engagement.",
+            "type": "string"
+          },
+          "mode": {
+            "description": "Mode describes the execution posture (enclave, cloud, hybrid, airgap).",
+            "type": "string"
+          },
+          "name": {
+            "description": "Name is the human-readable engagement title.",
+            "type": "string"
+          },
+          "scope": {
+            "description": "Scope lists authorized hostnames, CIDRs, or environments.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "status": {
+            "description": "Status is the engagement lifecycle state (active, paused, completed).",
+            "type": "string"
+          },
+          "synthetic": {
+            "description": "Synthetic marks lab/demonstration engagements using synthetic targets.",
+            "type": "boolean"
+          },
+          "target": {
+            "description": "Target is the primary host, CIDR, or enclave under assessment.",
+            "type": "string"
+          },
+          "updatedAt": {
+            "description": "UpdatedAt is the last update timestamp in Unix milliseconds.",
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "cyber.findingList": {
+        "properties": {
+          "data": {
+            "description": "Data holds the matching findings ordered newest first.",
+            "items": {
+              "$ref": "#/components/schemas/cyber.findingView"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "cyber.findingView": {
+        "properties": {
+          "category": {
+            "description": "Category classifies the vulnerability family.",
+            "type": "string"
+          },
+          "createdAt": {
+            "description": "CreatedAt is the creation timestamp in Unix milliseconds.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "cwe": {
+            "description": "CWE records the Common Weakness Enumeration identifier.",
+            "type": "string"
+          },
+          "engagementId": {
+            "description": "EngagementID links the finding to its engagement.",
+            "type": "string"
+          },
+          "evidenceQuote": {
+            "description": "EvidenceQuote is the exact substring expected verbatim in bound HTTP traffic.",
+            "type": "string"
+          },
+          "id": {
+            "description": "ID uniquely identifies the finding.",
+            "type": "string"
+          },
+          "mitreTactic": {
+            "description": "MitreTactic records the MITRE ATT\u0026CK tactic name.",
+            "type": "string"
+          },
+          "mitreTechnique": {
+            "description": "MitreTechnique records the MITRE ATT\u0026CK technique ID (for example T1078).",
+            "type": "string"
+          },
+          "remediation": {
+            "description": "Remediation describes concrete fix steps.",
+            "type": "string"
+          },
+          "severity": {
+            "description": "Severity ranks impact: critical, high, medium, low, or info.",
+            "type": "string"
+          },
+          "status": {
+            "description": "Status is open, verified, remediated, or false_positive.",
+            "type": "string"
+          },
+          "target": {
+            "description": "Target names the affected endpoint, host, or service.",
+            "type": "string"
+          },
+          "taskId": {
+            "description": "TaskID links the finding to the originating task when set.",
+            "type": "string"
+          },
+          "title": {
+            "description": "Title summarizes the vulnerability or misconfiguration.",
+            "type": "string"
+          },
+          "trafficId": {
+            "description": "TrafficID references the captured HTTP exchange backing this finding.",
+            "type": "string"
+          },
+          "updatedAt": {
+            "description": "UpdatedAt is the last update timestamp in Unix milliseconds.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "verificationNote": {
+            "description": "VerificationNote explains the outcome of verbatim proof verification.",
+            "type": "string"
+          },
+          "verified": {
+            "description": "Verified is true only when EvidenceQuote matched bound traffic verbatim.",
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
+      "cyber.graphNodeView": {
+        "properties": {
+          "createdAt": {
+            "description": "CreatedAt is the creation timestamp in Unix milliseconds.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "detail": {
+            "description": "Detail carries full technical context or rationale.",
+            "type": "string"
+          },
+          "id": {
+            "description": "ID uniquely identifies the node.",
+            "type": "string"
+          },
+          "kind": {
+            "description": "Kind is goal, intent, finding, hint, or action.",
+            "type": "string"
+          },
+          "label": {
+            "description": "Label is the concise node caption rendered on the graph canvas.",
+            "type": "string"
+          },
+          "parentId": {
+            "description": "ParentID links to the upstream node in the reasoning chain.",
+            "type": "string"
+          },
+          "severity": {
+            "description": "Severity carries finding severity when kind is finding.",
+            "type": "string"
+          },
+          "status": {
+            "description": "Status is active, verified, pending, blocked, or done.",
+            "type": "string"
+          },
+          "taskId": {
+            "description": "TaskID links the node to its task.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "cyber.hardeningCheckView": {
+        "properties": {
+          "control": {
+            "description": "Control names the security control or NIST/DoD baseline check.",
+            "type": "string"
+          },
+          "detail": {
+            "description": "Detail explains the live evidence behind the check status.",
+            "type": "string"
+          },
+          "id": {
+            "description": "ID uniquely identifies the control check.",
+            "type": "string"
+          },
+          "status": {
+            "description": "Status is pass, warn, or fail.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "cyber.hardeningView": {
+        "properties": {
+          "checks": {
+            "description": "Checks lists individual posture control evaluations.",
+            "items": {
+              "$ref": "#/components/schemas/cyber.hardeningCheckView"
+            },
+            "type": "array"
+          },
+          "openCritical": {
+            "description": "OpenCritical reports how many unmitigated critical findings remain.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "scopeEnforced": {
+            "description": "ScopeEnforced reports whether explicit intercept/scope rules are configured.",
+            "type": "boolean"
+          },
+          "score": {
+            "description": "Score is the aggregate hardening readiness score from 0 to 100.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "verbatimVerified": {
+            "description": "VerbatimVerified reports how many findings carry verbatim captured proof.",
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "cyber.healthView": {
+        "properties": {
+          "backend": {
+            "description": "Backend names the native cloud runtime serving /v1/cyber.",
+            "type": "string"
+          },
+          "flag": {
+            "description": "Flag is the principal feature flag gating alpha access.",
+            "type": "string"
+          },
+          "status": {
+            "description": "Status is \"ok\" when the cyber control store is open and accepting requests.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "cyber.recordTrafficReq": {
+        "properties": {
+          "engagementId": {
+            "description": "EngagementID identifies the engagement.",
+            "type": "string"
+          },
+          "host": {
+            "description": "Host overrides the parsed hostname when provided.",
+            "type": "string"
+          },
+          "latencyMs": {
+            "description": "LatencyMS records request duration in milliseconds.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "method": {
+            "description": "Method is the HTTP verb (defaults to GET).",
+            "type": "string"
+          },
+          "requestBody": {
+            "description": "RequestBody captures the request body.",
+            "type": "string"
+          },
+          "requestHeaders": {
+            "description": "RequestHeaders captures serialized request headers.",
+            "type": "string"
+          },
+          "responseBody": {
+            "description": "ResponseBody captures the response body.",
+            "type": "string"
+          },
+          "responseHeaders": {
+            "description": "ResponseHeaders captures serialized response headers.",
+            "type": "string"
+          },
+          "statusCode": {
+            "description": "StatusCode is the HTTP status code (defaults to 200).",
+            "format": "int64",
+            "type": "integer"
+          },
+          "taskId": {
+            "description": "TaskID optionally links the exchange to a task.",
+            "type": "string"
+          },
+          "url": {
+            "description": "URL is the target URL.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "engagementId",
+          "url"
+        ],
+        "type": "object"
+      },
+      "cyber.ruleList": {
+        "properties": {
+          "data": {
+            "description": "Data holds rules ordered newest first.",
+            "items": {
+              "$ref": "#/components/schemas/cyber.ruleView"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "cyber.ruleView": {
+        "properties": {
+          "action": {
+            "description": "Action is allow, block, require_approval, or tag.",
+            "type": "string"
+          },
+          "createdAt": {
+            "description": "CreatedAt is the creation timestamp in Unix milliseconds.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "enabled": {
+            "description": "Enabled reports whether the rule is enforced.",
+            "type": "boolean"
+          },
+          "engagementId": {
+            "description": "EngagementID scopes the rule to an engagement, or empty for org-wide.",
+            "type": "string"
+          },
+          "id": {
+            "description": "ID uniquely identifies the rule.",
+            "type": "string"
+          },
+          "matchHost": {
+            "description": "MatchHost is the hostname pattern matched by this rule.",
+            "type": "string"
+          },
+          "matchPath": {
+            "description": "MatchPath is the URL path prefix or wildcard matched by this rule.",
+            "type": "string"
+          },
+          "name": {
+            "description": "Name labels the rule.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "cyber.seedDemoRes": {
+        "properties": {
+          "approvals": {
+            "description": "Approvals is the number of Kai approval records seeded.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "engagement": {
+            "$ref": "#/components/schemas/cyber.engagementView",
+            "description": "Engagement is the seeded synthetic MDTF tactical enclave lab engagement."
+          },
+          "findings": {
+            "description": "Findings is the number of findings seeded.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "rules": {
+            "description": "Rules is the number of scope/intercept rules seeded.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "tasks": {
+            "description": "Tasks is the number of tasks seeded.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "traffic": {
+            "description": "Traffic is the number of captured HTTP traffic records seeded.",
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "cyber.submitApprovalReq": {
+        "properties": {
+          "action": {
+            "description": "Action describes the exact command or operation to evaluate.",
+            "type": "string"
+          },
+          "engagementId": {
+            "description": "EngagementID identifies the engagement.",
+            "type": "string"
+          },
+          "target": {
+            "description": "Target names the host, service, or asset.",
+            "type": "string"
+          },
+          "taskId": {
+            "description": "TaskID optionally links the action to a task.",
+            "type": "string"
+          },
+          "tool": {
+            "description": "Tool names the tool requesting execution.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "engagementId",
+          "action",
+          "target"
+        ],
+        "type": "object"
+      },
+      "cyber.taskGraphView": {
+        "properties": {
+          "nodes": {
+            "description": "Nodes is the ordered list of GOAL, INTENT, FINDING, HINT, and ACTION nodes.",
+            "items": {
+              "$ref": "#/components/schemas/cyber.graphNodeView"
+            },
+            "type": "array"
+          },
+          "task": {
+            "$ref": "#/components/schemas/cyber.taskView",
+            "description": "Task is the root task metadata."
+          }
+        },
+        "type": "object"
+      },
+      "cyber.taskList": {
+        "properties": {
+          "data": {
+            "description": "Data holds the tasks ordered newest first.",
+            "items": {
+              "$ref": "#/components/schemas/cyber.taskView"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "cyber.taskView": {
+        "properties": {
+          "createdAt": {
+            "description": "CreatedAt is the creation timestamp in Unix milliseconds.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "engagementId": {
+            "description": "EngagementID links the task to its parent engagement.",
+            "type": "string"
+          },
+          "goal": {
+            "description": "Goal states the verification objective.",
+            "type": "string"
+          },
+          "id": {
+            "description": "ID uniquely identifies the task.",
+            "type": "string"
+          },
+          "phase": {
+            "description": "Phase is recon, enumerate, verify, govern, or report.",
+            "type": "string"
+          },
+          "status": {
+            "description": "Status is active, paused, completed, or blocked.",
+            "type": "string"
+          },
+          "title": {
+            "description": "Title is the concise task name.",
+            "type": "string"
+          },
+          "updatedAt": {
+            "description": "UpdatedAt is the last update timestamp in Unix milliseconds.",
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "cyber.trafficList": {
+        "properties": {
+          "data": {
+            "description": "Data holds captured exchanges ordered newest first.",
+            "items": {
+              "$ref": "#/components/schemas/cyber.trafficView"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "cyber.trafficView": {
+        "properties": {
+          "createdAt": {
+            "description": "CreatedAt is the capture timestamp in Unix milliseconds.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "engagementId": {
+            "description": "EngagementID links the exchange to its engagement.",
+            "type": "string"
+          },
+          "host": {
+            "description": "Host is the extracted target hostname.",
+            "type": "string"
+          },
+          "id": {
+            "description": "ID uniquely identifies the captured traffic record.",
+            "type": "string"
+          },
+          "latencyMs": {
+            "description": "LatencyMS is the observed round-trip latency in milliseconds.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "method": {
+            "description": "Method is the HTTP verb.",
+            "type": "string"
+          },
+          "requestBody": {
+            "description": "RequestBody holds raw request payload.",
+            "type": "string"
+          },
+          "requestHeaders": {
+            "description": "RequestHeaders holds raw request headers.",
+            "type": "string"
+          },
+          "responseBody": {
+            "description": "ResponseBody holds raw response payload used for verbatim proof checks.",
+            "type": "string"
+          },
+          "responseHeaders": {
+            "description": "ResponseHeaders holds raw response headers.",
+            "type": "string"
+          },
+          "statusCode": {
+            "description": "StatusCode is the HTTP response status code.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "taskId": {
+            "description": "TaskID links the exchange to a task when present.",
+            "type": "string"
+          },
+          "url": {
+            "description": "URL is the full request URL.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "cyber.updateFindingReq": {
+        "properties": {
+          "evidenceQuote": {
+            "description": "EvidenceQuote updates the proof substring.",
+            "type": "string"
+          },
+          "id": {
+            "description": "ID is the finding identifier from the URL path.",
+            "type": "string"
+          },
+          "remediation": {
+            "description": "Remediation updates remediation guidance.",
+            "type": "string"
+          },
+          "status": {
+            "description": "Status transitions the finding to open, verified, remediated, or false_positive.",
+            "type": "string"
+          },
+          "trafficId": {
+            "description": "TrafficID updates the bound captured HTTP exchange.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "cyber.verifyFindingReq": {
+        "properties": {
+          "evidenceQuote": {
+            "description": "EvidenceQuote optionally supplies the exact proof quote before verifying.",
+            "type": "string"
+          },
+          "id": {
+            "description": "ID is the finding identifier from the URL path.",
+            "type": "string"
+          },
+          "trafficId": {
+            "description": "TrafficID optionally binds a captured traffic record before verifying.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "problem-details": {
+        "description": "An RFC 9457 problem document.",
+        "properties": {
+          "code": {
+            "description": "A stable token a client can branch on, when the refusal names one.",
+            "type": "string"
+          },
+          "detail": {
+            "description": "What was refused, for a person to read.",
+            "type": "string"
+          },
+          "status": {
+            "description": "The HTTP status.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "title": {
+            "description": "The status's reason phrase.",
+            "type": "string"
+          },
+          "type": {
+            "description": "about:blank",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "status",
+          "detail"
+        ],
+        "type": "object"
+      }
+    },
+    "securitySchemes": {
+      "bearer": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "The caller's credential, sent as `Authorization: Bearer \u003ctoken\u003e`. It is either an access token minted by Hanzo IAM or an API key (pk-/sk-). X-Authorization, and HTTP Basic carrying the token as the password, are accepted spellings of the same header for clients that cannot set Authorization; a browser presents the session cookie instead. Every operation requires it unless it says `security: []`."
+      }
+    }
+  }
+}

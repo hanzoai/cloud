@@ -1,0 +1,72 @@
+{
+  "$schema": "https://schemas.agentskills.io/discovery/0.2.0/schema.json",
+  "base_url": "https://api.lux.network",
+  "brand": "lux",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://lux.id",
+  "mcp": {
+    "description": "Model Context Protocol over JSON-RPC 2.0 — one POST per message, stateless, protocol revision 2026-07-28. tools/list answers without a credential with one tool per subsystem (its operations in the \"op\" enum) plus \"describe\", which returns one operation's input schema. tools/call names a subsystem tool and carries {\"op\": <operation>, \"input\": <its arguments>}; it takes the same bearer the REST API does, and a call that carries none is answered 401 with a WWW-Authenticate header naming the resource metadata at /.well-known/oauth-protected-resource, which names the authorization server to sign in at. The tool surface is the public contract: the operator's admin product is not offered, and a name that would disclose a secret or mutate an identity is withheld — the list says how many, under _meta.",
+    "method": "POST",
+    "url": "https://api.lux.network/v1/mcp"
+  },
+  "skill_count": 7,
+  "skills": [
+    {
+      "description": "Read function deployments: Is what is live right now — each function's current record IS its live deployment, so this is the deployment inventory..",
+      "digest": "sha256:5ebc96689c0cff9ba9b88d5b61be96078f1151344cab64b046744d54075ee1df",
+      "name": "function_deployments",
+      "service": "function",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/function_deployments/SKILL.md"
+    },
+    {
+      "description": "Read function function: Is every serverless function the caller's org has published, each with its real 7-day rollup., Is one function with everything a detail page needs in one round-trip: its definition, its 7-day rollup, its trigger, its twenty most recent invocations and the ",
+      "digest": "sha256:f7e80dc8a0bf8b5bb179e007115f66814e6ec6ed083be6409012433788260dd1",
+      "name": "function_function",
+      "service": "function",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/function_function/SKILL.md"
+    },
+    {
+      "description": "Read function invocations: Is one function's past runs, newest first — each with its status, HTTP code, method, time and duration..",
+      "digest": "sha256:a7a7ed389fd0455fada7671e14594bf24c85b2555d7fb5a9ef4aea868777078e",
+      "name": "function_invocations",
+      "service": "function",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/function_invocations/SKILL.md"
+    },
+    {
+      "description": "Read function logs: Is the output of a function's most recent run — its error text when that run failed, else what it printed..",
+      "digest": "sha256:6ab188782ae651ee21decb577bb85ea395a1ea47198c02a5c6d0e2362721d87a",
+      "name": "function_logs",
+      "service": "function",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/function_logs/SKILL.md"
+    },
+    {
+      "description": "Read function metrics: Is the org's serverless dashboard over a window: a per-function invocation costLine and how those invocations ended..",
+      "digest": "sha256:f01a692037ecfe39133686d1b767a0463d566416d85565dbeeab47ea8bd564f6",
+      "name": "function_metrics",
+      "service": "function",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/function_metrics/SKILL.md"
+    },
+    {
+      "description": "Read function secrets: Is the NAMES of the secrets the caller org's functions mount..",
+      "digest": "sha256:e7fa1851f26e368f87278a0437dc9bff607c7a5361acd58641fdf3e3617ac06d",
+      "name": "function_secrets",
+      "service": "function",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/function_secrets/SKILL.md"
+    },
+    {
+      "description": "Read function triggers: Is what calls the caller org's functions — one row per function..",
+      "digest": "sha256:1962b1eea87d17c80353cfd93af21f51f4f5fb442d2ac4c23e0da522cc3652fa",
+      "name": "function_triggers",
+      "service": "function",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/function_triggers/SKILL.md"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

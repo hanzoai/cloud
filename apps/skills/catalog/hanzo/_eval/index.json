@@ -1,0 +1,78 @@
+{
+  "$schema": "https://schemas.agentskills.io/discovery/0.2.0/schema.json",
+  "base_url": "https://api.hanzo.ai",
+  "brand": "hanzo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://hanzo.id",
+  "mcp": {
+    "description": "Model Context Protocol over JSON-RPC 2.0 — one POST per message, stateless, protocol revision 2026-07-28. tools/list answers without a credential with one tool per subsystem (its operations in the \"op\" enum) plus \"describe\", which returns one operation's input schema. tools/call names a subsystem tool and carries {\"op\": <operation>, \"input\": <its arguments>}; it takes the same bearer the REST API does, and a call that carries none is answered 401 with a WWW-Authenticate header naming the resource metadata at /.well-known/oauth-protected-resource, which names the authorization server to sign in at. The tool surface is the public contract: the operator's admin product is not offered, and a name that would disclose a secret or mutate an identity is withheld — the list says how many, under _meta.",
+    "method": "POST",
+    "url": "https://api.hanzo.ai/v1/mcp"
+  },
+  "skill_count": 7,
+  "skills": [
+    {
+      "description": "Read eval datasets: Is the datasets your org has, each with its name, description, metadata and timestamps., Returns one dataset of the caller's org by name, together with its live item count — the one read that answers how big the set actually is., Is the examples in one of your",
+      "digest": "sha256:716d64488f41a9846d90228c9739b6bac738d7da460fdedfcadc2a04098838ae",
+      "name": "eval_datasets",
+      "service": "eval",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/eval_datasets/SKILL.md"
+    },
+    {
+      "description": "Read eval evaluators: Is the judges your org has defined, each with its judge model, criteria and the score name it writes under..",
+      "digest": "sha256:2da525dd62d3874050cd660001648220ebfbf47ae4378c7c21e52ea42165a96e",
+      "name": "eval_evaluators",
+      "service": "eval",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/eval_evaluators/SKILL.md"
+    },
+    {
+      "description": "Read eval metrics: Is your org's AI overview board over a window: totals (generations, prompt and completion tokens, cost in cents, errors, success rate, distinct models and users), a gap-filled time series, a per-model breakdown with the long tail folded into \"other\", and latenc",
+      "digest": "sha256:dcfd259de295fa80001513258a42f72caa82f6000c2bc71275a8bbe6bf3f23df",
+      "name": "eval_metrics",
+      "service": "eval",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/eval_metrics/SKILL.md"
+    },
+    {
+      "description": "Read eval rubrics: Is the score shapes your org has declared — each name's data type, its numeric bounds and its allowed categories..",
+      "digest": "sha256:f7cdadb887487ef0dc0015cfe1b9245a9eb8e71530f52bc7dcb5eeb0c27d6bf0",
+      "name": "eval_rubrics",
+      "service": "eval",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/eval_rubrics/SKILL.md"
+    },
+    {
+      "description": "Read eval runs: Is your past runs and how they scored — the dataset and model, the judge model, how many examples were attempted and how many scored, the average score, and when it happened..",
+      "digest": "sha256:b1d44522213d151865ce3b0dd286b0589291594b71070f5407db4f36e27e9ebd",
+      "name": "eval_runs",
+      "service": "eval",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/eval_runs/SKILL.md",
+      "works": [
+        "data"
+      ]
+    },
+    {
+      "description": "Read eval scores: Is the score events your org has recorded, narrowed by any of name, runName and traceId..",
+      "digest": "sha256:6bd94dfcaceeefd990ee58d15bc8995971b2c4975cf4e8e1330f80726cb5daa2",
+      "name": "eval_scores",
+      "service": "eval",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/eval_scores/SKILL.md",
+      "works": [
+        "data"
+      ]
+    },
+    {
+      "description": "Read eval traces: Is the traces behind your evaluations — one per model call an evaluation made, carrying its input, output, model and timing — narrowed by any of sessionId, runName and datasetName..",
+      "digest": "sha256:b4840b6206266ebb6881a0fbe6bf3c391e4cb41b62a32290b9e7c6508d807df6",
+      "name": "eval_traces",
+      "service": "eval",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/eval_traces/SKILL.md"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

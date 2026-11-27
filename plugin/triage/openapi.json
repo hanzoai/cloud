@@ -1,0 +1,518 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Hanzo Cloud API",
+    "description": "Package triage closes the loop from an error to its fix.",
+    "version": "v1"
+  },
+  "servers": [
+    {
+      "url": "https://api.hanzo.ai"
+    }
+  ],
+  "security": [
+    {
+      "bearer": []
+    }
+  ],
+  "tags": [
+    {
+      "name": "admin"
+    }
+  ],
+  "paths": {
+    "/v1/admin/triage/config": {
+      "get": {
+        "operationId": "get_admin_triage_config",
+        "summary": "Is the settings as saved.",
+        "description": "Is the settings as saved.",
+        "tags": [
+          "admin"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/triage.Config"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-tool": true
+      },
+      "put": {
+        "operationId": "put_admin_triage_config",
+        "summary": "Saves the settings.",
+        "description": "Saves the settings. The change is on the audit trail before it is made,\nand turning the kill switch on ends every live run.",
+        "tags": [
+          "admin"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/triage.Config"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/triage.Config"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-tool": true
+      }
+    },
+    "/v1/admin/triage/faults": {
+      "get": {
+        "operationId": "get_admin_triage_faults",
+        "summary": "Is the ledger: every fingerprint counted, and the state of its issue.",
+        "description": "Is the ledger: every fingerprint counted, and the state of its issue.",
+        "tags": [
+          "admin"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/triage.faultList"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-tool": true
+      }
+    },
+    "/v1/admin/triage/work": {
+      "get": {
+        "operationId": "get_admin_triage_work",
+        "summary": "Is every issue handed to a run, and where the run stands.",
+        "description": "Is every issue handed to a run, and where the run stands.",
+        "tags": [
+          "admin"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/triage.workList"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-tool": true
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "problem-details": {
+        "description": "An RFC 9457 problem document.",
+        "properties": {
+          "code": {
+            "description": "A stable token a client can branch on, when the refusal names one.",
+            "type": "string"
+          },
+          "detail": {
+            "description": "What was refused, for a person to read.",
+            "type": "string"
+          },
+          "status": {
+            "description": "The HTTP status.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "title": {
+            "description": "The status's reason phrase.",
+            "type": "string"
+          },
+          "type": {
+            "description": "about:blank",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "status",
+          "detail"
+        ],
+        "type": "object"
+      },
+      "triage.Config": {
+        "properties": {
+          "actor": {
+            "description": "Actor is the IAM subject every autonomous act is done and audited as.",
+            "type": "string"
+          },
+          "enabled": {
+            "description": "Enabled is the kill switch. Off, faults are still counted and nothing is\nfiled, started or merged.",
+            "type": "boolean"
+          },
+          "label": {
+            "description": "Label is the issue label that hands an issue to a run.",
+            "type": "string"
+          },
+          "repos": {
+            "description": "Repos routes a fault to the repository that owns it, first match wins.",
+            "items": {
+              "$ref": "#/components/schemas/triage.Repo"
+            },
+            "type": "array"
+          },
+          "runs": {
+            "$ref": "#/components/schemas/triage.Runs",
+            "description": "Runs bounds the runs themselves."
+          },
+          "threshold": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/triage.Limit"
+            },
+            "description": "Threshold is, per fault class (server, dependency, run, cron, client), how\nmany occurrences within how many minutes file an issue. Count 0 files none.",
+            "type": "object"
+          }
+        },
+        "type": "object"
+      },
+      "triage.Fault": {
+        "properties": {
+          "class": {
+            "type": "string"
+          },
+          "code": {
+            "type": "string"
+          },
+          "fingerprint": {
+            "type": "string"
+          },
+          "firstSeen": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "fixedAt": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "fixedSha": {
+            "type": "string"
+          },
+          "hits": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "issue": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "lastSeen": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "op": {
+            "type": "string"
+          },
+          "org": {
+            "type": "string"
+          },
+          "release": {
+            "type": "string"
+          },
+          "repo": {
+            "type": "string"
+          },
+          "reported": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "sample": {
+            "$ref": "#/components/schemas/triage.Sample"
+          },
+          "state": {
+            "type": "string"
+          },
+          "total": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "windowStart": {
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "triage.Limit": {
+        "properties": {
+          "count": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "minutes": {
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "triage.Match": {
+        "properties": {
+          "capability": {
+            "type": "string"
+          },
+          "product": {
+            "type": "string"
+          },
+          "service": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "triage.Repo": {
+        "properties": {
+          "auto": {
+            "description": "Auto starts a run for an issue of this repository; off, issues are filed and\nleft to people.",
+            "type": "boolean"
+          },
+          "concurrent": {
+            "description": "Concurrent is how many runs this repository may have at once.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "match": {
+            "description": "Match routes a fault here when any entry holds.",
+            "items": {
+              "$ref": "#/components/schemas/triage.Match"
+            },
+            "type": "array"
+          },
+          "merge": {
+            "description": "Merge lets a green, low-risk pull request of a run merge itself.",
+            "type": "boolean"
+          },
+          "org": {
+            "description": "Org is the Hanzo org whose GitHub installation reaches the repository, and\nthe org whose faults route to it.",
+            "type": "string"
+          },
+          "repo": {
+            "description": "Repo is owner/name.",
+            "type": "string"
+          },
+          "required": {
+            "description": "Required are the checks that must read success on a pull request's head. None\nnamed: every check on it must, and at least one must exist.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "triage.Runs": {
+        "properties": {
+          "attempts": {
+            "description": "Attempts is how many runs one issue may have, a regression included.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "perDay": {
+            "description": "PerDay is how many runs one org's day may start.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "seconds": {
+            "description": "Seconds is the budget of one run.",
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "triage.Sample": {
+        "properties": {
+          "reason": {
+            "type": "string"
+          },
+          "requests": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "service": {
+            "type": "string"
+          },
+          "site": {
+            "$ref": "#/components/schemas/triage.Site"
+          }
+        },
+        "type": "object"
+      },
+      "triage.Site": {
+        "properties": {
+          "column": {
+            "format": "uint32",
+            "type": "integer"
+          },
+          "component": {
+            "type": "string"
+          },
+          "file": {
+            "type": "string"
+          },
+          "function": {
+            "type": "string"
+          },
+          "line": {
+            "format": "uint32",
+            "type": "integer"
+          },
+          "stack": {
+            "description": "Stack is the top frames, crash site first, `*` marking the platform's own.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "triage.Work": {
+        "properties": {
+          "attempt": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "branch": {
+            "type": "string"
+          },
+          "deadline": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "fingerprint": {
+            "type": "string"
+          },
+          "head": {
+            "type": "string"
+          },
+          "issue": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "note": {
+            "type": "string"
+          },
+          "org": {
+            "type": "string"
+          },
+          "pr": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "queuedAt": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "repo": {
+            "type": "string"
+          },
+          "session": {
+            "type": "string"
+          },
+          "startedAt": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "state": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "triage.faultList": {
+        "properties": {
+          "faults": {
+            "items": {
+              "$ref": "#/components/schemas/triage.Fault"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "triage.workList": {
+        "properties": {
+          "work": {
+            "items": {
+              "$ref": "#/components/schemas/triage.Work"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      }
+    },
+    "securitySchemes": {
+      "bearer": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "The caller's credential, sent as `Authorization: Bearer \u003ctoken\u003e`. It is either an access token minted by Hanzo IAM or an API key (pk-/sk-). X-Authorization, and HTTP Basic carrying the token as the password, are accepted spellings of the same header for clients that cannot set Authorization; a browser presents the session cookie instead. Every operation requires it unless it says `security: []`."
+      }
+    }
+  }
+}

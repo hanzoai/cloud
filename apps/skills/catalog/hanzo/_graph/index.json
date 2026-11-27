@@ -1,0 +1,56 @@
+{
+  "$schema": "https://schemas.agentskills.io/discovery/0.2.0/schema.json",
+  "base_url": "https://api.hanzo.ai",
+  "brand": "hanzo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://hanzo.id",
+  "mcp": {
+    "description": "Model Context Protocol over JSON-RPC 2.0 — one POST per message, stateless, protocol revision 2026-07-28. tools/list answers without a credential with one tool per subsystem (its operations in the \"op\" enum) plus \"describe\", which returns one operation's input schema. tools/call names a subsystem tool and carries {\"op\": <operation>, \"input\": <its arguments>}; it takes the same bearer the REST API does, and a call that carries none is answered 401 with a WWW-Authenticate header naming the resource metadata at /.well-known/oauth-protected-resource, which names the authorization server to sign in at. The tool surface is the public contract: the operator's admin product is not offered, and a name that would disclose a secret or mutate an identity is withheld — the list says how many, under _meta.",
+    "method": "POST",
+    "url": "https://api.hanzo.ai/v1/mcp"
+  },
+  "skill_count": 5,
+  "skills": [
+    {
+      "description": "Read graph graph: Lists the assertions recorded, every version, oldest first..",
+      "digest": "sha256:5b40f36a97cc3f75d8bc8785c834d4e9b087e2d9d1f5701a99acae1451513c39",
+      "name": "graph_graph",
+      "service": "graph",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/graph_graph/SKILL.md"
+    },
+    {
+      "description": "Read graph graphql: Read the graph's GraphQL schema..",
+      "digest": "sha256:1526f6763e74be14ac3f54ef1e30ac3f20224280eb9cea752898f73ab77f8f6b",
+      "name": "graph_graphql",
+      "service": "graph",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/graph_graphql/SKILL.md"
+    },
+    {
+      "description": "Read graph ontology: Lists the entity classes, predicates, classifier features and kinship scorecard columns of the personal knowledge graph ontology..",
+      "digest": "sha256:ecd61ac3979ce6acdc1e7c7e4337690649d7e6383f06e062c3f884302351cb86",
+      "name": "graph_ontology",
+      "service": "graph",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/graph_ontology/SKILL.md"
+    },
+    {
+      "description": "Read graph search: Finds assertions by their words, where read finds them by their keys, best match first..",
+      "digest": "sha256:9a456060ed7e598d4823cc0f36ef2690e89dc5dcbccfd77ed095832f0aae82af",
+      "name": "graph_search",
+      "service": "graph",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/graph_search/SKILL.md"
+    },
+    {
+      "description": "Read graph vocabulary: Lists the relations in use, the schema declared for them and the rule that settles a conflict..",
+      "digest": "sha256:a312389c2e9d7ccea8bcbeb06abe16c02cecdc564a1d4a8f6e43da8581eb8a46",
+      "name": "graph_vocabulary",
+      "service": "graph",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/graph_vocabulary/SKILL.md"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

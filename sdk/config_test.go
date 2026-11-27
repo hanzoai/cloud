@@ -25,7 +25,10 @@ func TestEnabled_ExplicitListIsAnAllowlist(t *testing.T) {
 	}
 }
 
-// An empty Enable list mounts everything, with no subsystem held back. The risk
+// An empty Enable list mounts everything, with no subsystem held back. There used
+// to be a staged set that an empty list skipped, on the rule that a subsystem was
+// staged while its Mount could abort startup — and apps are their own processes
+// now, so a Mount that fails takes down its own child and nothing else. The risk
 // the exception existed for is structural, and the exception went with it.
 func TestEnabled_EmptyListMountsEverything(t *testing.T) {
 	c := &cloud.Config{}

@@ -1,0 +1,191 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Terminal</title>
+<style>__CSS__</style>
+<style>
+  /* The face is Zen Mono, @hanzo/font's mono (1.9.6, ./mono.woff2: the variable
+     font, every weight), carried in the page so a terminal has it with no fetch. */
+  @font-face {
+    font-family: 'Zen Mono';
+    src: local('Zen Mono'), local('ZenMono-Regular'),
+         url('data:font/woff2;base64,__FONT__') format('woff2');
+    font-weight: 100 900;
+    font-style: normal;
+    font-display: block;
+  }
+  /* ONE font stack, named once. The terminal used to take xterm.css's own
+     `monospace` fallback while the status text beside it named a real stack —
+     so a shell rendered in whatever the browser calls monospace (Courier, on a
+     Mac) next to a message in the system's actual mono face. */
+  :root {
+    --mono: 'Zen Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace;
+  }
+  html, body { margin: 0; height: 100%; background: #000; overflow: hidden; }
+  /* A terminal is measured in rows and columns you can read, and this padding
+     is subtracted from every one of them — four times over in a tiled pane. */
+  #t { position: absolute; inset: 0; padding: 4px; }
+  #s {
+    position: absolute; inset: 0; display: flex; align-items: center;
+    justify-content: center; gap: 12px; flex-direction: column;
+    background: #000; color: #8b8b8b;
+    font: 13px/1.5 var(--mono);
+  }
+  #s[hidden] { display: none; }
+  #s button {
+    font: inherit; color: #ddd; background: #1c1c1c; border: 1px solid #333;
+    border-radius: 6px; padding: 4px 12px; cursor: pointer;
+  }
+  #s button:hover { border-color: #555; }
+  .xterm-viewport::-webkit-scrollbar { width: 8px }
+  .xterm-viewport::-webkit-scrollbar-thumb { background: rgba(255,255,255,.16); border-radius: 4px }
+  .xterm-viewport { scrollbar-width: thin; scrollbar-color: rgba(255,255,255,.16) transparent }
+</style>
+</head>
+<body>
+<div id="t"></div>
+<div id="s"><span id="m">Starting your cloud shell…</span></div>
+<script>__XTERM__</script>
+<script>__FIT__</script>
+<script>
+// The page knows its own address, so nothing here is templated. The socket is
+// this document's path plus /ws, carrying this document's query string
+// unchanged — which is where the ticket and the session name already are. A page
+// with no substitutions has no injection surface and can be served as a constant.
+(function () {
+  var status = document.getElementById('s')
+  var message = document.getElementById('m')
+
+  // A host that frames this page cannot see inside it, so anything it is not
+  // TOLD it has to infer — and the only inference that fits every silence is a
+  // timeout, which reads as "the credential went stale" whatever actually
+  // happened. That is why a refused socket came back as an endless run of fresh
+  // tickets. One channel, both outcomes.
+  function post(msg) {
+    if (window.parent !== window) window.parent.postMessage(msg, '*')
+  }
+
+  var told = false
+
+  function stopped(why) {
+    status.hidden = false
+    message.textContent = why
+    // Once. onerror and onclose both land here for a single failure, and a host
+    // that is told twice has to work out that it is one event.
+    if (!told) {
+      told = true
+      post({ source: 'hanzo-term', ready: false, why: why })
+    }
+    if (document.getElementById('r')) return
+    var again = document.createElement('button')
+    again.id = 'r'
+    again.textContent = 'Reconnect'
+    // A ticket is spent by the socket that presents it, so reloading this
+    // document re-presents a dead one and is refused for a reason that has
+    // nothing to do with the first failure. The parent is what holds the
+    // identity to mint another, so where there is a parent, ask it; standalone,
+    // a reload is the only thing this page can do for itself.
+    again.onclick = function () {
+      if (window.parent !== window) post({ source: 'hanzo-term', retry: true })
+      else location.reload()
+    }
+    status.appendChild(again)
+  }
+
+  var Fit = (window.FitAddon && window.FitAddon.FitAddon) || window.FitAddon
+  var mono = getComputedStyle(document.documentElement).getPropertyValue('--mono').trim()
+  var term = new window.Terminal({
+    cursorBlink: true,
+    cursorStyle: 'bar',
+    fontFamily: mono,
+    fontSize: 12,
+    lineHeight: 1.2,
+    scrollback: 10000,
+    theme: {
+      background: '#000000',
+      foreground: '#e6e6e6',
+      cursor: '#e6e6e6',
+      cursorAccent: '#000000',
+      selectionBackground: 'rgba(255,255,255,0.18)',
+      black: '#000000',
+      brightBlack: '#5c5c5c',
+      red: '#f87171',
+      brightRed: '#fca5a5',
+      green: '#34d399',
+      brightGreen: '#6ee7b7',
+      yellow: '#fbbf24',
+      brightYellow: '#fcd34d',
+      blue: '#60a5fa',
+      brightBlue: '#93c5fd',
+      magenta: '#c084fc',
+      brightMagenta: '#d8b4fe',
+      cyan: '#22d3ee',
+      brightCyan: '#67e8f9',
+      white: '#e6e6e6',
+      brightWhite: '#ffffff',
+    },
+  })
+  var fit = new Fit()
+  term.loadAddon(fit)
+  term.open(document.getElementById('t'))
+
+  var socket = location.origin.replace(/^http/, 'ws') +
+    location.pathname.replace(/\/+$/, '') + '/ws' + location.search
+  var ws = new WebSocket(socket)
+  ws.binaryType = 'arraybuffer'
+
+  function measure() {
+    try { fit.fit() } catch (e) { return }
+    if (ws.readyState === 1) {
+      ws.send(JSON.stringify({ resize: { cols: term.cols, rows: term.rows } }))
+    }
+  }
+  new ResizeObserver(measure).observe(document.body)
+
+  // The reader's own type size, font, and theme, from the host that frames this page
+  // — the reverse leg of the channel `post` already uses, so a change reaches a LIVE
+  // terminal. It cannot be a reload: a ticket is spent by the socket that
+  // presents it, so re-opening this document needs a fresh one.
+  window.addEventListener('message', function (e) {
+    if (e.source !== window.parent) return
+    var m = e.data
+    if (!m || m.source !== 'hanzo-term') return
+    if (typeof m.fontSize === 'number') {
+      var n = Math.round(m.fontSize)
+      if (n >= 8 && n <= 32 && n !== term.options.fontSize) {
+        term.options.fontSize = n
+        measure()
+      }
+    }
+    if (typeof m.fontFamily === 'string' && m.fontFamily && m.fontFamily !== term.options.fontFamily) {
+      term.options.fontFamily = m.fontFamily
+      measure()
+    }
+    if (m.theme && typeof m.theme === 'object') {
+      term.options.theme = Object.assign({}, term.options.theme, m.theme)
+    }
+  })
+
+  ws.onopen = function () {
+    status.hidden = true
+    measure()
+    term.focus()
+    // The readiness handshake. A host that frames this page has no other way to
+    // tell "the terminal is up" from "the page 404'd into a sign-in", and a host
+    // that guesses gets a blank pane it cannot explain.
+    told = true
+    post({ source: 'hanzo-term', ready: true })
+  }
+  ws.onmessage = function (e) {
+    term.write(typeof e.data === 'string' ? e.data : new Uint8Array(e.data))
+  }
+  ws.onerror = function () { stopped('The connection failed.') }
+  ws.onclose = function (e) { stopped(e.reason || 'The connection closed.') }
+  term.onData(function (d) { if (ws.readyState === 1) ws.send(d) })
+  window.addEventListener('focus', function () { term.focus() })
+})()
+</script>
+</body>
+</html>

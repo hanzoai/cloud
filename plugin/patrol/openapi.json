@@ -1,0 +1,2638 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Hanzo Cloud API",
+    "description": "Package patrol stands watch over an estate: sites, units, tours, keys, cameras, and the incidents that interrupt them.",
+    "version": "v1"
+  },
+  "servers": [
+    {
+      "url": "https://api.hanzo.ai"
+    }
+  ],
+  "security": [
+    {
+      "bearer": []
+    }
+  ],
+  "tags": [
+    {
+      "name": "patrol"
+    }
+  ],
+  "paths": {
+    "/v1/patrol/alarm": {
+      "post": {
+        "operationId": "post_patrol_alarm",
+        "summary": "Takes one activation.",
+        "description": "Takes one activation. It records the activation whatever happens, then\nmatches a site — the one the caller named, else the one whose account number\nreported — and on a match opens an incident in state received with that site's\ntier and SLA, puts the site into alarm, raises a red feed row and tells the\ncontrollers. An activation that matches no site is still recorded, raises an\namber row, and answers 202: an activation is never dropped.\n\nIt admits the receiving centre's own credential and a controller keying one in\nby hand. The centre holds the `centre` role its tenant granted it, which posts\nan activation and reads nothing, like every other identity here.\n\nThe centre's own reference identifies the activation while the response it\nopened is still running, so a redelivery is answered with that response rather\nthan dispatching a second unit. Centres recycle references, so once the\nresponse has closed the same one is the next activation.",
+        "tags": [
+          "patrol"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/patrol.patrolAlarmIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/patrol.patrolAlarmOut"
+                }
+              }
+            },
+            "description": "created"
+          },
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/patrol.patrolAlarmOut"
+                }
+              }
+            },
+            "description": "accepted"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/patrol/camera": {
+      "get": {
+        "operationId": "get_patrol_camera",
+        "summary": "Lists the cameras a caller may OPEN.",
+        "description": "Lists the cameras a caller may OPEN. A row somebody can never reach is\na catalogue of a customer's premises and nothing else, so the admission the\nstream enforces is asked here too rather than left to differ from it.\n\nThe stream credential is not part of a camera row — it is a KMS path the\ndocument store never holds — so what comes back says where a camera is and\nnever how to reach it.",
+        "tags": [
+          "patrol"
+        ],
+        "parameters": [
+          {
+            "name": "site",
+            "in": "query",
+            "required": false,
+            "description": "Site narrows the list to one site by document name. Empty lists every\ncamera.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/patrol.patrolCameraList"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/patrol/camera/{name}/stream": {
+      "get": {
+        "operationId": "get_patrol_camera_by_name_stream",
+        "summary": "Mints a short-lived way in to one camera.",
+        "description": "Mints a short-lived way in to one camera.\n\nThe credential is kept in KMS, at the one place a camera's credential is kept\n— the org's own patrol namespace, named for the camera — and what comes back\nis minted from it rather than being it: the camera's address with the user and\npassword removed, bounded by an expiry, and signed so that whatever opens the\ncamera can tell a live ticket from a made-up one. The caller receives\nsomething that opens one camera for five minutes and says nothing about how.\n\nA camera whose row points anywhere but its own place, and one with no\ncredential registered, is 404.",
+        "tags": [
+          "patrol"
+        ],
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "description": "Name is the camera's document name, from the path.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/patrol.patrolStreamOut"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/patrol/camera/{name}/stream/{ticket}": {
+      "get": {
+        "operationId": "get_patrol_camera_by_name_stream_by_ticket",
+        "summary": "Redeems a minted ticket for what opens the camera.",
+        "description": "Redeems a minted ticket for what opens the camera.\n\nThe mint is the operation's — staff only — and it hands back the camera's\naddress with the credential stripped out of it. This is where the holder of\nthat address gets what actually dials the camera, and it asks for no\ncredential of its own: whatever opens a camera is a relay, not a member of the\noperation, and a check only the issuer could perform checks nothing.\n\nThe ticket IS the authority. It names one camera, it covers one moment, and it\nis tagged with a key nobody but this deployment holds, so holding a live one is\nthe right to open that camera until it runs out — which is the whole of what\nwas issued, and the reason issuing one is staff-only and five minutes long.\n\nA tag that does not verify is 404 — the route is no oracle on which tenants or\ncameras exist, or which tickets were ever issued — and one that verifies but\nhas passed its moment is 410, because that ticket was real and is over.",
+        "tags": [
+          "patrol"
+        ],
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "description": "Name is the camera's document name, from the path.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "ticket",
+            "in": "path",
+            "required": true,
+            "description": "Ticket is the tag the minted address carries, from the path.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "expires",
+            "in": "query",
+            "required": false,
+            "description": "Expires is the moment the tag covers, as the seconds the minted address\ncarries in its `expires` parameter.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/patrol.patrolTicketOut"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/patrol/event": {
+      "get": {
+        "operationId": "get_patrol_event",
+        "summary": "Lists the feed, newest first.",
+        "description": "Lists the feed, newest first. It is the same rows the live stream\ncarries, read back for a screen that has just opened — so the window is the\nnewest rows, or a screen that reloads reads a feed that stopped on the day the\ntenant was installed.",
+        "tags": [
+          "patrol"
+        ],
+        "parameters": [
+          {
+            "name": "level",
+            "in": "query",
+            "required": false,
+            "description": "Level narrows the list to red, amber, green or cyan. Empty lists every\nlevel.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Limit caps how many rows are returned. Anything that is not a positive\ninteger uses 80, and higher values are clamped to 80.",
+            "schema": {
+              "format": "int64",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/patrol.patrolEventList"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      },
+      "post": {
+        "operationId": "post_patrol_event",
+        "summary": "Writes one feed row by hand and pushes it to every screen watching.",
+        "description": "Writes one feed row by hand and pushes it to every screen watching.\nIt is how a controller puts something on the record that no automatic write\nwould have produced.",
+        "tags": [
+          "patrol"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/patrol.patrolEventIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/patrol.patrolEventOut"
+                }
+              }
+            },
+            "description": "created"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/patrol/feed": {
+      "get": {
+        "operationId": "get_patrol_feed",
+        "summary": "Watch the live feed",
+        "description": "Holds a Server-Sent Events connection open and writes every change in the picture as it happens: a unit's position, an incident moving, a feed row, a checkpoint confirmed. Each record is one `data:` line carrying a JSON frame whose `kind` says which of the four it is, terminated by a blank line; a comment line arrives every 25 seconds so an idle connection stays open.\n\nIt carries the caller's own org and no other. ?since=\u003cYYYY-MM-DD HH:MM:SS\u003e replays the feed rows written at or after that moment before the stream goes live, so a reader that reconnected misses nothing it can still see. The list routes are the truth and the stream is a live hint: a dropped frame costs one refresh.",
+        "tags": [
+          "patrol"
+        ],
+        "x-public": true
+      }
+    },
+    "/v1/patrol/incident": {
+      "get": {
+        "operationId": "get_patrol_incident",
+        "summary": "Lists responses.",
+        "description": "Lists responses. ?open=1 narrows it to the ones still running.",
+        "tags": [
+          "patrol"
+        ],
+        "parameters": [
+          {
+            "name": "open",
+            "in": "query",
+            "required": false,
+            "description": "Open lists only the incidents that are not closed when it is 1.",
+            "schema": {
+              "format": "int64",
+              "type": "integer"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Limit caps how many are returned. Anything that is not a positive integer\nuses 50, and higher values are clamped to 50.",
+            "schema": {
+              "format": "int64",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/patrol.patrolIncidentList"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      },
+      "post": {
+        "operationId": "post_patrol_incident",
+        "summary": "Records a response by hand, in state received and carrying the site's tier and SLA.",
+        "description": "Records a response by hand, in state received and carrying the\nsite's tier and SLA. It is what a controller calls when an activation arrives\nby phone rather than over the intake.",
+        "tags": [
+          "patrol"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/patrol.patrolIncidentIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/patrol.patrolIncidentOut"
+                }
+              }
+            },
+            "description": "created"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/patrol/incident/{name}": {
+      "get": {
+        "operationId": "get_patrol_incident_by_name",
+        "summary": "Returns one response whole: the incident, every act performed on it, and the SLA clocks those acts settled.",
+        "description": "Returns one response whole: the incident, every act performed on it,\nand the SLA clocks those acts settled. The clocks are derived from the stamps\nand stored nowhere.",
+        "tags": [
+          "patrol"
+        ],
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "description": "Name is the incident's document name, from the path.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/patrol.patrolIncidentOut"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/patrol/incident/{name}/step": {
+      "post": {
+        "operationId": "post_patrol_incident_by_name_step",
+        "summary": "Performs one act on an incident: it stamps the act's time, moves the state, appends the act to the trail, and runs what the act sets in motion — a unit assigned, a site secured, a report filed, a controller told.",
+        "description": "Performs one act on an incident: it stamps the act's time, moves\nthe state, appends the act to the trail, and runs what the act sets in motion —\na unit assigned, a site secured, a report filed, a controller told.\n\nThe states run forward only. An act from a state it does not leave is 409\nnaming the state the incident is in, and a caller without the act's roles is\nrefused.",
+        "tags": [
+          "patrol"
+        ],
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "description": "Name is the incident's document name, from the path.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/patrol.patrolIncidentAct"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/patrol.patrolIncidentOut"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/patrol/key": {
+      "get": {
+        "operationId": "get_patrol_key",
+        "summary": "Lists the key register.",
+        "description": "Lists the key register. Neither the officer nor the client reaches it:\npatrol.key is its own DocType and its permissions name neither, so there is no\nkey row for either to read.",
+        "tags": [
+          "patrol"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/patrol.patrolKeyList"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/patrol/key/{name}": {
+      "get": {
+        "operationId": "get_patrol_key_by_name",
+        "summary": "Returns one key set from the register.",
+        "description": "Returns one key set from the register.",
+        "tags": [
+          "patrol"
+        ],
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "description": "Name is the key set's reference, from the path.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/patrol.patrolKeyOut"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/patrol/key/{name}/move": {
+      "post": {
+        "operationId": "post_patrol_key_by_name_move",
+        "summary": "Records a key set leaving, returning, or being counted, and moves the register row to match.",
+        "description": "Records a key set leaving, returning, or being counted, and moves the\nregister row to match. The register says where a set is now and the movements\nsay how it got there, so a movement is written once and never edited.\n\nWho signed for the move is the caller, stamped from the request. A body that\nnamed the signer would make the chain of custody a value the signer chose.",
+        "tags": [
+          "patrol"
+        ],
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "description": "Name is the key set's reference, from the path.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/patrol.patrolMoveIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/patrol.patrolKeyOut"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/patrol/note": {
+      "get": {
+        "operationId": "get_patrol_note",
+        "summary": "Lists internal remarks.",
+        "description": "Lists internal remarks. The client never reaches them: patrol.note is\nits own DocType and its permissions do not name the client, so there is no\nnote row for a customer to read.",
+        "tags": [
+          "patrol"
+        ],
+        "parameters": [
+          {
+            "name": "subject",
+            "in": "query",
+            "required": false,
+            "description": "Subject narrows the list to one subject by exact match. Empty lists every\nnote.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/patrol.patrolNoteList"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      },
+      "post": {
+        "operationId": "post_patrol_note",
+        "summary": "Records an internal remark, stamped with who wrote it.",
+        "description": "Records an internal remark, stamped with who wrote it.",
+        "tags": [
+          "patrol"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/patrol.patrolNoteIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/patrol.patrolNoteOut"
+                }
+              }
+            },
+            "description": "created"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/patrol/point/{name}/confirm": {
+      "post": {
+        "operationId": "post_patrol_point_by_name_confirm",
+        "summary": "Records presence at a checkpoint: who confirmed it, the method, where they stood, and the photo key if one was taken.",
+        "description": "Records presence at a checkpoint: who confirmed it, the method, where\nthey stood, and the photo key if one was taken. A confirmation after the\nwindow shuts is recorded late rather than refused — the visit happened, and a\nreport that hides it is worth nothing.\n\nAn officer confirms their own round and no other, by the same rule a position\nreport and every incident act are held to: the checkpoint belongs to a tour,\nthe tour names a unit, and the unit names its officer. The record carries the\nactor, so it says who claimed the visit and not merely that somebody did.",
+        "tags": [
+          "patrol"
+        ],
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "description": "Name is the checkpoint's document name, from the path.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/patrol.patrolConfirmIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/patrol.patrolCheckpointOut"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/patrol/report": {
+      "post": {
+        "operationId": "post_patrol_report",
+        "summary": "Composes and files a report from one estate read, so the same figures read the same a month later.",
+        "description": "Composes and files a report from one estate read, so the same\nfigures read the same a month later. The text is stored on the document; the\nPDF is produced on read at /v1/patrol/report/{name}.\n\nA client report naming a customer is an account of that customer's estate and\nis theirs to download; naming none covers every customer, which is an account\nof the operation.",
+        "tags": [
+          "patrol"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/patrol.patrolReportIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/patrol.patrolReportOut"
+                }
+              }
+            },
+            "description": "created"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/patrol/report/{name}": {
+      "get": {
+        "operationId": "get_patrol_report_by_name",
+        "summary": "Download a filed report",
+        "description": "Renders a filed report as a PDF and answers with the bytes under an attachment filename. ?format=text answers the stored text verbatim under text/plain, which is what a copy button reads.\n\nEveryone but the customer may read every report; a client reads only a report about a site of their own, and anything else is 404 rather than a refusal, so the route is no existence oracle. A report whose text cannot be set answers that text rather than failing, because the account is the thing being asked for.",
+        "tags": [
+          "patrol"
+        ],
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "x-public": true
+      }
+    },
+    "/v1/patrol/site": {
+      "get": {
+        "operationId": "get_patrol_site",
+        "summary": "Lists the estate.",
+        "description": "Lists the estate. A client sees only the sites their own customer\nrecord owns, filtered from their role rather than from anything they sent.",
+        "tags": [
+          "patrol"
+        ],
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Limit caps how many sites are returned. Anything that is not a positive\ninteger uses 500, and higher values are clamped to 500.",
+            "schema": {
+              "format": "int64",
+              "type": "integer"
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "description": "Status narrows the list to ok, fault, alarm or offline. Empty lists every\nstatus.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/patrol.patrolSiteList"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/patrol/site/{name}": {
+      "get": {
+        "operationId": "get_patrol_site_by_name",
+        "summary": "Returns one site whole: the register row plus the panel's zones and the standing hazards, which ride inside the document.",
+        "description": "Returns one site whole: the register row plus the panel's zones and the\nstanding hazards, which ride inside the document. A client asking for a site\nthat is not theirs is 404.",
+        "tags": [
+          "patrol"
+        ],
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "description": "Name is the site's document name, from the path.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/patrol.patrolSiteOut"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      },
+      "put": {
+        "operationId": "put_patrol_site_by_name",
+        "summary": "Changes a site's contract and brief fields.",
+        "description": "Changes a site's contract and brief fields. It leaves absent fields\nas they stand, and it never moves the account number, the coordinates or the\ncustomer — those are register facts, changed through the framework surface.",
+        "tags": [
+          "patrol"
+        ],
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "description": "Name is the site's document name, from the path.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/patrol.patrolSiteEdit"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/patrol.patrolSiteOut"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/patrol/snapshot": {
+      "get": {
+        "operationId": "get_patrol_snapshot",
+        "summary": "Returns the whole picture in one read: sites, units with their position trails, today's tours and checkpoints, the key register, the recent feed and the open incident.",
+        "description": "Returns the whole picture in one read: sites, units with their\nposition trails, today's tours and checkpoints, the key register, the recent\nfeed and the open incident. It replaces the five separate list calls the\nscreen used to make. A client sees only their own sites, and the key register\nis empty for anyone whose roles do not reach it.",
+        "tags": [
+          "patrol"
+        ],
+        "parameters": [
+          {
+            "name": "events",
+            "in": "query",
+            "required": false,
+            "description": "Events caps how many feed rows ride along. Anything that is not a positive\ninteger uses 80, and higher values are clamped to 80.",
+            "schema": {
+              "format": "int64",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/patrol.patrolSnapshotOut"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/patrol/tenant/{org}": {
+      "get": {
+        "operationId": "get_patrol_tenant_by_org",
+        "summary": "Returns one org's public face — brand, company, operations, features and terminology.",
+        "description": "Returns one org's public face — brand, company, operations, features\nand terminology. It is the one anonymous route here: the front end loads it\nbefore anyone signs in. It carries no contact list and nothing operational,\nand an org with no tenant document is 404.\n\nThe org is a name a stranger supplied, so the read asks whether the deployment\nalready holds that tenant before it opens anything. Resolving a store CREATES\none, and a caller naming a fresh org on every request would leave a database\nper name they invented.",
+        "tags": [
+          "patrol"
+        ],
+        "parameters": [
+          {
+            "name": "org",
+            "in": "path",
+            "required": true,
+            "description": "Org is the IAM org the tenant belongs to, from the path.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/patrol.patrolTenantOut"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/patrol/tour": {
+      "get": {
+        "operationId": "get_patrol_tour",
+        "summary": "Lists patrol rounds with their checkpoints — the proof-of-presence record.",
+        "description": "Lists patrol rounds with their checkpoints — the proof-of-presence\nrecord. ?date=today narrows it to the current day.",
+        "tags": [
+          "patrol"
+        ],
+        "parameters": [
+          {
+            "name": "date",
+            "in": "query",
+            "required": false,
+            "description": "Date narrows the list to one day, as YYYY-MM-DD. \"today\" means today.\nEmpty lists every round held.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/patrol.patrolTourList"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/patrol/unit": {
+      "get": {
+        "operationId": "get_patrol_unit",
+        "summary": "Lists the fleet with each unit's position trail, which is what the map draws.",
+        "description": "Lists the fleet with each unit's position trail, which is what the map\ndraws. It is the operation's own: a unit names no site, so a customer reads\nnone of it — the officer crewing one is the company's staff, and the trail is\nwhere that person has been all shift.",
+        "tags": [
+          "patrol"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/patrol.patrolUnitList"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/patrol/unit/near": {
+      "get": {
+        "operationId": "get_patrol_unit_near",
+        "summary": "Answers which units can reach a site soonest.",
+        "description": "Answers which units can reach a site soonest. Distance is a great-circle\nhaversine over the units' last reported positions, and an available unit sorts\nahead of a busy one at any distance — a controller asking for the nearest unit\nis asking for the nearest free one.",
+        "tags": [
+          "patrol"
+        ],
+        "parameters": [
+          {
+            "name": "site",
+            "in": "query",
+            "required": false,
+            "description": "Site is the site to measure from, by document name.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Limit caps how many units come back. Anything that is not a positive\ninteger uses 3, and higher values are clamped to 10.",
+            "schema": {
+              "format": "int64",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/patrol.patrolNearList"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/patrol/unit/{name}/fix": {
+      "post": {
+        "operationId": "post_patrol_unit_by_name_fix",
+        "summary": "Records where a unit is.",
+        "description": "Records where a unit is. It appends the position to the unit's trail,\nmoves the unit's own coordinates and last-seen stamp, and publishes one frame\nto every screen watching. An officer may report only their own unit; the\ncontrol room may report any.",
+        "tags": [
+          "patrol"
+        ],
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "description": "Name is the unit's call sign, from the path.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/patrol.patrolFixIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/patrol.patrolFixOut"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/patrol/unit/{name}/state": {
+      "post": {
+        "operationId": "post_patrol_unit_by_name_state",
+        "summary": "Moves a unit between states — on shift, on a break, off, or in trouble.",
+        "description": "Moves a unit between states — on shift, on a break, off, or in\ntrouble. An officer may move only their own unit; the control room may move\nany.",
+        "tags": [
+          "patrol"
+        ],
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "description": "Name is the unit's call sign, from the path.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/patrol.patrolUnitStateIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/patrol.patrolUnitOut"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "patrol.patrolAct": {
+        "properties": {
+          "act": {
+            "description": "Act is the act performed.",
+            "type": "string"
+          },
+          "actor": {
+            "description": "Actor is who performed it.",
+            "type": "string"
+          },
+          "at": {
+            "description": "At is when it happened.",
+            "type": "string"
+          },
+          "detail": {
+            "description": "Detail is what they wrote with it.",
+            "type": "string"
+          },
+          "from": {
+            "description": "From is the state the incident left.",
+            "type": "string"
+          },
+          "to": {
+            "description": "To is the state it landed in.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "patrol.patrolActivation": {
+        "properties": {
+          "alarm": {
+            "description": "Alarm is the recorded activation's document name.",
+            "type": "string"
+          },
+          "incident": {
+            "$ref": "#/components/schemas/patrol.patrolIncident",
+            "description": "Incident is the incident it opened, or null when it matched no site."
+          },
+          "matched": {
+            "description": "Matched says whether a site was found for it.",
+            "type": "boolean"
+          },
+          "site": {
+            "description": "Site is the site it matched, or empty.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "patrol.patrolAlarmIn": {
+        "properties": {
+          "account": {
+            "description": "Account is the alarm-panel account number that reported. It is what an\nactivation matches a site on when no site is named.",
+            "type": "string"
+          },
+          "raw": {
+            "description": "Raw is the activation exactly as it arrived, kept verbatim up to 16 KiB.\nA panel's own idea of the time rides in here; when the activation was\nreceived is the server's stamp, which is the fact an insurer and a court\nread off it and the one every SLA clock runs from."
+          },
+          "ref": {
+            "description": "Ref is the receiving centre's own reference for the activation.",
+            "type": "string"
+          },
+          "site": {
+            "description": "Site names the site directly, by document name, when the caller already\nknows it.",
+            "type": "string"
+          },
+          "source": {
+            "description": "Source is which receiver or operator the activation came through.",
+            "type": "string"
+          },
+          "trigger": {
+            "description": "Trigger is what the panel reported.",
+            "type": "string"
+          },
+          "zone": {
+            "description": "Zone is the panel zone that fired.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "patrol.patrolAlarmOut": {
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/patrol.patrolActivation",
+            "description": "Data is what became of the activation."
+          }
+        },
+        "type": "object"
+      },
+      "patrol.patrolCamera": {
+        "properties": {
+          "kind": {
+            "description": "Kind is the camera type.",
+            "type": "string"
+          },
+          "label": {
+            "description": "Label is what the camera is called on screen.",
+            "type": "string"
+          },
+          "name": {
+            "description": "Name is the camera's document name and the segment\n/v1/patrol/camera/{name}/stream addresses it by.",
+            "type": "string"
+          },
+          "online": {
+            "description": "Online says whether the camera last reported healthy.",
+            "type": "boolean"
+          },
+          "site": {
+            "description": "Site is the site the camera watches.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "patrol.patrolCameraList": {
+        "properties": {
+          "data": {
+            "description": "Data is the matching cameras, never their credentials.",
+            "items": {
+              "$ref": "#/components/schemas/patrol.patrolCamera"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "patrol.patrolCheckpoint": {
+        "properties": {
+          "actor": {
+            "description": "Actor is who confirmed it.",
+            "type": "string"
+          },
+          "at": {
+            "description": "At is when it was confirmed, or empty.",
+            "type": "string"
+          },
+          "close": {
+            "description": "Close is when that window shuts.",
+            "type": "string"
+          },
+          "lat": {
+            "description": "Lat is the latitude the confirmation was taken at.",
+            "format": "double",
+            "type": "number"
+          },
+          "lon": {
+            "description": "Lon is the longitude the confirmation was taken at.",
+            "format": "double",
+            "type": "number"
+          },
+          "method": {
+            "description": "Method is how it was confirmed: tag, scan, fence, manual or photo.",
+            "type": "string"
+          },
+          "name": {
+            "description": "Name is the checkpoint's document name and the segment\n/v1/patrol/point/{name}/confirm addresses it by.",
+            "type": "string"
+          },
+          "open": {
+            "description": "Open is when the window to confirm it opens.",
+            "type": "string"
+          },
+          "photo": {
+            "description": "Photo is the object key of the photo taken, or empty.",
+            "type": "string"
+          },
+          "site": {
+            "description": "Site is the site to attend.",
+            "type": "string"
+          },
+          "state": {
+            "description": "State is pending, done, late or skipped.",
+            "type": "string"
+          },
+          "tag": {
+            "description": "Tag is the tag or marker to read there.",
+            "type": "string"
+          },
+          "tour": {
+            "description": "Tour is the round this checkpoint belongs to.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "patrol.patrolCheckpointOut": {
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/patrol.patrolCheckpoint",
+            "description": "Data is the checkpoint as it now stands."
+          }
+        },
+        "type": "object"
+      },
+      "patrol.patrolClock": {
+        "properties": {
+          "elapsed": {
+            "description": "Elapsed is the seconds run so far, or the seconds it took when settled.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "label": {
+            "description": "Label names the clock: Verify, Dispatch or On site.",
+            "type": "string"
+          },
+          "settled": {
+            "description": "Settled is the seconds it took, or -1 while the clock is still running.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "target": {
+            "description": "Target is the contracted seconds.",
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "patrol.patrolConfirmIn": {
+        "properties": {
+          "lat": {
+            "description": "Lat is the latitude the confirmation was taken at.",
+            "format": "double",
+            "type": "number"
+          },
+          "lon": {
+            "description": "Lon is the longitude the confirmation was taken at.",
+            "format": "double",
+            "type": "number"
+          },
+          "method": {
+            "description": "Method is how presence was proved: tag, scan, fence, manual or photo.",
+            "type": "string"
+          },
+          "name": {
+            "description": "Name is the checkpoint's document name, from the path.",
+            "type": "string"
+          },
+          "photo": {
+            "description": "Photo is the object key of a photo taken there, never the bytes.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "patrol.patrolEstate": {
+        "properties": {
+          "events": {
+            "description": "Events is the recent feed, newest first.",
+            "items": {
+              "$ref": "#/components/schemas/patrol.patrolEvent"
+            },
+            "type": "array"
+          },
+          "incident": {
+            "$ref": "#/components/schemas/patrol.patrolIncident",
+            "description": "Incident is the incident currently running, or null when none is."
+          },
+          "keys": {
+            "description": "Keys is the key register, empty for a caller whose roles do not reach it.",
+            "items": {
+              "$ref": "#/components/schemas/patrol.patrolKey"
+            },
+            "type": "array"
+          },
+          "sites": {
+            "description": "Sites is the estate under contract.",
+            "items": {
+              "$ref": "#/components/schemas/patrol.patrolSite"
+            },
+            "type": "array"
+          },
+          "tours": {
+            "description": "Tours is today's rounds with their checkpoints.",
+            "items": {
+              "$ref": "#/components/schemas/patrol.patrolTour"
+            },
+            "type": "array"
+          },
+          "units": {
+            "description": "Units is the fleet, each with the tail of its position trail.",
+            "items": {
+              "$ref": "#/components/schemas/patrol.patrolUnit"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "patrol.patrolEvent": {
+        "properties": {
+          "at": {
+            "description": "At is when it was raised.",
+            "type": "string"
+          },
+          "detail": {
+            "description": "Detail is the longer account, or empty.",
+            "type": "string"
+          },
+          "level": {
+            "description": "Level is red, amber, green or cyan.",
+            "type": "string"
+          },
+          "name": {
+            "description": "Name is the event's document name.",
+            "type": "string"
+          },
+          "site": {
+            "description": "Site is the site the event is about, or empty.",
+            "type": "string"
+          },
+          "source": {
+            "description": "Source is what raised it.",
+            "type": "string"
+          },
+          "title": {
+            "description": "Title is the one line the feed shows.",
+            "type": "string"
+          },
+          "unit": {
+            "description": "Unit is the unit the event is about, or empty.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "patrol.patrolEventIn": {
+        "properties": {
+          "detail": {
+            "description": "Detail is the longer account.",
+            "type": "string"
+          },
+          "level": {
+            "description": "Level is red, amber, green or cyan.",
+            "type": "string"
+          },
+          "site": {
+            "description": "Site is the site it is about, by document name.",
+            "type": "string"
+          },
+          "source": {
+            "description": "Source is what raised it.",
+            "type": "string"
+          },
+          "title": {
+            "description": "Title is the one line the feed shows.",
+            "type": "string"
+          },
+          "unit": {
+            "description": "Unit is the unit it is about, by call sign.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "patrol.patrolEventList": {
+        "properties": {
+          "data": {
+            "description": "Data is the matching rows, newest first.",
+            "items": {
+              "$ref": "#/components/schemas/patrol.patrolEvent"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "patrol.patrolEventOut": {
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/patrol.patrolEvent",
+            "description": "Data is the row as recorded."
+          }
+        },
+        "type": "object"
+      },
+      "patrol.patrolFix": {
+        "properties": {
+          "at": {
+            "description": "At is when the position was recorded.",
+            "type": "string"
+          },
+          "lat": {
+            "description": "Lat is the latitude in degrees.",
+            "format": "double",
+            "type": "number"
+          },
+          "lon": {
+            "description": "Lon is the longitude in degrees.",
+            "format": "double",
+            "type": "number"
+          }
+        },
+        "type": "object"
+      },
+      "patrol.patrolFixIn": {
+        "properties": {
+          "at": {
+            "description": "At is not a caller's to fill. A position report is stamped by the server,\nand a body naming it is refused rather than silently restamped: the trail is\nthe proof of where a unit was, so a report that thought it was dating itself\nmust learn otherwise.",
+            "type": "string"
+          },
+          "lat": {
+            "description": "Lat is the latitude in degrees.",
+            "format": "double",
+            "type": "number"
+          },
+          "lon": {
+            "description": "Lon is the longitude in degrees.",
+            "format": "double",
+            "type": "number"
+          },
+          "name": {
+            "description": "Name is the unit's call sign, from the path.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "patrol.patrolFixOut": {
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/patrol.patrolFixed",
+            "description": "Data is the acknowledgement."
+          }
+        },
+        "type": "object"
+      },
+      "patrol.patrolFixed": {
+        "properties": {
+          "at": {
+            "description": "At is the moment the position was recorded under.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "patrol.patrolIncident": {
+        "properties": {
+          "checked": {
+            "description": "Checked is when the premises had been walked.",
+            "type": "string"
+          },
+          "clocks": {
+            "description": "Clocks is the SLA clocks, present on a single-incident read.",
+            "items": {
+              "$ref": "#/components/schemas/patrol.patrolClock"
+            },
+            "type": "array"
+          },
+          "closed": {
+            "description": "Closed is when the incident was closed.",
+            "type": "string"
+          },
+          "dispatched": {
+            "description": "Dispatched is when a unit was assigned.",
+            "type": "string"
+          },
+          "enroute": {
+            "description": "Enroute is when that unit started moving.",
+            "type": "string"
+          },
+          "escalated": {
+            "description": "Escalated is when it was escalated, or empty.",
+            "type": "string"
+          },
+          "false": {
+            "description": "False says the activation turned out to be nothing.",
+            "type": "boolean"
+          },
+          "filed": {
+            "description": "Filed is when the report was written.",
+            "type": "string"
+          },
+          "name": {
+            "description": "Name is the incident's document name.",
+            "type": "string"
+          },
+          "onsite": {
+            "description": "Onsite is when it arrived.",
+            "type": "string"
+          },
+          "opened": {
+            "description": "Opened is when the activation landed.",
+            "type": "string"
+          },
+          "outcome": {
+            "description": "Outcome is what it came to.",
+            "type": "string"
+          },
+          "ref": {
+            "description": "Ref is the receiving centre's own reference.",
+            "type": "string"
+          },
+          "secured": {
+            "description": "Secured is when the site was made safe.",
+            "type": "string"
+          },
+          "site": {
+            "description": "Site is where it is happening.",
+            "type": "string"
+          },
+          "sla": {
+            "description": "SLA is the contracted response time in minutes.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "state": {
+            "description": "State is one of received, verified, dispatched, enroute, onsite, checked,\nsecured, filed and closed.",
+            "type": "string"
+          },
+          "steps": {
+            "description": "Steps is the act trail, present on a single-incident read.",
+            "items": {
+              "$ref": "#/components/schemas/patrol.patrolAct"
+            },
+            "type": "array"
+          },
+          "tier": {
+            "description": "Tier is the site's contracted service tier.",
+            "type": "string"
+          },
+          "trigger": {
+            "description": "Trigger is what the panel reported.",
+            "type": "string"
+          },
+          "unit": {
+            "description": "Unit is the call sign attending, or empty.",
+            "type": "string"
+          },
+          "verified": {
+            "description": "Verified is when the activation was confirmed real.",
+            "type": "string"
+          },
+          "zone": {
+            "description": "Zone is the panel zone that reported.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "patrol.patrolIncidentAct": {
+        "properties": {
+          "act": {
+            "description": "Act is VERIFY, DISPATCH, ROLL, ARRIVE, CHECK, SECURE, FILE, CLOSE or\nESCALATE.",
+            "type": "string"
+          },
+          "detail": {
+            "description": "Detail is what to write on the trail with this act.",
+            "type": "string"
+          },
+          "false": {
+            "description": "False says the activation turned out to be nothing, read by CLOSE.",
+            "type": "boolean"
+          },
+          "name": {
+            "description": "Name is the incident's document name, from the path.",
+            "type": "string"
+          },
+          "outcome": {
+            "description": "Outcome is what the incident came to, read by CLOSE.",
+            "type": "string"
+          },
+          "unit": {
+            "description": "Unit is the call sign to send, read by DISPATCH.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "patrol.patrolIncidentIn": {
+        "properties": {
+          "ref": {
+            "description": "Ref is the receiving centre's own reference.",
+            "type": "string"
+          },
+          "site": {
+            "description": "Site is where it is happening, by document name.",
+            "type": "string"
+          },
+          "trigger": {
+            "description": "Trigger is what was reported.",
+            "type": "string"
+          },
+          "zone": {
+            "description": "Zone is the panel zone that reported.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "patrol.patrolIncidentList": {
+        "properties": {
+          "data": {
+            "description": "Data is the matching incidents, without their trails.",
+            "items": {
+              "$ref": "#/components/schemas/patrol.patrolIncident"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "patrol.patrolIncidentOut": {
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/patrol.patrolIncident",
+            "description": "Data is the incident with its act trail and SLA clocks."
+          }
+        },
+        "type": "object"
+      },
+      "patrol.patrolKey": {
+        "properties": {
+          "holder": {
+            "description": "Holder is who has it now.",
+            "type": "string"
+          },
+          "moved": {
+            "description": "Moved is when it last changed hands.",
+            "type": "string"
+          },
+          "name": {
+            "description": "Name is the key set's reference, which is its document name.",
+            "type": "string"
+          },
+          "site": {
+            "description": "Site is the site the keys open.",
+            "type": "string"
+          },
+          "where": {
+            "description": "Where is where the set is kept.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "patrol.patrolKeyList": {
+        "properties": {
+          "data": {
+            "description": "Data is every key set held.",
+            "items": {
+              "$ref": "#/components/schemas/patrol.patrolKey"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "patrol.patrolKeyOut": {
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/patrol.patrolKey",
+            "description": "Data is the key set."
+          }
+        },
+        "type": "object"
+      },
+      "patrol.patrolMoveIn": {
+        "properties": {
+          "act": {
+            "description": "Act is out, in or audit.",
+            "type": "string"
+          },
+          "holder": {
+            "description": "Holder is who the keys went to. Who SIGNED for the move is the caller, and\nis stamped from the request rather than read from here.",
+            "type": "string"
+          },
+          "job": {
+            "description": "Job is the work the keys were drawn for.",
+            "type": "string"
+          },
+          "name": {
+            "description": "Name is the key set's reference, from the path.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "patrol.patrolNearList": {
+        "properties": {
+          "data": {
+            "description": "Data is the closest units, available ones first and then by distance.",
+            "items": {
+              "$ref": "#/components/schemas/patrol.patrolNearest"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "patrol.patrolNearest": {
+        "properties": {
+          "eta": {
+            "description": "Eta is the minutes the drive would take at the planning speed.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "km": {
+            "description": "Km is the great-circle distance to the site in kilometres.",
+            "format": "double",
+            "type": "number"
+          },
+          "unit": {
+            "description": "Unit is the unit's call sign.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "patrol.patrolNote": {
+        "properties": {
+          "actor": {
+            "description": "Actor is who wrote it.",
+            "type": "string"
+          },
+          "at": {
+            "description": "At is when it was written.",
+            "type": "string"
+          },
+          "body": {
+            "description": "Body is the remark.",
+            "type": "string"
+          },
+          "name": {
+            "description": "Name is the note's document name.",
+            "type": "string"
+          },
+          "subject": {
+            "description": "Subject is what the note is about.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "patrol.patrolNoteIn": {
+        "properties": {
+          "body": {
+            "description": "Body is the remark.",
+            "type": "string"
+          },
+          "subject": {
+            "description": "Subject is what the note is about.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "patrol.patrolNoteList": {
+        "properties": {
+          "data": {
+            "description": "Data is the matching notes in store order.",
+            "items": {
+              "$ref": "#/components/schemas/patrol.patrolNote"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "patrol.patrolNoteOut": {
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/patrol.patrolNote",
+            "description": "Data is the note as written."
+          }
+        },
+        "type": "object"
+      },
+      "patrol.patrolReport": {
+        "properties": {
+          "at": {
+            "description": "At is when it was filed.",
+            "type": "string"
+          },
+          "body": {
+            "description": "Body is the report as text.",
+            "type": "string"
+          },
+          "client": {
+            "description": "Client is the customer it is about, or empty.",
+            "type": "string"
+          },
+          "from": {
+            "description": "From is the start of the window the report covers.",
+            "type": "string"
+          },
+          "incident": {
+            "description": "Incident is the incident it is about, or empty.",
+            "type": "string"
+          },
+          "kind": {
+            "description": "Kind is shift, incident or client.",
+            "type": "string"
+          },
+          "name": {
+            "description": "Name is the report's document name and the segment\n/v1/patrol/report/{name} addresses it by.",
+            "type": "string"
+          },
+          "to": {
+            "description": "To is the end of that window.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "patrol.patrolReportIn": {
+        "properties": {
+          "client": {
+            "description": "Client is the customer to report on, read by kind client. Naming one files\nan account that customer may download; leaving it empty covers every\ncustomer, which is an account of the operation and stays with it.",
+            "type": "string"
+          },
+          "from": {
+            "description": "From is the start of the window to cover.",
+            "type": "string"
+          },
+          "incident": {
+            "description": "Incident is the incident to report on, required for kind incident.",
+            "type": "string"
+          },
+          "kind": {
+            "description": "Kind is shift, incident or client.",
+            "type": "string"
+          },
+          "to": {
+            "description": "To is the end of that window.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "patrol.patrolReportOut": {
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/patrol.patrolReport",
+            "description": "Data is the report as filed."
+          }
+        },
+        "type": "object"
+      },
+      "patrol.patrolSite": {
+        "properties": {
+          "account": {
+            "description": "Account is the alarm-panel account number the receiving centre reports.",
+            "type": "string"
+          },
+          "cameras": {
+            "description": "Cameras is how many cameras are registered here.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "category": {
+            "description": "Category is what kind of premises this is.",
+            "type": "string"
+          },
+          "client": {
+            "description": "Client is the customer this site belongs to.",
+            "type": "string"
+          },
+          "contact": {
+            "description": "Contact is the keyholder to reach.",
+            "type": "string"
+          },
+          "eircode": {
+            "description": "Eircode is the postal code.",
+            "type": "string"
+          },
+          "hazards": {
+            "description": "Hazards is the standing warnings, present on a single-site read.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "keys": {
+            "description": "Keys says whether the operation holds a key set for this site.",
+            "type": "boolean"
+          },
+          "lat": {
+            "description": "Lat is the site's latitude in degrees.",
+            "format": "double",
+            "type": "number"
+          },
+          "lon": {
+            "description": "Lon is the site's longitude in degrees.",
+            "format": "double",
+            "type": "number"
+          },
+          "name": {
+            "description": "Name is the site's document name and the segment /v1/patrol/site/{name}\naddresses it by.",
+            "type": "string"
+          },
+          "notes": {
+            "description": "Notes is the standing brief for the site.",
+            "type": "string"
+          },
+          "ref": {
+            "description": "Ref is the site's number in the register.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "risk": {
+            "description": "Risk is the assessed risk score.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "sector": {
+            "description": "Sector is the patrol sector the site sits in.",
+            "type": "string"
+          },
+          "sla": {
+            "description": "SLA is the contracted response time in minutes.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "status": {
+            "description": "Status is ok, fault, alarm or offline.",
+            "type": "string"
+          },
+          "tier": {
+            "description": "Tier is the contracted service tier.",
+            "type": "string"
+          },
+          "town": {
+            "description": "Town is the town the site is in.",
+            "type": "string"
+          },
+          "unit": {
+            "description": "Unit is the call sign of the unit that covers the site, or empty.",
+            "type": "string"
+          },
+          "visits": {
+            "description": "Visits is how many patrol visits the contract calls for.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "zones": {
+            "description": "Zones is the panel's detection zones, present on a single-site read.",
+            "items": {
+              "$ref": "#/components/schemas/patrol.patrolZone"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "patrol.patrolSiteEdit": {
+        "properties": {
+          "category": {
+            "description": "Category is what kind of premises this is.",
+            "type": "string"
+          },
+          "contact": {
+            "description": "Contact is the keyholder to reach.",
+            "type": "string"
+          },
+          "eircode": {
+            "description": "Eircode is the postal code.",
+            "type": "string"
+          },
+          "name": {
+            "description": "Name is the site's document name, from the path.",
+            "type": "string"
+          },
+          "notes": {
+            "description": "Notes is the standing brief for the site.",
+            "type": "string"
+          },
+          "sector": {
+            "description": "Sector is the patrol sector the site sits in.",
+            "type": "string"
+          },
+          "sla": {
+            "description": "SLA is the contracted response time in minutes.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "status": {
+            "description": "Status is ok, fault, alarm or offline.",
+            "type": "string"
+          },
+          "tier": {
+            "description": "Tier is the contracted service tier.",
+            "type": "string"
+          },
+          "town": {
+            "description": "Town is the town the site is in.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "patrol.patrolSiteList": {
+        "properties": {
+          "data": {
+            "description": "Data is the matching sites, without their zones and hazards.",
+            "items": {
+              "$ref": "#/components/schemas/patrol.patrolSite"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "patrol.patrolSiteOut": {
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/patrol.patrolSite",
+            "description": "Data is the site with its zones and hazards."
+          }
+        },
+        "type": "object"
+      },
+      "patrol.patrolSnapshotOut": {
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/patrol.patrolEstate",
+            "description": "Data is the whole estate as one read."
+          }
+        },
+        "type": "object"
+      },
+      "patrol.patrolStream": {
+        "properties": {
+          "expires": {
+            "description": "Expires is when that address stops working.",
+            "type": "string"
+          },
+          "url": {
+            "description": "URL is the address to open the stream at.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "patrol.patrolStreamOut": {
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/patrol.patrolStream",
+            "description": "Data is the stream address and its expiry."
+          }
+        },
+        "type": "object"
+      },
+      "patrol.patrolTenant": {
+        "properties": {
+          "brand": {
+            "description": "Brand is the look: names, colours, logo references."
+          },
+          "company": {
+            "description": "Company is the legal entity behind the operation — name, address, licence."
+          },
+          "features": {
+            "description": "Features says which parts of the product this tenant runs."
+          },
+          "operations": {
+            "description": "Operations is how the operation runs: coverage, timezone, SLA targets."
+          },
+          "terminology": {
+            "description": "Terminology is the words this tenant's screens use for site, unit and\nofficer."
+          }
+        },
+        "type": "object"
+      },
+      "patrol.patrolTenantOut": {
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/patrol.patrolTenant",
+            "description": "Data is the tenant's public configuration."
+          }
+        },
+        "type": "object"
+      },
+      "patrol.patrolTicketOut": {
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/patrol.patrolStream",
+            "description": "Data is the address that opens the camera and when the ticket stops working."
+          }
+        },
+        "type": "object"
+      },
+      "patrol.patrolTour": {
+        "properties": {
+          "date": {
+            "description": "Date is the day the round belongs to.",
+            "type": "string"
+          },
+          "end": {
+            "description": "End is when it finished.",
+            "type": "string"
+          },
+          "name": {
+            "description": "Name is the tour's document name.",
+            "type": "string"
+          },
+          "points": {
+            "description": "Points is the round's checkpoints in store order.",
+            "items": {
+              "$ref": "#/components/schemas/patrol.patrolCheckpoint"
+            },
+            "type": "array"
+          },
+          "start": {
+            "description": "Start is when the round began.",
+            "type": "string"
+          },
+          "unit": {
+            "description": "Unit is the call sign running the round.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "patrol.patrolTourList": {
+        "properties": {
+          "data": {
+            "description": "Data is the matching rounds, each with its checkpoints.",
+            "items": {
+              "$ref": "#/components/schemas/patrol.patrolTour"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "patrol.patrolUnit": {
+        "properties": {
+          "due": {
+            "description": "Due is the lone-worker deadline, or empty when none is set.",
+            "type": "string"
+          },
+          "lat": {
+            "description": "Lat is the unit's last latitude in degrees.",
+            "format": "double",
+            "type": "number"
+          },
+          "lon": {
+            "description": "Lon is the unit's last longitude in degrees.",
+            "format": "double",
+            "type": "number"
+          },
+          "name": {
+            "description": "Name is the unit's call sign, which is its document name and the segment\n/v1/patrol/unit/{name}/fix addresses it by.",
+            "type": "string"
+          },
+          "officer": {
+            "description": "Officer is who is crewing it.",
+            "type": "string"
+          },
+          "sector": {
+            "description": "Sector is the patrol sector it works.",
+            "type": "string"
+          },
+          "seen": {
+            "description": "Seen is when the unit last reported.",
+            "type": "string"
+          },
+          "state": {
+            "description": "State is available, assigned, enroute, onsite, offline, break or emergency.",
+            "type": "string"
+          },
+          "trail": {
+            "description": "Trail is the tail of the unit's recorded positions, oldest first.",
+            "items": {
+              "$ref": "#/components/schemas/patrol.patrolFix"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "patrol.patrolUnitList": {
+        "properties": {
+          "data": {
+            "description": "Data is every unit in the org, each with its position trail.",
+            "items": {
+              "$ref": "#/components/schemas/patrol.patrolUnit"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "patrol.patrolUnitOut": {
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/patrol.patrolUnit",
+            "description": "Data is the unit as it now stands."
+          }
+        },
+        "type": "object"
+      },
+      "patrol.patrolUnitStateIn": {
+        "properties": {
+          "name": {
+            "description": "Name is the unit's call sign, from the path.",
+            "type": "string"
+          },
+          "state": {
+            "description": "State is available, assigned, enroute, onsite, offline, break or emergency.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "patrol.patrolZone": {
+        "properties": {
+          "device": {
+            "description": "Device is the detector type.",
+            "type": "string"
+          },
+          "location": {
+            "description": "Location is where in the building the zone is.",
+            "type": "string"
+          },
+          "ref": {
+            "description": "Ref is the zone number the panel reports.",
+            "type": "string"
+          },
+          "state": {
+            "description": "State is the zone's last known condition.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "problem-details": {
+        "description": "An RFC 9457 problem document.",
+        "properties": {
+          "code": {
+            "description": "A stable token a client can branch on, when the refusal names one.",
+            "type": "string"
+          },
+          "detail": {
+            "description": "What was refused, for a person to read.",
+            "type": "string"
+          },
+          "status": {
+            "description": "The HTTP status.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "title": {
+            "description": "The status's reason phrase.",
+            "type": "string"
+          },
+          "type": {
+            "description": "about:blank",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "status",
+          "detail"
+        ],
+        "type": "object"
+      }
+    },
+    "securitySchemes": {
+      "bearer": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "The caller's credential, sent as `Authorization: Bearer \u003ctoken\u003e`. It is either an access token minted by Hanzo IAM or an API key (pk-/sk-). X-Authorization, and HTTP Basic carrying the token as the password, are accepted spellings of the same header for clients that cannot set Authorization; a browser presents the session cookie instead. Every operation requires it unless it says `security: []`."
+      }
+    }
+  }
+}

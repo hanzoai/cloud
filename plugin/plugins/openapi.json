@@ -1,0 +1,614 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Hanzo Cloud API",
+    "description": "Package plugin is what each host is running, and how to change it: enable, disable, reload, or pin a service to a version.",
+    "version": "v1"
+  },
+  "servers": [
+    {
+      "url": "https://api.hanzo.ai"
+    }
+  ],
+  "security": [
+    {
+      "bearer": []
+    }
+  ],
+  "tags": [
+    {
+      "name": "admin"
+    }
+  ],
+  "paths": {
+    "/v1/admin/plugins": {
+      "get": {
+        "operationId": "adminPlugins",
+        "summary": "Reports what each host is actually running: every loaded plugin with its version, pid, uptime, reload and restart counts, and its measured CPU, RSS, thread and fd cost — read from the kernel, which is only answerable at all because a plugin is a process.",
+        "description": "Reports what each host is actually running: every loaded plugin with its\nversion, pid, uptime, reload and restart counts, and its measured CPU, RSS,\nthread and fd cost — read from the kernel, which is only answerable at all\nbecause a plugin is a process.\n\nReading this from deployment config would answer what was INTENDED. Only the\nprocess knows what is TRUE, and during a rolling upgrade the two disagree on\npurpose.",
+        "tags": [
+          "admin"
+        ],
+        "parameters": [
+          {
+            "name": "scope",
+            "in": "query",
+            "required": false,
+            "description": "Scope \"host\" answers for THIS host only. Default \"fleet\" fans out to every\nlive peer. A peer answers a host-scoped read, which is what stops the\nfan-out recursing.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "fleet"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "data": [
+                    {
+                      "host": "cloud-0",
+                      "plugins": [
+                        {
+                          "name": "billing",
+                          "prefix": "/v1/billing",
+                          "reloads": 1,
+                          "restarts": 0,
+                          "running": true,
+                          "source": "url",
+                          "version": "9f2c…"
+                        }
+                      ],
+                      "self": true
+                    }
+                  ],
+                  "drift": [
+                    {
+                      "drifted": false,
+                      "name": "billing",
+                      "running": 1,
+                      "versions": [
+                        "9f2c…"
+                      ]
+                    }
+                  ],
+                  "msg": "",
+                  "status": "ok"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ListOut"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-tool": true
+      }
+    },
+    "/v1/admin/plugins/{name}/disable": {
+      "post": {
+        "operationId": "adminDisablePlugin",
+        "summary": "Stops the plugin.",
+        "description": "Stops the plugin. Its routes STAY REGISTERED and answer 503 — not 404.\n\nThat is zip's choice and this keeps it. Removing the routes would mutate the\nroute table, and re-adding them on enable would grow it without bound across\nrepeated cycles, which is the invariant that makes reloads flat in memory. It\nis also the better answer: 404 says \"no such API\" and a client may cache it\nand stop retrying, while 503 says \"this API exists and is down right now\",\nwhich is true and retryable. Which of the two 503s this is — deliberate stop\nor crash — is what the status's disabled flag reports.",
+        "tags": [
+          "admin"
+        ],
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "description": "Name is the app, from the path.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "billing"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "name": "billing"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/NameIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "data": [
+                    {
+                      "host": "cloud-0",
+                      "ok": true
+                    }
+                  ],
+                  "msg": "billing disabled",
+                  "status": "ok"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ActionOut"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-tool": true
+      }
+    },
+    "/v1/admin/plugins/{name}/enable": {
+      "post": {
+        "operationId": "adminEnablePlugin",
+        "summary": "Brings a stopped or disabled plugin back on the artifact it already has: the zero Plugin names no new artifact, so Reload reuses the loaded spec and clears the disabled flag.",
+        "description": "Brings a stopped or disabled plugin back on the artifact it already\nhas: the zero Plugin names no new artifact, so Reload reuses the loaded spec\nand clears the disabled flag. Named for what an operator means by it.",
+        "tags": [
+          "admin"
+        ],
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "description": "Name is the app, from the path.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "billing"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "name": "billing"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/NameIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "data": [
+                    {
+                      "host": "cloud-0",
+                      "ok": true
+                    }
+                  ],
+                  "msg": "billing enabled",
+                  "status": "ok"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ActionOut"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-tool": true
+      }
+    },
+    "/v1/admin/plugins/{name}/reload": {
+      "post": {
+        "operationId": "adminReloadPlugin",
+        "summary": "Swaps a plugin for another build without dropping a request.",
+        "description": "Swaps a plugin for another build without dropping a request. The\nreplacement is started and proven to be LISTENING before any traffic moves to\nit, so a bad build leaves the old one serving and returns an error rather\nthan a hole; the old process then drains before it is killed.\n\nWith a version or url+sum it pins; naming a digest this host has run before is\nthe rollback, and costs no network because the digest IS the cache key. With\nneither it restarts what is already loaded.\n\nFleet scope applies it to one host at a time and STOPS at the first failure,\nso a build that cannot come up reaches exactly one host.",
+        "tags": [
+          "admin"
+        ],
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "description": "Name is the app, from the path. It must be one the manifest declares.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "billing"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "name": "billing",
+                "version": "v1.2.3"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/ReloadIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "data": [
+                    {
+                      "host": "cloud-0",
+                      "ok": true,
+                      "version": "9f2c…"
+                    }
+                  ],
+                  "msg": "billing -\u003e 9f2c…",
+                  "status": "ok"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ActionOut"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-tool": true
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "ActionOut": {
+        "properties": {
+          "data": {
+            "description": "Data is one row per host TOUCHED, in the order applied. Hosts the rollout\nnever reached are absent, so these rows are exactly the hosts whose state\nmay have moved.",
+            "items": {
+              "$ref": "#/components/schemas/Result"
+            },
+            "type": "array"
+          },
+          "msg": {
+            "description": "Msg names the outcome the way an operator would: \"billing -\u003e 9f2c…\" for a\npin, \"billing enabled\", \"billing disabled\", \"billing reloaded\", or\n\"billing halted at cloud-1: \u003creason\u003e\" when a host refused.",
+            "type": "string"
+          },
+          "status": {
+            "description": "Status is \"ok\" or \"error\". A halted rollout answers HTTP 200 with \"error\",\nbecause part of the fleet HAS changed and a transport failure would throw\nthat away; so does a deployment refusing to mutate without an audit store,\nwhere nothing changed at all. Data tells the two apart.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "Drift": {
+        "properties": {
+          "disabled": {
+            "description": "Disabled counts the hosts where it was stopped deliberately. Down and\nDisabled both answer 503 to a caller, which is exactly why they are counted\napart: one is an outage and one is a maintenance window.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "down": {
+            "description": "Down counts the hosts where it is loaded and not serving without anyone\nhaving asked for that: the child exited on its own, or a swap left nothing\nlistening.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "drifted": {
+            "description": "Drifted is true when more than one digest is running at once, meaning the\nrollout is incomplete or stuck. It is the one bit this view exists for.",
+            "type": "boolean"
+          },
+          "name": {
+            "description": "Name is the app as the manifest declares it — the same string the host\nreports a plugin under and the same one the reload, enable and disable\nroutes take in their path.",
+            "type": "string"
+          },
+          "running": {
+            "description": "Running counts the hosts serving it. A host that could not be reached is\ncounted nowhere — unknown is not down — so these three counts need not add\nup to the fleet size.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "versions": {
+            "description": "Versions is every distinct artifact SHA-256 seen RUNNING, sorted. Only a\nplugin installed from a URL carries a digest, so an empty list means\nnothing running is digest-pinned, not that the fleet agrees.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "Host": {
+        "properties": {
+          "addr": {
+            "description": "Addr is the host:port this row was read over, from the live membership.\nEmpty on a host-scoped read, which consults no membership at all.",
+            "type": "string"
+          },
+          "error": {
+            "description": "Err is set when a peer could not be reached. Its plugins are then\nunknown, which is NOT the same as none, so the list stays empty and the\ndrift below refuses to conclude anything from it.",
+            "type": "string"
+          },
+          "host": {
+            "description": "Host is the pod's stable id — the downward-API name for this host, the\nmembership id for a peer. Result names the same id when a change is\napplied, so the board and a rollout join on it.",
+            "type": "string"
+          },
+          "plugins": {
+            "description": "Plugins is every plugin this host has loaded, running or not, ordered by\nname so two hosts diff cleanly. It carries nothing when Err is set, where\nthat means unknown rather than none.",
+            "items": {
+              "$ref": "#/components/schemas/Status"
+            },
+            "type": "array"
+          },
+          "self": {
+            "description": "Self is true on the one row the answering host produced from its own\nprocess instead of over the network. Every other row cost a hop.",
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
+      "ListOut": {
+        "properties": {
+          "data": {
+            "description": "Data is one row per host, sorted by host id so two reads a minute apart\nline up line for line. A host-scoped read answers with this host's row alone.",
+            "items": {
+              "$ref": "#/components/schemas/Host"
+            },
+            "type": "array"
+          },
+          "drift": {
+            "description": "Drift folds Data into one row per plugin. Absent on a host-scoped read,\nwhere one host has nothing to disagree with.",
+            "items": {
+              "$ref": "#/components/schemas/Drift"
+            },
+            "type": "array"
+          },
+          "msg": {
+            "description": "Msg is the envelope's operator note. This read has none to make, so it is\nalways empty; the mutations are where it says something.",
+            "type": "string"
+          },
+          "status": {
+            "description": "Status is \"ok\". This read refuses with an HTTP status rather than an error\nenvelope, so it takes no other value — an unreachable peer is a row in Data\ncarrying its own error, not a failed read.",
+            "type": "string"
+          },
+          "total": {
+            "description": "Total counts the HOSTS in Data, not the plugins on them.",
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "NameIn": {
+        "properties": {
+          "name": {
+            "description": "Name is the app, from the path.",
+            "type": "string"
+          },
+          "scope": {
+            "description": "Scope \"host\" applies here only; default \"fleet\" applies everywhere.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "ReloadIn": {
+        "properties": {
+          "name": {
+            "description": "Name is the app, from the path. It must be one the manifest declares.",
+            "type": "string"
+          },
+          "scope": {
+            "description": "Scope \"host\" applies here only. Default \"fleet\" rolls it out one host at\na time, halting on the first host that fails to come up.",
+            "type": "string"
+          },
+          "sum": {
+            "description": "Sum is that artifact's hex SHA-256 and is REQUIRED with URL: zip verifies\nthe download against it before the file is made executable, and refuses an\nunverified one — so does this, one layer earlier. It is also the cache key,\nwhich is why re-pinning a digest this host has already run costs no network.",
+            "type": "string"
+          },
+          "url": {
+            "description": "URL is the artifact directly, for a release the lock does not pin.",
+            "type": "string"
+          },
+          "version": {
+            "description": "Version is a release tag, resolved to a URL and digest through the\nhost's plugins.lock — the pin a plugin repo's release writes, so there is\nno second table mapping versions to digests. The lock names one release\nper plugin; any other is named by URL and Sum.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "Result": {
+        "properties": {
+          "host": {
+            "description": "Host is the pod the outcome belongs to, the same id the fleet board reports.",
+            "type": "string"
+          },
+          "msg": {
+            "description": "Msg is why the change failed here, verbatim from the host that refused it.\nEmpty when OK.",
+            "type": "string"
+          },
+          "ok": {
+            "description": "OK false is the halt. A fleet rollout stops at the first host that fails, so\nat most one row carries it and the hosts after it are missing entirely\nrather than reported as skipped.",
+            "type": "boolean"
+          },
+          "version": {
+            "description": "Version is the artifact SHA-256 this host was moved to; on an ok row it is\nwhat the host now runs. Empty for enable, disable and a bare restart, none\nof which change the artifact.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "Status": {
+        "properties": {
+          "addr": {
+            "description": "Addr is the socket or address serving it.",
+            "type": "string"
+          },
+          "disabled": {
+            "description": "Disabled is true when Unload stopped it deliberately, as opposed to it\nhaving crashed. Both answer 503, so without this an operator cannot tell\na maintenance window from an outage — and would page for the former.",
+            "type": "boolean"
+          },
+          "error": {
+            "description": "Error is why the last start attempt failed, empty when none has. It is the\nanswer Running=false cannot give: a lazy plugin that has never been asked and\none whose every start dies both report Running=false, and only this separates\nthem. Cleared when an instance comes up.",
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "pid": {
+            "description": "PID is the child process, or 0 when this host did not start it.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "prefix": {
+            "description": "Prefix is the FIRST subtree this plugin answers — the one a log line\nnames it by. Prefixes is every subtree, and a plugin may own several.\nReporting only the first would understate the blast radius of taking\nthis plugin down, which is the question a fleet view exists to answer.",
+            "type": "string"
+          },
+          "prefixes": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "reloads": {
+            "description": "Reloads counts successful swaps since Load. A climbing number on one\nhost and not its peers is the signal that a rollout is uneven.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "restarts": {
+            "description": "Restarts counts times the supervisor brought this plugin back after it\ndied on its own. Distinct from Reloads, which are deliberate: a nonzero\nRestarts is a plugin crashing, and a climbing one is a crash loop.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "running": {
+            "description": "Running is false after Unload, or after a child exited and no Reload has\nreplaced it. Its routes stay registered and answer 503, so a false here\nis the difference between \"not deployed\" and \"deployed but down\".",
+            "type": "boolean"
+          },
+          "since": {
+            "description": "Since is when the CURRENT instance started — it resets on Reload, so it\nreports the age of what is running, not of the mount.",
+            "format": "date-time",
+            "type": "string"
+          },
+          "source": {
+            "description": "Source is where the binary came from: \"embedded\", \"path\", \"url\", or\n\"remote\" for an instance this host did not start.",
+            "type": "string"
+          },
+          "usage": {
+            "$ref": "#/components/schemas/Usage",
+            "description": "Usage is what this plugin costs right now, read from the kernel."
+          },
+          "version": {
+            "description": "Version is the artifact's SHA-256 when it was installed from a URL —\nthe only version identifier that cannot drift from the bits actually\nrunning, since it IS the bits. Empty for the other sources.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "Usage": {
+        "properties": {
+          "cpuNs": {
+            "description": "CPU is total user+system time this instance has consumed since it\nstarted. It only ever climbs, so a rate is the interesting derivative.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "fds": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "rssBytes": {
+            "description": "RSS is resident memory in bytes — the honest number for \"what does this\nplugin cost\", as opposed to virtual size.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "threads": {
+            "description": "Threads and FDs are the two limits a busy service hits first, and both\nare leaks when they climb without bound.",
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "problem-details": {
+        "description": "An RFC 9457 problem document.",
+        "properties": {
+          "code": {
+            "description": "A stable token a client can branch on, when the refusal names one.",
+            "type": "string"
+          },
+          "detail": {
+            "description": "What was refused, for a person to read.",
+            "type": "string"
+          },
+          "status": {
+            "description": "The HTTP status.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "title": {
+            "description": "The status's reason phrase.",
+            "type": "string"
+          },
+          "type": {
+            "description": "about:blank",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "status",
+          "detail"
+        ],
+        "type": "object"
+      }
+    },
+    "securitySchemes": {
+      "bearer": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "The caller's credential, sent as `Authorization: Bearer \u003ctoken\u003e`. It is either an access token minted by Hanzo IAM or an API key (pk-/sk-). X-Authorization, and HTTP Basic carrying the token as the password, are accepted spellings of the same header for clients that cannot set Authorization; a browser presents the session cookie instead. Every operation requires it unless it says `security: []`."
+      }
+    }
+  }
+}

@@ -1,0 +1,1062 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Hanzo Cloud API",
+    "description": "Package analytics implements the canonical /v1/analytics/* API, metric catalog, automatic query planner, IAM tenant isolation, Hanzo KV acceleration layer, and shared coalesced Server-Sent Events (SSE) real-time hub for Hanzo Unified Global Analytics.",
+    "version": "v1"
+  },
+  "servers": [
+    {
+      "url": "https://api.hanzo.ai"
+    }
+  ],
+  "security": [
+    {
+      "bearer": []
+    }
+  ],
+  "tags": [
+    {
+      "name": "analytics"
+    }
+  ],
+  "paths": {
+    "/v1/analytics/freshness": {
+      "get": {
+        "operationId": "analyticsFreshness",
+        "summary": "Reports per-pipeline watermarks, lag_ms, rows processed, and financial reconciliation drift from analytics.watermarks, accelerated by Hanzo KV with stale-on-outage fallback.",
+        "description": "Reports per-pipeline watermarks, lag_ms, rows processed, and financial\nreconciliation drift from analytics.watermarks, accelerated by Hanzo KV with stale-on-outage fallback.",
+        "tags": [
+          "analytics"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "data": {
+                    "freshness": {
+                      "accuracy": "exact",
+                      "asOf": "2026-11-25T00:00:01Z",
+                      "lagMs": 10,
+                      "source": "analytics.watermarks",
+                      "stale": false
+                    },
+                    "maxLagMs": 1200,
+                    "pipelines": [
+                      {
+                        "lagMs": 1200,
+                        "pipeline": "commerce",
+                        "reconciliationDriftCents": 0,
+                        "rowsProcessed": 54000,
+                        "status": "fresh",
+                        "updatedAt": "2026-11-25T00:00:01Z",
+                        "watermarkAt": "2026-11-25T00:00:00Z"
+                      }
+                    ],
+                    "stalePipelines": 0,
+                    "totalDriftCents": 0
+                  },
+                  "msg": "",
+                  "status": "ok"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/analytics.FreshnessOut"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/analytics/health": {
+      "get": {
+        "operationId": "analyticsHealth",
+        "summary": "Reports Datastore reachability, active MergeTree parts and merge pressure, Hanzo KV cache status, bounded query semaphore utilization, and active SSE stream counts.",
+        "description": "Reports Datastore reachability, active MergeTree parts and merge pressure,\nHanzo KV cache status, bounded query semaphore utilization, and active SSE stream counts.",
+        "tags": [
+          "analytics"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "data": {
+                    "checkedAt": "2026-11-25T00:00:00Z",
+                    "datastore": {
+                      "activeParts": 48,
+                      "maxPartsPerPartition": 12,
+                      "mergePressure": "low",
+                      "reachable": true
+                    },
+                    "kv": {
+                      "configured": true,
+                      "reachable": true
+                    },
+                    "semaphore": {
+                      "capacity": 32,
+                      "inFlight": 1,
+                      "rejected": 0,
+                      "utilizationPct": 3.13
+                    },
+                    "status": "healthy",
+                    "streams": {
+                      "activeScopes": 3,
+                      "activeStreams": 14
+                    }
+                  },
+                  "msg": "",
+                  "status": "ok"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/analytics.HealthOut"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/analytics/metrics": {
+      "get": {
+        "operationId": "analyticsMetrics",
+        "summary": "Lists all canonical registered metrics, their units, allowed group_by dimensions, upstream sources, freshness targets, accuracy classifications, and backing tables.",
+        "description": "Lists all canonical registered metrics, their units, allowed group_by dimensions,\nupstream sources, freshness targets, accuracy classifications, and backing tables.",
+        "tags": [
+          "analytics"
+        ],
+        "parameters": [
+          {
+            "name": "domain",
+            "in": "query",
+            "required": false,
+            "description": "Domain optionally filters metrics to one domain (commerce, ai, iam, o11y, compute, product).",
+            "schema": {
+              "type": "string"
+            },
+            "example": "ai"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "data": {
+                    "metrics": [
+                      {
+                        "accuracy": "exact",
+                        "description": "Total prompt and completion tokens processed across AI models.",
+                        "dimensions": [
+                          "org",
+                          "model",
+                          "provider",
+                          "day",
+                          "hour"
+                        ],
+                        "domain": "ai",
+                        "freshnessTargetSec": 15,
+                        "id": "ai.tokens",
+                        "source": "ai_ledger",
+                        "tables": [
+                          "analytics.rollup_ai_hourly",
+                          "analytics.rollup_ai_daily"
+                        ],
+                        "unit": "tokens"
+                      }
+                    ],
+                    "total": 1
+                  },
+                  "msg": "",
+                  "status": "ok"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/analytics.MetricsOut"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/analytics/overview": {
+      "get": {
+        "operationId": "analyticsOverview",
+        "summary": "Returns constant-cost global (SuperAdmin) or org-scoped executive KPIs directly from analytics.global_overview / analytics.org_overview with zero per-org RPCs, accelerated by Hanzo KV and degrading gracefully to the last-known KV snapshot if Datastore is unavailable.",
+        "description": "Returns constant-cost global (SuperAdmin) or org-scoped executive KPIs\ndirectly from analytics.global_overview / analytics.org_overview with zero per-org RPCs,\naccelerated by Hanzo KV and degrading gracefully to the last-known KV snapshot if Datastore is unavailable.",
+        "tags": [
+          "analytics"
+        ],
+        "parameters": [
+          {
+            "name": "org",
+            "in": "query",
+            "required": false,
+            "description": "Org optionally narrows a SuperAdmin overview to one tenant org. Non-super callers are hard-scoped to their own org.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "window",
+            "in": "query",
+            "required": false,
+            "description": "Window is the lookback window for movement KPIs (e.g. \"24h\", \"7d\", \"30d\", max \"365d\"). Defaults to \"30d\".",
+            "schema": {
+              "type": "string"
+            },
+            "example": "30d"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "data": {
+                    "freshness": {
+                      "accuracy": "exact",
+                      "asOf": "2026-11-25T00:00:00Z",
+                      "lagMs": 8,
+                      "source": "analytics.global_overview",
+                      "stale": false
+                    },
+                    "kpis": {
+                      "activeUsers": 1250,
+                      "aiBilledCents": 520000,
+                      "aiCostCents": 310000,
+                      "aiMarginCents": 210000,
+                      "aiRequests": 150000,
+                      "aiTokens": 42000000,
+                      "arrCents": 5040000,
+                      "cashHeldCents": 900000,
+                      "creditOutstandingCents": 250000,
+                      "mrrCents": 420000,
+                      "o11yErrors": 1400,
+                      "o11yP95Ms": 48.2,
+                      "o11yRequests": 9800000,
+                      "orgs": 320,
+                      "productEvents": 3100000,
+                      "productVisitors": 28000,
+                      "revenueCents": 1250000,
+                      "spendCents": 800000,
+                      "users": 4800
+                    },
+                    "scope": "global",
+                    "window": "30d"
+                  },
+                  "msg": "",
+                  "status": "ok"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/analytics.AnalyticsOverviewOut"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/analytics/query": {
+      "post": {
+        "operationId": "analyticsQuery",
+        "summary": "Plans and executes a structured analytical query against Hanzo Datastore's pre-aggregated analytics.* tables with IAM tenant isolation, cardinality/cost budgets, positional SQL parameters, and Hanzo KV caching with stale-on-outage fallback.",
+        "description": "Plans and executes a structured analytical query against Hanzo Datastore's\npre-aggregated analytics.* tables with IAM tenant isolation, cardinality/cost budgets,\npositional SQL parameters, and Hanzo KV caching with stale-on-outage fallback.",
+        "tags": [
+          "analytics"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "group_by": [
+                  "model"
+                ],
+                "limit": 20,
+                "metrics": [
+                  "ai.requests",
+                  "ai.tokens"
+                ],
+                "window": "7d"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/analytics.QueryIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "data": {
+                    "freshness": {
+                      "accuracy": "exact",
+                      "asOf": "2026-11-25T00:00:00Z",
+                      "lagMs": 12,
+                      "source": "ai_ledger",
+                      "stale": false
+                    },
+                    "plan": {
+                      "granularity": "hour",
+                      "limit": 20,
+                      "scope": "global",
+                      "table": "analytics.rollup_ai_hourly",
+                      "window": "7d"
+                    },
+                    "rows": [
+                      {
+                        "dimensions": {
+                          "model": "zen-pro"
+                        },
+                        "values": {
+                          "ai.requests": 420,
+                          "ai.tokens": 125000
+                        }
+                      }
+                    ],
+                    "totals": {
+                      "ai.requests": 420,
+                      "ai.tokens": 125000
+                    }
+                  },
+                  "msg": "",
+                  "status": "ok"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/analytics.QueryOut"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/analytics/stream": {
+      "get": {
+        "operationId": "get_analytics_stream",
+        "summary": "Stream coalesced real-time analytics updates as Server-Sent Events",
+        "description": "Holds one text/event-stream open per viewer while coalescing all viewers on the same authorized scope (`global` for SuperAdmin, `org:\u003cslug\u003e` for tenant callers) onto ONE shared backend refresh loop. Publishes monotonic `version` integers: `event: snapshot` on connect, `event: delta` when the version advances, and `: ping` every 25s. Pass `?since_version=\u003cn\u003e` on reconnect to receive `: up-to-date` instead of resending an unchanged snapshot.",
+        "tags": [
+          "analytics"
+        ],
+        "responses": {
+          "2XX": {
+            "description": "Success",
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          }
+        },
+        "x-public": true
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "analytics.AnalyticsOverviewData": {
+        "properties": {
+          "freshness": {
+            "$ref": "#/components/schemas/analytics.Freshness",
+            "description": "Freshness reports snapshot timestamp, lag, staleness, source, and accuracy."
+          },
+          "kpis": {
+            "$ref": "#/components/schemas/analytics.OverviewKPIs",
+            "description": "KPIs holds the constant-cost executive KPI figures."
+          },
+          "org": {
+            "description": "Org is the target organization slug when org-scoped, empty when global.",
+            "type": "string"
+          },
+          "scope": {
+            "description": "Scope is the enforced tenant scope (\"global\" or \"org:\u003cslug\u003e\").",
+            "type": "string"
+          },
+          "window": {
+            "description": "Window is the normalized lookback window for movement KPIs.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "analytics.AnalyticsOverviewOut": {
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/analytics.AnalyticsOverviewData",
+            "description": "Data holds the executive overview KPIs and freshness metadata."
+          },
+          "msg": {
+            "description": "Msg carries an error message when Status is \"error\", empty otherwise.",
+            "type": "string"
+          },
+          "status": {
+            "description": "Status is \"ok\" on success or \"error\" on failure.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "analytics.DatastoreHealth": {
+        "properties": {
+          "activeParts": {
+            "description": "ActiveParts is the total number of active MergeTree parts across the analytics database.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "error": {
+            "description": "Error records the probe error when Reachable is false.",
+            "type": "string"
+          },
+          "maxPartsPerPartition": {
+            "description": "MaxPartsPerPartition is the highest part count on any single partition (merge pressure indicator).",
+            "format": "int64",
+            "type": "integer"
+          },
+          "mergePressure": {
+            "description": "MergePressure classifies merge load: \"low\", \"elevated\", \"high\", or \"unknown\".",
+            "type": "string"
+          },
+          "reachable": {
+            "description": "Reachable is true when Datastore answered a live probe.",
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
+      "analytics.Freshness": {
+        "properties": {
+          "accuracy": {
+            "description": "Accuracy classifies metric precision: \"exact\", \"approximate\", or \"estimated\".",
+            "type": "string"
+          },
+          "asOf": {
+            "description": "AsOf is the RFC3339 UTC timestamp when the returned snapshot was computed.",
+            "type": "string"
+          },
+          "lagMs": {
+            "description": "LagMs is the age of the snapshot in milliseconds relative to response time.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "source": {
+            "description": "Source identifies the primary upstream pipeline or storage layer.",
+            "type": "string"
+          },
+          "stale": {
+            "description": "Stale is true when served from a last-known Hanzo KV snapshot during a Datastore outage.",
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
+      "analytics.FreshnessData": {
+        "properties": {
+          "freshness": {
+            "$ref": "#/components/schemas/analytics.Freshness",
+            "description": "Freshness reports snapshot timestamp, lag, staleness, source, and accuracy."
+          },
+          "maxLagMs": {
+            "description": "MaxLagMs is the highest watermark lag across all pipelines in milliseconds.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "pipelines": {
+            "description": "Pipelines lists per-pipeline watermarks read from analytics.watermarks.",
+            "items": {
+              "$ref": "#/components/schemas/analytics.PipelineWatermark"
+            },
+            "type": "array"
+          },
+          "stalePipelines": {
+            "description": "StalePipelines counts pipelines whose status is \"lagging\" or \"stalled\".",
+            "format": "int64",
+            "type": "integer"
+          },
+          "totalDriftCents": {
+            "description": "TotalDriftCents is the sum of absolute financial reconciliation drift across pipelines in USD cents.",
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "analytics.FreshnessOut": {
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/analytics.FreshnessData",
+            "description": "Data holds the per-pipeline freshness watermarks and reconciliation summary."
+          },
+          "msg": {
+            "description": "Msg carries an error message when Status is \"error\", empty otherwise.",
+            "type": "string"
+          },
+          "status": {
+            "description": "Status is \"ok\" on success or \"error\" on failure.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "analytics.HealthData": {
+        "properties": {
+          "checkedAt": {
+            "description": "CheckedAt is the RFC3339 UTC timestamp when health was probed.",
+            "type": "string"
+          },
+          "datastore": {
+            "$ref": "#/components/schemas/analytics.DatastoreHealth",
+            "description": "Datastore reports Datastore reachability, active parts, and merge pressure."
+          },
+          "kv": {
+            "$ref": "#/components/schemas/analytics.KVStatus",
+            "description": "KV reports Hanzo KV configuration and reachability."
+          },
+          "semaphore": {
+            "$ref": "#/components/schemas/analytics.SemaphoreStatus",
+            "description": "Semaphore reports bounded Datastore query concurrency utilization."
+          },
+          "status": {
+            "description": "Status is the overall analytics plane verdict (\"healthy\" or \"degraded\").",
+            "type": "string"
+          },
+          "streams": {
+            "$ref": "#/components/schemas/analytics.StreamStatus",
+            "description": "Streams reports live coalesced SSE subscriber and scope hub counts."
+          }
+        },
+        "type": "object"
+      },
+      "analytics.HealthOut": {
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/analytics.HealthData",
+            "description": "Data holds the analytics subsystem health breakdown."
+          },
+          "msg": {
+            "description": "Msg carries an error message when Status is \"error\", empty otherwise.",
+            "type": "string"
+          },
+          "status": {
+            "description": "Status is \"ok\" on success or \"error\" on failure.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "analytics.KVStatus": {
+        "properties": {
+          "configured": {
+            "description": "Configured is true when a KV backend URL or store is wired.",
+            "type": "boolean"
+          },
+          "error": {
+            "description": "Error records the last ping error when Configured is true and Reachable is false.",
+            "type": "string"
+          },
+          "reachable": {
+            "description": "Reachable is true when the KV store responded to a health ping.",
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
+      "analytics.MetricDef": {
+        "properties": {
+          "accuracy": {
+            "description": "Accuracy indicates whether the metric is exact, approximate (sketch/HLL/t-digest), or estimated.",
+            "type": "string"
+          },
+          "description": {
+            "description": "Description explains what the metric measures and its exact semantic meaning.",
+            "type": "string"
+          },
+          "dimensions": {
+            "description": "Dimensions lists the group_by dimension keys permitted for this metric.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "domain": {
+            "description": "Domain groups metrics by business/operational plane across the 14 Hanzo domains.",
+            "type": "string"
+          },
+          "freshnessTargetSec": {
+            "description": "FreshnessTargetSec is the target end-to-end ingestion lag SLA in seconds.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "id": {
+            "description": "ID is the canonical dotted metric identifier (e.g. \"commerce.revenue\", \"ai.tokens\").",
+            "type": "string"
+          },
+          "source": {
+            "description": "Source names the upstream data pipeline that populates this metric.",
+            "type": "string"
+          },
+          "tables": {
+            "description": "Tables lists the pre-aggregated analytics.* / hanzo.* tables backing this metric.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "unit": {
+            "description": "Unit is the measurement unit (usd_cents, count, tokens, bytes, ratio, bps, ms, seats).",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "analytics.MetricsData": {
+        "properties": {
+          "metrics": {
+            "description": "Metrics lists every registered metric definition matching the optional domain filter.",
+            "items": {
+              "$ref": "#/components/schemas/analytics.MetricDef"
+            },
+            "type": "array"
+          },
+          "total": {
+            "description": "Total is the count of metrics returned.",
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "analytics.MetricsOut": {
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/analytics.MetricsData",
+            "description": "Data holds the registered metric catalog definitions."
+          },
+          "msg": {
+            "description": "Msg carries an error message when Status is \"error\", empty otherwise.",
+            "type": "string"
+          },
+          "status": {
+            "description": "Status is \"ok\" on success or \"error\" on failure.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "analytics.OverviewKPIs": {
+        "properties": {
+          "activeUsers": {
+            "description": "ActiveUsers is distinct active users in this scope over the selected window.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "aiBilledCents": {
+            "description": "AIBilledCents is customer-billed AI charges over the selected window in USD cents.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "aiCostCents": {
+            "description": "AICostCents is upstream provider AI cost over the selected window in USD cents.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "aiMarginCents": {
+            "description": "AIMarginCents is gross AI margin (billed minus cost) in USD cents.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "aiRequests": {
+            "description": "AIRequests is total AI inference requests served over the selected window.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "aiTokens": {
+            "description": "AITokens is total AI tokens processed over the selected window.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "arrCents": {
+            "description": "ARRCents is current run-rate Annual Recurring Revenue (MRR * 12) in USD cents.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "cashHeldCents": {
+            "description": "CashHeldCents is current unspent customer prepaid cash balance in USD cents.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "creditOutstandingCents": {
+            "description": "CreditOutstandingCents is current unspent granted credit balance in USD cents.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "mrrCents": {
+            "description": "MRRCents is current run-rate Monthly Recurring Revenue in USD cents.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "o11yErrors": {
+            "description": "O11yErrors is total observed 5xx/error spans over the selected window.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "o11yP95Ms": {
+            "description": "O11yP95Ms is the 95th-percentile service latency in milliseconds.",
+            "format": "double",
+            "type": "number"
+          },
+          "o11yRequests": {
+            "description": "O11yRequests is total observed HTTP/RPC requests over the selected window.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "orgs": {
+            "description": "Orgs is total registered organizations visible in this scope.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "productEvents": {
+            "description": "ProductEvents is total product telemetry events ingested over the selected window.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "productVisitors": {
+            "description": "ProductVisitors is distinct product visitors observed over the selected window.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "revenueCents": {
+            "description": "RevenueCents is recognized revenue over the selected window in USD cents.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "spendCents": {
+            "description": "SpendCents is total metered spend over the selected window in USD cents.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "users": {
+            "description": "Users is total real user accounts visible in this scope.",
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "analytics.PipelineWatermark": {
+        "properties": {
+          "lagMs": {
+            "description": "LagMs is the end-to-end watermark lag in milliseconds.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "pipeline": {
+            "description": "Pipeline is the canonical ingestion pipeline name (e.g. \"commerce\", \"ai_ledger\", \"iam\", \"o11y\").",
+            "type": "string"
+          },
+          "reconciliationDriftCents": {
+            "description": "ReconciliationDriftCents is the financial reconciliation drift versus authoritative commerce books in USD cents.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "rowsProcessed": {
+            "description": "RowsProcessed is the cumulative row count processed by this pipeline.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "status": {
+            "description": "Status reports pipeline health (\"fresh\", \"lagging\", or \"stalled\").",
+            "type": "string"
+          },
+          "updatedAt": {
+            "description": "UpdatedAt is when this watermark row was last recorded (RFC3339 UTC).",
+            "type": "string"
+          },
+          "watermarkAt": {
+            "description": "WatermarkAt is the latest committed event timestamp processed by this pipeline (RFC3339 UTC).",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "analytics.PlanMeta": {
+        "properties": {
+          "granularity": {
+            "description": "Granularity is the aggregation bucket selected (\"minute\", \"hour\", \"day\", or \"snapshot\").",
+            "type": "string"
+          },
+          "limit": {
+            "description": "Limit is the enforced row limit ceiling (default 100, max 500).",
+            "format": "int64",
+            "type": "integer"
+          },
+          "scope": {
+            "description": "Scope is the enforced IAM isolation scope (\"global\" or \"org:\u003cslug\u003e\").",
+            "type": "string"
+          },
+          "table": {
+            "description": "Table is the coarsest sufficient pre-aggregated analytics.* table queried.",
+            "type": "string"
+          },
+          "window": {
+            "description": "Window is the normalized lookback duration (e.g. \"24h\", \"7d\", \"30d\", \"90d\").",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "analytics.QueryData": {
+        "properties": {
+          "freshness": {
+            "$ref": "#/components/schemas/analytics.Freshness",
+            "description": "Freshness reports snapshot timestamp, lag, stale degradation state, source, and accuracy."
+          },
+          "plan": {
+            "$ref": "#/components/schemas/analytics.PlanMeta",
+            "description": "Plan describes the aggregate table, window, granularity, scope, and limit chosen by the planner."
+          },
+          "rows": {
+            "description": "Rows lists the grouped analytical rows ordered by time or leading metric descending.",
+            "items": {
+              "$ref": "#/components/schemas/analytics.QueryRow"
+            },
+            "type": "array"
+          },
+          "totals": {
+            "additionalProperties": {
+              "format": "double",
+              "type": "number"
+            },
+            "description": "Totals maps each requested canonical metric ID to its overall aggregate across the window.",
+            "type": "object"
+          }
+        },
+        "type": "object"
+      },
+      "analytics.QueryIn": {
+        "properties": {
+          "granularity": {
+            "description": "Granularity selects \"auto\", \"minute\", \"hour\", or \"day\". Defaults to \"auto\" (coarsest sufficient table).",
+            "type": "string"
+          },
+          "group_by": {
+            "description": "GroupBy lists up to 2 allowed dimension keys for this metric family (e.g. [\"model\", \"day\"]).",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "limit": {
+            "description": "Limit caps returned grouped rows (default 100, max 500).",
+            "format": "int64",
+            "type": "integer"
+          },
+          "metrics": {
+            "description": "Metrics lists one or more registered canonical metric IDs (e.g. [\"ai.requests\", \"ai.tokens\"]).",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "org": {
+            "description": "Org optionally narrows a SuperAdmin query to one tenant org. Forbidden for non-super callers trying to read another org.",
+            "type": "string"
+          },
+          "window": {
+            "description": "Window is the lookback window (e.g. \"24h\", \"7d\", \"30d\", \"90d\", max \"365d\"). Defaults to \"24h\".",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "analytics.QueryOut": {
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/analytics.QueryData",
+            "description": "Data holds the query rows, totals, execution plan metadata, and freshness metadata."
+          },
+          "msg": {
+            "description": "Msg carries an error message when Status is \"error\", empty otherwise.",
+            "type": "string"
+          },
+          "status": {
+            "description": "Status is \"ok\" on success or \"error\" on failure.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "analytics.QueryRow": {
+        "properties": {
+          "dimensions": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "description": "Dimensions maps each requested group_by key to its string value for this row.",
+            "type": "object"
+          },
+          "values": {
+            "additionalProperties": {
+              "format": "double",
+              "type": "number"
+            },
+            "description": "Values maps each requested canonical metric ID to its numeric value for this row.",
+            "type": "object"
+          }
+        },
+        "type": "object"
+      },
+      "analytics.SemaphoreStatus": {
+        "properties": {
+          "capacity": {
+            "description": "Capacity is the maximum allowed concurrent Datastore queries.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "inFlight": {
+            "description": "InFlight is the number of Datastore queries currently executing.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "rejected": {
+            "description": "Rejected is the cumulative count of queries rejected due to semaphore exhaustion.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "utilizationPct": {
+            "description": "UtilizationPct is InFlight / Capacity expressed as a percentage (0–100).",
+            "format": "double",
+            "type": "number"
+          }
+        },
+        "type": "object"
+      },
+      "analytics.StreamStatus": {
+        "properties": {
+          "activeScopes": {
+            "description": "ActiveScopes is the number of scopes with an active background refresh ticker.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "activeStreams": {
+            "description": "ActiveStreams is the total number of currently connected SSE subscribers across all scopes.",
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "problem-details": {
+        "description": "An RFC 9457 problem document.",
+        "properties": {
+          "code": {
+            "description": "A stable token a client can branch on, when the refusal names one.",
+            "type": "string"
+          },
+          "detail": {
+            "description": "What was refused, for a person to read.",
+            "type": "string"
+          },
+          "status": {
+            "description": "The HTTP status.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "title": {
+            "description": "The status's reason phrase.",
+            "type": "string"
+          },
+          "type": {
+            "description": "about:blank",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "status",
+          "detail"
+        ],
+        "type": "object"
+      }
+    },
+    "securitySchemes": {
+      "bearer": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "The caller's credential, sent as `Authorization: Bearer \u003ctoken\u003e`. It is either an access token minted by Hanzo IAM or an API key (pk-/sk-). X-Authorization, and HTTP Basic carrying the token as the password, are accepted spellings of the same header for clients that cannot set Authorization; a browser presents the session cookie instead. Every operation requires it unless it says `security: []`."
+      }
+    }
+  }
+}

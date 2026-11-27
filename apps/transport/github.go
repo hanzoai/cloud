@@ -1,0 +1,56 @@
+package transport
+
+import (
+	"context"
+	"strings"
+	"time"
+
+	"github.com/hanzoai/cloud/client"
+	"github.com/hanzoai/cloud/sdk"
+)
+
+// github.go is the GitHub transport: an issue or pull request is a channel, its
+// comments are the thread, and a comment that mentions the App is a turn. The
+// integrations GitHub webhook normalizes the delivery and sends it here; the
+// reply is an issue comment posted with the installation's token
+// (integrations planeChatSend). One channel per issue is what lets an org bind an
+// agent to a repository's issues the way it binds one to a Slack channel.
+
+// githubEndpoint is the send path; tests spy it, prod never repoints.
+var githubEndpoint = func(ctx context.Context, org, channel, text string) (string, error) {
+	return post(ctx, org, client.ChatSendIn{Provider: "github", Channel: channel, Text: text})
+}
+
+var githubTransport = transport{
+	id:        "github",
+	caps:      capabilities{DM: false, Group: false, Thread: true},
+	normalize: githubNormalize,
+	send:      githubEgress,
+}
+
+// githubNormalize maps a GitHub Inbound (ExternalID = installation id, Channel =
+// "owner/repo#N", DedupeKey = comment id) into the envelope. Every issue is a
+// thread: there is no direct message on GitHub and the comments under an issue
+// are one conversation.
+func githubNormalize(ev client.TransportIngestIn) (Message, bool) {
+	if ev.Channel == "" {
+		return Message{}, false
+	}
+	return Message{
+		Transport:   "github",
+		Account:     strings.ToLower(ev.ExternalID),
+		Sender:      Sender{ExternalID: ev.User, Org: ev.Org},
+		Channel:     Channel{ID: ev.Channel, Kind: ChannelThread},
+		Text:        ev.Text,
+		Idempotency: ev.DedupeKey,
+	}, true
+}
+
+// githubEgress posts an issue comment through the org's own installation.
+func githubEgress(ctx context.Context, _ *cloud.Service[state], org string, m Message) (Delivery, error) {
+	id, err := githubEndpoint(ctx, org, m.Channel.ID, renderText(m))
+	if err != nil {
+		return Delivery{}, err
+	}
+	return Delivery{MessageID: id, Timestamp: time.Now().Unix()}, nil
+}

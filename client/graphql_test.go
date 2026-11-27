@@ -1,0 +1,683 @@
+package client_test
+
+import (
+	"bytes"
+	"encoding/json"
+	"io"
+	"net/http"
+	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"strconv"
+	"strings"
+	"sync"
+	"testing"
+	"time"
+
+	"github.com/hanzoai/cloud/apps/graph"
+	"github.com/hanzoai/cloud/client"
+	"github.com/hanzoai/cloud/openapi"
+	"github.com/hanzoai/cloud/sdk/kit"
+	"github.com/zap-proto/zip"
+)
+
+// ── a child that reports what it was asked ───────────────────────────────────
+
+// heard is one request as the child received it. The endpoint's whole job is to turn
+// a field into exactly this, so this is what the tests assert against.
+type heard struct {
+	method string
+	path   string
+	query  string
+	body   string
+	org    string
+	user   string
+	header http.Header
+}
+
+type stub struct {
+	addr  string
+	mu    sync.Mutex
+	calls []heard
+	reply string
+	code  int
+}
+
+// echo stands a child on its own socket, speaking the transport the surface dials.
+// It is a bare zip app rather than a composed one because what these tests prove
+// is what the ENDPOINT sent — a composed child answers its own identity gate first and
+// would report nothing about the request.
+func echo(t *testing.T, reply string) *stub {
+	t.Helper()
+	s := &stub{addr: filepath.Join(kit.Sockets(t), "echo.sock"), reply: reply}
+	app := zip.New(zip.Config{DisableStartupMessage: true})
+	app.Raw(zip.MethodAll, "/*", func(c *zip.Ctx) error {
+		fc := c.Fiber()
+		h := http.Header{}
+		for k, v := range fc.Request().Header.All() {
+			h.Add(string(k), string(v))
+		}
+		s.mu.Lock()
+		s.calls = append(s.calls, heard{
+			method: fc.Method(),
+			path:   fc.Path(),
+			query:  string(fc.Request().URI().QueryString()),
+			body:   string(fc.Body()),
+			org:    c.Header("X-Org-Id"),
+			user:   c.Header("X-User-Id"),
+			header: h,
+		})
+		code := s.code
+		s.mu.Unlock()
+		if code == 0 {
+			code = 200
+		}
+		c.SetHeader("Content-Type", "application/json")
+		return c.Bytes(code, []byte(s.reply))
+	})
+	go func() { _ = app.Listen(s.addr) }()
+	t.Cleanup(func() { _ = app.Shutdown() })
+	waitFor(t, s.addr)
+	return s
+}
+
+func (s *stub) once(t *testing.T) heard {
+	t.Helper()
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if len(s.calls) != 1 {
+		t.Fatalf("the child was asked %d times, want exactly once: %+v", len(s.calls), s.calls)
+	}
+	return s.calls[0]
+}
+
+// ── the endpoint under test ──────────────────────────────────────────────────
+
+// fromTree is the app's own committed document — the same bytes the host embeds
+// at build time, read here from the working tree so these tests fail when the
+// document and the plugin disagree.
+func fromTree(app string) []byte {
+	raw, err := os.ReadFile(filepath.Join("..", "plugin", app, "openapi.json"))
+	if err != nil {
+		return nil
+	}
+	return raw
+}
+
+// endpointTo builds the endpoint over one app's real document, pointed at an
+// address: a host serving the surface's graph on zip's engine, exactly as
+// cmd/cloud mounts it.
+func endpointTo(t *testing.T, app, addr string) *zip.App {
+	t.Helper()
+	h := zip.New(zip.Config{AppName: "cloud", DisableStartupMessage: true, MCP: zip.MCPConfig{Disabled: true}})
+	client.UseGraph(h, openapi.GraphPath, func() ([]openapi.Part, error) {
+		return openapi.Subsets([]string{app}, fromTree, func(string) string { return "" })
+	}, func(string) (string, string, error) { return addr, "/", nil })
+	if err := h.Build(); err != nil {
+		t.Fatalf("build: %v", err)
+	}
+	return h
+}
+
+// reply is one GraphQL answer as a client reads it.
+type reply struct {
+	Data   map[string]any `json:"data"`
+	Errors []struct {
+		Message string `json:"message"`
+		Path    []any  `json:"path"`
+	} `json:"errors"`
+	code int
+	rid  string
+}
+
+// run posts a request as the caller whose headers ride to the child — the
+// identity the host established, forwarded so the child scopes the caller
+// exactly as it would over REST. This endpoint establishes none of its own.
+func run(t *testing.T, h *zip.App, q string, vars map[string]any) reply {
+	t.Helper()
+	body, err := json.Marshal(zip.GraphRequest{Query: q, Variables: vars})
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	req := httptest.NewRequest(http.MethodPost, openapi.GraphPath, bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Org-Id", "acme")
+	req.Header.Set("X-User-Id", "acme/z@acme.test")
+	resp, err := h.Test(req, zip.TestConfig{Timeout: 30 * time.Second, FailOnTimeout: true})
+	if err != nil {
+		t.Fatalf("POST %s: %v", openapi.GraphPath, err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	raw, _ := io.ReadAll(resp.Body)
+	var out reply
+	if err := json.Unmarshal(raw, &out); err != nil {
+		t.Fatalf("the answer is not JSON (%s): %v", raw, err)
+	}
+	out.code = resp.StatusCode
+	return out
+}
+
+// ── what the endpoint sends ──────────────────────────────────────────────────
+
+// TestAFieldBecomesTheOperationsOwnRequest is the core claim: a name in a query
+// arrives at the owning app as the REST call that name stands for.
+func TestAFieldBecomesTheOperationsOwnRequest(t *testing.T) {
+	c := echo(t, `{"assertions":[]}`)
+	g := endpointTo(t, "graph", c.addr)
+
+	if res := run(t, g, `{ graphRead(entity: "acme/svc/api", limit: 5) { assertions { value } } }`, nil); len(res.Errors) > 0 {
+		t.Fatalf("read: %v", res.Errors)
+	}
+
+	got := c.once(t)
+	if got.method != "GET" || got.path != "/v1/graph" {
+		t.Errorf("the child was asked %s %s, want GET /v1/graph", got.method, got.path)
+	}
+	for _, want := range []string{"entity=acme%2Fsvc%2Fapi", "limit=5"} {
+		if !strings.Contains(got.query, want) {
+			t.Errorf("query = %q, missing %s", got.query, want)
+		}
+	}
+}
+
+// TestTheCallersIdentityRidesToTheChild is the security property. This endpoint
+// establishes no principal and decides no authorization: it forwards the one the
+// host established, so a field reaches precisely what its REST route reaches for
+// whoever asked.
+func TestTheCallersIdentityRidesToTheChild(t *testing.T) {
+	c := echo(t, `{"assertions":[]}`)
+	g := endpointTo(t, "graph", c.addr)
+
+	run(t, g, `{ graphRead { assertions { value } } }`, nil)
+
+	got := c.once(t)
+	if got.org != "acme" || got.user != "acme/z@acme.test" {
+		t.Errorf("the child saw org=%q user=%q; the caller's identity did not ride along", got.org, got.user)
+	}
+}
+
+// TestABodyIsSentAsTheRequestBody proves a mutation's one argument becomes the
+// JSON the operation already accepts.
+func TestABodyIsSentAsTheRequestBody(t *testing.T) {
+	c := echo(t, `{"recorded":1}`)
+	g := endpointTo(t, "graph", c.addr)
+
+	res := run(t, g, `mutation {
+		graphAssert(body: {assertions: [{entity: "e", relation: "r", value: "v", names: true}]})
+	}`, nil)
+	if len(res.Errors) > 0 {
+		t.Fatalf("assert: %v", res.Errors)
+	}
+
+	got := c.once(t)
+	if got.method != "POST" || got.path != "/v1/graph" {
+		t.Errorf("the child was asked %s %s, want POST /v1/graph", got.method, got.path)
+	}
+	var sent map[string]any
+	if err := json.Unmarshal([]byte(got.body), &sent); err != nil {
+		t.Fatalf("the body was not JSON: %v: %s", err, got.body)
+	}
+	rows, _ := sent["assertions"].([]any)
+	if len(rows) != 1 {
+		t.Fatalf("the body did not carry the assertion: %s", got.body)
+	}
+	if row, _ := rows[0].(map[string]any); row["entity"] != "e" || row["names"] != true {
+		t.Errorf("the body lost its values: %s", got.body)
+	}
+}
+
+// TestVariablesAreResolvedBeforeSending pins that a client sending values apart
+// from its query gets those values on the wire.
+func TestVariablesAreResolvedBeforeSending(t *testing.T) {
+	c := echo(t, `{"assertions":[]}`)
+	g := endpointTo(t, "graph", c.addr)
+
+	res := run(t, g, `query Look($e: String!, $n: Int) { graphRead(entity: $e, limit: $n) { assertions { id } } }`,
+		map[string]any{"e": "acme/svc/api", "n": 3})
+	if len(res.Errors) > 0 {
+		t.Fatalf("variables: %v", res.Errors)
+	}
+	if q := c.once(t).query; !strings.Contains(q, "limit=3") || !strings.Contains(q, "entity=acme%2Fsvc%2Fapi") {
+		t.Errorf("query = %q, want the variables' values", q)
+	}
+}
+
+// TestAVariableWithNoValueIsRefused guards the other half: a placeholder nobody
+// filled must not be sent as the literal text of its own name.
+func TestAVariableWithNoValueIsRefused(t *testing.T) {
+	c := echo(t, `{}`)
+	g := endpointTo(t, "graph", c.addr)
+
+	res := run(t, g, `query Look($e: String!) { graphRead(entity: $e) { assertions { id } } }`, nil)
+	if len(res.Errors) != 1 {
+		t.Fatalf("errors = %v, want the one unfilled variable", res.Errors)
+	}
+	if !strings.Contains(res.Errors[0].Message, "e") {
+		t.Errorf("the reason must name the variable, got %q", res.Errors[0].Message)
+	}
+}
+
+// ── what the endpoint answers ────────────────────────────────────────────────
+
+// TestASelectionNarrowsTheAnswer proves the selection set is honoured rather than
+// decorative: a caller that asked for one key gets one key.
+func TestASelectionNarrowsTheAnswer(t *testing.T) {
+	c := echo(t, `{"relations":["owner"],"rule":["later"],"bound":100}`)
+	g := endpointTo(t, "graph", c.addr)
+
+	res := run(t, g, `{ graphVocabulary { relations } }`, nil)
+	if len(res.Errors) > 0 {
+		t.Fatalf("vocabulary: %v", res.Errors)
+	}
+	m, ok := res.Data["graphVocabulary"].(map[string]any)
+	if !ok {
+		t.Fatalf("vocabulary answered %T", res.Data["graphVocabulary"])
+	}
+	if _, asked := m["relations"]; !asked {
+		t.Errorf("the selected key is missing: %v", m)
+	}
+	for _, unasked := range []string{"rule", "bound"} {
+		if _, got := m[unasked]; got {
+			t.Errorf("%q was not selected but came back: %v", unasked, m)
+		}
+	}
+}
+
+// TestASelectionReachesIntoAList pins that selecting over many rows narrows each
+// of them, which is what a caller means by it.
+func TestASelectionReachesIntoAList(t *testing.T) {
+	c := echo(t, `{"assertions":[{"value":"a","source":"s1"},{"value":"b","source":"s2"}]}`)
+	g := endpointTo(t, "graph", c.addr)
+
+	res := run(t, g, `{ graphRead { assertions { value } } }`, nil)
+	top, _ := res.Data["graphRead"].(map[string]any)
+	rows, _ := top["assertions"].([]any)
+	if len(rows) != 2 {
+		t.Fatalf("rows = %v, want both", rows)
+	}
+	for _, r := range rows {
+		m, _ := r.(map[string]any)
+		if _, ok := m["value"]; !ok {
+			t.Errorf("the selected key is missing from a row: %v", m)
+		}
+		if _, ok := m["source"]; ok {
+			t.Errorf("an unselected key came back on a row: %v", m)
+		}
+	}
+}
+
+// TestAliasesAnswerUnderTheNameTheCallerChose is what makes asking one operation
+// twice in one request possible.
+func TestAliasesAnswerUnderTheNameTheCallerChose(t *testing.T) {
+	c := echo(t, `{"relations":["owner"]}`)
+	g := endpointTo(t, "graph", c.addr)
+
+	res := run(t, g, `{ mine: graphVocabulary { relations } }`, nil)
+	if _, ok := res.Data["mine"]; !ok {
+		t.Errorf("the alias is not the key it answered under: %v", keys(res.Data))
+	}
+	if _, ok := res.Data["graphVocabulary"]; ok {
+		t.Errorf("an aliased field must not also answer under its own name: %v", keys(res.Data))
+	}
+}
+
+// TestTwoRootFieldsAreOneRequest is what a caller comes to this endpoint for: what
+// REST spends two round trips on, answered in one.
+func TestTwoRootFieldsAreOneRequest(t *testing.T) {
+	c := echo(t, `{"relations":["owner"]}`)
+	g := endpointTo(t, "graph", c.addr)
+
+	res := run(t, g, `{
+		vocab: graphVocabulary { relations }
+		rows:  graphRead(limit: 1) { assertions { id } }
+	}`, nil)
+	if len(res.Errors) > 0 {
+		t.Fatalf("two fields: %v", res.Errors)
+	}
+	for _, want := range []string{"vocab", "rows"} {
+		if _, ok := res.Data[want]; !ok {
+			t.Errorf("%q is missing from a two-field answer: %v", want, keys(res.Data))
+		}
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if len(c.calls) != 2 {
+		t.Errorf("two fields made %d hops, want 2", len(c.calls))
+	}
+}
+
+// TestFragmentsAreExpanded covers the last thing real clients send.
+func TestFragmentsAreExpanded(t *testing.T) {
+	c := echo(t, `{"relations":["owner"],"bound":100}`)
+	g := endpointTo(t, "graph", c.addr)
+
+	res := run(t, g, "{ graphVocabulary { ...V } }\nfragment V on Vocabulary { relations }", nil)
+	if len(res.Errors) > 0 {
+		t.Fatalf("fragment query: %v", res.Errors)
+	}
+	m, _ := res.Data["graphVocabulary"].(map[string]any)
+	if _, ok := m["relations"]; !ok {
+		t.Errorf("the fragment's selection did not reach the answer: %v", m)
+	}
+	if _, ok := m["bound"]; ok {
+		t.Errorf("the fragment selected one key; %v came back", m)
+	}
+}
+
+// TestAFragmentThatSpreadsItselfIsRefused guards the one cycle a parser cannot
+// see on its own.
+func TestAFragmentThatSpreadsItselfIsRefused(t *testing.T) {
+	c := echo(t, `{}`)
+	g := endpointTo(t, "graph", c.addr)
+
+	if res := run(t, g, "{ graphVocabulary { ...V } }\nfragment V on Vocabulary { ...V }", nil); len(res.Errors) == 0 {
+		t.Fatal("a self-spreading fragment must be refused, not run")
+	}
+}
+
+// ── how the endpoint fails ───────────────────────────────────────────────────
+
+// TestAnUnknownFieldIsAnErrorAndANull pins the wire a GraphQL client reads: the
+// answer still has a shape, and the reason names the field it belongs to.
+func TestAnUnknownFieldIsAnErrorAndANull(t *testing.T) {
+	c := echo(t, `{"relations":[]}`)
+	g := endpointTo(t, "graph", c.addr)
+
+	res := run(t, g, `{ graphVocabulary { relations } noSuchField }`, nil)
+	if len(res.Errors) != 1 {
+		t.Fatalf("errors = %v, want exactly the one unknown field", res.Errors)
+	}
+	if len(res.Errors[0].Path) != 1 || res.Errors[0].Path[0] != "noSuchField" {
+		t.Errorf("the failure must name its field, got %v", res.Errors[0].Path)
+	}
+	if v, ok := res.Data["noSuchField"]; !ok || v != nil {
+		t.Errorf("a failed field is null and present, got %v (present=%v)", v, ok)
+	}
+	if _, ok := res.Data["graphVocabulary"]; !ok {
+		t.Error("one bad field must not take the good ones with it")
+	}
+}
+
+// TestAQueryThatCannotBeParsedNeverBegins pins the other half of that wire: no
+// data at all, because execution did not start.
+func TestAQueryThatCannotBeParsedNeverBegins(t *testing.T) {
+	c := echo(t, `{}`)
+	g := endpointTo(t, "graph", c.addr)
+
+	res := run(t, g, `{ graphVocabulary { relations `, nil)
+	if len(res.Errors) == 0 {
+		t.Fatal("an unclosed query must be refused")
+	}
+	if res.Data != nil {
+		t.Errorf("nothing ran, so there is no data to be right about: %v", res.Data)
+	}
+}
+
+// TestTheEndpointReachesARealPluginOverItsSocket is the end-to-end hop, against a
+// child composed the way its plugin main composes it.
+//
+// The observable is the CHILD'S OWN VERDICT. A plugin sanitizes identity at its
+// own boundary — a header a client sent is not a principal — so this call is
+// refused there, and that proves the endpoint carried the request to the app owning
+// the field and reported what that app said rather than answering for it. What it
+// does not prove is a successful authenticated call: that needs a credential the
+// child validates, which is IAM's boundary and not this endpoint's.
+func TestTheEndpointReachesARealPluginOverItsSocket(t *testing.T) {
+	kid := darkChild(t, "graph", graph.Use)
+	g := endpointTo(t, "graph", kid.addr)
+
+	res := run(t, g, `{ graphVocabulary { relations } }`, nil)
+	if len(res.Errors) != 1 {
+		t.Fatalf("errors = %v, want the child's own refusal", res.Errors)
+	}
+	if !strings.Contains(res.Errors[0].Message, "401") {
+		t.Errorf("the reason must be what the app answered, got %q", res.Errors[0].Message)
+	}
+	// The status is the caller's; the address the hop asked is the deployment's.
+	if strings.Contains(res.Errors[0].Message, "/v1/graph/vocabulary") {
+		t.Errorf("the reason names the internal address it asked: %q", res.Errors[0].Message)
+	}
+}
+
+func keys(m map[string]any) []string {
+	out := make([]string, 0, len(m))
+	for k := range m {
+		out = append(out, k)
+	}
+	return out
+}
+
+// ── what the endpoint refuses to spend ───────────────────────────────────────
+
+// TestAQueryWiderThanTheCeilingIsRefused pins the fan-out bound. Each root field
+// is a hop that may START a lazy child, so the width of one query is how many apps
+// a single caller can make this host dial at once.
+func TestAQueryWiderThanTheCeilingIsRefused(t *testing.T) {
+	c := echo(t, `{"relations":[]}`)
+	g := endpointTo(t, "graph", c.addr)
+
+	var b strings.Builder
+	b.WriteString("{")
+	for i := range 200 {
+		b.WriteString(" f")
+		b.WriteString(strconv.Itoa(i))
+		b.WriteString(": graphVocabulary { relations }")
+	}
+	b.WriteString(" }")
+
+	res := run(t, g, b.String(), nil)
+	if len(res.Errors) == 0 {
+		t.Fatal("200 root fields must be refused; each one is a hop into the surface")
+	}
+	if res.Data != nil {
+		t.Error("a refused request runs nothing, so there is no data to be right about")
+	}
+	// REFUSED, not truncated: nothing was dispatched at all.
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if len(c.calls) != 0 {
+		t.Errorf("the endpoint dispatched %d hops for a request it refused", len(c.calls))
+	}
+}
+
+// TestAQueryAtTheCeilingStillRuns is the other side of that bound: the limit is a
+// ceiling on abuse, not a budget ordinary callers can trip over.
+func TestAQueryAtTheCeilingStillRuns(t *testing.T) {
+	c := echo(t, `{"relations":[]}`)
+	g := endpointTo(t, "graph", c.addr)
+
+	var b strings.Builder
+	b.WriteString("{")
+	for i := range 8 {
+		b.WriteString(" f")
+		b.WriteString(strconv.Itoa(i))
+		b.WriteString(": graphVocabulary { relations }")
+	}
+	b.WriteString(" }")
+
+	if res := run(t, g, b.String(), nil); len(res.Errors) > 0 {
+		t.Fatalf("an ordinary multi-field query was refused: %v", res.Errors)
+	}
+}
+
+// TestSelectionsDeeperThanTheCeilingAreRefused guards the recursion. Depth buys no
+// hop, but it is still a caller-supplied recursion; zip's engine bounds it at 64
+// levels, fragments included, and refuses before anything is dispatched.
+func TestSelectionsDeeperThanTheCeilingAreRefused(t *testing.T) {
+	c := echo(t, `{}`)
+	g := endpointTo(t, "graph", c.addr)
+
+	q := "{ graphVocabulary " + strings.Repeat("{ a ", 70) + strings.Repeat("} ", 70) + "}"
+	res := run(t, g, q, nil)
+	if len(res.Errors) == 0 || res.Data != nil {
+		t.Fatal("a query nesting past the ceiling must be refused")
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if len(c.calls) != 0 {
+		t.Errorf("the endpoint dispatched %d hops for a request it refused", len(c.calls))
+	}
+}
+
+// TestAnIntrospectionQueryIsToldWhereTheSchemaIs covers the first request a
+// GraphQL client makes. Introspection is not served here — the schema is a
+// projection of a document rather than a type graph this process can walk, and a
+// partial __schema would have every generator build against a shape that is not
+// the API. Reporting it as an unknown field is true and useless; the refusal
+// names the address that does answer.
+func TestAnIntrospectionQueryIsToldWhereTheSchemaIs(t *testing.T) {
+	c := echo(t, `{}`)
+	g := endpointTo(t, "graph", c.addr)
+
+	for _, q := range []string{
+		`{ __schema { queryType { name } } }`,
+		`{ __type(name: "Assertion") { name } }`,
+	} {
+		res := run(t, g, q, nil)
+		if len(res.Errors) != 1 {
+			t.Fatalf("%s: errors = %v, want one", q, res.Errors)
+		}
+		msg := res.Errors[0].Message
+		if !strings.Contains(msg, "introspection") || !strings.Contains(msg, "GET "+openapi.GraphPath) {
+			t.Errorf("%s: reason = %q, want it to say where the schema is", q, msg)
+		}
+		if strings.Contains(msg, "no field named") {
+			t.Errorf("%s: reported as a typo rather than as an unserved feature", q)
+		}
+	}
+	// And nothing was dispatched for it.
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if len(c.calls) != 0 {
+		t.Errorf("an introspection query reached the surface %d times", len(c.calls))
+	}
+}
+
+// TestAWriteIsNotReachableAsARead pins the schema's split as enforced, not only
+// published: a query cannot reach a mutation field, a mutation cannot reach a
+// query field, and neither dispatches anything. A query is what a cache, a
+// prefetch or a retry sends without asking, so a write behind one is a write
+// nobody chose to make.
+func TestAWriteIsNotReachableAsARead(t *testing.T) {
+	c := echo(t, `{"recorded":1}`)
+	g := endpointTo(t, "graph", c.addr)
+
+	for _, q := range []string{
+		`query { graphAssert(body: {assertions: []}) }`,
+		`{ graphAssert(body: {assertions: []}) }`,
+		`mutation { graphVocabulary { relations } }`,
+	} {
+		res := run(t, g, q, nil)
+		if len(res.Errors) != 1 || !strings.Contains(res.Errors[0].Message, "field; this operation is a") {
+			t.Errorf("%s: errors = %v, want the split named", q, res.Errors)
+		}
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if len(c.calls) != 0 {
+		t.Errorf("a field selected under the wrong operation was dispatched %d times", len(c.calls))
+	}
+}
+
+// runWith is run with extra request headers, for the tests about what a hop
+// carries.
+func runWith(t *testing.T, h *zip.App, q string, header map[string]string) reply {
+	t.Helper()
+	body, _ := json.Marshal(zip.GraphRequest{Query: q})
+	req := httptest.NewRequest(http.MethodPost, openapi.GraphPath, bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	for k, v := range header {
+		req.Header.Set(k, v)
+	}
+	resp, err := h.Test(req, zip.TestConfig{Timeout: 30 * time.Second, FailOnTimeout: true})
+	if err != nil {
+		t.Fatalf("POST: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	raw, _ := io.ReadAll(resp.Body)
+	var out reply
+	if err := json.Unmarshal(raw, &out); err != nil {
+		t.Fatalf("the answer is not JSON (%s): %v", raw, err)
+	}
+	out.code = resp.StatusCode
+	out.rid = resp.Header.Get("X-Request-Id")
+	return out
+}
+
+// TestAHopCarriesIdentityOnlyThroughZip is defence in depth for the relay. The
+// edge strips and re-mints every identity header before this endpoint runs, and
+// the hop must not depend on that ordering: it takes the identity set off what
+// it relays, whatever it says, and writes back only the caller zip resolves — so
+// a header the edge did not mint never reaches the child, while the credential
+// the child authenticates by does.
+func TestAHopCarriesIdentityOnlyThroughZip(t *testing.T) {
+	c := echo(t, `{"assertions":[]}`)
+	g := endpointTo(t, "graph", c.addr)
+
+	runWith(t, g, `{ graphRead { assertions { id } } }`, map[string]string{
+		"X-Org-Id":           "acme",
+		"X-User-Id":          "acme/z@acme.test",
+		"Authorization":      "Bearer the-credential",
+		"X-Workspace-Id":     "forged",
+		"X-User-Permissions": "everything",
+		"X-Scope":            "forged",
+		"X-App-Id":           "forged",
+		"X-Tenant-Id":        "forged",
+		// cloud's own authority headers, which authz does not name: which brand
+		// vouched, an app acting as itself, the memberships, the key whose budget is
+		// billed, the waitlist bit.
+		"X-User-Brand":    "forged",
+		"X-User-IsApp":    "true",
+		"X-User-Orgs":     "acme,victim",
+		"X-Key-Id":        "victim/key",
+		"X-User-Approved": "true",
+	})
+	got := c.once(t)
+	if got.org != "acme" || got.user != "acme/z@acme.test" {
+		t.Errorf("the caller's identity did not ride along: org=%q user=%q", got.org, got.user)
+	}
+	if got.header.Get("Authorization") != "Bearer the-credential" {
+		t.Error("the credential the child authenticates by was not relayed")
+	}
+	for _, h := range []string{"X-Workspace-Id", "X-User-Permissions", "X-Scope", "X-App-Id", "X-Tenant-Id",
+		"X-User-Brand", "X-User-IsApp", "X-User-Orgs", "X-Key-Id", "X-User-Approved"} {
+		if v := got.header.Get(h); v != "" {
+			t.Errorf("%s reached the child as %q: an identity header zip did not resolve was relayed", h, v)
+		}
+	}
+	if got.header.Get("X-Request-Id") == "" {
+		t.Error("the hop carries no request id to tie the two logs together")
+	}
+}
+
+// TestAFailedHopTellsTheCallerAnIDNotTheTopology: a child's refusal is told by
+// its status, and anything that is the deployment's own business — which app
+// answers, where it listens, the address it was asked — goes to the log under the
+// request's id, which is what the caller is given.
+func TestAFailedHopTellsTheCallerAnIDNotTheTopology(t *testing.T) {
+	refusing := echo(t, `{"detail":"no"}`)
+	refusing.code = http.StatusForbidden
+	r := run(t, endpointTo(t, "graph", refusing.addr), `{ graphRead { assertions { id } } }`, nil)
+	if len(r.Errors) != 1 || r.Errors[0].Message != "the operation answered 403 Forbidden" {
+		t.Fatalf("a child's refusal = %+v", r.Errors)
+	}
+
+	broken := echo(t, `{}`)
+	broken.code = http.StatusInternalServerError
+	dead := filepath.Join(kit.Sockets(t), "nothing-listens.sock")
+	for name, addr := range map[string]string{"a 500": broken.addr, "a dead socket": dead} {
+		r := runWith(t, endpointTo(t, "graph", addr), `{ graphRead { assertions { id } } }`, nil)
+		if len(r.Errors) != 1 {
+			t.Fatalf("%s: errors = %+v", name, r.Errors)
+		}
+		msg := r.Errors[0].Message
+		if r.rid == "" || msg != "internal error (request "+r.rid+")" {
+			t.Errorf("%s: message %q, request id %q", name, msg, r.rid)
+		}
+		for _, leak := range []string{"graph", "/v1/", ".sock", "GET"} {
+			if strings.Contains(msg, leak) {
+				t.Errorf("%s: the message names %q: %s", name, leak, msg)
+			}
+		}
+	}
+}

@@ -1,0 +1,44 @@
+{
+  "$schema": "https://schemas.agentskills.io/discovery/0.2.0/schema.json",
+  "base_url": "https://api.zoo.ngo",
+  "brand": "zoo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://zoolabs.id",
+  "mcp": {
+    "description": "Model Context Protocol over JSON-RPC 2.0 — one POST per message, stateless, protocol revision 2026-07-28. tools/list answers without a credential with one tool per subsystem (its operations in the \"op\" enum) plus \"describe\", which returns one operation's input schema. tools/call names a subsystem tool and carries {\"op\": <operation>, \"input\": <its arguments>}; it takes the same bearer the REST API does, and a call that carries none is answered 401 with a WWW-Authenticate header naming the resource metadata at /.well-known/oauth-protected-resource, which names the authorization server to sign in at. The tool surface is the public contract: the operator's admin product is not offered, and a name that would disclose a secret or mutate an identity is withheld — the list says how many, under _meta.",
+    "method": "POST",
+    "url": "https://api.zoo.ngo/v1/mcp"
+  },
+  "skill_count": 3,
+  "skills": [
+    {
+      "description": "Read experiment assign: Is the variant one subject is bucketed into, and the payload that variant carries..",
+      "digest": "sha256:acca5ae531bbfb44ca0e16d125c7ec3018c31664969ccbf4b0651736bc0317f9",
+      "name": "experiment_assign",
+      "service": "experiment",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/experiment_assign/SKILL.md"
+    },
+    {
+      "description": "Read experiment experiment: Is every experiment in the caller's org, with its variants, status and decision, ordered by project then id., Is one experiment's definition and lifecycle: variants, weights, control arm, status and winner..",
+      "digest": "sha256:4cee564974aad5ce727a708c964036e10222334d6311ef96f36fa8bb09323fa7",
+      "name": "experiment_experiment",
+      "service": "experiment",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/experiment_experiment/SKILL.md",
+      "works": [
+        "data",
+        "product"
+      ]
+    },
+    {
+      "description": "Read experiment health: Is whether the experiments subsystem is mounted and serving in this process..",
+      "digest": "sha256:74a9c70ccd963e6f6637c3ac58918d863a1244353129d707ac31ffc951df4482",
+      "name": "experiment_health",
+      "service": "experiment",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/experiment_health/SKILL.md"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

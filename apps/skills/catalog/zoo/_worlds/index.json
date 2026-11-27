@@ -1,0 +1,40 @@
+{
+  "$schema": "https://schemas.agentskills.io/discovery/0.2.0/schema.json",
+  "base_url": "https://api.zoo.ngo",
+  "brand": "zoo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://zoolabs.id",
+  "mcp": {
+    "description": "Model Context Protocol over JSON-RPC 2.0 — one POST per message, stateless, protocol revision 2026-07-28. tools/list answers without a credential with one tool per subsystem (its operations in the \"op\" enum) plus \"describe\", which returns one operation's input schema. tools/call names a subsystem tool and carries {\"op\": <operation>, \"input\": <its arguments>}; it takes the same bearer the REST API does, and a call that carries none is answered 401 with a WWW-Authenticate header naming the resource metadata at /.well-known/oauth-protected-resource, which names the authorization server to sign in at. The tool surface is the public contract: the operator's admin product is not offered, and a name that would disclose a secret or mutate an identity is withheld — the list says how many, under _meta.",
+    "method": "POST",
+    "url": "https://api.zoo.ngo/v1/mcp"
+  },
+  "skill_count": 3,
+  "skills": [
+    {
+      "description": "Read worlds beliefs: Reads an entity's local belief without sharing model artifacts..",
+      "digest": "sha256:f4a1040a72b0fafec76b60d21331b3d472a1fc4581ea3b20534966e790a3a2ff",
+      "name": "worlds_beliefs",
+      "service": "worlds",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/worlds_beliefs/SKILL.md"
+    },
+    {
+      "description": "Read worlds models: Lists alpha aliases only after the private runtime confirms readiness..",
+      "digest": "sha256:d0f60c05e85f7aeea0ddb9627707b760105b83d3f97e65dfe04b1052b9b10d87",
+      "name": "worlds_models",
+      "service": "worlds",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/worlds_models/SKILL.md"
+    },
+    {
+      "description": "Read worlds worlds: Reads a world in the authenticated tenant and project..",
+      "digest": "sha256:9f16d5169ee85e22adaf0ed1d1b3625456c2b394ce950d32627777ae1e138a61",
+      "name": "worlds_worlds",
+      "service": "worlds",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/worlds_worlds/SKILL.md"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

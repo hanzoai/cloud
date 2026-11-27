@@ -1,0 +1,843 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Hanzo Cloud API",
+    "description": "Package code is search and symbols across your repos, for you and your agents.",
+    "version": "v1"
+  },
+  "servers": [
+    {
+      "url": "https://api.hanzo.ai"
+    }
+  ],
+  "security": [
+    {
+      "bearer": []
+    }
+  ],
+  "tags": [
+    {
+      "name": "code"
+    }
+  ],
+  "paths": {
+    "/v1/code/ask": {
+      "get": {
+        "operationId": "get_code_ask",
+        "summary": "Answers a question about the caller org's code with a CITED answer: retrieval packs grounding context, then the synthesizer writes the answer over exactly those spans, which come back alongside it.",
+        "description": "Answers a question about the caller org's code with a CITED answer:\nretrieval packs grounding context, then the synthesizer writes the answer over\nexactly those spans, which come back alongside it. It never answers without\ngrounding — with no matched code the answer is empty and says so, and with no\nsynthesizer available the citations still come back with \"degraded\": true so\nthe caller can reason over the spans itself.",
+        "tags": [
+          "code"
+        ],
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "description": "Q is the question to answer. Required, max 4000 bytes.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "where is the per-org SQLite file opened"
+          },
+          {
+            "name": "repo",
+            "in": "query",
+            "required": false,
+            "description": "Repo narrows retrieval to one repository. Empty searches every repo the org\nhas indexed.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "cloud"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/code.AskAnswer"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      },
+      "post": {
+        "operationId": "post_code_ask",
+        "summary": "Answers a question about the caller org's code with a CITED answer, taking the question from the request BODY, for a question too long or too awkward to put in a URL.",
+        "description": "Answers a question about the caller org's code with a CITED answer,\ntaking the question from the request BODY, for a question too long or too\nawkward to put in a URL. `query` and `repo` in the body take precedence over\n`?q=` and `?repo=`; either source works alone.",
+        "tags": [
+          "code"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "query": "where is the per-org SQLite file opened",
+                "repo": "cloud"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/code.askPostIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/code.AskAnswer"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/code/context": {
+      "post": {
+        "operationId": "post_code_context",
+        "summary": "Packs the most relevant code for a query into a token budget — THE primitive for a coding agent that has to decide what to put in a prompt.",
+        "description": "Packs the most relevant code for a query into a token budget — THE\nprimitive for a coding agent that has to decide what to put in a prompt. It\nretrieves seed spans, expands each with the definitions it calls and its key\ncallers, then greedily fills the budget, so the answer is a coherent slice of\nthe codebase rather than a list of disconnected matches. The top match is\nalways included, truncated if it alone overflows, so a matched query never\ncomes back empty. A retrieval outage answers 200 with an empty bundle rather\nthan a 5xx.",
+        "tags": [
+          "code"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "budgetTokens": 4000,
+                "query": "how does the store open a per-org database",
+                "repo": "cloud"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/code.contextIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/code.ContextBundle"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/code/file": {
+      "get": {
+        "operationId": "get_code_file",
+        "summary": "Returns the INDEXED content of one file — read_file over the chunks the search tiers hold, for pulling up code an agent just found.",
+        "description": "Returns the INDEXED content of one file — read_file over the chunks the\nsearch tiers hold, for pulling up code an agent just found. It is NOT\nbyte-verbatim: the git object plane is the source of record for exact bytes,\nhistory and blame. A file absent from the index is a 404, so an agent can tell\n\"not indexed\" from \"empty file\".",
+        "tags": [
+          "code"
+        ],
+        "parameters": [
+          {
+            "name": "path",
+            "in": "query",
+            "required": false,
+            "description": "Path is the file's repo-relative path. Required.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "apps/code/store.go"
+          },
+          {
+            "name": "repo",
+            "in": "query",
+            "required": false,
+            "description": "Repo is the repository the file belongs to. REQUIRED.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "cloud"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/code.fileContent"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/code/index": {
+      "post": {
+        "operationId": "post_code_index",
+        "summary": "(re)indexes a repository for the caller's org, incrementally: files whose content hash is unchanged are skipped, so re-sending a whole tree is cheap.",
+        "description": "(re)indexes a repository for the caller's org, incrementally: files whose\ncontent hash is unchanged are skipped, so re-sending a whole tree is cheap.\nEach file is parsed for symbols, split at AST boundaries and — when the\nsemantic tier is available — embedded, which is what makes it searchable across\nall three retrieval tiers. Pass `prune` to also DELETE indexed files absent\nfrom the request, which turns the call into a full sync; without it the call is\nan upsert. The index is written to the caller org's own physically separate\ndatabase.",
+        "tags": [
+          "code"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "files": [
+                  {
+                    "content": "package main\n",
+                    "path": "main.go"
+                  }
+                ],
+                "prune": true,
+                "repo": "cloud"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/code.indexIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/code.indexResult"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/code/reindex": {
+      "post": {
+        "operationId": "post_code_reindex",
+        "summary": "Rebuilds the caller org's code index in the embedding space this deployment embeds in, from the code the index already holds, across every repository.",
+        "description": "Rebuilds the caller org's code index in the embedding space this\ndeployment embeds in, from the code the index already holds, across every\nrepository. An index created in another space (another model, revision,\ndimension, normalization or task prefix) has every chunk embedded again, and\nits old vectors and the record of their space are replaced in the same\ntransaction as the first new ones. An index already in this space keeps its\nvectors: the first chunk is embedded again to learn whether the model still\nanswers at the index's dimension, then only the chunks that have no vector\nare, so a reindex that stopped part way is finished by calling it again. It\nrequires ORG ADMIN, bills the embeddings to the caller's org and runs inline.\nAn embedding failure part way answers 502 with how far it got; the index is\nthen in the new space with the chunks it reached.\n\nThe request has no body. Response: {\"chunks\": 2048, \"embedded\": 2048, \"vectors\": 2048, \"model_revision\": \"zen-embedding\", \"dimensions\": 1024}",
+        "tags": [
+          "code"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/code.reindexResult"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/code/search": {
+      "get": {
+        "operationId": "get_code_search",
+        "summary": "Finds code in the caller org's index across three orthogonal retrieval tiers fused by reciprocal-rank fusion: lexical (FTS5 trigram over code-tokenized text), symbolic (real definition and reference edges), and semantic (embedding cosine over AST-boundary chunks).",
+        "description": "Finds code in the caller org's index across three orthogonal retrieval\ntiers fused by reciprocal-rank fusion: lexical (FTS5 trigram over\ncode-tokenized text), symbolic (real definition and reference edges), and\nsemantic (embedding cosine over AST-boundary chunks). Pick one tier with\n`type`, or leave it to run all three as hybrid, which is what a coding agent\nusually wants. It is FAIL-HONEST: a retrieval outage answers 200 with an empty\nresult set and \"degraded\": true rather than a 5xx, so an agent degrades instead\nof stalling. A malformed regex is a 400.",
+        "tags": [
+          "code"
+        ],
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "description": "Q is the search query. Required, max 4000 bytes. For type=regex it is a\nregular expression; for type=symbol it is a symbol name.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "func openStore"
+          },
+          {
+            "name": "type",
+            "in": "query",
+            "required": false,
+            "description": "Type selects the retrieval tier: \"text\" (FTS5 trigram), \"regex\",\n\"symbol\" (definitions), \"semantic\" (embeddings) or \"hybrid\". Anything\nelse — including empty — reads as hybrid.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "hybrid"
+          },
+          {
+            "name": "repo",
+            "in": "query",
+            "required": false,
+            "description": "Repo narrows to one repository. Empty searches every repo the org has indexed.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "cloud"
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Limit caps how many spans come back: default 20, maximum 100. A value that\nis not a positive integer reads as the default.",
+            "schema": {
+              "format": "int64",
+              "type": "integer"
+            },
+            "example": 20
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/code.searchResults"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/code/tree": {
+      "get": {
+        "operationId": "get_code_tree",
+        "summary": "Returns one repository's file structure with a per-file symbol count — get_repo_structure over the org's own index, with no git checkout involved.",
+        "description": "Returns one repository's file structure with a per-file symbol count —\nget_repo_structure over the org's own index, with no git checkout involved. A\nrepository that has not been indexed answers an empty tree rather than an\nerror, so an agent can tell \"nothing here\" without handling a failure.",
+        "tags": [
+          "code"
+        ],
+        "parameters": [
+          {
+            "name": "repo",
+            "in": "query",
+            "required": false,
+            "description": "Repo is the repository to walk. REQUIRED — a tree is repo-scoped.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "cloud"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/code.repoTree"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "code.AskAnswer": {
+        "properties": {
+          "answer": {
+            "description": "Answer is the synthesized prose. EMPTY is a real answer here: nothing in the\nindex matched, or synthesis was unavailable — read `degraded` and `citations`\nto tell those apart. It is never written without grounding.",
+            "type": "string"
+          },
+          "citations": {
+            "description": "Citations are the exact regions the answer was grounded on, and they are the\npoint: an answer is checkable only because every claim in it can be read back\nat a file and line. Present even when Answer is empty.",
+            "items": {
+              "$ref": "#/components/schemas/code.Citation"
+            },
+            "type": "array"
+          },
+          "degraded": {
+            "description": "Degraded is true when retrieval worked but no synthesizer was reachable. The\ncitations are still real code, so a caller can answer from them itself; a\ncaller that treats this like an error throws away a usable result.",
+            "type": "boolean"
+          },
+          "question": {
+            "description": "Question is the ask, echoed back.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "code.Citation": {
+        "properties": {
+          "endLine": {
+            "description": "EndLine is its last line, inclusive.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "file": {
+            "description": "File is the path inside the repo, relative to its root.",
+            "type": "string"
+          },
+          "line": {
+            "description": "Line is the first line of the cited region, 1-based.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "repo": {
+            "description": "Repo is the repository the cited code lives in (\"owner/name\"), absent when the\nask was already scoped to one.",
+            "type": "string"
+          },
+          "symbol": {
+            "description": "Symbol is the declaration the region belongs to, when it belongs to one.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "code.ContextBundle": {
+        "properties": {
+          "budgetTokens": {
+            "description": "BudgetTokens is the ceiling the caller asked for. Packing stops under it, so\nthis is a bound and not a target.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "capped": {
+            "description": "Capped is true when the semantic tier stopped at its scan cap — it compares\na query with at most 50000 stored vectors — with more left unread, so code\npast the cap could not be picked by meaning. The lexical and symbol tiers\nread the whole index either way. Absent otherwise.",
+            "type": "boolean"
+          },
+          "query": {
+            "description": "Query is the ask this bundle was packed for, echoed back so a cached or\nforwarded bundle still says what it answers.",
+            "type": "string"
+          },
+          "repo": {
+            "description": "Repo narrows the retrieval to one repository. Absent means every indexed repo\nwas searched.",
+            "type": "string"
+          },
+          "spans": {
+            "description": "Spans are the packed chunks, most relevant first, each expanded with the\ndefinitions it calls and its notable callers. The top match is always present\neven if it had to be truncated to fit, so a matched query never comes back\nwith nothing.",
+            "items": {
+              "$ref": "#/components/schemas/code.Span"
+            },
+            "type": "array"
+          },
+          "usedTokens": {
+            "description": "UsedTokens is what the returned spans actually cost, by the same estimate the\npacker used (roughly one token per four characters — an estimate, not a\ntokenizer's count, so size a real window with headroom).",
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "code.Span": {
+        "properties": {
+          "endLine": {
+            "description": "EndLine is the last line of the span, inclusive. It equals Line for a\none-line span rather than being zero or absent.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "file": {
+            "description": "File is the path inside the repo, relative to its root and never absolute.",
+            "type": "string"
+          },
+          "kind": {
+            "description": "Kind is what the indexer decided this chunk IS — \"func\", \"method\", \"type\",\n\"struct\", \"interface\", \"var\", \"const\", or \"block\" for a run of code that\ndeclares nothing. Absent when the chunker could not classify it.",
+            "type": "string"
+          },
+          "line": {
+            "description": "Line is where the span starts, 1-based, as an editor counts.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "repo": {
+            "description": "Repo is the indexed repository the span was found in, as it was indexed\n(\"owner/name\"). A search may be scoped to one repo or run across all of them,\nso this is how a caller tells the results apart.",
+            "type": "string"
+          },
+          "role": {
+            "description": "context: match | definition | caller",
+            "type": "string"
+          },
+          "score": {
+            "description": "Score ranks this span against the OTHERS IN THE SAME RESPONSE and means\nnothing across responses or between tiers: the hybrid tier's number is a\nreciprocal-rank fusion sum (Σ 1/(60+rank), so tenths at best), the symbol\ntier's is a descending position count, and the text and semantic tiers pass\nthrough bm25 and cosine. Compare within a list; never threshold on it.",
+            "format": "double",
+            "type": "number"
+          },
+          "snippet": {
+            "description": "Snippet is the code itself: a bounded excerpt on /search, the whole chunk on\n/context — which is why the same type serves both and why a /context span is\nthe one an agent pastes into its window.",
+            "type": "string"
+          },
+          "symbol": {
+            "description": "Symbol is the declared name, when the span declares one. Absent on a block.",
+            "type": "string"
+          },
+          "tier": {
+            "description": "Tier is which retrieval produced the span: \"hybrid\" (the default — all three\nfused), \"text\" (trigram/FTS), \"regex\", \"semantic\" (vector), or \"symbol\". It is\nwhat explains a Score, so the two travel together.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "code.TreeEntry": {
+        "properties": {
+          "lang": {
+            "description": "Lang is the language the indexer parsed the file as (\"go\", \"python\", …), or\nempty when it recognised none — in which case Symbols is 0 because nothing was\nextracted, not because the file declares nothing.",
+            "type": "string"
+          },
+          "path": {
+            "description": "Path is the file, relative to the repo root. The list is ordered by it, so a\nreader can see module layout without sorting.",
+            "type": "string"
+          },
+          "symbols": {
+            "description": "Symbols is how many top-level declarations the file defines. A file with none\nis still listed: the file set is the authority here and the counts decorate it.",
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "code.askPostIn": {
+        "properties": {
+          "query": {
+            "description": "Query is the question, from the BODY. Takes precedence over `?q=`.",
+            "type": "string"
+          },
+          "repo": {
+            "description": "Repo is the repository narrowing, from the BODY. Takes precedence over `?repo=`.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "code.contextIn": {
+        "properties": {
+          "budgetTokens": {
+            "description": "BudgetTokens caps the bundle's size. Clamped to [256, 32000]; 0 or absent\nuses 4000.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "query": {
+            "description": "Query is what to retrieve context for. Required, max 4000 bytes.",
+            "type": "string"
+          },
+          "repo": {
+            "description": "Repo narrows retrieval to one repository. Empty searches every repo the org\nhas indexed.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "code.fileContent": {
+        "properties": {
+          "content": {
+            "description": "Content is the file's text as the index stored it. It is NOT guaranteed\nbyte-verbatim — the git object plane is the source of record for exact\nbytes, history and blame.",
+            "type": "string"
+          },
+          "lang": {
+            "description": "Lang is the detected language.",
+            "type": "string"
+          },
+          "path": {
+            "description": "Path echoes the file that was read.",
+            "type": "string"
+          },
+          "repo": {
+            "description": "Repo echoes the repository it came from.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "code.fileInput": {
+        "properties": {
+          "content": {
+            "description": "Content is the file's full text. Max 1 MiB per file; binary files should\nsimply be omitted rather than sent.",
+            "type": "string"
+          },
+          "path": {
+            "description": "Path is the file's repo-relative path, e.g. \"internal/store/db.go\".",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "code.indexIn": {
+        "properties": {
+          "files": {
+            "description": "Files is the full set of files to index. Required and non-empty; max 20000\nfiles, 1 MiB per file and 1 GiB in total. Unchanged files are skipped by\ncontent hash, so re-sending the whole tree is cheap.",
+            "items": {
+              "$ref": "#/components/schemas/code.fileInput"
+            },
+            "type": "array"
+          },
+          "prune": {
+            "description": "Prune deletes indexed files that are NOT in this request — which makes the\ncall a full sync of the repo rather than an upsert. Only pass it when Files\nis the complete tree.",
+            "type": "boolean"
+          },
+          "repo": {
+            "description": "Repo is the repository label to index under. Required, max 200 bytes. It is\na stored column value, not a filesystem path.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "code.indexResult": {
+        "properties": {
+          "chunks": {
+            "description": "Chunks is how many AST-boundary chunks the repo holds after this pass.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "files": {
+            "description": "Files is how many files the repo holds after this pass.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "indexed": {
+            "description": "Indexed is how many files were parsed and written on this pass.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "pruned": {
+            "description": "Pruned is how many stored files were deleted because prune was set and they\nwere absent from the request.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "repo": {
+            "description": "Repo is the repository that was indexed.",
+            "type": "string"
+          },
+          "semantic": {
+            "description": "Semantic reports whether the semantic tier was available for this pass. When\nfalse the index is lexical + symbolic only and hybrid search still works.",
+            "type": "boolean"
+          },
+          "skipped": {
+            "description": "Skipped is how many files were unchanged by content hash and left alone.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "symbols": {
+            "description": "Symbols is how many symbol definitions the repo holds after this pass.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "vectors": {
+            "description": "Vectors is how many of those chunks carry an embedding.",
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "code.reindexResult": {
+        "properties": {
+          "chunks": {
+            "description": "Chunks is how many chunks the org's code index holds, across every\nrepository.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "dimensions": {
+            "description": "Dimensions is how many components each of the index's vectors has. 0 for\nan index with no chunks.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "embedded": {
+            "description": "Embedded is how many chunks this call embedded and wrote: every chunk\nwhen the index moved to this deployment's embedding space, and otherwise\nthe first chunk (embedded again to learn the dimension the model answers\nnow) and the chunks that had no vector.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "model_revision": {
+            "description": "ModelRevision is the embedding model, and its revision when the deployment\nstates one, that the index is in now. Empty for an index with no chunks.",
+            "type": "string"
+          },
+          "vectors": {
+            "description": "Vectors is how many chunks have a vector now. Equal to Chunks when the\nsemantic tier covers the whole index.",
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "code.repoTree": {
+        "properties": {
+          "files": {
+            "description": "Files are the repo's indexed files in path order, each with its language\nand how many symbols it defines. Never null.",
+            "items": {
+              "$ref": "#/components/schemas/code.TreeEntry"
+            },
+            "type": "array"
+          },
+          "repo": {
+            "description": "Repo echoes the repository that was walked.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "code.searchResults": {
+        "properties": {
+          "capped": {
+            "description": "Capped is true when the semantic tier stopped at its scan cap — it compares\na query with at most 50000 stored vectors — with more left unread, so a\nchunk past the cap could not be found by meaning. The text, regex and\nsymbol tiers read the whole index either way. Absent otherwise.",
+            "type": "boolean"
+          },
+          "degraded": {
+            "description": "Degraded is true when retrieval failed and the empty result set is an\noutage rather than a real absence of matches. Absent on a healthy answer.",
+            "type": "boolean"
+          },
+          "query": {
+            "description": "Query echoes the query that was run.",
+            "type": "string"
+          },
+          "results": {
+            "description": "Results are the matching spans, best first. Never null — an empty search is\nan empty array.",
+            "items": {
+              "$ref": "#/components/schemas/code.Span"
+            },
+            "type": "array"
+          },
+          "type": {
+            "description": "Type echoes the retrieval tier that ran, after defaulting.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "problem-details": {
+        "description": "An RFC 9457 problem document.",
+        "properties": {
+          "code": {
+            "description": "A stable token a client can branch on, when the refusal names one.",
+            "type": "string"
+          },
+          "detail": {
+            "description": "What was refused, for a person to read.",
+            "type": "string"
+          },
+          "status": {
+            "description": "The HTTP status.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "title": {
+            "description": "The status's reason phrase.",
+            "type": "string"
+          },
+          "type": {
+            "description": "about:blank",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "status",
+          "detail"
+        ],
+        "type": "object"
+      }
+    },
+    "securitySchemes": {
+      "bearer": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "The caller's credential, sent as `Authorization: Bearer \u003ctoken\u003e`. It is either an access token minted by Hanzo IAM or an API key (pk-/sk-). X-Authorization, and HTTP Basic carrying the token as the password, are accepted spellings of the same header for clients that cannot set Authorization; a browser presents the session cookie instead. Every operation requires it unless it says `security: []`."
+      }
+    }
+  }
+}

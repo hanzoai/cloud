@@ -16,11 +16,18 @@ import (
 // ciphertext and a leaked file is useless without the KMS master key.
 //
 // The key is cek's, and only cek's: cek.DeriveKey(master, ns, subsystem) — the
-// same derivation, from the same master, that keyed the local file this snapshot
-// is a copy of. A file and its snapshot are two renderings of one key, and the
-// estate has one place that turns a master into a key.
+// same derivation, from the same master, that keyed the local file this
+// snapshot is a copy of. A file and its snapshot are two renderings of one key,
+// and the estate has one place that turns a master into a key. This package
+// used to hold a second HKDF of its own, which meant the local file and the
+// object it ships to were keyed by two different functions that no test
+// compared; keeping them equal was a promise in a comment rather than a
+// property of the code.
 //
-// Binding the subsystem is what the org slug alone could not do.
+// Binding the subsystem is what the org slug alone could not do. Every database
+// an org owned used to seal under a single key, so its settings snapshot and
+// its ledger snapshot were interchangeable to anyone holding either one. cek
+// binds the subsystem into the derivation, so they no longer are.
 //
 // AES-256-GCM gives confidentiality and integrity. The AAD is the same
 // namespace/subsystem binding the key was derived under, so a blob lifted into

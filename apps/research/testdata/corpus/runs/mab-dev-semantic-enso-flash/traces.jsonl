@@ -1,0 +1,14 @@
+{"qid":"factconsolidation_mh_6k_no1","plan":{"entity":"Igor of Kiev","chain":["spouse","death_place"],"model":"deepseek-v4-flash"},"trace":null,"shown":[175,125,450,372,302,206,292,117,283,300],"resolved":null}
+{"qid":"factconsolidation_mh_6k_no0","plan":{"entity":"Our Mutual Friend","chain":["author","spouse","citizenship"],"model":"deepseek-v4-flash"},"trace":null,"shown":[146,107,183,73,343,244,204,444,441,311],"resolved":null}
+{"qid":"factconsolidation_mh_6k_no4","plan":{"entity":"Blair Walsh","chain":["sport"],"model":"deepseek-v4-flash"},"trace":null,"shown":[419,194,252,346,46,282,334,340,361,36],"resolved":null}
+{"qid":"factconsolidation_mh_6k_no5","plan":{"entity":"Nicolae Ceaușescu","chain":["spouse","educated_at"],"model":"deepseek-v4-flash"},"trace":null,"shown":[333,369,58,453,191,409,173,349,106,332],"resolved":null}
+{"qid":"factconsolidation_mh_6k_no3","plan":{"entity":"Tunisia national football team","chain":["sport","country_origin","capital"],"model":"deepseek-v4-flash"},"trace":null,"shown":[235,418,171,168,296,18,255,149,21,389],"resolved":null}
+{"qid":"factconsolidation_mh_6k_no7","plan":{"entity":"Thomas Arne","chain":["birth_place","continent"],"model":"deepseek-v4-flash"},"trace":null,"shown":[342,366,211,397,56,41,127,319,440,113],"resolved":null}
+{"qid":"factconsolidation_mh_6k_no8","plan":{"entity":"Colin Irwin","chain":["citizenship","continent"],"model":"deepseek-v4-flash"},"trace":null,"shown":[55,441,311,444,225,73,280,386,244,165],"resolved":null}
+{"qid":"factconsolidation_mh_6k_no9","plan":{"entity":"John Walsh","chain":["religion","founder","work_location"],"model":"deepseek-v4-flash"},"trace":null,"shown":[361,282,218,263,304,287,357,17,410,68],"resolved":null}
+{"qid":"factconsolidation_mh_6k_no6","plan":{"entity":"Twitter","chain":["ceo","citizenship"],"model":"deepseek-v4-flash"},"trace":null,"shown":[275,109,444,115,432,126,118,249,13,428],"resolved":null}
+{"qid":"factconsolidation_mh_6k_no11","plan":null,"trace":null,"shown":[182,263,312,357,412,70,260,68,172,367],"resolved":null}
+{"qid":"factconsolidation_mh_6k_no10","plan":{"entity":"Transcendental Meditation movement","chain":["founder","religion"],"model":"deepseek-v4-flash"},"trace":null,"shown":[154,360,370,331,304,410,374,119,20,287],"resolved":null}
+{"qid":"factconsolidation_mh_6k_no13","plan":null,"trace":null,"shown":[263,84,135,410,68,282,248,361,266,172],"resolved":null}
+{"qid":"factconsolidation_mh_6k_no2","plan":{"entity":"Steve Sax","chain":["sport","country_origin"],"model":"deepseek-v4-flash"},"trace":null,"shown":[417,35,150,348,216,279,160,137,57,382],"resolved":null}
+{"qid":"factconsolidation_mh_6k_no14","plan":null,"trace":null,"shown":[367,338,126,249,115,159,365,79,254,73],"resolved":null}

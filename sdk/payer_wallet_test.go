@@ -51,7 +51,7 @@ func wallets(t *testing.T, org, user, claim string) (direct, detached Payer) {
 }
 
 // A signed claim naming a person inside the caller's own org is the wallet, on
-// BOTH paths.
+// BOTH paths. This is the one the streamed answer used to get wrong.
 func TestDetachKeepsTheClaimedWallet(t *testing.T) {
 	direct, detached := wallets(t, "acme", "bob", "person:acme/bob")
 

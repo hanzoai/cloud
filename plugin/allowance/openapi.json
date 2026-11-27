@@ -1,0 +1,161 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Hanzo Cloud API",
+    "description": "Package allowance is how much a plan lets you do without paying, and how much of it you have left in the window that holds you.",
+    "version": "v1"
+  },
+  "servers": [
+    {
+      "url": "https://api.hanzo.ai"
+    }
+  ],
+  "security": [
+    {
+      "bearer": []
+    }
+  ],
+  "tags": [
+    {
+      "name": "allowance"
+    }
+  ],
+  "paths": {
+    "/v1/allowance": {
+      "get": {
+        "operationId": "get_allowance",
+        "summary": "Answers what the CALLER has left of their plan's free-call allowance in the window that holds them, and the instant that window reopens.",
+        "description": "Answers what the CALLER has left of their plan's free-call allowance in the window\nthat holds them, and the instant that window reopens.\n\nThis is the number a product shows beside the composer — \"2 of 3 left\" —\nand the moment to offer a plan is when it reaches zero. It READS: asking does not\nspend, so a page that polls it costs the caller nothing. A Free person's window is\na session that opens at their first call after the last one ended and runs five\nhours; while none runs, resets is 0 and the next call opens one.\n\nA bounded caller is POOLED: the Free plan is limited usage from one pool every\nfree user shares — the platform's vendor accounts for free models — so the answer\nsays so (pooled) and carries that pool's standing: available, busy or exhausted,\nand when it refills. The pool is read from the process that spends it and is\nabsent when that process does not answer, never guessed. A paid plan is not\npooled and carries no pool: its usage is metered in money.\n\nThe subject is the caller's own, resolved from the verified credential, and can\nnever be named in the request — so this is a mirror, not a lookup of someone else.\nAn unauthenticated caller is refused: there is no allowance without someone to\nhold it.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
+        "tags": [
+          "allowance"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/allowance.Allowance"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "allowance.Allowance": {
+        "properties": {
+          "limit": {
+            "description": "calls the plan allows in Window; 0 = unbounded",
+            "format": "int64",
+            "type": "integer"
+          },
+          "plan": {
+            "description": "the tier the limit came from",
+            "type": "string"
+          },
+          "pool": {
+            "$ref": "#/components/schemas/allowance.Pool",
+            "description": "Pool is that shared pool's standing, where it could be read. Absent when the\nsubject is not pooled, and when the process that holds it did not answer —\nnever a guess."
+          },
+          "pooled": {
+            "description": "Pooled says the calls counted here are served from the pool every free user\nshares — the platform's vendor accounts for free models — rather than from\nthe subject's own plan. True exactly where a window bounds the subject.",
+            "type": "boolean"
+          },
+          "resets": {
+            "description": "Resets is the instant THAT window reopens, unix seconds: the next UTC hour or\nmidnight, or a session's start plus its length — exact, to the second, from\nthe call that opened it. 0 for a session that is not running: it opens at the\nnext call.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "spent": {
+            "description": "Spent says the ceiling refuses: on a take, that THIS call was refused and\nnothing was counted; on a read, that the next call would be.",
+            "type": "boolean"
+          },
+          "start": {
+            "description": "Start is when the session this answer counts in opened, unix seconds: on a\ntake, the session the call was counted in, which a give names back\n(AllowanceIn.Start); on a read, the session running. 0 where no session bounds\nthe subject or none runs.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "used": {
+            "description": "Used is how many free calls this subject has been admitted in the window\nending at Resets. A call counts when it is admitted, whatever its upstream then\ndoes; a refused call counts nothing. It stops AT Limit rather than climbing\npast it, so Limit-Used is what remains and never goes negative.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "window": {
+            "description": "Window is which ceiling these numbers describe — \"hour\", \"session\" or \"day\" —\nbecause a caller can be held to more than one and only one of them is the\nanswer. A session is the Free plan's: it opens at the subject's first call\nafter the last one ended and runs five hours (ai_plan_session_hours). It is\nthe window that REFUSED where one did, and otherwise the one with least left,\nso Limit-Used is always the number that will actually stop them next. Empty\nwhere no window bounds the subject at all.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "allowance.Pool": {
+        "properties": {
+          "resets": {
+            "description": "Resets is when the pool refills, unix seconds: set when it is exhausted,\nand when it is busy for less than a minute. Absent otherwise.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "state": {
+            "description": "State is \"available\" (every account takes free requests), \"busy\" (some\naccount is at its vendor limit, or all are and one is back within a minute)\nor \"exhausted\" (none is until Resets).",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "problem-details": {
+        "description": "An RFC 9457 problem document.",
+        "properties": {
+          "code": {
+            "description": "A stable token a client can branch on, when the refusal names one.",
+            "type": "string"
+          },
+          "detail": {
+            "description": "What was refused, for a person to read.",
+            "type": "string"
+          },
+          "status": {
+            "description": "The HTTP status.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "title": {
+            "description": "The status's reason phrase.",
+            "type": "string"
+          },
+          "type": {
+            "description": "about:blank",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "status",
+          "detail"
+        ],
+        "type": "object"
+      }
+    },
+    "securitySchemes": {
+      "bearer": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "The caller's credential, sent as `Authorization: Bearer \u003ctoken\u003e`. It is either an access token minted by Hanzo IAM or an API key (pk-/sk-). X-Authorization, and HTTP Basic carrying the token as the password, are accepted spellings of the same header for clients that cannot set Authorization; a browser presents the session cookie instead. Every operation requires it unless it says `security: []`."
+      }
+    }
+  }
+}

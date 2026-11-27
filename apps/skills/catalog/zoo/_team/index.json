@@ -1,0 +1,123 @@
+{
+  "$schema": "https://schemas.agentskills.io/discovery/0.2.0/schema.json",
+  "base_url": "https://api.zoo.ngo",
+  "brand": "zoo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://zoolabs.id",
+  "mcp": {
+    "description": "Model Context Protocol over JSON-RPC 2.0 — one POST per message, stateless, protocol revision 2026-07-28. tools/list answers without a credential with one tool per subsystem (its operations in the \"op\" enum) plus \"describe\", which returns one operation's input schema. tools/call names a subsystem tool and carries {\"op\": <operation>, \"input\": <its arguments>}; it takes the same bearer the REST API does, and a call that carries none is answered 401 with a WWW-Authenticate header naming the resource metadata at /.well-known/oauth-protected-resource, which names the authorization server to sign in at. The tool surface is the public contract: the operator's admin product is not offered, and a name that would disclose a secret or mutate an identity is withheld — the list says how many, under _meta.",
+    "method": "POST",
+    "url": "https://api.zoo.ngo/v1/mcp"
+  },
+  "skill_count": 12,
+  "skills": [
+    {
+      "description": "Read team account: Start a sign-in at zoolabs.id, Complete a sign-in and hand the browser its session, Returns the identity providers this deployment starts a login with..",
+      "digest": "sha256:912d97c02713c7587ca196f0db4103dcd8d24c6fd31440aebc260495d70a7db6",
+      "name": "team_account",
+      "service": "team",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/team_account/SKILL.md"
+    },
+    {
+      "description": "Read team billing: Returns the plan and seat counts for the caller's OWN org, resolved from the VERIFIED team session token — never a client header., Open the wallet page, Load an asset of the wallet page.",
+      "digest": "sha256:c09618c1a241ad7828fb27e6cba13233cdaae4faaa87ee50a04c65f2093c4af1",
+      "name": "team_billing",
+      "service": "team",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/team_billing/SKILL.md"
+    },
+    {
+      "description": "Read team channels: Returns the channels the caller may see, with the kind and work facet each carries., Returns the people and agents in one channel, as the roster describes them., Returns the tail of one channel's conversation, oldest first, each message with its reactions, fil",
+      "digest": "sha256:cc3734619da998f79b5207a94d11ffffa2088afd53a122b41d6f81e46944df34",
+      "name": "team_channels",
+      "service": "team",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/team_channels/SKILL.md"
+    },
+    {
+      "description": "Read team collaborator: Open the live collaborative-editing socket.",
+      "digest": "sha256:4f59822d7581cfa3f299c60f48768f282fdc673d821d6e0094e5c36384f61efb",
+      "name": "team_collaborator",
+      "service": "team",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/team_collaborator/SKILL.md"
+    },
+    {
+      "description": "Read team docs: Returns the documents of a space the caller may see, with the teamspaces they are grouped in., Returns one document the caller may see., Returns the comments on a document, oldest first — the same message shape a channel's conversation answers..",
+      "digest": "sha256:64300404230923ea1d1061af901f39fe17f2e2d583fb76a7a716349be4a76c33",
+      "name": "team_docs",
+      "service": "team",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/team_docs/SKILL.md",
+      "works": [
+        "education",
+        "writing"
+      ]
+    },
+    {
+      "description": "Read team events: Stream live changes to what the caller may see, as Server-Sent Events.",
+      "digest": "sha256:f49fe7eb3d9c6d9f8a21e3f8a9a69dd458e07a82fae78f4969714cb7da46b821",
+      "name": "team_events",
+      "service": "team",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/team_events/SKILL.md"
+    },
+    {
+      "description": "Read team files: Download a space file.",
+      "digest": "sha256:42e5dfcebbf234a6e6d4e37c29346fa33a28429f2847afdc5e4c845dda3e4450",
+      "name": "team_files",
+      "service": "team",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/team_files/SKILL.md"
+    },
+    {
+      "description": "Read team inbox: Returns the caller's notifications, newest first, each with the channel or document it is about and the message that caused it..",
+      "digest": "sha256:abbdc2891986215832c333d84b6ec76850a1334131ddcd5520d5fedf3d4b5f7b",
+      "name": "team_inbox",
+      "service": "team",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/team_inbox/SKILL.md",
+      "works": [
+        "operations"
+      ]
+    },
+    {
+      "description": "Read team members: Returns the people and agents in a space, with the name, avatar, role and presence a client draws them with..",
+      "digest": "sha256:0fb22575ad28db38652c01476a5733a82c8799c45ef4868feb92044f3f221402",
+      "name": "team_members",
+      "service": "team",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/team_members/SKILL.md",
+      "works": [
+        "director",
+        "operations"
+      ]
+    },
+    {
+      "description": "Read team messages: Returns a message's thread, oldest first, each reply with its reactions and files..",
+      "digest": "sha256:4801703c46c19367c963e02bf7fa95109b1520ef6d2dfd96d22c8ade5af76815",
+      "name": "team_messages",
+      "service": "team",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/team_messages/SKILL.md"
+    },
+    {
+      "description": "Read team public: Lists the channels orgs have published, across every org..",
+      "digest": "sha256:ae9f7dad0b01d9c1455614a8d5d1e30af3d0905167e2fe4720d71c3005a84756",
+      "name": "team_public",
+      "service": "team",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/team_public/SKILL.md"
+    },
+    {
+      "description": "Read team transactor: Returns the transactor's live sessions for the space the caller's credential names — the endpoint the front's space switcher and server panel poll on the transactor base., Open the space data-plane socket.",
+      "digest": "sha256:c15db8721a75ed68deb2e9def9e66ca353e554b4ff7da8d5380d379758c33454",
+      "name": "team_transactor",
+      "service": "team",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/team_transactor/SKILL.md"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

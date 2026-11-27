@@ -1,0 +1,120 @@
+{
+  "$schema": "https://schemas.agentskills.io/discovery/0.2.0/schema.json",
+  "base_url": "https://api.hanzo.ai",
+  "brand": "hanzo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://hanzo.id",
+  "mcp": {
+    "description": "Model Context Protocol over JSON-RPC 2.0 — one POST per message, stateless, protocol revision 2026-07-28. tools/list answers without a credential with one tool per subsystem (its operations in the \"op\" enum) plus \"describe\", which returns one operation's input schema. tools/call names a subsystem tool and carries {\"op\": <operation>, \"input\": <its arguments>}; it takes the same bearer the REST API does, and a call that carries none is answered 401 with a WWW-Authenticate header naming the resource metadata at /.well-known/oauth-protected-resource, which names the authorization server to sign in at. The tool surface is the public contract: the operator's admin product is not offered, and a name that would disclose a secret or mutate an identity is withheld — the list says how many, under _meta.",
+    "method": "POST",
+    "url": "https://api.hanzo.ai/v1/mcp"
+  },
+  "skill_count": 13,
+  "skills": [
+    {
+      "description": "Read trust controls: Lists every control your organization publishes, with the counts., Reads one control by id..",
+      "digest": "sha256:1f074701043c5750ea269d5795a82131e7ef6aac8d56da519b68014fdfa56843",
+      "name": "trust_controls",
+      "service": "trust",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/trust_controls/SKILL.md"
+    },
+    {
+      "description": "Read trust coverage: Reads coverage: per framework, how many clauses have an automated control behind them, how many are partial, and how many have none — each carrying the unit it is counted in, because \"12 of 20\" is not a fact until you know what the 20 are., Reads one framewor",
+      "digest": "sha256:8c6353a2cc66882974f727e8dbff573e044c2a37298a0cdeefe67036b31bc437",
+      "name": "trust_coverage",
+      "service": "trust",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/trust_coverage/SKILL.md"
+    },
+    {
+      "description": "Read trust documents: Lists your organization's documents..",
+      "digest": "sha256:d60c1ec9e2c9758d05e1d21aa7362d849ec7b9e4bf352f571e111d5303c89c20",
+      "name": "trust_documents",
+      "service": "trust",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/trust_documents/SKILL.md"
+    },
+    {
+      "description": "Read trust evidence: Reads the audit rows that stand behind one control, over a window..",
+      "digest": "sha256:e036882ed8b58a9f006e81d5671ce6c83538442cb271cce55a2ac5b220d69ea1",
+      "name": "trust_evidence",
+      "service": "trust",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/trust_evidence/SKILL.md"
+    },
+    {
+      "description": "Read trust faq: Lists your knowledge base — the questions a reviewer asks, answered once..",
+      "digest": "sha256:71f2a1de7fd911894e5dda52f36dab344b46623ab987cf6bf7f1760f8870f601",
+      "name": "trust_faq",
+      "service": "trust",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/trust_faq/SKILL.md"
+    },
+    {
+      "description": "Read trust frameworks: Lists the frameworks coverage is computed against, and how many clauses each publishes..",
+      "digest": "sha256:e486f64314175bb3c22c8f1397109ed8838e43c6e73b73cdd3ae450cfbe54fcc",
+      "name": "trust_frameworks",
+      "service": "trust",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/trust_frameworks/SKILL.md"
+    },
+    {
+      "description": "Read trust policies: Lists your organization's published policies..",
+      "digest": "sha256:9d6cc8107d28054760c819ea4cb76d7ba20a3e2efb93b03b88bd06ba7be8804f",
+      "name": "trust_policies",
+      "service": "trust",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/trust_policies/SKILL.md"
+    },
+    {
+      "description": "Read trust profile: Reads your organization's trust-centre profile — the name, tagline and summary a visitor sees, whether the centre is published, and where to send somebody who wants a gated document..",
+      "digest": "sha256:8fcf18876d33432361ea71a4f6695af3e1a76e76ee67afb6a5c03837db9cb310",
+      "name": "trust_profile",
+      "service": "trust",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/trust_profile/SKILL.md"
+    },
+    {
+      "description": "Read trust published: Reads a published trust centre — the whole thing in one answer: the organization's profile, its control inventory, coverage computed against each framework's whole published clause list, its documents, subprocessors, policies, knowledge base, updates and ris",
+      "digest": "sha256:2de39b45940b06e9f975ac2593e54f08198120a20cfbd047270af0603ae78bce",
+      "name": "trust_published",
+      "service": "trust",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/trust_published/SKILL.md"
+    },
+    {
+      "description": "Read trust risk: Reads your risk profile — the label and value pairs describing what your organization handles and how..",
+      "digest": "sha256:f0211c33471c28a3b2fc4cd40bec692b6f2484bd9c78b10d04a11e1f4729d680",
+      "name": "trust_risk",
+      "service": "trust",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/trust_risk/SKILL.md"
+    },
+    {
+      "description": "Read trust subprocessors: Lists the third parties your organization sends data to, each naming what it is for..",
+      "digest": "sha256:d097ea95159d73cb74c3197302570747a0dd89ceca596fb59eb8cd8b0f748b80",
+      "name": "trust_subprocessors",
+      "service": "trust",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/trust_subprocessors/SKILL.md"
+    },
+    {
+      "description": "Read trust trust: Reads YOUR organization's whole trust centre, including the addresses of your own gated documents..",
+      "digest": "sha256:b097277b276862e975817625c8492f03ba13636538d932920a6b19587b98ec7d",
+      "name": "trust_trust",
+      "service": "trust",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/trust_trust/SKILL.md"
+    },
+    {
+      "description": "Read trust updates: Lists your trust-centre updates, newest as you ordered them..",
+      "digest": "sha256:f1c9872b50a69dc908be29dc70a241374ec9ada026a497914435e51e6366c214",
+      "name": "trust_updates",
+      "service": "trust",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/trust_updates/SKILL.md"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

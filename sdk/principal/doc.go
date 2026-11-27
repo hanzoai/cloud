@@ -8,8 +8,9 @@
 // X-User-Id / X-User-IsAdmin request headers. In production the gateway
 // (hanzoai/gateway) is the sole minter of those headers — it strips any
 // client-supplied copy and re-injects them from a validated IAM JWT (HIP-0026).
-// A deployment can also be reachable WITHOUT the gateway in front (directly
-// in-cluster, or on a second public host). The identity
+// But cloud-api is ALSO reachable WITHOUT the gateway in front: directly
+// in-cluster (cloud-api.hanzo.svc:8000, used by console's BFF) and, until the
+// ingress is locked down, on the public host api.cloud.hanzo.ai. The identity
 // middleware (SanitizeIdentity, ../../middleware_identity.go) deletes every
 // authority header a client sent and writes X-User-Id, X-Org-Id and the admin
 // bits back only for a principal it validated. So an org is authority only

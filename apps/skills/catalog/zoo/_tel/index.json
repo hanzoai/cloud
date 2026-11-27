@@ -1,0 +1,48 @@
+{
+  "$schema": "https://schemas.agentskills.io/discovery/0.2.0/schema.json",
+  "base_url": "https://api.zoo.ngo",
+  "brand": "zoo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://zoolabs.id",
+  "mcp": {
+    "description": "Model Context Protocol over JSON-RPC 2.0 — one POST per message, stateless, protocol revision 2026-07-28. tools/list answers without a credential with one tool per subsystem (its operations in the \"op\" enum) plus \"describe\", which returns one operation's input schema. tools/call names a subsystem tool and carries {\"op\": <operation>, \"input\": <its arguments>}; it takes the same bearer the REST API does, and a call that carries none is answered 401 with a WWW-Authenticate header naming the resource metadata at /.well-known/oauth-protected-resource, which names the authorization server to sign in at. The tool surface is the public contract: the operator's admin product is not offered, and a name that would disclose a secret or mutate an identity is withheld — the list says how many, under _meta.",
+    "method": "POST",
+    "url": "https://api.zoo.ngo/v1/mcp"
+  },
+  "skill_count": 4,
+  "skills": [
+    {
+      "description": "Read tel calls: Lists the calls this org has placed or received, newest first..",
+      "digest": "sha256:fd2f9d8af21a87b2311771db5686eaf0aad9274a602d9322315c1c526078c8c3",
+      "name": "tel_calls",
+      "service": "tel",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/tel_calls/SKILL.md"
+    },
+    {
+      "description": "Read tel messages: Lists the messages this org has sent or received, newest first..",
+      "digest": "sha256:a514a3df891b1e0cec1c035e9b71ab94a0b0056bb1af35e1da6b7335b87a148b",
+      "name": "tel_messages",
+      "service": "tel",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/tel_messages/SKILL.md"
+    },
+    {
+      "description": "Read tel numbers: Lists the phone numbers this org HOLDS — the ones it has bought and not released., Asks the carrier what is available to buy..",
+      "digest": "sha256:4a16aa386d27a19c2104ebc41a20de4147dc50f911dea59604f863dd45324b5a",
+      "name": "tel_numbers",
+      "service": "tel",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/tel_numbers/SKILL.md"
+    },
+    {
+      "description": "Read tel summary: Counts what this org holds on the telephony plane: its numbers, its calls and its messages..",
+      "digest": "sha256:55b241094af2ace27289580827762c6c57a2b4a3588f4405961fb4a72ed7a950",
+      "name": "tel_summary",
+      "service": "tel",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/tel_summary/SKILL.md"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

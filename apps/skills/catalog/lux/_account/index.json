@@ -1,0 +1,56 @@
+{
+  "$schema": "https://schemas.agentskills.io/discovery/0.2.0/schema.json",
+  "base_url": "https://api.lux.network",
+  "brand": "lux",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://lux.id",
+  "mcp": {
+    "description": "Model Context Protocol over JSON-RPC 2.0 — one POST per message, stateless, protocol revision 2026-07-28. tools/list answers without a credential with one tool per subsystem (its operations in the \"op\" enum) plus \"describe\", which returns one operation's input schema. tools/call names a subsystem tool and carries {\"op\": <operation>, \"input\": <its arguments>}; it takes the same bearer the REST API does, and a call that carries none is answered 401 with a WWW-Authenticate header naming the resource metadata at /.well-known/oauth-protected-resource, which names the authorization server to sign in at. The tool surface is the public contract: the operator's admin product is not offered, and a name that would disclose a secret or mutate an identity is withheld — the list says how many, under _meta.",
+    "method": "POST",
+    "url": "https://api.lux.network/v1/mcp"
+  },
+  "skill_count": 5,
+  "skills": [
+    {
+      "description": "Read account appearance: Returns the signed-in caller's own appearance preference — text size, density and accent — read from their IAM account so it is the same on every device and every Lux surface..",
+      "digest": "sha256:0a20e4afb5b7a5f331f794937b190333baee47a5c84fe6f904a1c28fd9cdd3d3",
+      "name": "account_appearance",
+      "service": "account",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/account_appearance/SKILL.md"
+    },
+    {
+      "description": "Read account avatar: Fetch a profile photo.",
+      "digest": "sha256:c2b3828df5077e1e45748e1827ea085c358eb66003965ce917f3a06d4a9a6030",
+      "name": "account_avatar",
+      "service": "account",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/account_avatar/SKILL.md"
+    },
+    {
+      "description": "Read account csrf: Mints the anti-forgery token a browser echoes as X-CSRF-Token on every change it asks for..",
+      "digest": "sha256:8b6783e0281e9cf0ad6b8f646c2784e76af21371db8eba02b24bf3adb9fc1284",
+      "name": "account_csrf",
+      "service": "account",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/account_csrf/SKILL.md"
+    },
+    {
+      "description": "Read account embed: Reports whether one of this brand's shared embedded apps (cms, erp, help) may be framed by the caller and is actually running, so a console module can choose between the embed and the provision panel..",
+      "digest": "sha256:3817adf1acf7a677111d2d971de477efec541765629b91cb06c6ee35c4b5c679",
+      "name": "account_embed",
+      "service": "account",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/account_embed/SKILL.md"
+    },
+    {
+      "description": "Read account keys: Returns the API keys the caller may see, newest first: their own, or every key the org holds when the caller administers it..",
+      "digest": "sha256:d1ed711e73265e19a34f4555dac37a6a574055f1fe29411f30fb3c4b5c70374a",
+      "name": "account_keys",
+      "service": "account",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/account_keys/SKILL.md"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

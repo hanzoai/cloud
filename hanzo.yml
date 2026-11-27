@@ -1,0 +1,50 @@
+# Canonical CI config for github.com/hanzoai/cloud (OSS Cloud platform).
+#
+# No images: block here — ghcr.io/hanzoai/cloud-oss is built and published by
+# .github/workflows/image.yml on main pushes.
+
+test:
+  - name: oss-proxy-build
+    run: |
+      set -euo pipefail
+      GIT_TERMINAL_PROMPT=0 GIT_SSH_COMMAND="false" GOENV=off GOWORK=off \
+        GOPROXY=https://proxy.golang.org GOSUMDB=sum.golang.org \
+        CGO_ENABLED=0 go build ./...
+      GOENV=off GOWORK=off CGO_ENABLED=0 go vet ./...
+  - name: generated-current
+    run: |
+      set -euo pipefail
+      GOWORK=off go run ./plugin/gen-app-cmds
+      stale=$(git status --porcelain -- 'plugin/*/main.go')
+      if [ -n "$stale" ]; then
+        echo "::error::a manifest app has no plugin/<app> (or one is stale) — run 'make generate' and commit."
+        echo "$stale"
+        exit 1
+      fi
+  - name: zipdoc-current
+    run: |
+      set -euo pipefail
+      GOWORK=off make zipdoc-check
+  - name: host-is-light
+    run: |
+      set -euo pipefail
+      export GOWORK=off CGO_ENABLED=0
+      leak=$(go list -deps ./cmd/cloud | grep -E '^github.com/hanzoai/cloud/(apps|clients)' \
+        | grep -vE '^github.com/hanzoai/cloud/apps/sites$' || true)
+      if [ -n "$leak" ]; then
+        echo "::error::cmd/cloud links subsystem code: $leak"
+        exit 1
+      fi
+      n=$(go list -deps ./cmd/cloud | wc -l)
+      if [ "$n" -gt 480 ]; then
+        echo "::error::cmd/cloud links $n packages (bound 480)"
+        exit 1
+      fi
+  - name: openapi-composed
+    run: |
+      set -euo pipefail
+      GOWORK=off go test ./openapi
+  - name: oss-qualification-race
+    run: |
+      set -euo pipefail
+      GOWORK=off go test -race ./cmd/cloud/... ./manifest/... ./sdk/coord/... ./apps/iam ./apps/event -count=1

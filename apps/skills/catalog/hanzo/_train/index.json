@@ -1,0 +1,48 @@
+{
+  "$schema": "https://schemas.agentskills.io/discovery/0.2.0/schema.json",
+  "base_url": "https://api.hanzo.ai",
+  "brand": "hanzo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://hanzo.id",
+  "mcp": {
+    "description": "Model Context Protocol over JSON-RPC 2.0 — one POST per message, stateless, protocol revision 2026-07-28. tools/list answers without a credential with one tool per subsystem (its operations in the \"op\" enum) plus \"describe\", which returns one operation's input schema. tools/call names a subsystem tool and carries {\"op\": <operation>, \"input\": <its arguments>}; it takes the same bearer the REST API does, and a call that carries none is answered 401 with a WWW-Authenticate header naming the resource metadata at /.well-known/oauth-protected-resource, which names the authorization server to sign in at. The tool surface is the public contract: the operator's admin product is not offered, and a name that would disclose a secret or mutate an identity is withheld — the list says how many, under _meta.",
+    "method": "POST",
+    "url": "https://api.hanzo.ai/v1/mcp"
+  },
+  "skill_count": 4,
+  "skills": [
+    {
+      "description": "Read train artifacts: Answers the org's objects — its uploads and its jobs' outputs, one per sha256 — with what produced each, whether it is published and when retention deletes it., Answers one of the org's objects, as the list does, with an address that fetches its bytes for te",
+      "digest": "sha256:7231faa4cc7ab439c4f79f69d0bcd9c1ccd615bcef73e98e2e2476a7d1e0bf4d",
+      "name": "train_artifacts",
+      "service": "train",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/train_artifacts/SKILL.md"
+    },
+    {
+      "description": "Read train clients: Answers the org's live clients as the engine reports them., Answers one of the org's clients with its loss history..",
+      "digest": "sha256:d909cf8d28b60c1c5eb7d808760e033e0235fcd2b2e00f87610a88c3fe16ec7b",
+      "name": "train_clients",
+      "service": "train",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/train_clients/SKILL.md"
+    },
+    {
+      "description": "Read train jobs: Answers the org's jobs, newest first, narrowed by ?status=., Answers one job: what it asked for, its status and tasks, its artifacts, its result and verdict, and whether it was published., Answers a job's artifacts — checkpoint, capability, lora, basis or merged,",
+      "digest": "sha256:fdc5f1a8d745245151434e7ff0c5657dc8eaa706d9c1a3d40b480d4000734d66",
+      "name": "train_jobs",
+      "service": "train",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/train_jobs/SKILL.md"
+    },
+    {
+      "description": "Read train models: Answers each base the caller can train today, in one shape: the base, the methods it trains by (adaptations), where it runs (runs: Hanzo's devices or the org's machines) with what one device-second costs there in nano-USD, then the resources that run it (nouns)",
+      "digest": "sha256:4237a69c7a848c37117f3333f537ad853860ae12e59df81e309fe5c3aa608a25",
+      "name": "train_models",
+      "service": "train",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/train_models/SKILL.md"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

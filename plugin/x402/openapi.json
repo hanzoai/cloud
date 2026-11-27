@@ -1,0 +1,438 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Hanzo Cloud API",
+    "description": "Package x402 is pay-per-request over HTTP 402: quote a price, take the payment, serve the resource.",
+    "version": "v1"
+  },
+  "servers": [
+    {
+      "url": "https://api.hanzo.ai"
+    }
+  ],
+  "security": [
+    {
+      "bearer": []
+    }
+  ],
+  "tags": [
+    {
+      "name": "x402"
+    }
+  ],
+  "paths": {
+    "/v1/x402/prices": {
+      "get": {
+        "operationId": "get_x402_prices",
+        "summary": "Lists the flat fees this deployment sells per request over x402: one function invoke, one agent run, one provisioned resource of each kind.",
+        "description": "Lists the flat fees this deployment sells per request over x402: one\nfunction invoke, one agent run, one provisioned resource of each kind. Each row\nis the route's own fee knob, paid into the platform's wallet, and carries the\nexact terms that route's 402 challenge states, so a client can sign before it\nis refused.\n\nA payment is made on the route itself: the client calls it with the signed\nPAYMENT-SIGNATURE header, is served once, and reads the receipt on\nPAYMENT-RESPONSE. The payer must be signed in, and the payment is drawn from\nits Hanzo wallet, which must cover the fee. The payment is settled only once the\ncall is done and billable, so a call that fails costs nothing. A fee whose knob\nis zero is free and is not listed; with no platform wallet configured the table\nis empty.",
+        "tags": [
+          "x402"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/x402.priceTable"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "security": [],
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/x402/prices/{product}": {
+      "get": {
+        "operationId": "get_x402_prices_by_product",
+        "summary": "Answers one fee's x402 challenge: always 402, with the PAYMENT-REQUIRED header the fee's route sends an unfunded caller, and the same row the price table lists as the body.",
+        "description": "Answers one fee's x402 challenge: always 402, with the PAYMENT-REQUIRED\nheader the fee's route sends an unfunded caller, and the same row the price\ntable lists as the body.\n\nIt sells nothing itself. A payment sent here is never settled; it is made on\nthe route the row names, where it buys one call. An unknown product, or one\nnot sold here, is 404.",
+        "tags": [
+          "x402"
+        ],
+        "parameters": [
+          {
+            "name": "product",
+            "in": "path",
+            "required": true,
+            "description": "Product is the fee's product name, e.g. function.invoke or provision.sql.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "402": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/x402.quoted"
+                }
+              }
+            },
+            "description": "payment required"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "security": [],
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/x402/settlements": {
+      "get": {
+        "operationId": "get_x402_settlements",
+        "summary": "Lists the caller's x402 receipts, newest first: as payer, what its wallet paid; as payee, what its org was paid — each settled payment with what it bought, both parties, the exact amount and when.",
+        "description": "Lists the caller's x402 receipts, newest first: as payer, what its\nwallet paid; as payee, what its org was paid — each settled payment with what it\nbought, both parties, the exact amount and when. A payer is the caller's own\naccount, which for a SuperAdmin inspecting another org is still its own and for\na member of the signup org is their own wallet, never the org's; a payee is the\ncaller's own org. An unsettled claim is not a receipt and is never listed.",
+        "tags": [
+          "x402"
+        ],
+        "parameters": [
+          {
+            "name": "role",
+            "in": "query",
+            "required": false,
+            "description": "Role is payer — what the caller's org paid — or payee — what it was paid.\nPayer when empty.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "payee"
+          },
+          {
+            "name": "year",
+            "in": "query",
+            "required": false,
+            "description": "Year keeps the calendar year (UTC) the payments settled in. Zero keeps\nevery year.",
+            "schema": {
+              "format": "int64",
+              "type": "integer"
+            },
+            "example": 2026
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/x402.settlementList"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/x402/settlements/{id}": {
+      "get": {
+        "operationId": "get_x402_settlements_by_id",
+        "summary": "Reads one x402 payment receipt by id.",
+        "description": "Reads one x402 payment receipt by id.\n\nIt is scoped to the caller's own account — the wallet that was drawn, in the\nbooks that hold it — so one tenant can never read another's settlement, nor one\nmember of the signup org another's, and an id that exists but belongs to\nsomebody else is a 404 exactly like one that does not exist. A caller with no\nbillable identity is refused outright.",
+        "tags": [
+          "x402"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the settlement id from the URL — the deterministic keccak(from|nonce)\nkey an x402 receipt is issued under (the `id` field of a Receipt, and the\n`transaction` of the SettlementResponse on the PAYMENT-RESPONSE header a paid\nrequest answers with).",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/x402.Receipt"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "problem-details": {
+        "description": "An RFC 9457 problem document.",
+        "properties": {
+          "code": {
+            "description": "A stable token a client can branch on, when the refusal names one.",
+            "type": "string"
+          },
+          "detail": {
+            "description": "What was refused, for a person to read.",
+            "type": "string"
+          },
+          "status": {
+            "description": "The HTTP status.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "title": {
+            "description": "The status's reason phrase.",
+            "type": "string"
+          },
+          "type": {
+            "description": "about:blank",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "status",
+          "detail"
+        ],
+        "type": "object"
+      },
+      "x402.Extra": {
+        "properties": {
+          "assetTransferMethod": {
+            "description": "AssetTransferMethod is how the token moves: \"eip3009\", its own\ntransferWithAuthorization. Absent means eip3009.",
+            "type": "string"
+          },
+          "name": {
+            "description": "Name is the token's EIP-712 domain name, e.g. \"USD Coin\".",
+            "type": "string"
+          },
+          "version": {
+            "description": "Version is the token's EIP-712 domain version, e.g. \"2\".",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "x402.PaymentRequirements": {
+        "properties": {
+          "amount": {
+            "description": "Amount is the price in atomic units of Asset, as a decimal string.",
+            "type": "string"
+          },
+          "asset": {
+            "description": "Asset is the token contract address, which must implement EIP-3009.",
+            "type": "string"
+          },
+          "extra": {
+            "$ref": "#/components/schemas/x402.Extra",
+            "description": "Extra is the token's EIP-712 domain the authorization is signed over."
+          },
+          "maxTimeoutSeconds": {
+            "description": "MaxTimeoutSeconds is how long the client has to complete the payment.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "network": {
+            "description": "Network is the CAIP-2 identifier of the chain, e.g. \"eip155:8453\".",
+            "type": "string"
+          },
+          "payTo": {
+            "description": "PayTo is the recipient address.",
+            "type": "string"
+          },
+          "scheme": {
+            "description": "Scheme is how the payment is made: \"exact\", the buyer authorizing exactly\nAmount. It is the only scheme implemented.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "x402.Receipt": {
+        "properties": {
+          "amount": {
+            "description": "Amount is what actually moved, as an exact 18-decimal-place USD string. It\nis NOT the atomic-unit figure the client signed: the challenge quotes the\nasset's own units (USDC's 6 dp) and truncates to fit them, while the ledger\nmoves this exact value.",
+            "type": "string"
+          },
+          "category": {
+            "description": "Category is what the payment was for — service, goods, transfer or royalty\n— as the price table said it: a tool call is a service, a job is what its\nparties agreed.",
+            "type": "string"
+          },
+          "from": {
+            "description": "From is the payer's EVM address: the account that signed the EIP-3009\nauthorization, recovered from the signature rather than taken on trust.",
+            "type": "string"
+          },
+          "id": {
+            "description": "ID is the settle-once key: \"x402_\" + keccak(from|nonce) in hex. It is\nDERIVED, not minted, so a client that re-submits the same authorization\naddresses the same settlement and is served again for free rather than\ncharged twice. It is also the id GET /v1/x402/settlements/:id takes.",
+            "type": "string"
+          },
+          "network": {
+            "description": "Network is the CAIP-2 identifier the payment was settled under, e.g.\n\"eip155:36963\". Its eip155 reference is the chain id in the EIP-712 domain\nthe payer signed, so it is not a label — changing it invalidates the\nsignature.",
+            "type": "string"
+          },
+          "nonce": {
+            "description": "Nonce is the client-chosen nonce from the authorization, hex — up to 32\nbytes, left-padded to the contract's bytes32. It is the replay anchor: the\ntoken contract refuses a second on-chain transfer for one (from, nonce), and\nthis rail refuses a second settlement for the same pair, so a ledger\nsettlement inherits the identical guarantee.",
+            "type": "string"
+          },
+          "payee": {
+            "description": "Payee is the recipient's EVM address — the `payTo` the challenge advertised\nand the authorization named. A payment to any other address never settles.",
+            "type": "string"
+          },
+          "payeeOrg": {
+            "description": "PayeeOrg is the tenant that owns the recipient wallet, resolved at\nsettlement. It is who got PAID, as Payer is who paid.",
+            "type": "string"
+          },
+          "payer": {
+            "description": "Payer is the payer ORG — the tenant whose ledger was debited — and not an\naddress. It is the org the request was authenticated as, so it answers who\nis billed, which the payer address alone cannot.",
+            "type": "string"
+          },
+          "resource": {
+            "description": "Resource is what was paid for, in the same spelling the price table and the\nchallenge used: the request path for a priced route, \"tool:\u003cid\u003e\" for a\npriced tool.",
+            "type": "string"
+          },
+          "settledAt": {
+            "description": "SettledAt is when this settlement was CLAIMED, in unix seconds — the moment\nthe authorization was accepted, which is also the moment the time window it\ncarried stopped applying. A settlement finished later by reconciliation\nkeeps this instant.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "settledVia": {
+            "description": "SettledVia is which rail moved the money: \"ledger\", the live default, or\n\"chain\" when the authorization is broadcast. Those two values and no others.",
+            "type": "string"
+          },
+          "txHash": {
+            "description": "TxHash is the chain transaction hash, present only for a \"chain\"\nsettlement. Empty on a ledger settlement — that is the normal case today,\nand it means the money moved without a chain, not that it failed. The\nwire's PAYMENT-RESPONSE `transaction` falls back to ID when this is empty.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "x402.priceRow": {
+        "properties": {
+          "accepts": {
+            "description": "Accepts is how the fee may be paid, as the route's challenge states it.",
+            "items": {
+              "$ref": "#/components/schemas/x402.PaymentRequirements"
+            },
+            "type": "array"
+          },
+          "method": {
+            "description": "Method is the method of the route the fee buys one call of.",
+            "type": "string"
+          },
+          "path": {
+            "description": "Path is that route. A payment is sent there, on PAYMENT-SIGNATURE, never\nhere.",
+            "type": "string"
+          },
+          "price": {
+            "description": "Price is the fee in US dollars, exactly.",
+            "type": "string"
+          },
+          "product": {
+            "description": "Product names the fee: function.invoke, agent.run, provision.\u003ckind\u003e.",
+            "type": "string"
+          },
+          "resource": {
+            "description": "Resource is the fee's x402 resource: what a challenge names and a payment\nis settled for.",
+            "type": "string"
+          },
+          "summary": {
+            "description": "Summary says what one payment buys.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "x402.priceTable": {
+        "properties": {
+          "prices": {
+            "description": "Prices is one row per fee for sale; a fee that is free or not sold here is\nabsent.",
+            "items": {
+              "$ref": "#/components/schemas/x402.priceRow"
+            },
+            "type": "array"
+          },
+          "x402Version": {
+            "description": "X402Version is the protocol version the terms are stated in.",
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "x402.quoted": {
+        "properties": {
+          "error": {
+            "description": "Error says the fee is paid on its route, and how.",
+            "type": "string"
+          },
+          "fee": {
+            "$ref": "#/components/schemas/x402.priceRow",
+            "description": "Fee is the fee's row, as the price table lists it."
+          }
+        },
+        "type": "object"
+      },
+      "x402.settlementList": {
+        "properties": {
+          "settlements": {
+            "description": "Settlements is at most 1000 receipts.",
+            "items": {
+              "$ref": "#/components/schemas/x402.Receipt"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      }
+    },
+    "securitySchemes": {
+      "bearer": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "The caller's credential, sent as `Authorization: Bearer \u003ctoken\u003e`. It is either an access token minted by Hanzo IAM or an API key (pk-/sk-). X-Authorization, and HTTP Basic carrying the token as the password, are accepted spellings of the same header for clients that cannot set Authorization; a browser presents the session cookie instead. Every operation requires it unless it says `security: []`."
+      }
+    }
+  }
+}

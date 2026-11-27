@@ -1,0 +1,134 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Hanzo Cloud API",
+    "description": "Package admission is launch control for Hanzo's hosted services — the waitlist DECIDE, COMPOSING the ONE flag engine (apps/flags) one-way.",
+    "version": "v1"
+  },
+  "servers": [
+    {
+      "url": "https://api.hanzo.ai"
+    }
+  ],
+  "security": [
+    {
+      "bearer": []
+    }
+  ],
+  "tags": [
+    {
+      "name": "admission"
+    }
+  ],
+  "paths": {
+    "/v1/admission/waitlist": {
+      "get": {
+        "operationId": "get_admission_waitlist",
+        "summary": "Reports whether ONE host is currently gated by the launch waitlist.",
+        "description": "Reports whether ONE host is currently gated by the launch waitlist.\nIt resolves the host to the service that governs it and reads that service's\nwaitlist switch, so a guard sitting in front of a hosted surface can decide in one\ncall whether to show the waitlist or the product. It answers for the ONE host\nasked about and never enumerates the registry, which is why it needs no\ncredential. It FAILS OPEN: an unregistered host, an unmounted registry and a store\nfault all answer known=false with mode=false, so a request is never gated pre-boot\nor on a registry fault.",
+        "tags": [
+          "admission"
+        ],
+        "parameters": [
+          {
+            "name": "host",
+            "in": "query",
+            "required": false,
+            "description": "Host is the host to resolve, e.g. \"chat.hanzo.ai\". Defaults to the request's\nown Host header when omitted, which is what lets a guard running on the\ngoverned host ask about itself with no argument.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/admission.waitlistModeView"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "admission.waitlistModeView": {
+        "properties": {
+          "host": {
+            "description": "Host is the queried host, normalized (lowercased, port stripped).",
+            "type": "string"
+          },
+          "known": {
+            "description": "Known is false when no registered service claims this host, or when the\nregistry is unavailable — the guard then lets the request through, which is\nwhy the two cases answer alike.",
+            "type": "boolean"
+          },
+          "service": {
+            "description": "Service is the registered service that governs this host, empty when none does.",
+            "type": "string"
+          },
+          "waitlistMode": {
+            "description": "WaitlistMode is true when the service is GATED to approved users, false when\nit is open. Always false for an ungoverned host.",
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
+      "problem-details": {
+        "description": "An RFC 9457 problem document.",
+        "properties": {
+          "code": {
+            "description": "A stable token a client can branch on, when the refusal names one.",
+            "type": "string"
+          },
+          "detail": {
+            "description": "What was refused, for a person to read.",
+            "type": "string"
+          },
+          "status": {
+            "description": "The HTTP status.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "title": {
+            "description": "The status's reason phrase.",
+            "type": "string"
+          },
+          "type": {
+            "description": "about:blank",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "status",
+          "detail"
+        ],
+        "type": "object"
+      }
+    },
+    "securitySchemes": {
+      "bearer": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "The caller's credential, sent as `Authorization: Bearer \u003ctoken\u003e`. It is either an access token minted by Hanzo IAM or an API key (pk-/sk-). X-Authorization, and HTTP Basic carrying the token as the password, are accepted spellings of the same header for clients that cannot set Authorization; a browser presents the session cookie instead. Every operation requires it unless it says `security: []`."
+      }
+    }
+  }
+}

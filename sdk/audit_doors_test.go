@@ -5,12 +5,13 @@ package cloud
 // toll_test.go asks what an operation COSTS however it was reached, and found
 // three doors charging nothing because the gate read the path the transport
 // carried. This asks the other question about the same value: what the
-// tamper-evident trail SAYS happened.
+// tamper-evident trail SAYS happened. Measured before the fix, against a real
+// recorder read back row by row, one op reached four ways wrote:
 //
-// 	REST   "POST /v1/probe/run"                   resource {run}
-// 	MCP    "POST /mcp"                            resource {}
-// 	ZAP    "POST /.well-known/zip/op/probe_run"   resource {op}
-// 	CLI    nothing
+//	REST   "POST /v1/probe/run"                   resource {run}
+//	MCP    "POST /mcp"                            resource {}
+//	ZAP    "POST /.well-known/zip/op/probe_run"   resource {op}
+//	CLI    nothing
 //
 // Two rows name the door. The MCP row is the one that matters most, because it
 // is the door agents use and because every tools/call in the fleet writes those

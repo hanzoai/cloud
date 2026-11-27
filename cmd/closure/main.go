@@ -1,0 +1,504 @@
+package main
+
+import (
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
+	"flag"
+	"fmt"
+	"io"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"runtime"
+	"sort"
+	"strings"
+	"sync"
+)
+
+// The module this repo IS. Its packages are the ones app-contract already checks
+// from source, and the ones every app links, so they are not part of the witness.
+const mainModule = "github.com/hanzoai/cloud"
+
+// Where the roots live, and what makes one an app: plugin/<app> is the app's
+// main package and plugin/<app>/openapi.json is the document it projects. An app
+// with no committed document (kafka, and the coresident apps — mk/fleet.mk names
+// both and why) has nothing here to be stale, and drops out by having no file
+// rather than by being listed a second time.
+const (
+	rootPattern = "./plugin/..."
+	rootPrefix  = mainModule + "/plugin/"
+)
+
+// The witness, beside openapi/floor.json — the other recorded invariant of the
+// same document, kept honest the same way.
+const witnessPath = "openapi/closure.json"
+
+// ONE CONFIGURATION, STATED HERE, because a digest that depends on the box that
+// wrote it cannot be committed. linux/amd64 is what the clusters run and what the
+// runner builds; CGO_ENABLED=0 is mk/go.mk's floor and what mk/plugin.mk links
+// every app binary with. Build constraints select FILES, so any other setting
+// hashes a different set of them — a developer on darwin/arm64 has to compute the
+// same value as the runner, and pinning is the only way that holds.
+var listEnv = []string{
+	"GOOS=linux",
+	"GOARCH=amd64",
+	"CGO_ENABLED=0",
+	"GOWORK=off",
+	"GOPRIVATE=github.com/hanzoai/*,github.com/hanzo-inc/*,github.com/zap-proto/*,zap-proto.io/*",
+}
+
+// pkg is the slice of `go list` output this needs: who a package is, where its
+// source is, what it imports, and — for one that resolved to nothing — why.
+//
+// Error is what `-e` does with a failure instead of aborting: it attaches it to
+// the package and stays quiet. Asking for it is the difference between naming a
+// missing package and naming the cause, and nothing else here reads it.
+type pkg struct {
+	ImportPath string
+	Dir        string
+	GoFiles    []string
+	CgoFiles   []string
+	Imports    []string
+	Module     *struct {
+		Path    string
+		Version string
+	}
+	Error *struct{ Err string }
+}
+
+// witnessed says whether a package is part of what a document was generated FROM.
+//
+// ONE definition, because two agree about it — the hashing and the digest — and a
+// filter written twice is a filter that can be broken once. Stated in two places it
+// was: hashing skipped the main module while the digest still named its packages,
+// so those lines carried an EMPTY hash and compared equal no matter what the source
+// did. Silently, and in the safe direction, which is the kind that survives review.
+//
+// Stdlib (no module) is out because it moves with the toolchain, not with this repo.
+// The main module is out because app-contract already polices cloud's own source
+// from source, and every app links the root package — witnessing it would move all
+// 125 digests on every commit and report the fleet, every time, forever.
+func witnessed(p *pkg) bool {
+	return p != nil && p.Module != nil && p.Module.Path != mainModule
+}
+
+// witness is the committed record: what each document was generated from, and the
+// module versions that closure resolved to at the time.
+//
+// Modules are recorded for the MESSAGE, never for the comparison — the digests
+// decide. Without them a failure can say "four documents moved" and not which
+// dependency moved them, and a gate that cannot name the cause makes you bisect.
+type witness struct {
+	Modules map[string]string `json:"modules"`
+	Apps    map[string]string `json:"apps"`
+}
+
+func main() {
+	write := flag.Bool("write", false, "record the current closure (run by `make closure`)")
+	// WHICH APPS CAN DESCRIBE THEMSELVES, passed in rather than worked out here.
+	//
+	// Not every app with a document can regenerate one: kafka's Mount is fail-closed
+	// on a live broker, and a coresident app is middleware on a sibling's router and
+	// refuses to mount alone. mk/fleet.mk owns that set — one is named, the other is
+	// DERIVED from manifest/apps.go — and it is $(DESCRIBABLE) there.
+	//
+	// It is passed because the alternative was worse in a way that was measured, not
+	// argued: this tool restated nothing, witnessed every app with a document, and
+	// so printed `make -f mk/fleet.mk describe/zen` for a coresident app. That target
+	// does not exist, and `make` answered "No rule to make target". A gate whose
+	// repair command does not run is the exact failure mk/fleet.mk already carries a
+	// paragraph about — the fix for a red gate routed through a sweep that could not
+	// complete. One definition, read here, never a second copy to fall out of step.
+	describable := flag.String("describable", "", "apps that can regenerate their own document (mk/fleet.mk $(DESCRIBABLE))")
+	flag.Parse()
+
+	if err := run(*write, strings.Fields(*describable)); err != nil {
+		fmt.Fprintln(os.Stderr, "closure:", err)
+		os.Exit(1)
+	}
+}
+
+func run(write bool, describable []string) error {
+	// REQUIRED IN BOTH MODES, and the second one is the one that bit.
+	//
+	// Refusing to WRITE without it is obvious: defaulting to "every app with a
+	// document" is how the unrunnable `describe/zen` repair got printed. Refusing to
+	// CHECK without it is the same fact from the dangerous side — the filter emptied
+	// the comparison set, nothing was compared, and the gate printed "0 app documents
+	// current" and exited 0. A gate that silently checks nothing is worse than no
+	// gate, because it is believed.
+	if len(describable) == 0 {
+		return fmt.Errorf("-describable is required — run `make closure` or `make closure-check`, which pass mk/fleet.mk's $(DESCRIBABLE)")
+	}
+	root, err := repoRoot()
+	if err != nil {
+		return err
+	}
+	pkgs, err := list(root)
+	if err != nil {
+		return err
+	}
+	have, err := snapshot(root, pkgs, describable)
+	if err != nil {
+		return err
+	}
+	if write {
+		return record(filepath.Join(root, witnessPath), have)
+	}
+	want, err := load(filepath.Join(root, witnessPath))
+	if err != nil {
+		return err
+	}
+	return compare(os.Stderr, want, have)
+}
+
+// repoRoot finds the module root by walking up to the go.mod that declares
+// mainModule, so the tool works from anywhere — `make` runs it from the root, a
+// developer runs it from wherever they are.
+func repoRoot() (string, error) {
+	dir, err := os.Getwd()
+	if err != nil {
+		return "", err
+	}
+	for {
+		b, err := os.ReadFile(filepath.Join(dir, "go.mod"))
+		if err == nil && strings.Contains(string(b), "module "+mainModule) {
+			return dir, nil
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			return "", fmt.Errorf("no %s go.mod above %q", mainModule, dir)
+		}
+		dir = parent
+	}
+}
+
+// list asks the toolchain for the whole plugin closure in ONE invocation: 4312
+// packages in under two seconds. -e so a package that does not build is reported
+// rather than aborting the walk — a broken app is app-contract's to fail, and this
+// gate going red for it would be the masking this whole change exists to remove.
+// -e also swallows an import that resolves to NOTHING, which is a different fact
+// and not one this gate may swallow: placed below is the other half of the flag.
+func list(root string) ([]pkg, error) {
+	cmd := exec.Command("go", "list", "-e", "-deps",
+		"-json=ImportPath,Dir,GoFiles,CgoFiles,Imports,Module,Error", rootPattern)
+	cmd.Dir = root
+	cmd.Env = append(os.Environ(), listEnv...)
+	cmd.Stderr = os.Stderr
+
+	out, err := cmd.Output()
+	if err != nil {
+		return nil, fmt.Errorf("go list: %w", err)
+	}
+	var pkgs []pkg
+	dec := json.NewDecoder(strings.NewReader(string(out)))
+	for dec.More() {
+		var p pkg
+		if err := dec.Decode(&p); err != nil {
+			return nil, fmt.Errorf("go list output: %w", err)
+		}
+		pkgs = append(pkgs, p)
+	}
+	return pkgs, nil
+}
+
+// placed refuses a closure the toolchain could not fully resolve.
+//
+// THE THIRD SHAPE OF THE DEFECT THIS FILE ALREADY CARRIES TWO PARAGRAPHS ABOUT,
+// and the one that stopped the release train. The other two are above: an empty
+// hash that compares equal whatever the source did, and an empty comparison set
+// that reports zero and exits green. This is the same mistake at the graph:
+// `go list -e` reports an import it CANNOT PLACE as a package with no module and
+// no directory, witnessed() then drops it for having no module, and every app
+// that links it gets a digest over a SMALLER closure. Silently, and in the
+// direction that reads as real work — every document stale, no module moved.
+//
+// That is not a hypothetical either. github.com/hanzoai/orm v0.6.24 was tagged on
+// one of that repo's two homes and not the other. The runner resolves
+// github.com/hanzoai/* from the forge, found no such revision there, and placed
+// five orm packages nowhere; 116 of 116 apps link one of them, so the gate
+// reported the whole fleet stale and could name no module that had moved —
+// correctly, because none had. It never once passed in CI, and cloud shipped on
+// hand-pinned digests instead of the train for as long as that lasted.
+//
+// DIR IS THE WHOLE TEST, and it is the toolchain's own answer rather than a
+// heuristic about import paths: stdlib carries no module either and has a Dir
+// under GOROOT, a package that fails to COMPILE has a Dir, and only an import
+// that resolves to no source at all has none. So this stays orthogonal to
+// app-contract — it fires on a dependency that is not THERE, never on one that is
+// there and broken.
+//
+// IT IS ASKED BY snapshot, over every listed package, which is both call sites at
+// once: recording from an incomplete graph is how a wrong witness gets committed,
+// and comparing against one is how a right witness gets called stale. Asking it
+// there rather than in run() is what makes it structural — no witness can be
+// built from a graph with a hole in it, whoever does the building.
+func placed(pkgs []pkg) error {
+	var lost []string
+	for i := range pkgs {
+		if pkgs[i].Dir == "" {
+			why := "no reason recorded"
+			if pkgs[i].Error != nil && pkgs[i].Error.Err != "" {
+				why = strings.ReplaceAll(pkgs[i].Error.Err, "\n", "\n        ")
+			}
+			lost = append(lost, pkgs[i].ImportPath+"\n        "+why)
+		}
+	}
+	if len(lost) == 0 {
+		return nil
+	}
+	sort.Strings(lost)
+	return fmt.Errorf("the toolchain could not place %d package(s), so this closure witnesses nothing:\n    %s\n\n"+
+		"  Each is an import that resolves to no source in this environment, and the line\n"+
+		"  under it is the toolchain's own reason. Read that reason before reproducing it\n"+
+		"  by hand: which HOST git dialled is set by the runner's insteadOf rewrite, so a\n"+
+		"  warm cache or a different rewrite answers a different question than CI asked.",
+		len(lost), strings.Join(lost, "\n    "))
+}
+
+// snapshot reduces the package graph to the witness: one digest per app that has
+// a document, plus the module versions its closure reached.
+func snapshot(root string, pkgs []pkg, describable []string) (witness, error) {
+	if err := placed(pkgs); err != nil {
+		return witness{}, err
+	}
+	can := make(map[string]bool, len(describable))
+	for _, app := range describable {
+		can[app] = true
+	}
+	byPath := make(map[string]*pkg, len(pkgs))
+	for i := range pkgs {
+		byPath[pkgs[i].ImportPath] = &pkgs[i]
+	}
+
+	// Hash every external package once, in parallel — 3718 packages and 222 MB of
+	// source, shared many times over across 125 closures.
+	hash, err := hashAll(pkgs)
+	if err != nil {
+		return witness{}, err
+	}
+
+	w := witness{Modules: map[string]string{}, Apps: map[string]string{}}
+	for i := range pkgs {
+		p := &pkgs[i]
+		app := strings.TrimPrefix(p.ImportPath, rootPrefix)
+		if app == p.ImportPath || strings.Contains(app, "/") {
+			continue // not a plugin root
+		}
+		if _, err := os.Stat(filepath.Join(root, "plugin", app, "openapi.json")); err != nil {
+			continue // no document to be stale
+		}
+		// An app that cannot describe itself has a document nothing regenerates — a
+		// constant, and a constant cannot go stale. Witnessing it would report a
+		// document no command can repair.
+		if !can[app] {
+			continue
+		}
+
+		var lines []string
+		for dep := range reach(byPath, p) {
+			d := byPath[dep]
+			if !witnessed(d) {
+				continue
+			}
+			lines = append(lines, dep+"\x00"+hash[dep])
+			w.Modules[d.Module.Path] = d.Module.Version
+		}
+		sort.Strings(lines)
+		sum := sha256.Sum256([]byte(strings.Join(lines, "\n")))
+		w.Apps[app] = hex.EncodeToString(sum[:])
+	}
+	return w, nil
+}
+
+// reach walks the import graph from one root. `go list -deps` gives the union of
+// every root's closure; the per-root closure is this walk over the Imports it also
+// gives, which is why one invocation is enough for all 125.
+func reach(byPath map[string]*pkg, from *pkg) map[string]bool {
+	seen := map[string]bool{}
+	var walk func(string)
+	walk = func(path string) {
+		if seen[path] {
+			return
+		}
+		seen[path] = true
+		if p := byPath[path]; p != nil {
+			for _, imp := range p.Imports {
+				walk(imp)
+			}
+		}
+	}
+	for _, imp := range from.Imports {
+		walk(imp)
+	}
+	return seen
+}
+
+// hashAll digests the SOURCE of every external package. Filenames are hashed
+// alongside contents so a file appearing or being renamed moves the digest —
+// a package's type surface is the set of files as much as the bytes in them.
+func hashAll(pkgs []pkg) (map[string]string, error) {
+	type result struct {
+		path string
+		sum  string
+		err  error
+	}
+	work := make(chan *pkg)
+	out := make(chan result)
+
+	var wg sync.WaitGroup
+	for i := 0; i < runtime.NumCPU(); i++ {
+		wg.Go(func() {
+			for p := range work {
+				sum, err := hashPkg(p)
+				out <- result{p.ImportPath, sum, err}
+			}
+		})
+	}
+	go func() {
+		for i := range pkgs {
+			if p := &pkgs[i]; witnessed(p) {
+				work <- p
+			}
+		}
+		close(work)
+		wg.Wait()
+		close(out)
+	}()
+
+	hash := make(map[string]string, len(pkgs))
+	for r := range out {
+		if r.err != nil {
+			return nil, r.err
+		}
+		hash[r.path] = r.sum
+	}
+	return hash, nil
+}
+
+// hashPkg is reached only for a package placed() has already seen a directory
+// for. It carried that check itself, one package at a time, which is why the
+// check never fired for the case that mattered: witnessed() drops an unplaceable
+// package before hashing ever asks. One definition, over the whole graph, above.
+func hashPkg(p *pkg) (string, error) {
+	files := append(append([]string{}, p.GoFiles...), p.CgoFiles...)
+	sort.Strings(files)
+
+	h := sha256.New()
+	for _, f := range files {
+		b, err := os.ReadFile(filepath.Join(p.Dir, f))
+		if err != nil {
+			return "", fmt.Errorf("%s: %w", p.ImportPath, err)
+		}
+		fmt.Fprintf(h, "%s\x00%d\x00", f, len(b))
+		h.Write(b)
+	}
+	return hex.EncodeToString(h.Sum(nil)), nil
+}
+
+func record(path string, w witness) error {
+	b, err := json.MarshalIndent(w, "", "  ")
+	if err != nil {
+		return err
+	}
+	if err := os.WriteFile(path, append(b, '\n'), 0o644); err != nil {
+		return err
+	}
+	fmt.Printf(">> %s — %d app documents, %d modules\n", witnessPath, len(w.Apps), len(w.Modules))
+	return nil
+}
+
+func load(path string) (witness, error) {
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return witness{}, fmt.Errorf("%s is missing — run `make describe`: %w", witnessPath, err)
+	}
+	var w witness
+	if err := json.Unmarshal(b, &w); err != nil {
+		return witness{}, fmt.Errorf("%s: %w", witnessPath, err)
+	}
+	return w, nil
+}
+
+// compare reports EVERY stale document in one pass, and names the dependency that
+// moved. Reporting the first one is how three separate red runs cost hours: each
+// told you about one file, and the next one found the next.
+func compare(w io.Writer, want, have witness) error {
+	// An app that has a document but no recorded closure is stale by definition:
+	// nothing ever recorded what it was generated from, and the empty string never
+	// equals a digest — so a NEW app needs no separate case.
+	var stale []string
+	for app, sum := range have.Apps {
+		if want.Apps[app] != sum {
+			stale = append(stale, app)
+		}
+	}
+	sort.Strings(stale)
+
+	// FAIL CLOSED ON AN EMPTY COMPARISON. Nothing to compare is not "everything is
+	// current" — it is the gate having lost its subject, which is how this reported
+	// green while checking nothing at all. Belt to the -describable brace above:
+	// whatever empties the set, the answer is red rather than a confident zero.
+	if len(have.Apps) == 0 {
+		return fmt.Errorf("no app documents were compared — the gate has nothing to check, which is a defect in the gate and never a pass")
+	}
+
+	if len(stale) == 0 {
+		fmt.Fprintf(w, ">> %d app documents current with their dependencies\n", len(have.Apps))
+		return nil
+	}
+
+	var moved []string
+	for mod, version := range have.Modules {
+		if was, ok := want.Modules[mod]; !ok {
+			moved = append(moved, fmt.Sprintf("    %s  (new)  %s", mod, version))
+		} else if was != version {
+			moved = append(moved, fmt.Sprintf("    %s  %s → %s", mod, was, version))
+		}
+	}
+	sort.Strings(moved)
+
+	fmt.Fprintf(w, "\nSTALE: %d app document(s) were generated from source that has since moved.\n\n", len(stale))
+	if len(moved) > 0 {
+		fmt.Fprintln(w, "  dependencies that moved since these documents were recorded:")
+		for _, m := range moved {
+			fmt.Fprintln(w, m)
+		}
+		fmt.Fprintln(w)
+	} else {
+		fmt.Fprintln(w, "  no module version moved — a dependency's source changed underneath a")
+		fmt.Fprintln(w, "  pinned version (a replace, a workspace, or a retagged release).")
+		fmt.Fprintln(w)
+	}
+	fmt.Fprintln(w, "  documents to regenerate:")
+	for _, app := range stale {
+		fmt.Fprintf(w, "    plugin/%s/openapi.json\n", app)
+	}
+	fmt.Fprintln(w)
+	fmt.Fprintln(w, "  fix:")
+	fmt.Fprintf(w, "    %s\n", repair(stale, len(have.Apps)))
+	fmt.Fprintln(w, "    # then commit plugin/*/openapi.json, openapi.yaml, private.yaml and openapi/closure.json")
+	fmt.Fprintln(w)
+	fmt.Fprintln(w, "  This is the cheap warning, not the verdict: regenerating may produce no change,")
+	fmt.Fprintln(w, "  in which case only openapi/closure.json moves and that is the whole fix.")
+	fmt.Fprintln(w)
+	return fmt.Errorf("%d app document(s) stale", len(stale))
+}
+
+// repair names the CHEAPEST command that regenerates what moved. A bump to a
+// package four apps link is four links and about a minute, where `make describe`
+// is one link per app and 6m39s warm. Past a third of the fleet the scoped form is
+// longer to read than the sweep is to run, so it stops — and that branch is the
+// common one for the nineteen hanzoai modules in 122 of 125 closures, which is why
+// it exists rather than emitting 121 targets nobody will paste.
+func repair(stale []string, total int) string {
+	if len(stale)*3 > total {
+		return "make describe"
+	}
+	targets := make([]string, len(stale))
+	for i, app := range stale {
+		targets[i] = "describe/" + app
+	}
+	return "make -f mk/fleet.mk " + strings.Join(targets, " ") + " && make closure && make -f mk/fleet.mk openapi"
+}

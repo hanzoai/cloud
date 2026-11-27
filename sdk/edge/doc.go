@@ -2,10 +2,16 @@
 //
 // It exists because TWO processes are one edge and each was configured
 // separately. cmd/cloud is the host every request reaches first; the program
-// behind it is built by cloud.App(). The host reads the header and body limits
-// off Config itself, so GATEWAY_BODY_LIMIT and its siblings take effect at the
-// edge, not only downstream. The 16 MiB body default exists so a 1M-token prompt
-// (~4.3 MB of JSON) can reach the 1M-context models; a smaller cap answers an
+// behind it is built by cloud.App(). App() read these off Config and the host
+// read nothing, so the host enforced the framework defaults — 4 KiB headers
+// and 4 MiB bodies — and no setting downstream could be reached past it.
+// GATEWAY_BODY_LIMIT was set to 100 MiB in the pod's environment and 4,194,305
+// bytes still answered 400: the value was declared, and the process that decides
+// had never read it.
+//
+// That also means the 16 MiB default had never taken effect. It exists so a
+// 1M-token prompt (~4.3 MB of JSON) can reach the 1M-context models; at the
+// framework's 4 MiB those models were unreachable, and the wire error is the
 // opaque 400 "Error when parsing request", which reads like a malformed payload
 // rather than a size cap.
 //

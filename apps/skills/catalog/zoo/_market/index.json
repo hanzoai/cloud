@@ -1,0 +1,56 @@
+{
+  "$schema": "https://schemas.agentskills.io/discovery/0.2.0/schema.json",
+  "base_url": "https://api.zoo.ngo",
+  "brand": "zoo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://zoolabs.id",
+  "mcp": {
+    "description": "Model Context Protocol over JSON-RPC 2.0 — one POST per message, stateless, protocol revision 2026-07-28. tools/list answers without a credential with one tool per subsystem (its operations in the \"op\" enum) plus \"describe\", which returns one operation's input schema. tools/call names a subsystem tool and carries {\"op\": <operation>, \"input\": <its arguments>}; it takes the same bearer the REST API does, and a call that carries none is answered 401 with a WWW-Authenticate header naming the resource metadata at /.well-known/oauth-protected-resource, which names the authorization server to sign in at. The tool surface is the public contract: the operator's admin product is not offered, and a name that would disclose a secret or mutate an identity is withheld — the list says how many, under _meta.",
+    "method": "POST",
+    "url": "https://api.zoo.ngo/v1/mcp"
+  },
+  "skill_count": 5,
+  "skills": [
+    {
+      "description": "Read market chains: Answers every chain this deployment can read, what is deployed on each, and what its automated market maker amounts to..",
+      "digest": "sha256:cbb70e29ad607ee801ee6595033f2d731daf0135815ec7794d7c23ceadcd4afe",
+      "name": "market_chains",
+      "service": "market",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/market_chains/SKILL.md"
+    },
+    {
+      "description": "Read market pools: Answers the automated market makers on one chain: their two tokens, their fee tier, and what has moved through each..",
+      "digest": "sha256:88ec43861b871b31ab5bc48b1b9e623a44a3573530b14241fff0bccb067a1522",
+      "name": "market_pools",
+      "service": "market",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/market_pools/SKILL.md"
+    },
+    {
+      "description": "Read market survey: Answers which of the four settlement precompiles carry code on one chain..",
+      "digest": "sha256:dca38cf24f4a6da6d3ab85f21648a5c6b1f317e3a9f865b92ba6aa04dc0dae80",
+      "name": "market_survey",
+      "service": "market",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/market_survey/SKILL.md"
+    },
+    {
+      "description": "Read market token: Answers one token's daily history — open, high, low, close, price and volume per UTC day, oldest first..",
+      "digest": "sha256:be5d610f5ba4a9001dd2b2a07ba06904424cd24be09934d9e1b03e760355d209",
+      "name": "market_token",
+      "service": "market",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/market_token/SKILL.md"
+    },
+    {
+      "description": "Read market tokens: Answers the tokens one chain's indexer has seen, with the decimals a caller needs to read any amount of one correctly..",
+      "digest": "sha256:bf5918a0f7af254311e98c7c5d636a2a223726146eeebf9af02ee0f77f1aefb0",
+      "name": "market_tokens",
+      "service": "market",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/market_tokens/SKILL.md"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

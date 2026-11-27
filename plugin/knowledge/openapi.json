@@ -1,0 +1,1732 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Hanzo Cloud API",
+    "description": "Package knowledge is your team's wiki and your agents' memory, searchable by meaning.",
+    "version": "v1"
+  },
+  "servers": [
+    {
+      "url": "https://api.hanzo.ai"
+    }
+  ],
+  "security": [
+    {
+      "bearer": []
+    }
+  ],
+  "tags": [
+    {
+      "name": "knowledge"
+    }
+  ],
+  "paths": {
+    "/v1/knowledge/connectors": {
+      "get": {
+        "operationId": "get_knowledge_connectors",
+        "summary": "Returns every supported knowledge connector with THIS org's connection state and the REAL number of documents each has ingested into the org's store.",
+        "description": "Returns every supported knowledge connector with THIS org's\nconnection state and the REAL number of documents each has ingested into the\norg's store. A provider that is configured for the deployment but not yet\nconnected appears as disconnected, so the console can offer a Connect button.\nNo secret is ever returned.",
+        "tags": [
+          "knowledge"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/knowledge.kbConnectorsOut"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/knowledge/connectors/catalog": {
+      "get": {
+        "operationId": "get_knowledge_connectors_catalog",
+        "summary": "Returns the ONE catalog of everything a caller can connect: every first-party connector and every long-tail one, in a single list sorted by provider.",
+        "description": "Returns the ONE catalog of everything a caller can\nconnect: every first-party connector and every long-tail one, in a single list\nsorted by provider. `configured` reports whether this deployment holds OAuth\ncredentials for a source, so the console can show Connect rather than a dead\nbutton, and `kind` is a badge only — the connect and sync lifecycle is\nidentical for both. The catalog itself is org-independent; a validated\nprincipal is still required. It is metadata only: no secret is ever returned.",
+        "tags": [
+          "knowledge"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "connectors": [
+                    {
+                      "configured": true,
+                      "description": "Repositories, READMEs, and issues.",
+                      "displayName": "GitHub",
+                      "kind": "native",
+                      "provider": "github"
+                    }
+                  ]
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/knowledge.catalogOut"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/knowledge/connectors/{provider}": {
+      "delete": {
+        "operationId": "delete_knowledge_connectors_by_provider",
+        "summary": "Revokes a connection: it tombstones the stored credential so a later sync cannot reuse it, removes this provider's passages from the org's store, and marks the connector disconnected.",
+        "description": "Revokes a connection: it tombstones the stored credential\nso a later sync cannot reuse it, removes this provider's passages from the\norg's store, and marks the connector disconnected. The documents already\ningested stay in the org's store — they are the org's own data — but stop being\nretrievable by search; a caller deletes them through the document surface.",
+        "tags": [
+          "knowledge"
+        ],
+        "parameters": [
+          {
+            "name": "provider",
+            "in": "path",
+            "required": true,
+            "description": "Provider is the connector to act on: github, slack, google or notion.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/knowledge.connectionOut"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/knowledge/connectors/{provider}/callback": {
+      "get": {
+        "operationId": "get_knowledge_connectors_by_provider_callback",
+        "summary": "CompleteConnectorOAuth finishes an OAuth connection: it exchanges the provider's code for a token, seals that token in KMS, and records the connection.",
+        "description": "CompleteConnectorOAuth finishes an OAuth connection: it exchanges the\nprovider's code for a token, seals that token in KMS, and records the\nconnection. THE ORG COMES FROM THE SIGNED STATE, not from a header and not from\nthe provider, so an attacker cannot bind their own account to someone else's\norg — a tampered, expired or foreign-provider state is refused outright. The\ntoken itself is never returned, never written into the document, and never\nlogged; the document holds only its KMS path.",
+        "tags": [
+          "knowledge"
+        ],
+        "parameters": [
+          {
+            "name": "provider",
+            "in": "path",
+            "required": true,
+            "description": "Provider is the connector completing its flow, from the path.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "code",
+            "in": "query",
+            "required": false,
+            "description": "Code is the provider's authorization code, exchanged for a token.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "state",
+            "in": "query",
+            "required": false,
+            "description": "State is the org-bound value this server signed at connect time.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "error",
+            "in": "query",
+            "required": false,
+            "description": "Error is the provider's denial reason when the user refused consent.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/knowledge.connectionOut"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/knowledge/connectors/{provider}/connect": {
+      "get": {
+        "operationId": "get_knowledge_connectors_by_provider_connect",
+        "summary": "StartConnectorOAuth returns the provider authorize URL the console opens to connect this org's account.",
+        "description": "StartConnectorOAuth returns the provider authorize URL the console opens to\nconnect this org's account. There is no server-side redirect — the console\nstays in control of the navigation. The URL carries a state this server SIGNED\nover the caller's validated org, so the connection the callback completes can\nonly ever land in that org.",
+        "tags": [
+          "knowledge"
+        ],
+        "parameters": [
+          {
+            "name": "provider",
+            "in": "path",
+            "required": true,
+            "description": "Provider is the connector to act on: github, slack, google or notion.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/knowledge.kbAuthorizeOut"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/knowledge/connectors/{provider}/sync": {
+      "post": {
+        "operationId": "post_knowledge_connectors_by_provider_sync",
+        "summary": "Pulls the provider's documents for the caller's org and files them as knowledge sources, which the store's own hook then indexes — so a synced document is retrievable exactly like a hand-written page.",
+        "description": "Pulls the provider's documents for the caller's org and files\nthem as knowledge sources, which the store's own hook then indexes — so a\nsynced document is retrievable exactly like a hand-written page. The org is the\nvalidated tenant and the credential is read from KMS, so an org can only ever\nsync its own connection. A provider failure is reported honestly (502) and\nrecorded on the connector rather than silently swallowed.",
+        "tags": [
+          "knowledge"
+        ],
+        "parameters": [
+          {
+            "name": "provider",
+            "in": "path",
+            "required": true,
+            "description": "Provider is the connector to act on: github, slack, google or notion.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/knowledge.kbSyncOut"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/knowledge/files": {
+      "get": {
+        "operationId": "get_knowledge_files",
+        "summary": "Answers the caller's org files, most recently changed first, each with its status and stage — optionally only those in one bucket, which is how Drive shows a folder's files with their index state.",
+        "description": "Answers the caller's org files, most recently changed first, each\nwith its status and stage — optionally only those in one bucket, which is how\nDrive shows a folder's files with their index state.",
+        "tags": [
+          "knowledge"
+        ],
+        "parameters": [
+          {
+            "name": "bucket",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/knowledge.filesOut"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      },
+      "post": {
+        "operationId": "post_knowledge_files",
+        "summary": "Makes an object in one of the caller's org buckets a workspace file.",
+        "description": "Makes an object in one of the caller's org buckets a workspace\nfile. Upload the bytes first — POST /v1/s3/buckets/{bucket}/objects mints a\npresigned PUT, POST /v1/s3/buckets/{bucket}/uploads starts a multipart upload\nfor a large one — then register the key here. The object's name, type and\nsize are read from the store. The file is recorded as queued, a file_stored\nevent is stated on the org's event plane, and a durable ingest is queued that\nextracts its text and structure, summarizes its table of contents, cuts and\nembeds its passages and links it into the org's graph. An archive (.zip) is\nunpacked and every file inside becomes a workspace file of its own. Poll GET\n/v1/knowledge/files/{id} for status. Registering an object again answers the\nsame file, and re-indexes it only when the object changed or its last ingest\nfailed.\n\nRegistering a changed object again changes its file, which only the person\nwho registered it or an admin of the org may do: anyone else is refused 403\nand the file keeps its version. Registering an unchanged object is a read.",
+        "tags": [
+          "knowledge"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "bucket": "hanzo",
+                "key": "chat/report.pdf"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/knowledge.fileIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/knowledge.File"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/knowledge/files/retrieve": {
+      "post": {
+        "operationId": "post_knowledge_files_retrieve",
+        "summary": "Grounds an answer in the caller's org files, table of contents first: candidate documents are found by searching their passages; a model reads their tables of contents — titles and one-line summaries — and picks the sections the answer is in; hybrid search drills into the passages of those sections; and the graph expands to the sections they link to or name the same entities as, in any file of the workspace.",
+        "description": "Grounds an answer in the caller's org files, table of contents\nfirst: candidate documents are found by searching their passages; a model\nreads their tables of contents — titles and one-line summaries — and picks\nthe sections the answer is in; hybrid search drills into the passages of\nthose sections; and the graph expands to the sections they link to or name\nthe same entities as, in any file of the workspace. Every passage cites its\nfile › section › paragraph, so an answer can say exactly where it came from.\nThis is what a chat runs before it answers about an attached file, and what\nan agent runs before it answers about a workspace.",
+        "tags": [
+          "knowledge"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "files": [
+                  "f3a9c0d1e2b4f5a6b7c8"
+                ],
+                "query": "how long are backups retained, and who audits that?"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/knowledge.retrieveIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/knowledge.retrieveOut"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/knowledge/files/search": {
+      "post": {
+        "operationId": "post_knowledge_files_search",
+        "summary": "Answers the passages of the caller's org files that match a query, each citing its file › section › paragraph: the search behind Drive's box, and the first step an agent takes across a workspace.",
+        "description": "Answers the passages of the caller's org files that match a query,\neach citing its file › section › paragraph: the search behind Drive's box,\nand the first step an agent takes across a workspace. Name file ids to search\nonly those files; name none to search them all. A semantic leg compares the\nquery with every embedded passage and a full-text leg finds the passages\nholding its words; the two are fused, so a passage both found comes first.",
+        "tags": [
+          "knowledge"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "limit": 5,
+                "query": "termination notice period"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/knowledge.fileSearchIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/knowledge.fileSearchOut"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/knowledge/files/{id}": {
+      "delete": {
+        "operationId": "delete_knowledge_files_by_id",
+        "summary": "Removes one of the caller's org files from the index — its table of contents, passages, full-text rows, mentions and links — and its record.",
+        "description": "Removes one of the caller's org files from the index — its table of\ncontents, passages, full-text rows, mentions and links — and its record. The\nfile is gone from every read when this answers: its listing, its contents,\nsearch and retrieval. What the index held of it is removed after, a batch at\na time, so forgetting a file of any size answers at once. The object itself\nstays in its bucket; delete it there. Drive calls this when it deletes a file.\n\nOnly the person who registered the file or an admin of the org may forget it;\nanyone else in the org, who can still read it, is refused 403. A file\nregistered before uploaders were recorded is forgotten by an admin alone.",
+        "tags": [
+          "knowledge"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the file's id, as POST /v1/knowledge/files answered it.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/knowledge.forgotten"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      },
+      "get": {
+        "operationId": "get_knowledge_files_by_id",
+        "summary": "Answers one of the caller's org files: what it is, where its bytes are, and how far its ingest has got.",
+        "description": "Answers one of the caller's org files: what it is, where its bytes\nare, and how far its ingest has got. 404 for an id the org holds no file for.",
+        "tags": [
+          "knowledge"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the file's id, as POST /v1/knowledge/files answered it.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/knowledge.File"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/knowledge/files/{id}/graph": {
+      "get": {
+        "operationId": "get_knowledge_files_by_id_graph",
+        "summary": "Answers one of the caller's org files' place in the org's graph: the files it links to and is linked from (a hyperlink, a citation by name), the files that name the same entities, and the entities it names.",
+        "description": "Answers one of the caller's org files' place in the org's graph:\nthe files it links to and is linked from (a hyperlink, a citation by name),\nthe files that name the same entities, and the entities it names. It is how\nan agent finds the other documents a question about this one needs.",
+        "tags": [
+          "knowledge"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the file's id, as POST /v1/knowledge/files answered it.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/knowledge.fileGraph"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/knowledge/files/{id}/sections/{section}": {
+      "get": {
+        "operationId": "get_knowledge_files_by_id_sections_by_section",
+        "summary": "Answers one section of one of the caller's org files: its own text, its subsections, the sections it links to or shares entities with — in this file or another — and the entities it names.",
+        "description": "Answers one section of one of the caller's org files: its own\ntext, its subsections, the sections it links to or shares entities with —\nin this file or another — and the entities it names. Open the document\nitself with section 0.",
+        "tags": [
+          "knowledge"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the file's id.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "section",
+            "in": "path",
+            "required": true,
+            "description": "Section is the section's number in the file's table of contents.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/knowledge.sectionOut"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/knowledge/files/{id}/toc": {
+      "get": {
+        "operationId": "get_knowledge_files_by_id_toc",
+        "summary": "Answers one of the caller's org files' table of contents: every section in document order with its depth, its parent and a one-line summary.",
+        "description": "Answers one of the caller's org files' table of contents: every\nsection in document order with its depth, its parent and a one-line summary.\nIt is the map a reader — a person in Drive, or an agent deciding where to\nlook — reads before opening a section with GET\n/v1/knowledge/files/{id}/sections/{section}.",
+        "tags": [
+          "knowledge"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the file's id, as POST /v1/knowledge/files answered it.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/knowledge.tocOut"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/knowledge/graph": {
+      "get": {
+        "operationId": "get_knowledge_graph",
+        "summary": "Returns the caller org's knowledge as a node/edge graph shaped for a force-directed renderer: pages, memories and synced sources as nodes; the page parent tree, the wikilinks between pages, and each source's connector provenance as edges.",
+        "description": "Returns the caller org's knowledge as a node/edge graph\nshaped for a force-directed renderer: pages, memories and synced sources as\nnodes; the page parent tree, the wikilinks between pages, and each source's\nconnector provenance as edges. Wikilink targets are resolved HERE by title or\nslug, so a rename never needs an edge rewrite and a link that matches no page\nrenders as its own \"unresolved\" node instead of vanishing. ?project= narrows\nit. A store outage degrades to an honest empty graph, never a 5xx.",
+        "tags": [
+          "knowledge"
+        ],
+        "parameters": [
+          {
+            "name": "project",
+            "in": "query",
+            "required": false,
+            "description": "Project narrows the graph to one project scope. Empty reads the whole org.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/knowledge.graphOut"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/knowledge/import": {
+      "post": {
+        "operationId": "post_knowledge_import",
+        "summary": "Import an Obsidian, Notion, Roam or Evernote export into the org's knowledge base",
+        "description": "Ingests an uploaded export as a tree of kb.page documents with its link structure intact. `?format=` picks the normalizer — obsidian, notion, roam or evernote — and the export arrives as a multipart `file` part, or as the raw request body when there is no multipart part: an Obsidian or Notion vault zip, a Roam JSON (raw or inside the zip Roam downloads), or an Evernote .enex.\n\nThe pages are filed through the SAME ingest path a connector sync uses, so the kb.page hook indexes each one for retrieval AND extracts its `[[wikilinks]]` into kb.link edges — the imported vault is searchable and its graph is navigable without a second pass. Parents are filed before their children, and each page takes a slug unique within the org (suffixed -2, -3, … on collision), so a re-import adds pages rather than overwriting the ones already there.\n\nScoped to the caller's validated org; `?project=` narrows every imported page to one project. No validated principal is 403, and an org that has not installed the kb module is refused with the install call to make first. The bounds are 64 MB per upload, 5000 pages and 8 MB per archive entry: pages past the five-thousandth are dropped and a larger entry is truncated at its bound, and a page the store rejects is skipped — so the answer's `imported` count is what was actually filed, not what was sent.",
+        "tags": [
+          "knowledge"
+        ],
+        "x-public": true
+      }
+    },
+    "/v1/knowledge/reindex": {
+      "post": {
+        "operationId": "post_knowledge_reindex",
+        "summary": "Rebuilds the caller org's retrieval from its documents: every passage is removed, and every page, memory and source is cut into passages and embedded again with the configured model; the lexical index is reconciled to the same documents.",
+        "description": "Rebuilds the caller org's retrieval from its documents: every passage\nis removed, and every page, memory and source is cut into passages and\nembedded again with the configured model; the lexical index is reconciled to\nthe same documents. It is what an operator runs after the embedding model\nchanges — passages of another model are never compared with the query, so\nuntil then they are unread — and what puts an org's retrieval right after an\noutage of the ai plane. It requires ORG ADMIN and runs inline: an org's\nknowledge is a few thousand documents, and the answer is the count.\n\nThe request has no body. Response: {\"vectors\": 412, \"lexical\": 412, \"removed\": 3, \"failed\": 0}",
+        "tags": [
+          "knowledge"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/knowledge.reindexOut"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/knowledge/search": {
+      "post": {
+        "operationId": "post_knowledge_search",
+        "summary": "Runs a hybrid search over the caller org's own knowledge — its wiki pages, its agent memories and everything its connectors have synced.",
+        "description": "Runs a hybrid search over the caller org's own knowledge —\nits wiki pages, its agent memories and everything its connectors have synced.\nThis is the RAG entry point: an agent asks \"what does this org know about X\"\nand the org's OWN knowledge answers. Two legs run and are fused by reciprocal\nrank: a semantic leg that embeds the query and compares it with every passage\nof every document in reach (a document is cut into passages of about 2000\nbytes, so a fact deep in a long page is found), and a keyword leg over the\norg's knowledge index. The org comes from the validated principal and its\npassages live in its own database, so cross-tenant retrieval is impossible. A\nfailed leg answers 200 with what the other leg found and degraded=true, never\na 5xx.",
+        "tags": [
+          "knowledge"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "limit": 5,
+                "query": "how do we rotate the signing key"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/knowledge.searchIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/knowledge.searchOut"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "knowledge.File": {
+        "properties": {
+          "bucket": {
+            "description": "Bucket is the org bucket the object is in, by the friendly name\n/v1/s3/buckets lists.",
+            "type": "string"
+          },
+          "chars": {
+            "description": "Chars is the length of the text read out of the file, in bytes.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "clipped": {
+            "description": "Clipped is true when only the file's beginning is indexed: its text ran\npast the org's bound or the room the index has. Note says how far.",
+            "type": "boolean"
+          },
+          "created": {
+            "description": "Created is when the file was first registered, in unix seconds.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "done": {
+            "description": "Done is how far the running stage has come, of Total: bytes of the file\nread (extract), sections summarized (toc), cut into passages (passages)\nand linked (graph), passages embedded (embed). Absent between stages and\nonce the ingest is done.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "embedded": {
+            "description": "Embedded is how many of those passages carry a vector — Passages once the\nembed stage is done, unless Note says the file is embedded in part.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "error": {
+            "description": "Error is why a stored or failed file was not indexed — or, on a ready\nfile, why it is searched by its words alone — in words a person can act\non. Absent otherwise.",
+            "type": "string"
+          },
+          "id": {
+            "description": "ID names the file in its org. It is derived from the bucket and key, so\nregistering the same object twice answers the same file.",
+            "type": "string"
+          },
+          "key": {
+            "description": "Key is the object's key in that bucket. GET\n/v1/s3/buckets/{bucket}/objects/{key} answers a signed download URL for it.",
+            "type": "string"
+          },
+          "name": {
+            "description": "Name is the object's file name, the last segment of its key.",
+            "type": "string"
+          },
+          "note": {
+            "description": "Note says in words where the file is indexed less than whole and why: its\ntext past the org's bound or the room the index has, its passages past\nthe bound on vectors. Absent when the whole file is indexed every way.",
+            "type": "string"
+          },
+          "parent": {
+            "description": "Parent is the id of the archive this file was unpacked from. Absent for a\nfile uploaded on its own.",
+            "type": "string"
+          },
+          "passages": {
+            "description": "Passages is how many passages its text was cut into.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "project": {
+            "description": "Project is the project scope it is indexed under. Absent for the org's\nown files.",
+            "type": "string"
+          },
+          "sections": {
+            "description": "Sections is how many nodes its table of contents has, the document's own\nroot included.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "size": {
+            "description": "Size is the object's length in bytes, as the store reports it.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "stage": {
+            "description": "Stage is the ingest stage the file is in: extract, toc, passages or graph\nwhile indexing, embed while a ready file's vectors are written. Absent once\nthe ingest is done.",
+            "type": "string"
+          },
+          "status": {
+            "description": "Status is queued, indexing, ready, stored (kept but not indexed — Error\nsays why) or failed. A ready file's contents, passages and links are all\nreadable and its full text is searched; its vectors may still be filling\nin (Stage embed), which adds search by meaning as it goes.",
+            "type": "string"
+          },
+          "total": {
+            "description": "Total is what the running stage has to do in all, in Done's units.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "type": {
+            "description": "Type is the object's media type as the store holds it, or the one its\nname implies when the store holds only the generic default.",
+            "type": "string"
+          },
+          "updated": {
+            "description": "Updated is when its record last changed, in unix seconds.",
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "knowledge.catalogEntry": {
+        "properties": {
+          "configured": {
+            "description": "Configured is whether THIS DEPLOYMENT holds the OAuth client credentials for\nthe provider. False means Connect would dead-end, so the console can offer it\ndisabled instead of broken. It is deployment-wide and says nothing about\nwhether the caller's org has connected the source — that is the connector\nlist's `status`.",
+            "type": "boolean"
+          },
+          "description": {
+            "description": "Description is one line of shop copy: what connecting this source pulls in.\nNative connectors carry written prose; a provider-backed one reads\n\"activepieces connector (\u003cprovider\u003e)\".",
+            "type": "string"
+          },
+          "displayName": {
+            "description": "DisplayName is the label to show a person. First-party connectors carry a\nwritten name (\"GitHub\", \"Google Drive\"); a provider-backed one falls back to the\nprovider capitalized, because the rich activepieces metadata lives behind a\ncross-service call this read will not make.",
+            "type": "string"
+          },
+          "kind": {
+            "description": "\"native\" | \"provider\"",
+            "type": "string"
+          },
+          "provider": {
+            "description": "Provider is the source's id and the address every connector op takes it by\n(/v1/knowledge/connectors/:provider). One of github, slack, google, notion.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "knowledge.catalogOut": {
+        "properties": {
+          "connectors": {
+            "description": "Connectors is every connectable source, sorted by provider.",
+            "items": {
+              "$ref": "#/components/schemas/knowledge.catalogEntry"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "knowledge.citedPassage": {
+        "properties": {
+          "cite": {
+            "description": "Cite is how an answer cites it: file › section path › ¶part.",
+            "type": "string"
+          },
+          "file": {
+            "$ref": "#/components/schemas/knowledge.fileBrief",
+            "description": "File is the file the passage is from."
+          },
+          "part": {
+            "description": "Part is the passage's place in its section, from 1.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "score": {
+            "description": "Score is the fused rank score, comparable within one response only.",
+            "format": "double",
+            "type": "number"
+          },
+          "section": {
+            "$ref": "#/components/schemas/knowledge.sectionBrief",
+            "description": "Section is the section it is in."
+          },
+          "text": {
+            "description": "Text is the passage: a span of its section of about 2000 bytes, never\ncrossing into another section.",
+            "type": "string"
+          },
+          "via": {
+            "description": "Via is how retrieval reached it: search (it matched), toc (it is in a\nsection the table of contents pointed at) or graph (a linked section).",
+            "type": "string"
+          },
+          "why": {
+            "description": "Why says, for a passage reached through the graph, which edge led there.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "knowledge.connectionOut": {
+        "properties": {
+          "account": {
+            "description": "Account names the connected external account, when the provider reports one.",
+            "type": "string"
+          },
+          "provider": {
+            "description": "Provider is the connector this answer is about.",
+            "type": "string"
+          },
+          "status": {
+            "description": "Status is the connection state: connected or disconnected.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "knowledge.connectorView": {
+        "properties": {
+          "account": {
+            "description": "Account names the connected external account. Absent until the org connects.",
+            "type": "string"
+          },
+          "configured": {
+            "description": "Configured is true when this deployment holds OAuth credentials for the provider.",
+            "type": "boolean"
+          },
+          "docCount": {
+            "description": "DocCount is the live count of this provider's documents in the org's store.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "error": {
+            "description": "Error is the last sync failure, if any. Absent until the org connects.",
+            "type": "string"
+          },
+          "kind": {
+            "description": "Kind is \"native\" for a first-party Go connector, \"provider\" for a long-tail one.",
+            "type": "string"
+          },
+          "lastSync": {
+            "description": "LastSync is when the last pull finished. Absent until the org connects.",
+            "type": "string"
+          },
+          "provider": {
+            "description": "Provider is the connector's id.",
+            "type": "string"
+          },
+          "status": {
+            "description": "Status is connected, disconnected, syncing or error.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "knowledge.fileBrief": {
+        "properties": {
+          "bucket": {
+            "description": "Bucket and Key are where its bytes are: GET\n/v1/s3/buckets/{bucket}/objects/{key} answers a signed download URL.",
+            "type": "string"
+          },
+          "id": {
+            "description": "ID is the file's id.",
+            "type": "string"
+          },
+          "key": {
+            "description": "Key is the object's key in Bucket.",
+            "type": "string"
+          },
+          "name": {
+            "description": "Name is the file's name.",
+            "type": "string"
+          },
+          "type": {
+            "description": "Type is the file's media type.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "knowledge.fileEntity": {
+        "properties": {
+          "files": {
+            "description": "Files is how many other files of the org name it too.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "kind": {
+            "description": "Kind is person, org, product, place or term.",
+            "type": "string"
+          },
+          "name": {
+            "description": "Name is the entity as the text names it.",
+            "type": "string"
+          },
+          "sections": {
+            "description": "Sections is how many of the file's sections name it.",
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "knowledge.fileGraph": {
+        "properties": {
+          "entities": {
+            "description": "Entities are the entities it names, most mentioned first.",
+            "items": {
+              "$ref": "#/components/schemas/knowledge.fileEntity"
+            },
+            "type": "array"
+          },
+          "file": {
+            "$ref": "#/components/schemas/knowledge.File",
+            "description": "File is the file the graph is of."
+          },
+          "links": {
+            "description": "Links are the other files it is joined to, strongest first.",
+            "items": {
+              "$ref": "#/components/schemas/knowledge.fileLink"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "knowledge.fileIn": {
+        "properties": {
+          "bucket": {
+            "description": "Bucket is one of the org's buckets, by the friendly name /v1/s3/buckets\nlists. Required.",
+            "type": "string"
+          },
+          "key": {
+            "description": "Key is the object's key in that bucket, as the upload wrote it. Required.",
+            "type": "string"
+          },
+          "project": {
+            "description": "Project indexes the file under one project scope. Empty is the org's own.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "knowledge.fileLink": {
+        "properties": {
+          "direction": {
+            "description": "Direction is out when this file links to the other, in when the other\nlinks to this one, and shared when the two name the same entities.",
+            "type": "string"
+          },
+          "file": {
+            "description": "File is the other file, by id.",
+            "type": "string"
+          },
+          "kind": {
+            "description": "Kind is href (a hyperlink), cites (the text names the file), xref (a\ncross-reference inside one document) or entity (shared mentions).",
+            "type": "string"
+          },
+          "label": {
+            "description": "Label is the link's own text, or the entities the two files share.",
+            "type": "string"
+          },
+          "name": {
+            "description": "Name is the other file's name.",
+            "type": "string"
+          },
+          "weight": {
+            "description": "Weight is how many edges of this kind join the two; for shared entities,\nhow many entities they share.",
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "knowledge.fileSearchIn": {
+        "properties": {
+          "files": {
+            "description": "Files restricts the search to these file ids. Empty searches every file\nthe org holds.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "limit": {
+            "description": "Limit bounds the passages returned. Default 8, maximum 50.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "project": {
+            "description": "Project restricts the search to files indexed under one project scope.",
+            "type": "string"
+          },
+          "query": {
+            "description": "Query is the question or phrase. Required.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "knowledge.fileSearchOut": {
+        "properties": {
+          "degraded": {
+            "description": "Degraded is true when a leg failed — the query could not be embedded, or\nthe full-text index could not be read — and Passages are what the other\nleg found.",
+            "type": "boolean"
+          },
+          "passages": {
+            "description": "Passages are the matching passages, best first, at most Limit.",
+            "items": {
+              "$ref": "#/components/schemas/knowledge.citedPassage"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "knowledge.filesOut": {
+        "properties": {
+          "files": {
+            "description": "Files are the org's files, most recently changed first.",
+            "items": {
+              "$ref": "#/components/schemas/knowledge.File"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "knowledge.forgotten": {
+        "properties": {
+          "id": {
+            "description": "ID is the file whose index was removed.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "knowledge.graphEdge": {
+        "properties": {
+          "from": {
+            "description": "From is the id of the node the edge starts at: the child page for a parent\nedge, the page holding the wikilink for a link edge, the kb.source for a\nprovenance edge. Always one of Nodes.",
+            "type": "string"
+          },
+          "kind": {
+            "description": "parent | link | provenance",
+            "type": "string"
+          },
+          "to": {
+            "description": "To is the id of the node the edge points at: the parent page, the linked\npage, the kb.connector. Always one of Nodes — a wikilink matching no page\npoints at a synthetic \"unresolved:\u003clowercased title\u003e\" node rather than\ndangling.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "knowledge.graphNode": {
+        "properties": {
+          "id": {
+            "description": "\"\u003cdoctype\u003e:\u003cname\u003e\" — globally unique, click-to-open key",
+            "type": "string"
+          },
+          "name": {
+            "description": "the document name (empty for synthetic nodes)",
+            "type": "string"
+          },
+          "project": {
+            "description": "Project is the project scope the underlying document was saved under. Absent\nfor a document saved with none, and for the synthetic nodes — unresolved link\ntargets and connectors belong to no project. When ?project= narrows the\ngraph, every page, memory and source node carries that value.",
+            "type": "string"
+          },
+          "title": {
+            "description": "display label",
+            "type": "string"
+          },
+          "type": {
+            "description": "kb.page | kb.memory | kb.source | kb.connector | unresolved",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "knowledge.graphOut": {
+        "properties": {
+          "degraded": {
+            "description": "Degraded is true when the store was unreachable and this graph is honestly\nempty rather than wrong. Absent on a normal answer.",
+            "type": "boolean"
+          },
+          "edges": {
+            "description": "Edges are the parent tree, the resolved wikilinks and the connector provenance.",
+            "items": {
+              "$ref": "#/components/schemas/knowledge.graphEdge"
+            },
+            "type": "array"
+          },
+          "nodes": {
+            "description": "Nodes are the pages, memories, sources, connectors and unresolved link targets.",
+            "items": {
+              "$ref": "#/components/schemas/knowledge.graphNode"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "knowledge.hit": {
+        "properties": {
+          "doctype": {
+            "description": "DocType is which kind of knowledge matched, by address: kb.page (a wiki\npage), kb.memory (a unit of agent memory) or kb.source (a document a\nconnector ingested).\nThose three are the whole indexed set, and searchIn.DocTypes filters on them.",
+            "type": "string"
+          },
+          "name": {
+            "description": "Name is the document's name in the framework store — the id to read or open\nit with. Unique per (org, doctype), so it identifies the document with\nDocType and not alone.",
+            "type": "string"
+          },
+          "project": {
+            "description": "Project is the project scope the document was saved under. Absent for a\ndocument saved with none, which is also why a project-scoped query cannot\nreach it.",
+            "type": "string"
+          },
+          "provider": {
+            "description": "Provider is the connector that ingested the document — github, slack, google\nor notion. Absent for a page or memory written in the product, which came\nfrom no connector.",
+            "type": "string"
+          },
+          "score": {
+            "description": "Score is the cosine similarity between the query's embedding and the\ndocument's BEST-matching passage, from -1 to 1, higher being closer. A\ndocument is cut into passages of about 2000 bytes, each embedded on its own,\nso a fact deep in a long page scores as high as one in its first paragraph.\n0 for a document only the lexical leg found, which has no similarity to\nreport. There is no absolute cutoff: what counts as a good score moves with\nthe query and the embedding model, so compare scores within one response and\nnot across queries.",
+            "format": "double",
+            "type": "number"
+          },
+          "title": {
+            "description": "Title is the document's title. Empty for a document saved without one; it\nis a label to show, never the id (that is Name).",
+            "type": "string"
+          },
+          "url": {
+            "description": "URL is the document's link back into the app it was ingested from. Absent\nwhen the document carries none, which is the normal case for pages and\nmemories.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "knowledge.kbAuthorizeOut": {
+        "properties": {
+          "authorizeUrl": {
+            "description": "AuthorizeURL is the provider's authorize endpoint with an org-bound signed state.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "knowledge.kbConnectorsOut": {
+        "properties": {
+          "connectors": {
+            "description": "Connectors is every supported provider with this org's connection state.",
+            "items": {
+              "$ref": "#/components/schemas/knowledge.connectorView"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "knowledge.kbSyncOut": {
+        "properties": {
+          "ingested": {
+            "description": "Ingested is how many documents landed in the org's knowledge store.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "provider": {
+            "description": "Provider is the connector that was pulled.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "knowledge.pickedSection": {
+        "properties": {
+          "file": {
+            "$ref": "#/components/schemas/knowledge.fileBrief",
+            "description": "File is the file it is in."
+          },
+          "section": {
+            "$ref": "#/components/schemas/knowledge.sectionBrief",
+            "description": "Section is where it is."
+          },
+          "summary": {
+            "description": "Summary is its one-line account.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "knowledge.reindexOut": {
+        "properties": {
+          "failed": {
+            "description": "Failed is how many documents could not be indexed; each is logged with its\nname and has no passages — the rest of the rebuild went on without it.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "lexical": {
+            "description": "Lexical is how many rows the org's lexical index holds now; 0 in a\ndeployment without the index app.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "removed": {
+            "description": "Removed is how many rows the lexical index held for documents that no\nlonger exist; 0 without the index app.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "vectors": {
+            "description": "Vectors is how many documents were read back, cut into passages, embedded\nand written to the org's passage store, which was emptied first — so it now\nholds these documents' passages and nothing else.",
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "knowledge.retrieveIn": {
+        "properties": {
+          "files": {
+            "description": "Files are the files the question is about — the files a chat message\nreferences. Empty asks the whole workspace. The graph may still reach\nfiles beyond them.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "limit": {
+            "description": "Limit bounds the passages drilled out of the chosen sections. Default 8,\nmaximum 24. The graph adds up to four more.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "project": {
+            "description": "Project restricts retrieval to files indexed under one project scope.",
+            "type": "string"
+          },
+          "query": {
+            "description": "Query is the question to answer. Required.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "knowledge.retrieveOut": {
+        "properties": {
+          "degraded": {
+            "description": "Degraded is true when a search leg failed along the way.",
+            "type": "boolean"
+          },
+          "passages": {
+            "description": "Passages are the passages drilled out of those sections, then those the\ngraph reached, each citing file › section › paragraph.",
+            "items": {
+              "$ref": "#/components/schemas/knowledge.citedPassage"
+            },
+            "type": "array"
+          },
+          "picked": {
+            "description": "Picked says how the sections were chosen: whole when the documents were\nshort enough to read every section, model when a model read the tables of\ncontents, search when the sections of the best passages stood in — the\ndocuments had no headings to choose by, or no model answered.",
+            "type": "string"
+          },
+          "sections": {
+            "description": "Sections are the sections chosen from the candidate documents' tables of\ncontents.",
+            "items": {
+              "$ref": "#/components/schemas/knowledge.pickedSection"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "knowledge.searchIn": {
+        "properties": {
+          "doctypes": {
+            "description": "DocTypes restricts retrieval to a subset of the indexed knowledge doctypes\n(kb.page, kb.memory, kb.source). An empty or foreign list reads all of them.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "limit": {
+            "description": "Limit bounds the hits returned. Default 10, maximum 50.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "project": {
+            "description": "Project narrows retrieval to one project scope.",
+            "type": "string"
+          },
+          "query": {
+            "description": "Query is the natural-language question. Required.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "knowledge.searchOut": {
+        "properties": {
+          "degraded": {
+            "description": "Degraded is true when a leg FAILED — the query could not be embedded, or a\nstore could not be read — and Hits are what the other leg found, possibly\nnothing. A RAG caller continues with what it got instead of failing the turn.\nAbsent on a normal answer, including one from a deployment that runs only\none of the legs.",
+            "type": "boolean"
+          },
+          "hits": {
+            "description": "Hits are the matching documents, most relevant first: the order is the two\nlegs fused, so a document both the semantic and the keyword leg found comes\nbefore one only a single leg found.",
+            "items": {
+              "$ref": "#/components/schemas/knowledge.hit"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "knowledge.sectionBrief": {
+        "properties": {
+          "id": {
+            "description": "ID is the section's number in its file's table of contents; 0 is the\ndocument itself.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "path": {
+            "description": "Path is the section's place in its document: the titles from the\ndocument's own down to it, joined by \" › \".",
+            "type": "string"
+          },
+          "title": {
+            "description": "Title is the section's heading.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "knowledge.sectionLink": {
+        "properties": {
+          "file": {
+            "$ref": "#/components/schemas/knowledge.fileBrief",
+            "description": "File is the file the linked section is in."
+          },
+          "kind": {
+            "description": "Kind is href, xref, cites, or entity (the two sections name the same\nentities).",
+            "type": "string"
+          },
+          "label": {
+            "description": "Label is the link's text, or the entities the two share.",
+            "type": "string"
+          },
+          "section": {
+            "$ref": "#/components/schemas/knowledge.sectionBrief",
+            "description": "Section is the linked section."
+          }
+        },
+        "type": "object"
+      },
+      "knowledge.sectionOut": {
+        "properties": {
+          "children": {
+            "description": "Children are its subsections, to open next.",
+            "items": {
+              "$ref": "#/components/schemas/knowledge.tocEntry"
+            },
+            "type": "array"
+          },
+          "entities": {
+            "description": "Entities are the entities it names.",
+            "items": {
+              "$ref": "#/components/schemas/knowledge.fileEntity"
+            },
+            "type": "array"
+          },
+          "file": {
+            "$ref": "#/components/schemas/knowledge.fileBrief",
+            "description": "File is the file it is in."
+          },
+          "links": {
+            "description": "Links are the sections the graph reaches from it, strongest first.",
+            "items": {
+              "$ref": "#/components/schemas/knowledge.sectionLink"
+            },
+            "type": "array"
+          },
+          "section": {
+            "$ref": "#/components/schemas/knowledge.sectionBrief",
+            "description": "Section is where it is."
+          },
+          "summary": {
+            "description": "Summary is its one-line account.",
+            "type": "string"
+          },
+          "text": {
+            "description": "Text is its own text — up to its first subsection — at most 64 KB.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "knowledge.tocEntry": {
+        "properties": {
+          "id": {
+            "description": "ID is the section's number; 0 is the document itself.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "level": {
+            "description": "Level is its depth: 0 for the document, 1 for a top-level heading.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "parent": {
+            "description": "Parent is the id of the section it sits in; -1 for the document.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "size": {
+            "description": "Size is how many bytes of the document it spans, subsections included.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "summary": {
+            "description": "Summary is a one-line account of what it covers.",
+            "type": "string"
+          },
+          "synthetic": {
+            "description": "Synthetic is true for a section the index cut out of a long run of text\nthe document gave no structure to.",
+            "type": "boolean"
+          },
+          "title": {
+            "description": "Title is its heading.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "knowledge.tocOut": {
+        "properties": {
+          "file": {
+            "$ref": "#/components/schemas/knowledge.File",
+            "description": "File is the file it is of."
+          },
+          "sections": {
+            "description": "Sections are its nodes in document order, the document first; Parent\nmakes them a tree.",
+            "items": {
+              "$ref": "#/components/schemas/knowledge.tocEntry"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "problem-details": {
+        "description": "An RFC 9457 problem document.",
+        "properties": {
+          "code": {
+            "description": "A stable token a client can branch on, when the refusal names one.",
+            "type": "string"
+          },
+          "detail": {
+            "description": "What was refused, for a person to read.",
+            "type": "string"
+          },
+          "status": {
+            "description": "The HTTP status.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "title": {
+            "description": "The status's reason phrase.",
+            "type": "string"
+          },
+          "type": {
+            "description": "about:blank",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "status",
+          "detail"
+        ],
+        "type": "object"
+      }
+    },
+    "securitySchemes": {
+      "bearer": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "The caller's credential, sent as `Authorization: Bearer \u003ctoken\u003e`. It is either an access token minted by Hanzo IAM or an API key (pk-/sk-). X-Authorization, and HTTP Basic carrying the token as the password, are accepted spellings of the same header for clients that cannot set Authorization; a browser presents the session cookie instead. Every operation requires it unless it says `security: []`."
+      }
+    }
+  }
+}

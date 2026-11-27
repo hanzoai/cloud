@@ -1,0 +1,266 @@
+package treasury
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"io"
+	"net/http"
+	"net/http/httptest"
+	"testing"
+	"time"
+
+	"github.com/hanzoai/cloud/apps/treasury/ledger"
+	"github.com/hanzoai/cloud/apps/treasury/ledger/sqlstore"
+	"github.com/hanzoai/cloud/sdk"
+	"github.com/hanzoai/namespace"
+	luxlog "github.com/luxfi/log"
+	"github.com/zap-proto/zip"
+
+	// devmaster keys this test binary: cek opens nothing without a master and a
+	// test process has no KMS.
+	_ "github.com/hanzoai/cloud/sdk/kit/master"
+)
+
+// testMaster is the data-plane master a test deployment is given (cloud.Deps.MasterKey).
+var testMaster = bytes.Repeat([]byte{0x5a}, 32)
+
+// mount builds a treasury app on a fresh store and installs it as the process
+// singleton (so the Reserve helper resolves it), cleaning both up.
+func mount(t *testing.T) (*zip.App, *cloud.Service[state]) {
+	t.Helper()
+	store, err := sqlstore.Open(namespace.System(), "treasury", t.TempDir(), "", testMaster)
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	t.Cleanup(func() { _ = store.Close() })
+	log := luxlog.New("test")
+	s := &cloud.Service[state]{
+		Base: cloud.NewBase(cloud.Deps{}, "treasury"),
+		State: state{
+			store:  store,
+			record: ledger.New(store),
+			anchor: newAnchorer(cloud.Deps{}, log, store),
+		},
+	}
+	mounted = s
+	t.Cleanup(func() { mounted = nil })
+	app := zip.New(zip.Config{Logger: log})
+	// cloud.Bridge at the root, standing in for the composer that owns it in
+	// production: a typed op receives only a context, so the request its handlers
+	// read the SuperAdmin bit and the org off crosses on that. Registered before
+	// the leaves — fiber runs middleware in registration order.
+	app.Use(cloud.Bridge())
+	o := ops{s: s}
+	app.Get("/v1/treasury", o.myTreasury)
+	app.Get("/v1/treasury/accounts", o.myAccounts)
+	app.Get("/v1/admin/treasury", o.adminReport)
+	app.Post("/v1/admin/treasury/policy", o.adminSetPolicy)
+	app.Post("/v1/admin/treasury/sweep", o.adminSweep)
+	app.Post("/v1/admin/treasury/seed", o.adminSeed)
+	app.Post("/v1/admin/treasury/anchor", o.adminAnchor)
+	return app, s
+}
+
+// req drives one HTTP request. org sets a VALIDATED principal; admin adds the
+// SuperAdmin header.
+func req(t *testing.T, app *zip.App, method, path, org string, admin bool, body any) (int, []byte) {
+	t.Helper()
+	var r io.Reader
+	if body != nil {
+		b, _ := json.Marshal(body)
+		r = bytes.NewReader(b)
+	}
+	hr := httptest.NewRequest(method, path, r)
+	if body != nil {
+		hr.Header.Set("Content-Type", "application/json")
+	}
+	if org != "" {
+		hr.Header.Set("X-Org-Id", org)
+		hr.Header.Set("X-User-Id", "u_"+org)
+	}
+	if admin {
+		hr.Header.Set("X-User-IsAdmin", "true")
+	}
+	resp, err := app.Test(hr, zip.TestConfig{Timeout: 30 * time.Second, FailOnTimeout: true})
+	if err != nil {
+		t.Fatalf("Test %s %s: %v", method, path, err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	b, _ := io.ReadAll(resp.Body)
+	return resp.StatusCode, b
+}
+
+// unwrap returns the `data` object of the { status, msg, data } admin envelope.
+func unwrap(t *testing.T, body []byte) map[string]any {
+	t.Helper()
+	var env struct {
+		Status string         `json:"status"`
+		Data   map[string]any `json:"data"`
+	}
+	if err := json.Unmarshal(body, &env); err != nil {
+		t.Fatalf("decode envelope: %v (%s)", err, body)
+	}
+	if env.Status != "ok" {
+		t.Fatalf("envelope status = %q", env.Status)
+	}
+	return env.Data
+}
+
+// ── auth gates ───────────────────────────────────────────────────────────────
+
+func TestTreasury_RequiresAuth(t *testing.T) {
+	app, _ := mount(t)
+	if code, _ := req(t, app, http.MethodGet, "/v1/treasury", "", false, nil); code != http.StatusUnauthorized {
+		t.Fatalf("GET /v1/treasury unauth = %d, want 401", code)
+	}
+	if code, _ := req(t, app, http.MethodGet, "/v1/treasury", "acme", false, nil); code != http.StatusOK {
+		t.Fatalf("GET /v1/treasury as org = %d, want 200", code)
+	}
+}
+
+func TestAdmin_RequiresAdmin(t *testing.T) {
+	app, _ := mount(t)
+	for _, p := range []struct {
+		method, path string
+	}{
+		{http.MethodGet, "/v1/admin/treasury"},
+		{http.MethodPost, "/v1/admin/treasury/policy"},
+		{http.MethodPost, "/v1/admin/treasury/sweep"},
+		{http.MethodPost, "/v1/admin/treasury/seed"},
+		{http.MethodPost, "/v1/admin/treasury/anchor"},
+	} {
+		// A non-admin org caller must be refused.
+		if code, _ := req(t, app, p.method, p.path, "acme", false, map[string]any{}); code != http.StatusForbidden {
+			t.Fatalf("%s %s as non-admin = %d, want 403", p.method, p.path, code)
+		}
+	}
+}
+
+// ── policy + sweep + seed + report ───────────────────────────────────────────
+
+func TestPolicy_SetAndRead(t *testing.T) {
+	app, _ := mount(t)
+	code, body := req(t, app, http.MethodPost, "/v1/admin/treasury/policy", "root", true, policyRequest{RevenueShareBps: 500})
+	if code != http.StatusOK {
+		t.Fatalf("set policy = %d (%s)", code, body)
+	}
+	// customer read reflects the policy
+	_, cb := req(t, app, http.MethodGet, "/v1/treasury", "acme", true, nil)
+	var rep ledger.TreasuryReport
+	if err := json.Unmarshal(cb, &rep); err != nil {
+		t.Fatalf("decode report: %v", err)
+	}
+	if rep.Policy.RevenueShareBps != 500 {
+		t.Fatalf("policy bps = %d, want 500", rep.Policy.RevenueShareBps)
+	}
+}
+
+func TestSeed_FundsReserve(t *testing.T) {
+	app, s := mount(t)
+	code, body := req(t, app, http.MethodPost, "/v1/admin/treasury/seed", "root", true, seedRequest{AmountCents: 10_000, Memo: "bootstrap"})
+	if code != http.StatusOK {
+		t.Fatalf("seed = %d (%s)", code, body)
+	}
+	if bal, _ := s.State.record.ReserveCents(context.Background()); bal != 10_000 {
+		t.Fatalf("reserve = %d, want 10000", bal)
+	}
+}
+
+func TestSweep_AccruesRevenueShare_Idempotent(t *testing.T) {
+	app, s := mount(t)
+	// 10% policy.
+	req(t, app, http.MethodPost, "/v1/admin/treasury/policy", "root", true, policyRequest{RevenueShareBps: 1000})
+	// Sweep $2000 revenue for 2026-07 → $200 accrual.
+	_, body := req(t, app, http.MethodPost, "/v1/admin/treasury/sweep", "root", true, sweepRequest{Period: "2026-07", RevenueCents: 200_000})
+	d := unwrap(t, body)
+	if d["accruedCents"].(float64) != 20_000 {
+		t.Fatalf("accrued = %v, want 20000", d["accruedCents"])
+	}
+	// Re-sweep the SAME period → no double accrual.
+	_, body2 := req(t, app, http.MethodPost, "/v1/admin/treasury/sweep", "root", true, sweepRequest{Period: "2026-07", RevenueCents: 200_000})
+	d2 := unwrap(t, body2)
+	if d2["created"].(bool) {
+		t.Fatal("re-sweep same period must be idempotent (created=false)")
+	}
+	if bal, _ := s.State.record.ReserveCents(context.Background()); bal != 20_000 {
+		t.Fatalf("reserve double-accrued: %d, want 20000", bal)
+	}
+}
+
+func TestAdminReport_Shape(t *testing.T) {
+	app, _ := mount(t)
+	req(t, app, http.MethodPost, "/v1/admin/treasury/seed", "root", true, seedRequest{AmountCents: 5_000})
+	_, body := req(t, app, http.MethodGet, "/v1/admin/treasury", "root", true, nil)
+	d := unwrap(t, body)
+	if _, ok := d["report"]; !ok {
+		t.Fatal("report missing")
+	}
+	if _, ok := d["journal"]; !ok {
+		t.Fatal("journal missing")
+	}
+	anchor, ok := d["anchor"].(map[string]any)
+	if !ok {
+		t.Fatal("anchor status missing")
+	}
+	if anchor["status"] != "pending" {
+		t.Fatalf("anchor status = %v, want pending (unconfigured)", anchor["status"])
+	}
+	if anchor["chainId"].(float64) != float64(defaultHanzoChainID) {
+		t.Fatalf("anchor chainId = %v, want %d", anchor["chainId"], defaultHanzoChainID)
+	}
+	// The root is a real 32-byte commitment (0x + 64 hex).
+	if root, _ := anchor["currentRoot"].(string); len(root) != 66 {
+		t.Fatalf("currentRoot = %q, want 0x+64hex", root)
+	}
+}
+
+// ── scope-aware accounts (tenant isolation) ──────────────────────────────────
+
+func TestAccounts_ScopeIsolation(t *testing.T) {
+	app, _ := mount(t)
+	req(t, app, http.MethodPost, "/v1/admin/treasury/seed", "root", true, seedRequest{AmountCents: 5_000})
+
+	// A per-org caller sees ONLY its own tenant prefix (empty here — honest) and
+	// NEVER the house fund:reserve account.
+	_, body := req(t, app, http.MethodGet, "/v1/treasury/accounts", "acme", false, nil)
+	var org struct {
+		Scope    string        `json:"scope"`
+		Tenant   string        `json:"tenant"`
+		Accounts []accountView `json:"accounts"`
+	}
+	if err := json.Unmarshal(body, &org); err != nil {
+		t.Fatalf("decode: %v (%s)", err, body)
+	}
+	if org.Scope != "org" || org.Tenant != "acme" {
+		t.Fatalf("scope/tenant = %q/%q, want org/acme", org.Scope, org.Tenant)
+	}
+	for _, a := range org.Accounts {
+		if a.Address == "fund:reserve" {
+			t.Fatal("per-org caller leaked the house reserve account")
+		}
+	}
+	// Unauth → 403.
+	if code, _ := req(t, app, http.MethodGet, "/v1/treasury/accounts", "", false, nil); code != http.StatusUnauthorized {
+		t.Fatalf("unauth accounts = %d, want 401", code)
+	}
+	// SuperAdmin ?scope=house sees the seeded reserve.
+	_, hb := req(t, app, http.MethodGet, "/v1/treasury/accounts?scope=house", "root", true, nil)
+	var house struct {
+		Scope    string        `json:"scope"`
+		Accounts []accountView `json:"accounts"`
+	}
+	_ = json.Unmarshal(hb, &house)
+	if house.Scope != "house" {
+		t.Fatalf("admin house scope = %q", house.Scope)
+	}
+	var reserve int64
+	for _, a := range house.Accounts {
+		if a.Address == "fund:reserve" {
+			reserve = a.BalanceCents
+		}
+	}
+	if reserve != 5_000 {
+		t.Fatalf("house fund:reserve = %d, want 5000", reserve)
+	}
+}

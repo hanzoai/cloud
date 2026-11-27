@@ -2,9 +2,11 @@
 // its compute found alive, started, or moved — APART FROM how long its model took
 // to answer.
 //
-// Readiness and first-token latency are two facts that never share a row: a total
-// that sums them reads as "the model is slow" when the time went to making compute
-// ready. So they are recorded separately:
+// The two were one number. A turn that waited forty seconds for a parked
+// sandbox to come back and two seconds for its first token read, everywhere a
+// person could look, as a forty-two second turn — and the obvious reading of that
+// is "the model is slow", which sends whoever is on call to the wrong system. The
+// fix is not a better total but two facts that never share a row:
 //
 //   - activation: one span per session made ready, named Span, its duration the
 //     latency, labelled with HOW it was made ready (Kind). It carries no gen_ai

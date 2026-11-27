@@ -1,0 +1,329 @@
+package agents
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"net/http"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/hanzoai/cloud/internal/sqltest"
+	"github.com/hanzoai/cloud/sdk/infer"
+)
+
+func testStore(t *testing.T) *Store {
+	t.Helper()
+	return openStoreOn(t)
+}
+
+func mk(org, name string) Agent {
+	now := time.Now().Unix()
+	return Agent{
+		ID: org + "-" + name + "-id", Org: org, Name: name, Model: "gpt-4o-mini",
+		Instructions: "You are " + name, Description: "d", Tools: []string{"http"},
+		Status: "ready", CreatedAt: now, UpdatedAt: now,
+	}
+}
+
+// fakeAI is a deterministic AIClient for exercising executeRun without a real
+// gateway — proves the compose + record contract, not the model.
+type fakeAI struct {
+	gotModel string
+	// gotPrompt is what the model was actually shown, whether the caller sent a
+	// conversation or the one string this used to be — ChatRequest.Text is the
+	// accessor that answers for both, so "no inference ran" is still the empty
+	// string and does not quietly become true when the shape changes.
+	gotPrompt string
+	gotMsgs   []infer.ChatMessage
+	// gotActor is WHO the completion was made for. A run states it on the
+	// request because there is no live request the meter could read one off, so
+	// this is the only place a test can see whether the person survived.
+	gotActor string
+	content  string
+	err      error
+}
+
+func (f *fakeAI) ChatCompletion(_ context.Context, req *infer.ChatRequest) (*infer.ChatResponse, error) {
+	f.gotModel = req.Model
+	f.gotPrompt = req.Text()
+	f.gotMsgs = req.Messages
+	f.gotActor = req.Actor
+	if f.err != nil {
+		return nil, f.err
+	}
+	return &infer.ChatResponse{Content: f.content}, nil
+}
+
+func (f *fakeAI) Embed(_ context.Context, _ *infer.EmbedRequest) ([][]float32, error) {
+	return nil, nil
+}
+
+func (f *fakeAI) Rerank(context.Context, *infer.RerankRequest) ([]float64, error) { return nil, nil }
+
+func TestCreateGetListDelete(t *testing.T) {
+	sqltest.Engines(t, func(t *testing.T, _ sqltest.Open) {
+		s := testStore(t)
+		ctx := context.Background()
+		if err := s.Create(ctx, mk("maxpower", "helper")); err != nil {
+			t.Fatalf("create: %v", err)
+		}
+		if err := s.Create(ctx, mk("maxpower", "helper")); err != errConflict {
+			t.Fatalf("duplicate create should conflict, got %v", err)
+		}
+		a, err := s.Get(ctx, "maxpower", "helper")
+		if err != nil || a.Model != "gpt-4o-mini" {
+			t.Fatalf("get: %v model=%q", err, a.Model)
+		}
+		list, _ := s.List(ctx, "maxpower")
+		if len(list) != 1 {
+			t.Fatalf("want 1 agent, got %d", len(list))
+		}
+		deleted, err := s.Delete(ctx, "maxpower", "helper")
+		if err != nil || !deleted {
+			t.Fatalf("delete: %v deleted=%v", err, deleted)
+		}
+		if _, err := s.Get(ctx, "maxpower", "helper"); err != errNotFound {
+			t.Fatalf("want notfound after delete, got %v", err)
+		}
+
+	})
+}
+
+// TestResolveByIdOrName proves the id/name split that made a created agent
+// un-gettable is closed: Store.Resolve returns the SAME agent whether addressed
+// by its public id (the handle create/list return) or its org-unique name, and
+// stays fail-closed for another tenant's ref and unknown refs.
+func TestResolveByIdOrName(t *testing.T) {
+	sqltest.Engines(t, func(t *testing.T, _ sqltest.Open) {
+		s := testStore(t)
+		ctx := context.Background()
+		a := mk("maxpower", "helper") // ID = "maxpower-helper-id", Name = "helper"
+		if err := s.Create(ctx, a); err != nil {
+			t.Fatalf("create: %v", err)
+		}
+
+		byID, err := s.Resolve(ctx, "maxpower", a.ID)
+		if err != nil || byID.Name != "helper" || byID.ID != a.ID {
+			t.Fatalf("resolve by id must return the agent, got %+v err=%v", byID, err)
+		}
+		byName, err := s.Resolve(ctx, "maxpower", "helper")
+		if err != nil || byName.ID != a.ID {
+			t.Fatalf("resolve by name must return the SAME agent, got %+v err=%v", byName, err)
+		}
+		if byID.ID != byName.ID {
+			t.Fatalf("id and name must resolve to the same row: %q vs %q", byID.ID, byName.ID)
+		}
+
+		// Cross-org: maxpower's id/name must be invisible to acme (fail-closed).
+		if _, err := s.Resolve(ctx, "acme", a.ID); err != errNotFound {
+			t.Fatalf("cross-org resolve by id must be errNotFound, got %v", err)
+		}
+		if _, err := s.Resolve(ctx, "acme", "helper"); err != errNotFound {
+			t.Fatalf("cross-org resolve by name must be errNotFound, got %v", err)
+		}
+		// Unknown ref.
+		if _, err := s.Resolve(ctx, "maxpower", "agent_deadbeef"); err != errNotFound {
+			t.Fatalf("unknown ref must be errNotFound, got %v", err)
+		}
+
+	})
+}
+
+// TestTenantIsolation: one org cannot read, run-log, or delete another's agents.
+func TestTenantIsolation(t *testing.T) {
+	sqltest.Engines(t, func(t *testing.T, _ sqltest.Open) {
+		s := testStore(t)
+		ctx := context.Background()
+		if err := s.Create(ctx, mk("maxpower", "shared")); err != nil {
+			t.Fatalf("seed maxpower: %v", err)
+		}
+		if err := s.Create(ctx, mk("acme", "shared")); err != nil {
+			t.Fatalf("seed acme: %v", err)
+		}
+		// Record a run for maxpower's agent only.
+		if err := s.InsertRun(ctx, Run{ID: "r1", Org: "maxpower", AgentName: "shared", Status: "ok", CreatedAt: time.Now().Unix()}); err != nil {
+			t.Fatalf("insert run: %v", err)
+		}
+
+		mpRuns, _ := s.ListRuns(ctx, "maxpower", "shared", nobodys, 50)
+		if len(mpRuns) != 1 {
+			t.Fatalf("maxpower should have 1 run, got %d", len(mpRuns))
+		}
+		acRuns, _ := s.ListRuns(ctx, "acme", "shared", nobodys, 50)
+		if len(acRuns) != 0 {
+			t.Fatalf("acme must NOT see maxpower's runs, got %d", len(acRuns))
+		}
+		if n, _ := s.CountRuns(ctx, "acme", "shared", nobodys); n != 0 {
+			t.Fatalf("acme run count must be 0, got %d", n)
+		}
+
+		// acme deleting "shared" must not remove maxpower's agent or its run log.
+		if _, err := s.Delete(ctx, "acme", "shared"); err != nil {
+			t.Fatalf("acme delete own: %v", err)
+		}
+		if _, err := s.Get(ctx, "maxpower", "shared"); err != nil {
+			t.Fatalf("maxpower agent must survive acme delete: %v", err)
+		}
+		if n, _ := s.CountRuns(ctx, "maxpower", "shared", nobodys); n != 1 {
+			t.Fatalf("maxpower run log must survive acme delete, got %d", n)
+		}
+
+	})
+}
+
+func TestExecuteRunOK(t *testing.T) {
+	ai := &fakeAI{content: "hi there"}
+	a := mk("maxpower", "greeter")
+	a.Instructions = "You are a greeter."
+	r := executeRun(context.Background(), ai, "maxpower", "maxpower/u1", a, "say hi", nil, "", "run_test")
+
+	if r.Status != "ok" {
+		t.Fatalf("want ok, got %q err=%q", r.Status, r.Error)
+	}
+	if r.Output != "hi there" {
+		t.Fatalf("output should be the model content, got %q", r.Output)
+	}
+	if ai.gotModel != "gpt-4o-mini" {
+		t.Fatalf("run must use the agent's model, got %q", ai.gotModel)
+	}
+	if len(ai.gotMsgs) != 2 ||
+		ai.gotMsgs[0].Role != infer.RoleSystem || ai.gotMsgs[0].Content != "You are a greeter." ||
+		ai.gotMsgs[1].Role != infer.RoleUser || ai.gotMsgs[1].Content != "say hi" {
+		t.Fatalf("the model must be shown what it is (system) and what it was asked (user), got %+v", ai.gotMsgs)
+	}
+	if r.Org != "maxpower" || r.AgentName != "greeter" {
+		t.Fatalf("run must be scoped to the org+agent, got %+v", r)
+	}
+}
+
+func TestExecuteRunRecordsError(t *testing.T) {
+	ai := &fakeAI{err: errors.New("model unavailable")}
+	r := executeRun(context.Background(), ai, "maxpower", "maxpower/u1", mk("maxpower", "x"), "in", nil, "", "run_test")
+	if r.Status != "error" {
+		t.Fatalf("want error status, got %q", r.Status)
+	}
+	if r.Error != "model unavailable" {
+		t.Fatalf("error must be recorded honestly, got %q", r.Error)
+	}
+	if r.Output != "" {
+		t.Fatalf("failed run must not fabricate output, got %q", r.Output)
+	}
+}
+
+// TestAvatarProvenance is a portrait drafted from Wikimedia Commons: the agent
+// keeps the file page and the licence beside the image, every read returns them,
+// and they never outlive the image they describe.
+func TestAvatarProvenance(t *testing.T) {
+	sqltest.Engines(t, func(t *testing.T, _ sqltest.Open) {
+		app := mountApp(t, &fakeAI{content: "x"})
+		const (
+			img     = "https://upload.wikimedia.org/wikipedia/commons/a/a1/Ada_Lovelace.jpg"
+			page    = "https://commons.wikimedia.org/wiki/File:Ada_Lovelace.jpg"
+			licence = "Public domain"
+		)
+		budget := map[string]any{"cap_micro_usd": 1000000, "max_task_micro_usd": 100000, "period": "month"}
+		create := func(fields map[string]any) (int, []byte) {
+			body := map[string]any{}
+			for k, v := range budget {
+				body[k] = v
+			}
+			for k, v := range fields {
+				body[k] = v
+			}
+			return do(t, app, http.MethodPost, "/v1/agent", "acme", body)
+		}
+		get := func(ref string) agentDetail {
+			t.Helper()
+			code, body := do(t, app, http.MethodGet, "/v1/agent/"+ref, "acme", nil)
+			if code != http.StatusOK {
+				t.Fatalf("get %s: %d %s", ref, code, body)
+			}
+			var d agentDetail
+			if err := json.Unmarshal(body, &d); err != nil {
+				t.Fatal(err)
+			}
+			return d
+		}
+
+		code, body := create(map[string]any{"name": "ada", "avatar": img, "avatar_source": page, "avatar_licence": licence})
+		if code != http.StatusCreated {
+			t.Fatalf("create: %d %s", code, body)
+		}
+		for _, field := range []string{`"avatar_source":"` + page + `"`, `"avatar_licence":"` + licence + `"`} {
+			if !strings.Contains(string(body), field) {
+				t.Fatalf("create answered without %s: %s", field, body)
+			}
+		}
+		if d := get("ada"); d.Avatar != img || d.AvatarSource != page || d.AvatarLicence != licence {
+			t.Fatalf("get lost the provenance: %+v", d.agentView)
+		}
+		code, body = do(t, app, http.MethodGet, "/v1/agent", "acme", nil)
+		if code != http.StatusOK || !strings.Contains(string(body), `"avatar_licence":"`+licence+`"`) {
+			t.Fatalf("list lost the provenance: %d %s", code, body)
+		}
+
+		// A change that leaves the image alone leaves its provenance alone.
+		if code, body := do(t, app, http.MethodPatch, "/v1/agent/ada", "acme", map[string]any{"description": "the first programmer"}); code != http.StatusOK {
+			t.Fatalf("patch description: %d %s", code, body)
+		}
+		if d := get("ada"); d.AvatarSource != page || d.AvatarLicence != licence {
+			t.Fatalf("an unrelated patch touched the provenance: %+v", d.agentView)
+		}
+
+		// A new image sent alone carries none of the old one's.
+		if code, body := do(t, app, http.MethodPatch, "/v1/agent/ada", "acme", map[string]any{"avatar": img + "?v=2"}); code != http.StatusOK {
+			t.Fatalf("patch avatar: %d %s", code, body)
+		}
+		if d := get("ada"); d.Avatar != img+"?v=2" || d.AvatarSource != "" || d.AvatarLicence != "" {
+			t.Fatalf("a replaced image kept the old provenance: %+v", d.agentView)
+		}
+
+		// Sending either half replaces the pair against the stored image.
+		if code, body := do(t, app, http.MethodPatch, "/v1/agent/ada", "acme", map[string]any{"avatar_source": page, "avatar_licence": "CC0"}); code != http.StatusOK {
+			t.Fatalf("patch provenance: %d %s", code, body)
+		}
+		if code, body := do(t, app, http.MethodPatch, "/v1/agent/ada", "acme", map[string]any{"avatar_licence": licence}); code != http.StatusOK {
+			t.Fatalf("patch licence: %d %s", code, body)
+		}
+		if d := get("ada"); d.AvatarSource != "" || d.AvatarLicence != licence {
+			t.Fatalf("a licence sent alone did not replace the pair: %+v", d.agentView)
+		}
+
+		// Without an image there is nothing to describe: the pair is not stored.
+		code, body = create(map[string]any{"name": "glyph", "emoji": "\U0001F916", "avatar_source": page, "avatar_licence": licence})
+		if code != http.StatusCreated {
+			t.Fatalf("create glyph: %d %s", code, body)
+		}
+		if d := get("glyph"); d.AvatarSource != "" || d.AvatarLicence != "" {
+			t.Fatalf("provenance stored without an image: %+v", d.agentView)
+		}
+		if code, body := do(t, app, http.MethodPatch, "/v1/agent/ada", "acme", map[string]any{"avatar": "", "avatar_source": page}); code != http.StatusOK {
+			t.Fatalf("patch clear: %d %s", code, body)
+		}
+		if d := get("ada"); d.Avatar != "" || d.AvatarSource != "" || d.AvatarLicence != "" {
+			t.Fatalf("clearing the image kept its provenance: %+v", d.agentView)
+		}
+
+		// A source must be an https link, bounded; a licence one bounded line.
+		for _, bad := range []map[string]any{
+			{"avatar_source": "http://commons.wikimedia.org/wiki/File:Ada_Lovelace.jpg"},
+			{"avatar_source": "javascript:alert(1)"},
+			{"avatar_source": "https://"},
+			{"avatar_source": "https://commons.wikimedia.org/" + strings.Repeat("a", maxAvatarSource)},
+			{"avatar_licence": strings.Repeat("a", maxAvatarLicence+1)},
+			{"avatar_licence": "Public\ndomain"},
+		} {
+			bad["name"], bad["avatar"] = "bad", img
+			if code, body := create(bad); code != http.StatusBadRequest {
+				t.Fatalf("create %v: want 400, got %d %s", bad, code, body)
+			}
+			delete(bad, "name")
+			if code, body := do(t, app, http.MethodPatch, "/v1/agent/glyph", "acme", bad); code != http.StatusBadRequest {
+				t.Fatalf("patch %v: want 400, got %d %s", bad, code, body)
+			}
+		}
+
+	})
+}

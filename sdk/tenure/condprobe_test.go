@@ -124,15 +124,18 @@ func (s *etagCondStore) PutIfVersion(_ context.Context, key string, data []byte,
 
 var _ replica.ConditionalStore = (*etagCondStore)(nil)
 
-// Over a store that is atomic BY CONSTRUCTION but versions by content, the probe
-// must still find exactly one winner per race — which requires that no two
-// writes it performs ever carry the same bytes.
+// TestProbeCASContentAddressedStoreConfirmed is the regression. Over a store that
+// is atomic BY CONSTRUCTION but versions by content, the probe must still find
+// exactly one winner per race — which requires that no two writes it performs
+// ever carry the same bytes.
 //
-// The create race left the object at one of them; the update race conditioned on
-// that ETag and wrote the same four again, so a 1-in-4 draw rewrote identical
-// bytes, left the ETag unmoved, and let every remaining racer's If-Match still
-// hold. All of them committed and the probe called the store non-atomic. With
-// the payload bound to the probe key and the raced version: 0/400.
+// The payloads used to be four fixed values (`cas-probe0`..`cas-probe3`) reused
+// by BOTH phases. The create race left the object at one of them; the update race
+// conditioned on that ETag and wrote the same four again, so a 1-in-4 draw
+// rewrote identical bytes, left the ETag unmoved, and let every remaining racer's
+// If-Match still hold. All of them committed and the probe called the store
+// non-atomic. Measured against production s3: 56/300 runs. With the payload bound
+// to the probe key and the raced version: 0/400.
 func TestProbeCASContentAddressedStoreConfirmed(t *testing.T) {
 	for i := range 200 {
 		if err := ProbeCAS(context.Background(), newETagCondStore(), ".probe/cas-"); err != nil {

@@ -52,6 +52,8 @@ func TestBillingOrg(t *testing.T) {
 		wantOK  bool
 	}{
 		{
+			// The overwhelmingly common case, and the regression guard: a caller
+			// who has not switched must bill exactly what it billed before.
 			name: "member who did not switch pays home (unchanged behavior)",
 			headers: map[string]string{
 				"X-User-Id":    "u-1",

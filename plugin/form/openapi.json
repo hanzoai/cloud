@@ -1,0 +1,3013 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Hanzo Cloud API",
+    "description": "Package form mounts forms (github.com/hanzoai/form) at /v1/form, the way apps/iam mounts hanzoai/iam: the module owns every route and every rule of a form, and this package hands it what only cloud knows.",
+    "version": "v1"
+  },
+  "servers": [
+    {
+      "url": "https://api.hanzo.ai"
+    }
+  ],
+  "security": [
+    {
+      "bearer": []
+    }
+  ],
+  "tags": [
+    {
+      "name": "admin"
+    },
+    {
+      "name": "form"
+    }
+  ],
+  "paths": {
+    "/v1/admin/form/settings": {
+      "get": {
+        "operationId": "get_form_settings",
+        "summary": "Reads the platform's settings of forms: every field type with whether forms may ask it and its bound, the limits every form and submission is held to (fields, hidden values, body bytes, submissions per address per window, webhooks), the sinks a new form takes when it names none, and the days a response is kept.",
+        "description": "Reads the platform's settings of forms: every field type with whether forms may\nask it and its bound, the limits every form and submission is held to (fields,\nhidden values, body bytes, submissions per address per window, webhooks), the\nsinks a new form takes when it names none, and the days a response is kept.\n`saved` is false when nothing is stored and the defaults are in force.\n\nSuperAdmin only. 503 when the settings store does not answer.",
+        "tags": [
+          "admin"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/form.FormSettings"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-tool": true
+      },
+      "put": {
+        "operationId": "set_form_settings",
+        "summary": "Replaces the platform's settings of forms whole and answers them as stored.",
+        "description": "Replaces the platform's settings of forms whole and answers them as stored.\nEvery field type is listed once, enabled or not, each bound inside what the\nstore holds; every limit is inside its range; the default sinks name no field.\nA type turned off stays answerable on the forms that already ask it, and is\nrefused on a form that adds it. The forms service reads the change within 30\nseconds.\n\nSuperAdmin only. 400 names every problem at once; 503 when the settings store\ndoes not take the change.\n\nA limit the document leaves out, forward and welcome among them, is the\ndefault.",
+        "tags": [
+          "admin"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "limits": {
+                  "body": 65536,
+                  "fields": 100,
+                  "forward": 60,
+                  "hidden": 10,
+                  "rate": 30,
+                  "webhooks": 10,
+                  "welcome": 60,
+                  "window": 3600
+                },
+                "retention": 0,
+                "sinks": {
+                  "crm": {},
+                  "events": true
+                },
+                "types": [
+                  {
+                    "enabled": true,
+                    "max": 255,
+                    "type": "short_text"
+                  }
+                ]
+              },
+              "schema": {
+                "$ref": "#/components/schemas/form.Settings"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/form.FormSettings"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-tool": true
+      }
+    },
+    "/v1/form/forms": {
+      "get": {
+        "operationId": "list_forms",
+        "summary": "Lists the caller org's forms, newest first, a page at a time; search keeps the forms whose title holds it and tag the ones carrying it.",
+        "description": "Lists the caller org's forms, newest first, a page at a time; search keeps\nthe forms whose title holds it and tag the ones carrying it. An org admin only.",
+        "tags": [
+          "form"
+        ],
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "description": "Page is the page, from 1. Default 1.",
+            "schema": {
+              "format": "int64",
+              "type": "integer"
+            }
+          },
+          {
+            "name": "page_size",
+            "in": "query",
+            "required": false,
+            "description": "PageSize is how many a page holds: at most 200, default 50.",
+            "schema": {
+              "format": "int64",
+              "type": "integer"
+            }
+          },
+          {
+            "name": "search",
+            "in": "query",
+            "required": false,
+            "description": "Search keeps the forms whose title holds it.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "tag",
+            "in": "query",
+            "required": false,
+            "description": "Tag keeps the forms tagged with it.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/form.FormList"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      },
+      "post": {
+        "operationId": "create_form",
+        "summary": "Makes a form in the caller's org and answers it as stored, its fields' ids assigned and its defaults filled: kind form, visibility public, language en, one question at a time, and the platform's default sinks when it names none.",
+        "description": "Makes a form in the caller's org and answers it as stored, its fields' ids\nassigned and its defaults filled: kind form, visibility public, language en,\none question at a time, and the platform's default sinks when it names none.\n\nA slug, when given, is the form's id for good: a second form with the same\nslug is refused (409). Every problem with the form is named at once (400). An\norg admin only.",
+        "tags": [
+          "form"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "fields": [
+                  {
+                    "ref": "rating",
+                    "required": true,
+                    "title": "Rate the video",
+                    "type": "rating"
+                  },
+                  {
+                    "ref": "comment",
+                    "title": "Anything to tell us?",
+                    "type": "long_text"
+                  }
+                ],
+                "hidden": [
+                  "video"
+                ],
+                "slug": "video-feedback",
+                "title": "How was the video?"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/form.Form"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/form.Form"
+                }
+              }
+            },
+            "description": "created"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/form/forms/{id}": {
+      "delete": {
+        "operationId": "delete_form",
+        "summary": "Deletes a form with every response, webhook and delivery it has, and the webhooks' signing secrets.",
+        "description": "Deletes a form with every response, webhook and delivery it has, and the\nwebhooks' signing secrets. An org admin only.",
+        "tags": [
+          "form"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the form's id or its slug, from the path.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "no content"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      },
+      "get": {
+        "operationId": "get_form",
+        "summary": "Reads one form of the caller's org, by its id or its slug.",
+        "description": "Reads one form of the caller's org, by its id or its slug. An org admin only.",
+        "tags": [
+          "form"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the form's id or its slug, from the path.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/form.Form"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      },
+      "patch": {
+        "operationId": "update_form",
+        "summary": "Changes the parts of a form the body names and keeps the rest, then answers it as stored.",
+        "description": "Changes the parts of a form the body names and keeps the rest, then answers it\nas stored. The whole form is checked as it will be, exactly as a replace is.\nAn org admin only.",
+        "tags": [
+          "form"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the form's id or its slug, from the path.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/form.FormPatch"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/form.Form"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      },
+      "put": {
+        "operationId": "replace_form",
+        "summary": "Replaces a form whole and answers it as stored.",
+        "description": "Replaces a form whole and answers it as stored. Named by a slug no form has\nyet, it makes the form under that slug, so a definition written twice is one\nform: the way a seed states a form. A field sent with its id keeps it; a type\nthe platform no longer offers stays answerable where the form already asks\nit, and is refused where it is new. An org admin only.",
+        "tags": [
+          "form"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the form's id: 15 lowercase hex characters, derived from the slug when\nthe form has one, so a slug names one form for good.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/form.Form"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/form.Form"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/form/forms/{id}/export": {
+      "get": {
+        "operationId": "export_form_responses",
+        "summary": "Exports a form's responses as JSON or CSV, a page of up to 5000 at a time under the same filter a listing takes; next is the page to ask for after it, 0 at the end.",
+        "description": "Exports a form's responses as JSON or CSV, a page of up to 5000 at a time\nunder the same filter a listing takes; next is the page to ask for after it,\n0 at the end. The CSV has one column per field (its title), then each hidden\nvalue, the respondent's address and kind, and when the response was landed on\nand submitted. An org admin only.",
+        "tags": [
+          "form"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the form's id or slug, from the path.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "description": "Page is the page, from 1. Default 1.",
+            "schema": {
+              "format": "int64",
+              "type": "integer"
+            }
+          },
+          {
+            "name": "page_size",
+            "in": "query",
+            "required": false,
+            "description": "PageSize is how many a page holds: at most 1000, default 25.",
+            "schema": {
+              "format": "int64",
+              "type": "integer"
+            }
+          },
+          {
+            "name": "since",
+            "in": "query",
+            "required": false,
+            "description": "Since keeps the responses made at or after it, RFC 3339.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "until",
+            "in": "query",
+            "required": false,
+            "description": "Until keeps the responses made before it, RFC 3339.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "completed",
+            "in": "query",
+            "required": false,
+            "description": "Completed keeps the completed responses (true) or the open ones (false);\nabsent keeps both.",
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "query",
+            "in": "query",
+            "required": false,
+            "description": "Query keeps the responses whose answers hold it.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "filed",
+            "in": "query",
+            "required": false,
+            "description": "Filed keeps the responses on the CRM's timeline (true) or not yet on it\n(false); absent keeps both.",
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "required": false,
+            "description": "Sort is submitted_at,desc (the default) or submitted_at,asc.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "included_response_ids",
+            "in": "query",
+            "required": false,
+            "description": "IncludedResponseIDs keeps only these responses, comma separated, at most 90.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "excluded_response_ids",
+            "in": "query",
+            "required": false,
+            "description": "ExcludedResponseIDs drops these responses, comma separated, at most 90.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "format",
+            "in": "query",
+            "required": false,
+            "description": "Format is json (the default) or csv.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/form.Export"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/form/forms/{id}/import": {
+      "post": {
+        "operationId": "import_form_responses",
+        "summary": "Brings responses made elsewhere into a form, keeping when each was made, a batch of at most 500 at a time.",
+        "description": "Brings responses made elsewhere into a form, keeping when each was made, a\nbatch of at most 500 at a time. Each is keyed by its external id (on a\nsubscribe form, by its address), so a batch sent again, or an import resumed\nfrom any point, makes nothing twice. Each answer is read against its field as\na submission's is; a required field may be unanswered. With file, each new\nresponse is also filed in the CRM at the time it was made; nothing is mailed\nand no webhook is told. An org admin only.",
+        "tags": [
+          "form"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the form's id or slug, from the path.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "file": true,
+                "responses": [
+                  {
+                    "at": "2017-03-04T12:00:00Z",
+                    "email": "ada@example.com",
+                    "external": "sub_4XkQ",
+                    "source": "commerce"
+                  }
+                ]
+              },
+              "schema": {
+                "$ref": "#/components/schemas/form.ImportIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/form.Imports"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/form/forms/{id}/responses": {
+      "get": {
+        "operationId": "list_form_responses",
+        "summary": "Lists a form's responses, newest first, a page at a time: since and until bound when they were made, completed keeps the finished or the open ones, query keeps the ones whose answers hold it, and included_response_ids and excluded_response_ids keep or drop named ones.",
+        "description": "Lists a form's responses, newest first, a page at a time: since and until\nbound when they were made, completed keeps the finished or the open ones, query\nkeeps the ones whose answers hold it, and included_response_ids and\nexcluded_response_ids keep or drop named ones. An org admin only.",
+        "tags": [
+          "form"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the form's id or slug, from the path.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "description": "Page is the page, from 1. Default 1.",
+            "schema": {
+              "format": "int64",
+              "type": "integer"
+            }
+          },
+          {
+            "name": "page_size",
+            "in": "query",
+            "required": false,
+            "description": "PageSize is how many a page holds: at most 1000, default 25.",
+            "schema": {
+              "format": "int64",
+              "type": "integer"
+            }
+          },
+          {
+            "name": "since",
+            "in": "query",
+            "required": false,
+            "description": "Since keeps the responses made at or after it, RFC 3339.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "until",
+            "in": "query",
+            "required": false,
+            "description": "Until keeps the responses made before it, RFC 3339.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "completed",
+            "in": "query",
+            "required": false,
+            "description": "Completed keeps the completed responses (true) or the open ones (false);\nabsent keeps both.",
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "query",
+            "in": "query",
+            "required": false,
+            "description": "Query keeps the responses whose answers hold it.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "filed",
+            "in": "query",
+            "required": false,
+            "description": "Filed keeps the responses on the CRM's timeline (true) or not yet on it\n(false); absent keeps both.",
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "required": false,
+            "description": "Sort is submitted_at,desc (the default) or submitted_at,asc.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "included_response_ids",
+            "in": "query",
+            "required": false,
+            "description": "IncludedResponseIDs keeps only these responses, comma separated, at most 90.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "excluded_response_ids",
+            "in": "query",
+            "required": false,
+            "description": "ExcludedResponseIDs drops these responses, comma separated, at most 90.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/form.ResponseList"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/form/forms/{id}/responses/{response}": {
+      "delete": {
+        "operationId": "delete_form_response",
+        "summary": "Deletes one response of a form, and its webhook deliveries.",
+        "description": "Deletes one response of a form, and its webhook deliveries. What the sinks\nalready hold (the CRM's timeline, a webhook's receiver) is theirs. An org admin\nonly.",
+        "tags": [
+          "form"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the form's id or slug, from the path.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "response",
+            "in": "path",
+            "required": true,
+            "description": "Response is the response's id, from the path.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "no content"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      },
+      "get": {
+        "operationId": "get_form_response",
+        "summary": "Reads one response of a form.",
+        "description": "Reads one response of a form. An org admin only.",
+        "tags": [
+          "form"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the form's id or slug, from the path.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "response",
+            "in": "path",
+            "required": true,
+            "description": "Response is the response's id, from the path.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/form.Response"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/form/forms/{id}/responses/{response}/file": {
+      "post": {
+        "operationId": "file_form_response",
+        "summary": "Files a completed response on the CRM's timeline now, and answers the response with whether it is filed and, when it is not, why.",
+        "description": "Files a completed response on the CRM's timeline now, and answers the response\nwith whether it is filed and, when it is not, why. A filing that failed after\nits submission is retried on a schedule; one a restart abandoned waits here.\nFiling twice is one timeline entry. 409 for an open response, or a form that\nfiles nowhere. An org admin only.",
+        "tags": [
+          "form"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the form's id or slug, from the path.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "response",
+            "in": "path",
+            "required": true,
+            "description": "Response is the response's id, from the path.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/form.Response"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/form/forms/{id}/summary": {
+      "get": {
+        "operationId": "summarize_form",
+        "summary": "Sums up a form's responses: how many were begun and completed, and for each field how many answered it, the distribution of what was said (choices, points, yes and no), the mean, least and most of a number, and how many open responses stopped in front of it.",
+        "description": "Sums up a form's responses: how many were begun and completed, and for each\nfield how many answered it, the distribution of what was said (choices,\npoints, yes and no), the mean, least and most of a number, and how many open\nresponses stopped in front of it. since and until narrow it to when the\nresponses were made. At most the newest 50000 are read, and truncated says so.\nAn org admin only.",
+        "tags": [
+          "form"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the form's id or slug, from the path.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "since",
+            "in": "query",
+            "required": false,
+            "description": "Since keeps the responses made at or after it, RFC 3339.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "until",
+            "in": "query",
+            "required": false,
+            "description": "Until keeps the responses made before it, RFC 3339.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/form.Summary"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/form/forms/{id}/webhooks": {
+      "get": {
+        "operationId": "list_form_webhooks",
+        "summary": "Lists a form's webhooks.",
+        "description": "Lists a form's webhooks. Secrets are never read back. An org admin only.",
+        "tags": [
+          "form"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the form's id or its slug, from the path.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/form.WebhookList"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      },
+      "post": {
+        "operationId": "create_form_webhook",
+        "summary": "Adds a webhook to a form: every completed response is posted to its https address as JSON, signed with Hanzo-Signature: t=\u003cunix seconds\u003e,sha256=\u003cbase64 of HMAC-SHA256(secret, \"\u003cseconds\u003e.\" + body)\u003e; a receiver refuses a timestamp older than five minutes and an event_id it has seen.",
+        "description": "Adds a webhook to a form: every completed response is posted to its https\naddress as JSON, signed with Hanzo-Signature: t=\u003cunix seconds\u003e,sha256=\u003cbase64\nof HMAC-SHA256(secret, \"\u003cseconds\u003e.\" + body)\u003e; a receiver refuses a timestamp\nolder than five minutes and an event_id it has seen. The secret is the one\ngiven (16 to 256 characters) or one minted, kept in KMS and answered here\nonce. A form has at\nmost the platform's number of webhooks. An org admin only.",
+        "tags": [
+          "form"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the form's id or slug, from the path.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "tag": "sales",
+                "url": "https://hooks.example.com/forms"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/form.WebhookIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/form.Webhook"
+                }
+              }
+            },
+            "description": "created"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/form/forms/{id}/webhooks/{webhook}": {
+      "delete": {
+        "operationId": "delete_form_webhook",
+        "summary": "Deletes a webhook, its deliveries and its secret.",
+        "description": "Deletes a webhook, its deliveries and its secret. An org admin only.",
+        "tags": [
+          "form"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the form's id or slug, from the path.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "webhook",
+            "in": "path",
+            "required": true,
+            "description": "Webhook is the webhook's id, from the path.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "no content"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      },
+      "get": {
+        "operationId": "get_form_webhook",
+        "summary": "Reads one webhook of a form.",
+        "description": "Reads one webhook of a form. Its secret is never read back. An org admin only.",
+        "tags": [
+          "form"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the form's id or slug, from the path.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "webhook",
+            "in": "path",
+            "required": true,
+            "description": "Webhook is the webhook's id, from the path.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/form.Webhook"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      },
+      "put": {
+        "operationId": "replace_form_webhook",
+        "summary": "Replaces a webhook's tag, address and whether it is enabled.",
+        "description": "Replaces a webhook's tag, address and whether it is enabled. A secret given is\nkept in place of the one held, rotate mints a new one, and either is answered\nonce; otherwise the secret held stays. An org admin only.",
+        "tags": [
+          "form"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the form's id or slug, from the path.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "webhook",
+            "in": "path",
+            "required": true,
+            "description": "Webhook is the webhook's id, from the path of a replace.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/form.WebhookIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/form.Webhook"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/form/forms/{id}/webhooks/{webhook}/deliveries": {
+      "get": {
+        "operationId": "list_form_deliveries",
+        "summary": "Lists a webhook's deliveries, newest first: each response posted, how many attempts it took, the last status the address answered and why it failed.",
+        "description": "Lists a webhook's deliveries, newest first: each response posted, how many\nattempts it took, the last status the address answered and why it failed. An\norg admin only.",
+        "tags": [
+          "form"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the form's id or slug, from the path.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "webhook",
+            "in": "path",
+            "required": true,
+            "description": "Webhook is the webhook's id, from the path.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "description": "Page is the page, from 1; PageSize at most 200, default 50.",
+            "schema": {
+              "format": "int64",
+              "type": "integer"
+            }
+          },
+          {
+            "name": "page_size",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "format": "int64",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/form.DeliveryList"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/form/forms/{id}/webhooks/{webhook}/deliveries/{delivery}/retry": {
+      "post": {
+        "operationId": "redeliver_form_webhook",
+        "summary": "Posts a delivery's response to its webhook again, now, and answers how it went.",
+        "description": "Posts a delivery's response to its webhook again, now, and answers how it\nwent. A delivery that failed, or was waiting on a retry when the service\nrestarted, is sent this way. An org admin only.",
+        "tags": [
+          "form"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the form's id or slug, from the path.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "webhook",
+            "in": "path",
+            "required": true,
+            "description": "Webhook is the webhook's id, from the path.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "delivery",
+            "in": "path",
+            "required": true,
+            "description": "Delivery is the delivery's id, from the path.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/form.Delivery"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/form/public/{id}": {
+      "get": {
+        "operationId": "get_public_form",
+        "summary": "Reads a published form as its page draws it: the questions, the screens, the hidden values it takes, how it is answered and its theme.",
+        "description": "Reads a published form as its page draws it: the questions, the screens, the\nhidden values it takes, how it is answered and its theme. Nothing about where\nits responses go. No credential is needed; a form that is private, deleted or\nnever was is a 404.",
+        "tags": [
+          "form"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the form's public id, \"\u003corg\u003e.\u003cslug or id\u003e\", from the path.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/form.PublicForm"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "security": [],
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/form/public/{id}/responses": {
+      "post": {
+        "operationId": "submit_form_response",
+        "summary": "Answers a published form.",
+        "description": "Answers a published form. No credential is needed.\n\nThe answers are read against the form's own fields: each names a field (by\nref) once and carries the one value its type takes, inside its bounds; a\ncompleted submission answers every required field. Hidden values are the\nnames the form declares. The response is from the signed-in person when there\nis one (their account, from their token, never from the body), else from the\nemail field's answer, else from the page's visitor id.\n\nIdempotent by token: the same token is the same response, so a submission\nsent twice files one. With completed false the answers so far are saved and\nthe response stays open; a completed response is final and a later submission\nunder its token is answered with it unchanged. A subscribe form's response is\nkeyed by its address instead: one address is one subscriber.\n\nA completed response goes to the form's sinks: the event stream, the CRM, the\nforwarding address, the welcome mail and the webhooks.\n\n429 past the platform's rate for one address, 413 past its body bound, 400\nfor a body that does not decode, a field no person fills, or any problem with\nthe answers (every one named), 404 for a form that is not published.",
+        "tags": [
+          "form"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the form's public id, from the path.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "answers": [
+                  {
+                    "field": "rating",
+                    "number": 5
+                  },
+                  {
+                    "field": "comment",
+                    "text": "Loved it"
+                  }
+                ],
+                "hidden": {
+                  "video": "7mVTEAHHjPc"
+                },
+                "landed_at": "2026-11-02T08:34:10Z",
+                "path": "/beta",
+                "token": "r_9f1c2a7b",
+                "visitor": "v_k3j2h1"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/form.Submission"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/form.Receipt"
+                }
+              }
+            },
+            "description": "created"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "security": [],
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/form/themes": {
+      "get": {
+        "operationId": "list_form_themes",
+        "summary": "Lists the caller org's themes by name.",
+        "description": "Lists the caller org's themes by name. An org admin only.",
+        "tags": [
+          "form"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/form.ThemeList"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      },
+      "post": {
+        "operationId": "create_form_theme",
+        "summary": "Makes a theme in the caller's org: a name, four colours (#rrggbb), a font family and an https background image, each optional but the name.",
+        "description": "Makes a theme in the caller's org: a name, four colours (#rrggbb), a font\nfamily and an https background image, each optional but the name. An org\nadmin only.",
+        "tags": [
+          "form"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "colors": {
+                  "answer": "#f59e0b",
+                  "background": "#0a0b0e",
+                  "button": "#ff6a00",
+                  "question": "#ffffff"
+                },
+                "font": "Inter",
+                "name": "Hanzo dark"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/form.Theme"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/form.Theme"
+                }
+              }
+            },
+            "description": "created"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/form/themes/{id}": {
+      "delete": {
+        "operationId": "delete_form_theme",
+        "summary": "Deletes a theme.",
+        "description": "Deletes a theme. A form drawn in it is refused (409) until it names another,\nso no form is left naming a theme that is gone. An org admin only.",
+        "tags": [
+          "form"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the theme's id, from the path.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "no content"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      },
+      "get": {
+        "operationId": "get_form_theme",
+        "summary": "Reads one theme of the caller's org.",
+        "description": "Reads one theme of the caller's org. An org admin only.",
+        "tags": [
+          "form"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the theme's id, from the path.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/form.Theme"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      },
+      "put": {
+        "operationId": "replace_form_theme",
+        "summary": "Replaces a theme whole; every form drawn in it is drawn in the new one.",
+        "description": "Replaces a theme whole; every form drawn in it is drawn in the new one. An\norg admin only.",
+        "tags": [
+          "form"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the theme's id.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/form.Theme"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/form.Theme"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "form.Answer": {
+        "properties": {
+          "boolean": {
+            "type": "boolean"
+          },
+          "choices": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "date": {
+            "type": "string"
+          },
+          "field": {
+            "description": "Field is the ref of the field answered.",
+            "type": "string"
+          },
+          "number": {
+            "format": "double",
+            "type": "number"
+          },
+          "text": {
+            "type": "string"
+          },
+          "type": {
+            "description": "Type is the field's type. Set on a read; ignored on a write.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "form.CRM": {
+        "properties": {
+          "company": {
+            "description": "Company is the ref of the field whose answer is the person's company.",
+            "type": "string"
+          },
+          "email": {
+            "description": "Email is the ref of the field whose answer is the person's address.\nEmpty, the first email field is. A signed-in respondent is always the\naddress their account holds.",
+            "type": "string"
+          },
+          "list": {
+            "description": "List is the CRM list the person joins, by name (a subscribe form's\nmailing list). Empty joins none.",
+            "type": "string"
+          },
+          "name": {
+            "description": "Name is the ref of the field whose answer is the person's name.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "form.Choice": {
+        "properties": {
+          "id": {
+            "description": "ID is the choice's id, assigned when empty.",
+            "type": "string"
+          },
+          "label": {
+            "description": "Label is the choice as shown. At most 200 characters.",
+            "type": "string"
+          },
+          "ref": {
+            "description": "Ref is how an answer names the choice; unique in the field, defaults to the id.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "form.Colors": {
+        "properties": {
+          "answer": {
+            "type": "string"
+          },
+          "background": {
+            "type": "string"
+          },
+          "button": {
+            "type": "string"
+          },
+          "question": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "form.Delivery": {
+        "properties": {
+          "attempts": {
+            "description": "Attempts is how many posts were made.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "code": {
+            "description": "Code is the last HTTP status the address answered; 0 when it did not answer.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "created": {
+            "description": "Created is when the first attempt was made, RFC 3339.",
+            "type": "string"
+          },
+          "error": {
+            "description": "Error is why the last attempt failed.",
+            "type": "string"
+          },
+          "id": {
+            "description": "ID is the delivery's id; the body carries it as event_id.",
+            "type": "string"
+          },
+          "next": {
+            "description": "Next is when the next attempt is due, RFC 3339; empty when none is.",
+            "type": "string"
+          },
+          "response": {
+            "description": "Response is the response's id.",
+            "type": "string"
+          },
+          "status": {
+            "description": "Status is delivered, retrying or failed.",
+            "type": "string"
+          },
+          "updated": {
+            "description": "Updated is when the last was, RFC 3339.",
+            "type": "string"
+          },
+          "webhook": {
+            "description": "Webhook is the webhook's id.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "form.DeliveryList": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/form.Delivery"
+            },
+            "type": "array"
+          },
+          "page": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "page_size": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "total": {
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "form.Drawn": {
+        "properties": {
+          "language": {
+            "description": "Language is the form's language tag.",
+            "type": "string"
+          },
+          "mode": {
+            "description": "Mode is one (a question at a time) or all.",
+            "type": "string"
+          },
+          "progress": {
+            "description": "Progress is whether a progress bar is shown.",
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
+      "form.Export": {
+        "properties": {
+          "csv": {
+            "description": "CSV is the responses as CSV, for csv: one row each, one column per field,\nthen the hidden values, the respondent and the times.",
+            "type": "string"
+          },
+          "filename": {
+            "description": "Filename is what to save it as.",
+            "type": "string"
+          },
+          "format": {
+            "description": "Format is json or csv.",
+            "type": "string"
+          },
+          "items": {
+            "description": "Items are the responses, for json.",
+            "items": {
+              "$ref": "#/components/schemas/form.Response"
+            },
+            "type": "array"
+          },
+          "next": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "page": {
+            "description": "Page is this page; Next the page after it, 0 when this is the last.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "total": {
+            "description": "Total is how many responses answer the filter.",
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "form.Field": {
+        "properties": {
+          "choices": {
+            "description": "Choices are what a multiple_choice or dropdown field offers, in order.",
+            "items": {
+              "$ref": "#/components/schemas/form.Choice"
+            },
+            "type": "array"
+          },
+          "description": {
+            "description": "Description is the line under the question. At most 1000 characters.",
+            "type": "string"
+          },
+          "id": {
+            "description": "ID is the field's id: assigned when a write leaves it empty, and kept\nacross edits by sending it back.",
+            "type": "string"
+          },
+          "labels": {
+            "$ref": "#/components/schemas/form.Labels",
+            "description": "Labels name the ends and middle of an opinion_scale."
+          },
+          "multiple": {
+            "description": "Multiple is whether a multiple_choice field takes several choices.",
+            "type": "boolean"
+          },
+          "ref": {
+            "description": "Ref is the field's stable name, how an answer and a sink name it:\nlowercase letters, digits, dash and underscore, at most 64, unique in the\nform. Defaults to the id.",
+            "type": "string"
+          },
+          "required": {
+            "description": "Required is whether a completed response must answer it. A statement is\nnever required.",
+            "type": "boolean"
+          },
+          "start": {
+            "description": "Start is where an opinion_scale begins: 0 (the default) or 1.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "steps": {
+            "description": "Steps is how many points a rating (3 to 10, default 5) or an opinion_scale\n(5 to 11, default 11) has.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "title": {
+            "description": "Title is the question as asked. At most 500 characters.",
+            "type": "string"
+          },
+          "type": {
+            "description": "Type is one of short_text, long_text, email, phone, url, number, rating,\nopinion_scale, yes_no, multiple_choice, dropdown, date and statement.",
+            "type": "string"
+          },
+          "validations": {
+            "$ref": "#/components/schemas/form.Validations",
+            "description": "Validations bound an answer beyond its type."
+          }
+        },
+        "type": "object"
+      },
+      "form.FieldSummary": {
+        "properties": {
+          "answered": {
+            "description": "Answered is how many responses answer it.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "distribution": {
+            "description": "Distribution counts each value: every choice of a multiple_choice or\ndropdown (with its label), every point of a rating or opinion_scale, and\nyes and no.",
+            "items": {
+              "$ref": "#/components/schemas/form.Tally"
+            },
+            "type": "array"
+          },
+          "drop_off": {
+            "description": "DropOff is how many open responses stopped in front of it: this is the\nfirst field they left unanswered after the last one they answered.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "field": {
+            "description": "Field is the field's ref; Type its type; Title its question.",
+            "type": "string"
+          },
+          "max": {
+            "format": "double",
+            "type": "number"
+          },
+          "mean": {
+            "description": "Mean, Min and Max are a number, rating or opinion_scale's.",
+            "format": "double",
+            "type": "number"
+          },
+          "min": {
+            "format": "double",
+            "type": "number"
+          },
+          "title": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "form.Form": {
+        "properties": {
+          "created": {
+            "description": "Created is when the form was made, RFC 3339.",
+            "type": "string"
+          },
+          "fields": {
+            "description": "Fields are the questions, in the order they are asked.",
+            "items": {
+              "$ref": "#/components/schemas/form.Field"
+            },
+            "type": "array"
+          },
+          "hidden": {
+            "description": "Hidden names the values a page passes in when it embeds the form (a video\nid, a plan): lowercase letters, digits and underscores, at most 32 each.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "id": {
+            "description": "ID is the form's id: 15 lowercase hex characters, derived from the slug when\nthe form has one, so a slug names one form for good.",
+            "type": "string"
+          },
+          "kind": {
+            "description": "Kind is form (every submission is a response, the default) or subscribe (a\nmailing list: an email field is required and one address is one response).",
+            "type": "string"
+          },
+          "public_id": {
+            "description": "PublicID is the address the form is answered at: \"\u003corg\u003e.\u003cslug or id\u003e\", as\nGET /v1/form/public/{id} and POST /v1/form/public/{id}/responses take it.",
+            "type": "string"
+          },
+          "settings": {
+            "$ref": "#/components/schemas/form.Options",
+            "description": "Settings is how the form is answered."
+          },
+          "sinks": {
+            "$ref": "#/components/schemas/form.Sinks",
+            "description": "Sinks are where each completed response goes. Absent on a write, the\nplatform's defaults are taken."
+          },
+          "slug": {
+            "description": "Slug is the form's own name within its org: lowercase letters, digits and\ndashes, at most 64. Optional; once set it is the form's id, so it cannot change.",
+            "type": "string"
+          },
+          "tags": {
+            "description": "Tags label the form for its org: at most 20, each at most 64 characters.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "thanks": {
+            "$ref": "#/components/schemas/form.Screen",
+            "description": "Thanks is the screen shown after a submission, or where the respondent is\nsent. Optional."
+          },
+          "theme": {
+            "description": "Theme is the id of the theme the form is drawn in. Optional.",
+            "type": "string"
+          },
+          "title": {
+            "description": "Title is the form's name, as a respondent and the CRM timeline read it. At\nmost 200 characters.",
+            "type": "string"
+          },
+          "updated": {
+            "description": "Updated is when it last changed, RFC 3339.",
+            "type": "string"
+          },
+          "welcome": {
+            "$ref": "#/components/schemas/form.Screen",
+            "description": "Welcome is the screen shown before the first question. Optional."
+          }
+        },
+        "type": "object"
+      },
+      "form.FormList": {
+        "properties": {
+          "items": {
+            "description": "Items are the forms, newest first.",
+            "items": {
+              "$ref": "#/components/schemas/form.Form"
+            },
+            "type": "array"
+          },
+          "page": {
+            "description": "Page is this page, from 1.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "page_size": {
+            "description": "PageSize is how many a page holds.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "total": {
+            "description": "Total is how many forms answer the query.",
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "form.FormPatch": {
+        "properties": {
+          "fields": {
+            "items": {
+              "$ref": "#/components/schemas/form.Field"
+            },
+            "type": "array"
+          },
+          "hidden": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "id": {
+            "description": "ID is the form's id or its slug, from the path.",
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "settings": {
+            "$ref": "#/components/schemas/form.Options"
+          },
+          "sinks": {
+            "$ref": "#/components/schemas/form.Sinks"
+          },
+          "tags": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "thanks": {
+            "$ref": "#/components/schemas/form.Screen"
+          },
+          "theme": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "welcome": {
+            "$ref": "#/components/schemas/form.Screen"
+          }
+        },
+        "type": "object"
+      },
+      "form.FormSettings": {
+        "properties": {
+          "saved": {
+            "description": "Saved is false when nothing is stored and the defaults are in force.",
+            "type": "boolean"
+          },
+          "settings": {
+            "$ref": "#/components/schemas/form.Settings",
+            "description": "Settings are the settings in force."
+          }
+        },
+        "type": "object"
+      },
+      "form.Forward": {
+        "properties": {
+          "email": {
+            "description": "Email is the address. Required.",
+            "type": "string"
+          },
+          "name": {
+            "description": "Name is who it is, for the greeting. Optional.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "form.ImportFailure": {
+        "properties": {
+          "external": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "form.ImportIn": {
+        "properties": {
+          "file": {
+            "description": "File also files each new response in the CRM, at the time it was made.\nNothing is mailed and no webhook is told.",
+            "type": "boolean"
+          },
+          "id": {
+            "description": "ID is the form's id or slug, from the path.",
+            "type": "string"
+          },
+          "responses": {
+            "description": "Responses are the responses, at most 500.",
+            "items": {
+              "$ref": "#/components/schemas/form.Imported"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "form.Imported": {
+        "properties": {
+          "answers": {
+            "description": "Answers are its answers, each read against the form's field as a\nsubmission's is; a required field may be unanswered.",
+            "items": {
+              "$ref": "#/components/schemas/form.Answer"
+            },
+            "type": "array"
+          },
+          "at": {
+            "description": "At is when it was made, RFC 3339. Required.",
+            "type": "string"
+          },
+          "email": {
+            "description": "Email is the address it was from, when the source knew one. On a subscribe\nform the address is the response's key: one address is one subscriber,\nhowever many times and places it subscribed.",
+            "type": "string"
+          },
+          "external": {
+            "description": "External is its id where it was made: at most 200 characters, and the\nresponse's key, so importing it again is the same response.",
+            "type": "string"
+          },
+          "hidden": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "description": "Hidden are values it carried, by the names the form declares.",
+            "type": "object"
+          },
+          "source": {
+            "description": "Source is where it was made, at most 100 characters: commerce, a list's name.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "form.Imports": {
+        "properties": {
+          "created": {
+            "description": "Created counts the responses made new.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "existing": {
+            "description": "Existing counts the ones already held: imported before, or the same\nsubscriber.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "failed": {
+            "description": "Failed are the ones refused, with why.",
+            "items": {
+              "$ref": "#/components/schemas/form.ImportFailure"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "form.Labels": {
+        "properties": {
+          "center": {
+            "type": "string"
+          },
+          "left": {
+            "type": "string"
+          },
+          "right": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "form.Limits": {
+        "properties": {
+          "body": {
+            "description": "Body is the most bytes one submission's body holds.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "fields": {
+            "description": "Fields is the most fields one form has.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "forward": {
+            "description": "Forward is how many responses one form forwards to its address in an hour;\npast it the response is kept and not mailed.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "hidden": {
+            "description": "Hidden is the most hidden values one form names.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "rate": {
+            "description": "Rate is how many submissions one address makes in Window seconds.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "webhooks": {
+            "description": "Webhooks is the most webhooks one form has.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "welcome": {
+            "description": "Welcome is how many welcome mails one form sends in an hour, counted apart\nfrom its forwards so a flood of one cannot silence the other.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "window": {
+            "description": "Window is the rate's window, in seconds.",
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "form.Options": {
+        "properties": {
+          "identity": {
+            "description": "Identity is who a response is from when nobody is signed in. claimed (the\ndefault): an address typed into an email field is the respondent's CLAIM,\nfiled on the CRM marked unverified, on the person it names only when the CRM\nalready holds them and without changing them; it joins no list and is mailed\nno welcome, and a list's consent is asked by the double opt-in instead.\nverified: only a signed-in respondent (their token) is anyone; a typed\naddress is an answer and nothing more. A signed-in respondent is verified\nunder either.",
+            "type": "string"
+          },
+          "language": {
+            "description": "Language is the form's language, a tag like en or pt-BR. Default en.",
+            "type": "string"
+          },
+          "mode": {
+            "description": "Mode is one (a question at a time, the default) or all (every question at once).",
+            "type": "string"
+          },
+          "progress": {
+            "description": "Progress is whether the renderer shows a progress bar.",
+            "type": "boolean"
+          },
+          "visibility": {
+            "description": "Visibility is public (answerable at its public address by anyone) or\nprivate (not served there). Default public.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "form.PublicForm": {
+        "properties": {
+          "fields": {
+            "description": "Fields are the questions, in order.",
+            "items": {
+              "$ref": "#/components/schemas/form.Field"
+            },
+            "type": "array"
+          },
+          "hidden": {
+            "description": "Hidden names the values the page passes in.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "id": {
+            "description": "ID is the form's public id.",
+            "type": "string"
+          },
+          "kind": {
+            "description": "Kind is form or subscribe.",
+            "type": "string"
+          },
+          "settings": {
+            "$ref": "#/components/schemas/form.Drawn",
+            "description": "Settings are how the form is answered."
+          },
+          "thanks": {
+            "$ref": "#/components/schemas/form.Screen",
+            "description": "Thanks is the screen after a submission, or where the respondent is sent."
+          },
+          "theme": {
+            "$ref": "#/components/schemas/form.Theme",
+            "description": "Theme is the theme the form is drawn in, when it names one."
+          },
+          "title": {
+            "description": "Title is the form's title.",
+            "type": "string"
+          },
+          "welcome": {
+            "$ref": "#/components/schemas/form.Screen",
+            "description": "Welcome is the screen before the first question."
+          }
+        },
+        "type": "object"
+      },
+      "form.Receipt": {
+        "properties": {
+          "completed": {
+            "description": "Completed is whether the response is now submitted whole.",
+            "type": "boolean"
+          },
+          "id": {
+            "description": "ID is the response's id.",
+            "type": "string"
+          },
+          "submitted_at": {
+            "description": "SubmittedAt is when it was completed, RFC 3339.",
+            "type": "string"
+          },
+          "thanks": {
+            "$ref": "#/components/schemas/form.Screen",
+            "description": "Thanks is the form's thank-you screen, for a completed response."
+          }
+        },
+        "type": "object"
+      },
+      "form.Respondent": {
+        "properties": {
+          "email": {
+            "description": "Email is the address the response is from: the account's, else the email\nfield's.",
+            "type": "string"
+          },
+          "kind": {
+            "description": "Kind is account (a signed-in person, from their token), email (an email\nfield's answer), visitor (the page's visitor id) or none.",
+            "type": "string"
+          },
+          "person_id": {
+            "description": "PersonID is the CRM person the address is: the one key a response, a list\nmembership, an email event and an experiment share. Every event and\ntimeline entry the service states carries it, never the address.",
+            "type": "string"
+          },
+          "subject": {
+            "description": "Subject is the signed-in person's IAM subject.",
+            "type": "string"
+          },
+          "verified": {
+            "description": "Verified is whether the respondent is who the response says: true only\nfor a signed-in person, from their token. A typed address is a claim.",
+            "type": "boolean"
+          },
+          "visitor": {
+            "description": "Visitor is the page's visitor id.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "form.Response": {
+        "properties": {
+          "answers": {
+            "description": "Answers are the answers, in the form's field order.",
+            "items": {
+              "$ref": "#/components/schemas/form.Answer"
+            },
+            "type": "array"
+          },
+          "completed": {
+            "description": "Completed is whether the response was submitted whole; false is one saved\npart way.",
+            "type": "boolean"
+          },
+          "created": {
+            "description": "Created is when the record was first written, RFC 3339.",
+            "type": "string"
+          },
+          "duration": {
+            "description": "Duration is how many seconds lay between landing and submitting.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "external": {
+            "description": "External is an imported response's id where it came from.",
+            "type": "string"
+          },
+          "filed": {
+            "description": "Filed is whether a completed response is on the CRM's timeline. A filing\nthat failed is tried again on a schedule, and POST .../file tries it now.",
+            "type": "boolean"
+          },
+          "filing": {
+            "description": "Filing is why the last filing failed; empty once it is filed.",
+            "type": "string"
+          },
+          "form": {
+            "description": "Form is the form's id.",
+            "type": "string"
+          },
+          "hidden": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "description": "Hidden are the values the page passed in, by name.",
+            "type": "object"
+          },
+          "id": {
+            "description": "ID is the response's id: derived from the form and the submission's token\n(from the form and the address on a subscribe form), so a retried\nsubmission is this same response.",
+            "type": "string"
+          },
+          "landed_at": {
+            "description": "LandedAt is when the respondent opened the form, RFC 3339, as their page said.",
+            "type": "string"
+          },
+          "path": {
+            "description": "Path is the page the form was answered on.",
+            "type": "string"
+          },
+          "respondent": {
+            "$ref": "#/components/schemas/form.Respondent",
+            "description": "Respondent is who it is from."
+          },
+          "source": {
+            "description": "Source is web, or import for a response brought in from elsewhere.",
+            "type": "string"
+          },
+          "submitted_at": {
+            "description": "SubmittedAt is when the response was completed, RFC 3339.",
+            "type": "string"
+          },
+          "token": {
+            "description": "Token is the submission token the response was made under.",
+            "type": "string"
+          },
+          "updated": {
+            "description": "Updated is when it last changed, RFC 3339.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "form.ResponseList": {
+        "properties": {
+          "items": {
+            "description": "Items are the responses.",
+            "items": {
+              "$ref": "#/components/schemas/form.Response"
+            },
+            "type": "array"
+          },
+          "page": {
+            "description": "Page is this page, from 1.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "page_size": {
+            "description": "PageSize is how many a page holds.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "total": {
+            "description": "Total is how many responses answer the filter.",
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "form.Screen": {
+        "properties": {
+          "button": {
+            "description": "Button is the button's label. At most 64 characters.",
+            "type": "string"
+          },
+          "description": {
+            "description": "Description is the text under it. At most 2000 characters.",
+            "type": "string"
+          },
+          "redirect": {
+            "description": "Redirect is where a thank-you screen sends the respondent instead of\nshowing itself: an https address. Ignored on a welcome screen.",
+            "type": "string"
+          },
+          "title": {
+            "description": "Title is the screen's heading. At most 200 characters.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "form.Settings": {
+        "properties": {
+          "limits": {
+            "$ref": "#/components/schemas/form.Limits",
+            "description": "Limits bound every form and every submission."
+          },
+          "retention": {
+            "description": "Retention is how many days a response is kept; 0 keeps it. A response past\nit is deleted the next time its form is answered or its responses are read.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "sinks": {
+            "$ref": "#/components/schemas/form.Sinks",
+            "description": "Sinks are what a new form routes its responses to when it names nothing."
+          },
+          "types": {
+            "description": "Types are the field types, each with whether forms may use it and its bound.",
+            "items": {
+              "$ref": "#/components/schemas/form.TypeRule"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "form.Sinks": {
+        "properties": {
+          "crm": {
+            "$ref": "#/components/schemas/form.CRM",
+            "description": "CRM files the response on the timeline of the person it is from, or on the\norg's own timeline when it names nobody. Absent, nothing is filed."
+          },
+          "events": {
+            "description": "Events states form_viewed, form_started and form_submitted on the\ndeployment's event stream: the form's ids and the refs of the fields\nanswered, never an answer's text.",
+            "type": "boolean"
+          },
+          "forward": {
+            "$ref": "#/components/schemas/form.Forward",
+            "description": "Forward mails every completed response to one address."
+          },
+          "welcome": {
+            "$ref": "#/components/schemas/form.Welcome",
+            "description": "Welcome mails the respondent once, the first time their address answers."
+          }
+        },
+        "type": "object"
+      },
+      "form.Submission": {
+        "properties": {
+          "answers": {
+            "description": "Answers are the answers, one per field at most.",
+            "items": {
+              "$ref": "#/components/schemas/form.Answer"
+            },
+            "type": "array"
+          },
+          "completed": {
+            "description": "Completed is false to save the answers so far and keep the response open\n(a later submission under the same token completes it); true or absent\nsubmits it whole, every required field answered. A completed response is\nfinal.",
+            "type": "boolean"
+          },
+          "hidden": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "description": "Hidden are the values the page passes in, by the names the form declares;\neach one line of at most 500 characters.",
+            "type": "object"
+          },
+          "id": {
+            "description": "ID is the form's public id, from the path.",
+            "type": "string"
+          },
+          "landed_at": {
+            "description": "LandedAt is when the respondent opened the form, RFC 3339.",
+            "type": "string"
+          },
+          "path": {
+            "description": "Path is the page the form was answered on, at most 500 characters.",
+            "type": "string"
+          },
+          "token": {
+            "description": "Token is the client's idempotency token for this response: 8 to 64\nletters, digits, dashes and underscores. A submission sent twice under one\ntoken is one response, so a double click or a retry files nothing twice.\nAbsent, the response is new each time.",
+            "type": "string"
+          },
+          "visitor": {
+            "description": "Visitor is the page's visitor id: letters, digits, dot, dash and\nunderscore, at most 64. It is who the response is from when nobody is\nsigned in and no email field is answered.",
+            "type": "string"
+          },
+          "website": {
+            "description": "Website is a field no person sees and no person fills: a submission that\nfills it is refused.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "form.Summary": {
+        "properties": {
+          "completion_rate": {
+            "description": "CompletionRate is completions over starts, 0 to 1.",
+            "format": "double",
+            "type": "number"
+          },
+          "completions": {
+            "description": "Completions is how many were completed.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "fields": {
+            "description": "Fields are each asked field's figures, in form order.",
+            "items": {
+              "$ref": "#/components/schemas/form.FieldSummary"
+            },
+            "type": "array"
+          },
+          "form": {
+            "description": "Form is the form's id.",
+            "type": "string"
+          },
+          "scanned": {
+            "description": "Scanned is how many responses were read; Truncated says the form has more\nthan one summary reads (50000), and the newest were read.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "starts": {
+            "description": "Starts is how many responses were begun: open and completed.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "truncated": {
+            "type": "boolean"
+          },
+          "views": {
+            "description": "Views is null: a view is stated on the event stream as form_viewed and\ncounted there, not kept with the responses.",
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "form.Tally": {
+        "properties": {
+          "count": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "label": {
+            "type": "string"
+          },
+          "value": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "form.Theme": {
+        "properties": {
+          "background": {
+            "description": "Background is an https address of an image drawn behind the form. Optional.",
+            "type": "string"
+          },
+          "colors": {
+            "$ref": "#/components/schemas/form.Colors",
+            "description": "Colors are the theme's colours, each #rrggbb."
+          },
+          "created": {
+            "description": "Created is when the theme was made, RFC 3339.",
+            "type": "string"
+          },
+          "font": {
+            "description": "Font is the font family the form is set in: letters, digits, spaces and\ndashes, at most 64. Empty is the renderer's own.",
+            "type": "string"
+          },
+          "id": {
+            "description": "ID is the theme's id.",
+            "type": "string"
+          },
+          "name": {
+            "description": "Name is the theme's name in its org. At most 100 characters.",
+            "type": "string"
+          },
+          "updated": {
+            "description": "Updated is when it last changed, RFC 3339.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "form.ThemeList": {
+        "properties": {
+          "items": {
+            "description": "Items are the themes, by name.",
+            "items": {
+              "$ref": "#/components/schemas/form.Theme"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "form.TypeRule": {
+        "properties": {
+          "enabled": {
+            "description": "Enabled is whether a form may ask it. A form already asking a type that is\nturned off keeps answering it; a write that adds one is refused.",
+            "type": "boolean"
+          },
+          "max": {
+            "description": "Max is the type's bound: characters for short_text, long_text, email,\nphone and url; points for rating and opinion_scale; choices for\nmultiple_choice and dropdown. 0 for the types that have none.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "type": {
+            "description": "Type is the field type.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "form.Validations": {
+        "properties": {
+          "max_length": {
+            "description": "MaxLength is the most characters a text answer holds, at most the\nplatform's bound for the type.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "max_value": {
+            "description": "MaxValue is the most a number answer may be.",
+            "format": "double",
+            "type": "number"
+          },
+          "min_value": {
+            "description": "MinValue is the least a number answer may be.",
+            "format": "double",
+            "type": "number"
+          }
+        },
+        "type": "object"
+      },
+      "form.Webhook": {
+        "properties": {
+          "created": {
+            "description": "Created is when the webhook was made, RFC 3339.",
+            "type": "string"
+          },
+          "enabled": {
+            "description": "Enabled is whether responses are posted.",
+            "type": "boolean"
+          },
+          "form": {
+            "description": "Form is the form's id.",
+            "type": "string"
+          },
+          "id": {
+            "description": "ID is the webhook's id.",
+            "type": "string"
+          },
+          "secret": {
+            "description": "Secret is the signing secret, answered once: when the webhook is made or\nits secret is set or rotated. Every delivery carries Hanzo-Signature:\nt=\u003cunix seconds\u003e,sha256=\u003cbase64 of HMAC-SHA256(secret, \"\u003cseconds\u003e.\" + body)\u003e;\na receiver refuses one older than five minutes. It is kept in KMS and never\nread back.",
+            "type": "string"
+          },
+          "tag": {
+            "description": "Tag names the webhook in its form. At most 64 characters.",
+            "type": "string"
+          },
+          "updated": {
+            "description": "Updated is when it last changed, RFC 3339.",
+            "type": "string"
+          },
+          "url": {
+            "description": "URL is the https address posted to.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "form.WebhookIn": {
+        "properties": {
+          "enabled": {
+            "description": "Enabled is whether responses are posted. Default true.",
+            "type": "boolean"
+          },
+          "id": {
+            "description": "ID is the form's id or slug, from the path.",
+            "type": "string"
+          },
+          "rotate": {
+            "description": "Rotate mints a new secret on a replace, and answers it.",
+            "type": "boolean"
+          },
+          "secret": {
+            "description": "Secret sets the signing secret: 16 to 256 characters. Absent on a make,\none is minted; absent on a replace, the secret held is kept.",
+            "type": "string"
+          },
+          "tag": {
+            "description": "Tag names the webhook in its form, at most 64 characters.",
+            "type": "string"
+          },
+          "url": {
+            "description": "URL is the https address posted to. Required.",
+            "type": "string"
+          },
+          "webhook": {
+            "description": "Webhook is the webhook's id, from the path of a replace.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "form.WebhookList": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/form.Webhook"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "form.Welcome": {
+        "properties": {
+          "body": {
+            "description": "Body is the mail's text: plain text, a blank line a new paragraph. At most\n10000 characters.",
+            "type": "string"
+          },
+          "subject": {
+            "description": "Subject is the mail's subject. At most 200 characters.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "problem-details": {
+        "description": "An RFC 9457 problem document.",
+        "properties": {
+          "code": {
+            "description": "A stable token a client can branch on, when the refusal names one.",
+            "type": "string"
+          },
+          "detail": {
+            "description": "What was refused, for a person to read.",
+            "type": "string"
+          },
+          "status": {
+            "description": "The HTTP status.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "title": {
+            "description": "The status's reason phrase.",
+            "type": "string"
+          },
+          "type": {
+            "description": "about:blank",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "status",
+          "detail"
+        ],
+        "type": "object"
+      }
+    },
+    "securitySchemes": {
+      "bearer": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "The caller's credential, sent as `Authorization: Bearer \u003ctoken\u003e`. It is either an access token minted by Hanzo IAM or an API key (pk-/sk-). X-Authorization, and HTTP Basic carrying the token as the password, are accepted spellings of the same header for clients that cannot set Authorization; a browser presents the session cookie instead. Every operation requires it unless it says `security: []`."
+      }
+    }
+  }
+}

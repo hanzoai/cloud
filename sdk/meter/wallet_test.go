@@ -10,9 +10,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hanzoai/account"
 	"github.com/hanzoai/cloud/sdk/meter"
 	"github.com/hanzoai/cloud/sdk/principal"
+	"github.com/hanzoai/account"
 	"github.com/zap-proto/zip"
 )
 
@@ -62,12 +62,12 @@ var signupPerson = map[string]string{
 // addresses must be the wallet a deposit can NAME — and every funding path names
 // "<org>/<username>" or the bare org, never "<org>/<uuid>".
 //
-// Both minters set that header from the JWT `sub`, and IAM's `sub` is a UUID, so
-// the address resolved to "hanzo/<uuid>" — a wallet no grant, no promo, no
-// starter credit and no operator deposit can ever reach. It read $0 forever
-// while the ai gate, the usage debit and GET /v1/billing/balance all addressed
-// "hanzo/z@hanzo.ai". Third recurrence of one bug: two layers deriving one
-// address two ways.
+// The regression: the wallet read X-User-Id for the name half. Both minters set that
+// header from the JWT `sub`, and IAM's `sub` is a UUID, so the address resolved to
+// "hanzo/<uuid>" — a wallet no grant, no promo, no starter credit and no operator
+// deposit can ever reach. It read $0 forever while the ai gate, the usage debit and
+// GET /v1/billing/balance all addressed "hanzo/z@hanzo.ai". Third recurrence of one
+// bug: two layers deriving one address two ways.
 func TestWallet_AddressIsTheFundableOne(t *testing.T) {
 	ledger, acct, ok := wallet(t, signupPerson)
 	if !ok {
@@ -157,10 +157,11 @@ func TestWallet_IdShapesResolveOneName(t *testing.T) {
 	}
 }
 
-// A two-branch resolver that shortcuts to account.PayerOf when X-User-Name is
-// absent DROPS the signed `billing_account` claim, and a token whose signature
-// says "person:acme/bob" would gate the acme POOL instead. The claim is the
-// whole point of the module: it cannot be conditional on a header's shape.
+// TestWallet_ClaimSurvivesAMissingUsername is the regression this fix nearly
+// introduced. A two-branch resolver that shortcuts to account.PayerOf when
+// X-User-Name is absent DROPS the signed `billing_account` claim, and a token whose
+// signature says "person:acme/bob" would gate the acme POOL instead. The claim is
+// the whole point of the module: it cannot be conditional on a header's shape.
 func TestWallet_ClaimSurvivesAMissingUsername(t *testing.T) {
 	_, acct, ok := wallet(t, map[string]string{
 		"X-User-Id":            "bob",

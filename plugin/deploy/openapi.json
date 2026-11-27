@@ -1,0 +1,2174 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Hanzo Cloud API",
+    "description": "Package deploy is Hanzo CD: see what each app is running, sync it, and roll back a bad release.",
+    "version": "v1"
+  },
+  "servers": [
+    {
+      "url": "https://api.hanzo.ai"
+    }
+  ],
+  "security": [
+    {
+      "bearer": []
+    }
+  ],
+  "tags": [
+    {
+      "name": "deploy"
+    }
+  ],
+  "paths": {
+    "/v1/deploy/account/can-i/{wildcard1}": {
+      "get": {
+        "operationId": "get_deploy_account_can-i_by_wildcard1",
+        "summary": "Compatibility answer the console UI asks before enabling its buttons",
+        "description": "Always answers `yes`, whatever resource, action or subresource the path names. It exists for the ArgoCD-compatible console, which asks this before enabling a control, and it is NOT the authorization decision: nothing downstream consults it, and every route that returns fleet data or mutates a CR carries its own gate. Reaching it at all already requires SuperAdmin, so a caller who can read the `yes` is one for whom it is true.",
+        "tags": [
+          "deploy"
+        ],
+        "parameters": [
+          {
+            "name": "wildcard1",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/deploy/applications": {
+      "get": {
+        "operationId": "get_deploy_applications",
+        "summary": "Returns the fleet as an argocd ApplicationList: one projected Application per operator App CR, carrying the image tag the CR DECLARES, the tag actually RUNNING in the cluster's Deployment, the reconciled health, and the sync verdict those two produce (declared == running ⇒ Synced, both known and different ⇒ OutOfSync, either unknown ⇒ Unknown).",
+        "description": "Returns the fleet as an argocd ApplicationList: one\nprojected Application per operator App CR, carrying the image tag the CR\nDECLARES, the tag actually RUNNING in the cluster's Deployment, the reconciled\nhealth, and the sync verdict those two produce (declared == running ⇒ Synced,\nboth known and different ⇒ OutOfSync, either unknown ⇒ Unknown).\n\nIt is TENANT-SCOPED: a platform SuperAdmin reads every platform namespace, a\nvalidated org member reads only its own org's tenant namespace and only the App\nCRs labelled with its org, and anyone else is refused. A cross-tenant CR is\nnever projected into an answer. The CD Applications the caller may see follow,\nthen the sites of the caller's org (or the org a SuperAdmin acts in), each\nnamed site-\u003cslug\u003e; sites the projects app cannot answer for are left out.",
+        "tags": [
+          "deploy"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/deploy.argoAppList"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/deploy/applications/{name}": {
+      "get": {
+        "operationId": "get_deploy_applications_by_name",
+        "summary": "Returns ONE projected argocd Application by name, with status.resources filled in from its reconciled resource tree — which is what makes it the detail view rather than a row of the list.",
+        "description": "Returns ONE projected argocd Application by name, with\nstatus.resources filled in from its reconciled resource tree — which is what\nmakes it the detail view rather than a row of the list.\n\nA CD Application and a site (site-\u003cslug\u003e) also carry status.history: the\nrevisions they were deployed at, which a sync names to roll back to.\n\nIt is TENANT-SCOPED, and a name that belongs to another org is reported NOT\nFOUND rather than refused: a 403 would confirm the application exists, so the\nroute would become a cross-tenant existence oracle. A name that is not a\nDNS-1123 label is a 400 before any cluster read.",
+        "tags": [
+          "deploy"
+        ],
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "description": "Name is the application to read, from the path. It must be a DNS-1123 label\n(lowercase alphanumerics and hyphens, starting and ending alphanumeric) —\nevery operator App CR's metadata.name satisfies that, and anything else is a\n400 rather than a lookup.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/deploy.argoApp"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/deploy/applications/{name}/resource-tree": {
+      "get": {
+        "operationId": "get_deploy_applications_by_name_resource-tree",
+        "summary": "Returns one application's argocd ApplicationTree: the objects the operator reconciled from its App CR, reached by ownerRef — the Deployment and, under it, the ReplicaSet and Pods, plus the Service, Ingress, HorizontalPodAutoscaler, PodDisruptionBudget and ConfigMaps it owns — each node carrying its parent edges and its health.",
+        "description": "Returns one application's argocd ApplicationTree: the\nobjects the operator reconciled from its App CR, reached by ownerRef — the\nDeployment and, under it, the ReplicaSet and Pods, plus the Service, Ingress,\nHorizontalPodAutoscaler, PodDisruptionBudget and ConfigMaps it owns — each node\ncarrying its parent edges and its health.\n\nSecrets are DELIBERATELY not walked, so no materialized environment can ever\nappear in the tree. Tenant-scoped exactly like the application read: another\norg's name is not found, a malformed name is a 400.",
+        "tags": [
+          "deploy"
+        ],
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "description": "Name is the application to read, from the path. It must be a DNS-1123 label\n(lowercase alphanumerics and hyphens, starting and ending alphanumeric) —\nevery operator App CR's metadata.name satisfies that, and anything else is a\n400 rather than a lookup.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/deploy.argoTree"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/deploy/applications/{name}/revisions/{revision}/metadata": {
+      "get": {
+        "operationId": "get_deploy_applications_by_name_revisions_by_revision_metadata",
+        "summary": "Returns the argocd RevisionMetadata for one revision of one application — what the detail view shows beside a revision.",
+        "description": "Returns the argocd RevisionMetadata for one revision\nof one application — what the detail view shows beside a revision.\n\nAn App CR is IMAGE-pinned rather than commit-pinned: the deploy names an image\ntag, and the git source this projection reports is the display-only manifest\nrepo, not the application's own source. Nothing in this process can read a\ncommit's author or message for an arbitrary revision. So rather than 404 (which\nthe SPA turns into an error toast) or invent a git author, it answers the\nHONEST minimum: date is when the App CR was created, message is the revision\nasked for — with the empty revision and \"HEAD\" resolving to the image tag the\nCR declares — and author is empty. An over-long revision is truncated before it\nis echoed back.\n\nTenant-scoped exactly like the application read.",
+        "tags": [
+          "deploy"
+        ],
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "description": "Name is the application to read, from the path. It must be a DNS-1123 label.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "revision",
+            "in": "path",
+            "required": true,
+            "description": "Revision is the revision to describe, from the path. The empty revision and\n\"HEAD\" both mean \"whatever this application currently declares\".",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/deploy.argoRevisionMetadata"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/deploy/applications/{name}/sync": {
+      "post": {
+        "operationId": "post_deploy_applications_by_name_sync",
+        "summary": "Syncs ONE application to what its source declares now or, given a revision from its own history, back to that revision: the rollback.",
+        "description": "Syncs ONE application to what its source declares now\nor, given a revision from its own history, back to that revision: the rollback.\n\nA Hanzo CD Application (what the estate runs) gets the sync operation\ncd.hanzo.ai's Sync button requests: CD applies a commit to that one\napplication, with its own sync options and no pruning. With no revision that is\nthe commit CD last compared with git. A revision must be one CD deployed the\napplication at before (status.history), not the one it runs, and the\napplication must not sync itself, or CD would put git's head back on its next\npoll. A tenant's operator App CR gets a sync-requested timestamp the operator\nreconciles on its own clock; it keeps no history, so it has no revision to go\nback to. A site (site-\u003cslug\u003e) is synced only to a revision: one of the releases\nits live deployments were kept as (its status.history), which it then serves\nagain — the projects app moves its serving pointer and purges the edge. Its next\ndeployment serves that deployment, as always.\n\nWHO MAY. A platform SuperAdmin, any application. Below SuperAdmin, only a\nrollback of a site of the caller's own org, by a validated member, because the\nprojects app already lets that member publish the site and activate its\nreleases. A credential whose limit names the deploy kind must also name the\nwrite: deploy:rollback for a revision, deploy:sync for none (sdk/grant.go). A key\nlimited to product:deploy and deploy:rollback therefore reads this console and\nrolls back its org's sites, and reaches nothing else. The gate is INSIDE the op\nrather than in middleware around the route: this op is also reached by POST\n/mcp and by the by-name call plane, neither of which runs route middleware.\n\nIt answers the application re-projected; a CD operation is QUEUED, so poll the\napplication for how it ends. An unknown name is a 404 (never a 403, which would\nconfirm the application exists), a name that is not a DNS-1123 label is a 400,\na sync or rollback refused for the application's state (one already queued or\nrunning, a revision not in its history or the one it runs, an application that\nsyncs itself) is a 409, a site release retention has reclaimed is a 410, and no\ncluster client is a 503.",
+        "tags": [
+          "deploy"
+        ],
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "description": "Name is the application to sync, from the path. It must be a DNS-1123 label.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/deploy.syncRef"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/deploy.argoApp"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/deploy/applications/{name}/syncwindows": {
+      "get": {
+        "operationId": "get_deploy_applications_by_name_syncwindows",
+        "summary": "Returns one application's argocd ApplicationSyncWindowState — the answer to \"is anything blocking a sync of this application right now?\".",
+        "description": "Returns one application's argocd\nApplicationSyncWindowState — the answer to \"is anything blocking a sync of this\napplication right now?\".\n\nThis platform runs NO sync windows, so the answer is always the permissive\nempty one: canSync true, with no active and no assigned windows. The\napplication is still resolved first, so a name that is not the caller's is not\nfound rather than handed the static body — the endpoint discloses nothing about\nanother tenant's fleet.",
+        "tags": [
+          "deploy"
+        ],
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "description": "Name is the application to read, from the path. It must be a DNS-1123 label\n(lowercase alphanumerics and hyphens, starting and ending alphanumeric) —\nevery operator App CR's metadata.name satisfies that, and anything else is a\n400 rather than a lookup.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/deploy.argoSyncWindows"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/deploy/callback": {
+      "get": {
+        "operationId": "get_deploy_callback",
+        "summary": "Finish the sign-in round trip and mint the console session",
+        "description": "Completes the redirect from IAM: it validates `state` against the single-use flow cookie in constant time, redeems the authorization code with the PKCE verifier, and then VERIFIES the resulting token exactly as this deployment's identity boundary will on every later request — so a token that would be refused next request fails here with the real reason instead of producing a sign-in loop. On success it sets the session cookie, bounded by the token's own expiry, and redirects to the validated return path.\n\nIt fails closed, and closes on the ADMIN ORG: a principal whose verified owner claim is not the reserved admin org is told plainly that it lacks the role (403) and no cookie is minted for it. That check is not the authorization decision — every gated route re-derives SuperAdmin from the verified JWT — it exists so nobody is handed a session that silently 403s everything. No flow in progress, or a mismatched `state`, is a 400; a refused or unexchangeable code is a 401.",
+        "tags": [
+          "deploy"
+        ],
+        "x-public": true
+      }
+    },
+    "/v1/deploy/clusters": {
+      "get": {
+        "operationId": "get_deploy_clusters",
+        "summary": "Returns the argocd ClusterList of the destinations the caller's applications reconcile into: one entry per distinct destination server, carrying the count of applications reconciling into it.",
+        "description": "Returns the argocd ClusterList of the destinations the\ncaller's applications reconcile into: one entry per distinct destination\nserver, carrying the count of applications reconciling into it. The in-cluster\ndestination is always present, so an empty fleet still answers one cluster, and\nno cluster credential can appear — the projected type physically has no config\nfield.\n\nIt is TENANT-SCOPED and reads the SAME App CRs the applications list reads: a\nplatform SuperAdmin counts the whole fleet, a validated org member counts only\nits own org's applications, anyone else is refused.",
+        "tags": [
+          "deploy"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/deploy.argoClusterList"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/deploy/gitops": {
+      "get": {
+        "operationId": "get_deploy_gitops",
+        "summary": "Lists every Hanzo CD Application in the cluster: the git source each one polls, the commit it last APPLIED, how its last sync operation ended, and its recent deploy history — newest deploy first, ordered by namespace then name.",
+        "description": "Lists every Hanzo CD Application in the cluster: the git source\neach one polls, the commit it last APPLIED, how its last sync operation ended,\nand its recent deploy history — newest deploy first, ordered by namespace then\nname.\n\nThis is the layer ABOVE the application board, and the two disagree in exactly\nthe case an operator most needs to see: main carries a new image pin, CD has\nnot applied that commit yet, so every App CR still declares the old tag and the\napplication board is legitimately \"Synced\" while the deploy has not landed.\nOnly the applied revision here can show that.\n\ninstalled is false — with a reason and an empty list — when the CD CRD is not\nserved in this cluster. That is a FACT about the cluster rather than a failure\nof the request, so the caller can say \"no CD plane here\" instead of rendering\nan error it cannot act on; a genuine transport or RBAC failure still errors.\n\nRead-only, and platform SuperAdmin only: the CD plane is fleet infrastructure\nwith no tenant dimension. This view observes CD and never drives it — the sync\npolicy is automated with self-heal, and the actionable verb an operator has is\nthe per-application reconcile at POST /v1/deploy/applications/{name}/sync.",
+        "tags": [
+          "deploy"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/deploy.GitOpsPlane"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/deploy/health": {
+      "get": {
+        "operationId": "get_deploy_health",
+        "summary": "Reports whether this deployment can observe the delivery plane.",
+        "description": "Reports whether this deployment can observe the delivery plane.\n\n200 only when the Kubernetes API answers AND the App custom resource is served;\n503 with the same shape otherwise, naming which half failed. It reports BOOLEANS\nand never the underlying error, because the route is unauthenticated — liveness\nmust be probe-able without a token — and a raw client error can disclose the\napiserver address or an RBAC detail. That detail is logged server-side instead.",
+        "tags": [
+          "deploy"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/deploy.deployHealth"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/deploy.deployHealth"
+                }
+              }
+            },
+            "description": "service unavailable"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/deploy/live": {
+      "get": {
+        "operationId": "get_deploy_live",
+        "summary": "Answers, for each service, what it is running and whether that is what universe says it should run.",
+        "description": "Answers, for each service, what it is running and whether that is what\nuniverse says it should run.\n\nFor every Hanzo CD Application the caller may see: the images its live pods run\n(tag, digest, and the source commit and repository each was built from where\nthe registry answers it), the universe commit CD last applied, CD's sync and\nhealth verdicts, when it last synced, the image its values files pin at that\ncommit, whether the two agree and which of them does not, and the image CD\ndeployed before this one.\n\n`service` lists one service. `commit` — at least seven hex characters of a sha\n— adds a top-level `live`: whether any listed service runs an image built from\nthat commit. Together they answer \"is commit X live for service Y\", and a\nservice's `previous` is where to roll back to.\n\nIt reads CD's own state and derives nothing CD already says. The declared image\nis read from the universe files the Application names, at the commits CD\nnames. A value the registry or the repository has not yet answered is left out\nof this answer and read again on the next. Read-only, and scoped exactly as\n/v1/deploy/gitops is: a SuperAdmin sees every Application, a validated org\nmember only its own org's, anyone else 403s.\n\ninstalled is false — with a reason and an empty list — when the CD CRD is not\nserved in this cluster.",
+        "tags": [
+          "deploy"
+        ],
+        "parameters": [
+          {
+            "name": "service",
+            "in": "query",
+            "required": false,
+            "description": "Service lists one service, by the name it is listed under. Empty lists them all.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "commit",
+            "in": "query",
+            "required": false,
+            "description": "Commit asks whether the listed services run an image built from this source\ncommit: at least seven hex characters of its sha, matched as a prefix.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/deploy.Live"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/deploy/login": {
+      "get": {
+        "operationId": "get_deploy_login",
+        "summary": "Start the sign-in round trip for this console",
+        "description": "Redirects the browser to IAM's authorize endpoint, having minted a nonce and a PKCE verifier into a short-lived, single-use flow cookie. The nonce comes back as `state` and is what proves the code belongs to the round trip THIS browser started; the verifier never appears in the address bar.\n\nNecessarily public — this is how a browser gets a principal for this host in the first place — and it grants nothing by itself. An optional `returnTo` names where to land afterwards and is run through the open-redirect guard, so only a same-host path survives. A deployment with no sign-in configured answers 503 rather than redirecting nowhere.",
+        "tags": [
+          "deploy"
+        ],
+        "x-public": true
+      }
+    },
+    "/v1/deploy/logout": {
+      "post": {
+        "operationId": "post_deploy_logout",
+        "summary": "Ends the console session on this host.",
+        "description": "Ends the console session on this host.\n\nIt clears this console's session cookie and answers the signed-out state with\nthe sign-in URL to start again. IAM's own session is untouched — this ends the\nconsole session only, so signing back in may not prompt for credentials.\n\nIt is a POST because it CHANGES STATE. As a GET it was reachable by a\ncross-site top-level navigation, which a SameSite=Lax cookie still rides, so\nany page could sign a SuperAdmin out; a POST is not carried cross-site by that\ncookie. It reads no request body and takes no argument: the session it ends is\nthe one the request already carries.",
+        "tags": [
+          "deploy"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/deploy.sessionEnded"
+                }
+              }
+            },
+            "description": "ok",
+            "headers": {
+              "Set-Cookie": {
+                "description": "Set by POST /v1/deploy/logout.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/deploy/projects": {
+      "get": {
+        "operationId": "get_deploy_projects",
+        "summary": "Returns the argocd AppProjectList this console groups and filters applications by.",
+        "description": "Returns the argocd AppProjectList this console groups and\nfilters applications by. Projects are owned by Hanzo IAM rather than by argocd,\nso they are REFLECTED read-only from the IAM project store and nothing is\npersisted here: a validated org member gets its own organization's projects and\na platform SuperAdmin gets every organization's.\n\nA SuperAdmin whose IAM store is not reachable falls back to the real\nargoproj.io AppProject CRs when that CRD is served, and otherwise to one\npermissive synthesized project per distinct project name the App CRs declare.\nA project named \"default\" is always present, because that is what an App CR\ncarrying no project label projects to.",
+        "tags": [
+          "deploy"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/deploy.argoProjectList"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/deploy/reconcile": {
+      "post": {
+        "operationId": "post_deploy_reconcile",
+        "summary": "Renders the configured git source and applies it to the cluster, once.",
+        "description": "Renders the configured git source and applies it to the\ncluster, once.\n\nIt runs one full GitOps sync through the embedded engine — render the\nconfigured repo, ref and path, then three-way server-side apply with scoped\nprune — and answers the revision it applied, the source it came from, the\ndeclared/synced/pruned/failed counts and a per-resource result. This is the\nWRITE half of the plane: it mutates live cluster objects and, with prune\nenabled, deletes objects the source no longer declares.\n\nSuperAdmin-only and fail-closed, with the gate INSIDE the op because a typed op\nis also reached by POST /mcp and by the by-name call plane, where no route\nmiddleware runs. The git source is read AS THE PLATFORM, not as the caller: the\ncoordinate is this deployment's own configuration and never a parameter, which\nis why the op reads no request body at all. A deployment with the engine\nswitched off, or with no usable cluster config, answers 503; a failure to\nstart, render or sync is a 502.",
+        "tags": [
+          "deploy"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/deploy.reconcileReport"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/deploy/release": {
+      "get": {
+        "operationId": "get_deploy_release",
+        "summary": "Answers why a service is, or is not, live: for the newest versions claimed in its source repository, the commit each names, whether the pipeline's runs on it passed and which jobs failed with the lines that say why, whether an image of it was smoked, whether universe pins it, and whether it is what the pods run — and stuck, one sentence saying where the newest version stopped.",
+        "description": "Answers why a service is, or is not, live: for the newest versions\nclaimed in its source repository, the commit each names, whether the\npipeline's runs on it passed and which jobs failed with the lines that say\nwhy, whether an image of it was smoked, whether universe pins it, and whether\nit is what the pods run — and stuck, one sentence saying where the newest\nversion stopped.\n\nThe service is scoped exactly as live is; its source repository is read off\nthe image it runs unless repo names it, and is read from the forge as the\ncaller, in a namespace the caller's org owns.",
+        "tags": [
+          "deploy"
+        ],
+        "parameters": [
+          {
+            "name": "service",
+            "in": "query",
+            "required": false,
+            "description": "Service is the service, by the name live lists it under, such as hanzo-cloud.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "hanzo-cloud"
+          },
+          {
+            "name": "repo",
+            "in": "query",
+            "required": false,
+            "description": "Repo is the forge repository the service is built from, owner/name. Empty\nreads it off the image the service runs.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "versions",
+            "in": "query",
+            "required": false,
+            "description": "Versions is how many of the newest claimed versions to read; 0 is 3, and 10\nis the ceiling. The pinned and the live version are read as well.",
+            "schema": {
+              "format": "int64",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/deploy.Release"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/deploy/session/userinfo": {
+      "get": {
+        "operationId": "get_deploy_session_userinfo",
+        "summary": "Answers \"is this browser signed in, and if not where does it sign in?\" — the dashboard SPA's bootstrap question, and the only route on this plane that answers for an anonymous caller.",
+        "description": "Answers \"is this browser signed in, and if not where does it\nsign in?\" — the dashboard SPA's bootstrap question, and the only route on this\nplane that answers for an anonymous caller.\n\nThe anonymous answer carries loggedIn:false and a URL and NOTHING else: no\nusername, no org, no groups, no issuer, no hint about who the caller might be or\nwhat exists in the cluster. Answering it costs nothing (the caller already knows\nwhether it holds a cookie) and withholding it costs the whole sign-in journey.\n\nThe predicate is the platform SuperAdmin fact — the SAME one every other route\nhere gates on, minted from a validated principal whose org is the reserved admin\norg — so a validated-but-not-SuperAdmin caller is reported as NOT signed in,\nwhich is the truth as this console defines it: they cannot use it.",
+        "tags": [
+          "deploy"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/deploy.sessionUser"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/deploy/settings": {
+      "get": {
+        "operationId": "get_deploy_settings",
+        "summary": "Returns the argocd AuthSettings object the dashboard SPA awaits before its first render.",
+        "description": "Returns the argocd AuthSettings object the dashboard SPA\nawaits before its first render.\n\nEvery value is a CONSTANT of this projection rather than configuration read\nfrom anywhere: the SPA's own login form is reported disabled and its OIDC\nconfig null because Hanzo IAM owns identity at the edge and this console's\nsign-in is GET /v1/deploy/login, and every argocd feature the projection does\nnot implement — status badges, Dex connectors, config-management plugins,\nkustomize versions, the exec terminal, apps-in-any-namespace, the hydrator,\nsync-with-replace — is reported off. Platform SuperAdmin only.",
+        "tags": [
+          "deploy"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/deploy.consoleSettings"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/deploy/stream/applications": {
+      "get": {
+        "operationId": "get_deploy_stream_applications",
+        "summary": "Live application fleet updates as Server-Sent Events",
+        "description": "Holds the connection open as text/event-stream and pushes one watch event per application change. It opens with an `ADDED` frame for every application currently present — the same projection the applications list serves, so a client renders a complete fleet from the stream alone — and then forwards `ADDED`, `MODIFIED` and `DELETED` as they happen, with a keep-alive every 25 seconds that is also how a vanished client is noticed and its watch torn down.\n\nRead-only and TENANT-SCOPED, fail-closed: a platform SuperAdmin streams the whole fleet, a validated org member streams only its own org's applications, anyone else gets 403 and no stream. No cluster client configured is 503. If the deployment is not granted the watch verb the stream degrades to keep-alives only — the initial state still renders, it simply stops updating — rather than failing the connection.",
+        "tags": [
+          "deploy"
+        ],
+        "x-public": true
+      }
+    },
+    "/v1/deploy/stream/applications/{name}/resource-tree": {
+      "get": {
+        "operationId": "get_deploy_stream_applications_by_name_resource-tree",
+        "summary": "Live resource tree for one application, as Server-Sent Events",
+        "description": "Holds the connection open as text/event-stream and pushes the application's whole resource tree — its live child objects and each one's derived health — once immediately and again on every keep-alive tick, so a client always has a current picture without polling. The refresh IS the keep-alive: it is a cheap rebuild rather than a watch, so there is no multi-resource watch to leak.\n\nTENANT-SCOPED and fail-closed BEFORE the stream opens, which is the rule that matters: the caller's scope and the application's namespace are resolved first, so an unvalidated caller gets a plain 403 and an application belonging to another tenant gets a plain 404 — never an opened stream that emits nothing. A SuperAdmin reaches the whole fleet, an org member only its own org's applications. No cluster client configured is 503.",
+        "tags": [
+          "deploy"
+        ],
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "x-public": true
+      }
+    },
+    "/v1/deploy/version": {
+      "get": {
+        "operationId": "get_deploy_version",
+        "summary": "Returns the argocd VersionMessage the dashboard SPA reads at bootstrap.",
+        "description": "Returns the argocd VersionMessage the dashboard SPA reads at\nbootstrap. There is no argocd binary behind this plane — it is a projection\nover operator App CRs — so the fields say so rather than describing a build:\nVersion names the projection, BuildDate is the moment this response was\ngenerated, and Compiler/Platform/GoVersion are the constants the SPA tolerates\nrather than facts about this process. Platform SuperAdmin only.",
+        "tags": [
+          "deploy"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/deploy.versionMessage"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "deploy.Built": {
+        "properties": {
+          "commit": {
+            "description": "Commit is the source commit.",
+            "type": "string"
+          },
+          "failed": {
+            "description": "Failed are the jobs that failed in the runs on the commit that count, with\nthe lines of each log that say what failed.",
+            "items": {
+              "$ref": "#/components/schemas/deploy.FailedJob"
+            },
+            "type": "array"
+          },
+          "number": {
+            "description": "Number is that run's number in the repository, as the forge's page shows it.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "run": {
+            "description": "Run is the newest run on the commit, by its id on the forge, as `hanzo git\nruns get` takes it with the repository.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "state": {
+            "description": "State answers \"is this commit green?\": passed, failed, running, queued or\nnone, over the latest attempt of each workflow on it.",
+            "type": "string"
+          },
+          "url": {
+            "description": "URL is that run's page on the forge.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "deploy.FailedJob": {
+        "properties": {
+          "failing": {
+            "description": "Failing are the lines of its log that say what failed: a failing test and\nwhat it reported, a failing package, a panic, a diagnostic, an annotated\nerror. Read for the head and the versions newer than the pin, six logs a\nrequest; absent otherwise, and for a job that wrote no log of its own — a\nreusable workflow's caller, whose own jobs are listed beside it.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "fault": {
+            "description": "Fault is why the job's log could not be read; the rest of the answer stands.",
+            "type": "string"
+          },
+          "id": {
+            "description": "ID is the job's id on the forge.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "name": {
+            "description": "Name is the job's name in the workflow.",
+            "type": "string"
+          },
+          "run": {
+            "description": "Run is the forge id of the run the job is in, as `hanzo git runs logs` takes it.",
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "deploy.GitOpsApp": {
+        "properties": {
+          "automated": {
+            "description": "Automated is whether CD applies new commits without being asked. It reads the\nPRESENCE of spec.syncPolicy.automated, which is a block rather than a\nboolean; false means drift is reported and nothing moves.",
+            "type": "boolean"
+          },
+          "health": {
+            "description": "Health is CD's verdict on the objects it manages, verbatim: Healthy,\nProgressing, Degraded, Suspended, Missing or Unknown.",
+            "type": "string"
+          },
+          "history": {
+            "description": "History is the recent deploy log, NEWEST FIRST and capped at ten. CD appends\noldest-first and bounds the list itself; the reversal happens here so a\ncaller never has to know the storage order to show what shipped last. Empty\n(never null) for an Application that has deployed nothing.",
+            "items": {
+              "$ref": "#/components/schemas/deploy.GitOpsDeploy"
+            },
+            "type": "array"
+          },
+          "name": {
+            "description": "Name is what CD calls this tracked source, not the workload it deploys —\nthe Application CR's own metadata.name. The fleet ApplicationSet mints these\nas \u003cnamespace\u003e-\u003capp\u003e.",
+            "type": "string"
+          },
+          "namespace": {
+            "description": "Namespace is where the Application OBJECT lives: CD's own controller\nnamespace, which is the same one for every row here. It is NOT the\ndestination the workloads land in — this endpoint lists cluster-wide and\nnever reads spec.destination.",
+            "type": "string"
+          },
+          "operation": {
+            "$ref": "#/components/schemas/deploy.GitOpsOperation",
+            "description": "Operation is the last sync attempt and how it ended. Absent when CD has run\nnone, which is the honest gap between \"never tried\" and \"tried and failed\"."
+          },
+          "path": {
+            "description": "Path is the directory inside that repository CD renders, relative to its root.",
+            "type": "string"
+          },
+          "project": {
+            "description": "Project is the AppProject fence the sync is admitted under: which repos this\nApplication may pull from and which destinations it may write to. Empty when\nthe CR declares none.",
+            "type": "string"
+          },
+          "reconciledAt": {
+            "description": "ReconciledAt is when CD last COMPARED this Application against git, RFC 3339.\nIt moves on every comparison, including ones that applied nothing.",
+            "type": "string"
+          },
+          "repoURL": {
+            "description": "RepoURL is the git repository CD polls for this Application's desired state.",
+            "type": "string"
+          },
+          "resources": {
+            "description": "Resources is how MANY objects CD manages for this Application\n(len(status.resources)) — a count, not the objects. Zero for an Application\nCD has not reconciled.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "revision": {
+            "description": "Revision is the commit CD last APPLIED (status.sync.revision). Empty means it\nhas applied none — never read that as the head of TargetRevision.",
+            "type": "string"
+          },
+          "selfHeal": {
+            "description": "SelfHeal is whether CD also reverts changes made directly in the cluster\n(syncPolicy.automated.selfHeal). Meaningless unless Automated.",
+            "type": "boolean"
+          },
+          "sync": {
+            "description": "Sync is CD's verdict on git versus cluster, verbatim: Synced, OutOfSync or\nUnknown. It is about the applied REVISION, so an Application can be Synced to\na commit that is several behind the branch it tracks.",
+            "type": "string"
+          },
+          "targetRevision": {
+            "description": "TargetRevision is the git ref CD TRACKS — usually a branch such as \"main\".\nIt is what CD aims at; Revision is what it has reached.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "deploy.GitOpsDeploy": {
+        "properties": {
+          "automated": {
+            "description": "Automated is whether CD started this deploy itself, from its own polling of\nthe tracked git ref (initiatedBy.automated), rather than someone asking for it.",
+            "type": "boolean"
+          },
+          "deployedAt": {
+            "description": "DeployedAt is when the apply finished, RFC 3339. Absent when CD recorded none.",
+            "type": "string"
+          },
+          "id": {
+            "description": "ID is CD's own sequence number for this deploy (status.history[].id). It\nincreases with every applied revision, so the largest id in `history` is the\nmost recent deploy — which is the first entry, since the list is reversed.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "revision": {
+            "description": "Revision is the git commit this deploy applied, as CD recorded it.",
+            "type": "string"
+          },
+          "startedAt": {
+            "description": "StartedAt is when CD began applying the revision (deployStartedAt), RFC 3339.\nAbsent when CD recorded none.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "deploy.GitOpsOperation": {
+        "properties": {
+          "finishedAt": {
+            "description": "FinishedAt is when it ended, RFC 3339. Absent while the phase is Running.",
+            "type": "string"
+          },
+          "message": {
+            "description": "Message is CD's account of the phase — \"successfully synced (all tasks run)\"\nfor a Succeeded operation, the reason it stopped for a Failed one.",
+            "type": "string"
+          },
+          "phase": {
+            "description": "Phase is how the last sync operation ended, in CD's own vocabulary: Running,\nSucceeded or Failed. It is never empty — an Application whose phase is empty\nhas no operation at all and omits this whole object.",
+            "type": "string"
+          },
+          "revision": {
+            "description": "Revision is the commit this operation ATTEMPTED (operationState.syncResult).\nIt differs from the Application's own revision exactly when the attempt did\nnot land: revision is the last commit CD got applied, this is the last one it\ntried.",
+            "type": "string"
+          },
+          "startedAt": {
+            "description": "StartedAt is when the operation began, RFC 3339.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "deploy.GitOpsPlane": {
+        "properties": {
+          "applications": {
+            "description": "Applications is every CD Application in the cluster, ordered by namespace\nthen name. Empty (never null) when the plane is not installed, and equally\nempty when it is installed and tracks nothing — Installed is what separates\nthose two.",
+            "items": {
+              "$ref": "#/components/schemas/deploy.GitOpsApp"
+            },
+            "type": "array"
+          },
+          "installed": {
+            "description": "Installed is whether this cluster serves the CD Application CRD at all. False\nis a fact about the cluster, not a failure of the request: the caller says\n\"no CD plane here\" rather than rendering an error it cannot act on.",
+            "type": "boolean"
+          },
+          "reason": {
+            "description": "Reason says why the plane is absent, in words a caller can show. Empty when\nInstalled.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "deploy.Image": {
+        "properties": {
+          "commit": {
+            "description": "Commit is the source commit the image was built from — its\norg.opencontainers.image.revision label — where the registry answers it:\na digest-pinned image in one of our registries that this deployment can\nread. Absent means unknown, never \"built from nothing\".",
+            "type": "string"
+          },
+          "digest": {
+            "description": "Digest is the sha256 of the bytes, when the reference is pinned by one.",
+            "type": "string"
+          },
+          "ref": {
+            "description": "Ref is the reference exactly as the pods run it.",
+            "type": "string"
+          },
+          "repo": {
+            "description": "Repo is the repository that commit is in — the image's\norg.opencontainers.image.source label, as the build wrote it — where the\nregistry answers it. Absent as Commit is.",
+            "type": "string"
+          },
+          "repository": {
+            "description": "Repository is the reference without its tag or digest.",
+            "type": "string"
+          },
+          "tag": {
+            "description": "Tag is the release name, when the reference carries one.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "deploy.Live": {
+        "properties": {
+          "installed": {
+            "description": "Installed is whether this cluster serves the CD Application CRD at all.\nFalse is a fact about the cluster, not a failure of the request.",
+            "type": "boolean"
+          },
+          "live": {
+            "description": "Live answers the commit query: whether any listed service runs an image\nbuilt from that commit. Absent when no commit was asked, and when it cannot\nbe told: an image whose build commit the registry did not answer, such as a\nprivate one this deployment holds no credential for, could be the one.",
+            "type": "boolean"
+          },
+          "reason": {
+            "description": "Reason says why the plane is absent. Empty when Installed.",
+            "type": "string"
+          },
+          "services": {
+            "description": "Services is every visible Application the query keeps, ordered by namespace\nthen name. Empty, never null.",
+            "items": {
+              "$ref": "#/components/schemas/deploy.Running"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "deploy.Release": {
+        "properties": {
+          "drift": {
+            "description": "Drift names what disagrees between the pin and the pods, as live does.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "head": {
+            "$ref": "#/components/schemas/deploy.Built",
+            "description": "Head is the default branch's tip and what ran on it."
+          },
+          "health": {
+            "description": "Health is CD's verdict on the objects it manages: Healthy, Progressing,\nDegraded, Suspended, Missing or Unknown.",
+            "type": "string"
+          },
+          "live": {
+            "$ref": "#/components/schemas/deploy.Image",
+            "description": "Live is the service's image of Repo its pods run now, with the commit it\nwas built from where the registry answers it."
+          },
+          "pinned": {
+            "$ref": "#/components/schemas/deploy.Image",
+            "description": "Pinned is the image universe pins the service to."
+          },
+          "repo": {
+            "description": "Repo is the forge repository it is built from, owner/name.",
+            "type": "string"
+          },
+          "service": {
+            "description": "Service is the service asked about.",
+            "type": "string"
+          },
+          "stuck": {
+            "description": "Stuck says in one sentence where the newest claimed version stopped on its\nway to live, and what is live instead. Empty when the newest claimed\nversion is the one live.",
+            "type": "string"
+          },
+          "sync": {
+            "description": "Sync is CD's verdict on git against the cluster: Synced, OutOfSync or Unknown.",
+            "type": "string"
+          },
+          "versions": {
+            "description": "Versions are the newest claimed versions, newest first, with the pinned\nand the live one among them.",
+            "items": {
+              "$ref": "#/components/schemas/deploy.Version"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "deploy.Running": {
+        "properties": {
+          "converged": {
+            "description": "Converged is whether nothing disagrees: Drift is empty.",
+            "type": "boolean"
+          },
+          "declared": {
+            "$ref": "#/components/schemas/deploy.Image",
+            "description": "Declared is the image the service's values files pin at Revision: what\nuniverse says it should run. Absent for a service CD renders from plain\nmanifests, one that pins no image, and one whose files could not be read\n(Drift says unread)."
+          },
+          "drift": {
+            "description": "Drift names what disagrees, from: image, the pods do not run the declared\ntag and digest; sync, CD's verdict is not Synced; health, CD's verdict is not\nHealthy; unread, the declaration could not be read so agreement is unproven.\nEmpty, never null, when converged.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "health": {
+            "description": "Health is CD's verdict on the objects it manages: Healthy, Progressing,\nDegraded, Suspended, Missing or Unknown.",
+            "type": "string"
+          },
+          "images": {
+            "description": "Images are the images the service's pods are running now, as CD collected\nthem from the live pods. Two of one repository is a rollout in progress.",
+            "items": {
+              "$ref": "#/components/schemas/deploy.Image"
+            },
+            "type": "array"
+          },
+          "name": {
+            "description": "Name is the CD Application's name, which the fleet mints as\n\u003cnamespace\u003e-\u003capp\u003e.",
+            "type": "string"
+          },
+          "namespace": {
+            "description": "Namespace is where the service's workloads run (spec.destination.namespace).",
+            "type": "string"
+          },
+          "previous": {
+            "$ref": "#/components/schemas/deploy.Image",
+            "description": "Previous is the image CD deployed before the one it deployed last: the\nnewest earlier deploy in CD's history whose pin differs, which is what a\nrollback returns to. Deploys that changed something else are passed over.\nAbsent when CD's history, which it bounds itself, holds no earlier image."
+          },
+          "repoURL": {
+            "description": "RepoURL is the git repository CD applies this service from, usually universe.",
+            "type": "string"
+          },
+          "revision": {
+            "description": "Revision is the commit of that repository CD last applied. Empty means it\nhas applied none.",
+            "type": "string"
+          },
+          "sync": {
+            "description": "Sync is CD's verdict on git against the cluster: Synced, OutOfSync or Unknown.",
+            "type": "string"
+          },
+          "syncedAt": {
+            "description": "SyncedAt is when CD last finished applying a revision, RFC 3339. Empty when\nit never has.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "deploy.Version": {
+        "properties": {
+          "commit": {
+            "description": "Commit is the source commit.",
+            "type": "string"
+          },
+          "failed": {
+            "description": "Failed are the jobs that failed in the runs on the commit that count, with\nthe lines of each log that say what failed.",
+            "items": {
+              "$ref": "#/components/schemas/deploy.FailedJob"
+            },
+            "type": "array"
+          },
+          "live": {
+            "description": "Live is whether the service's pods run it.",
+            "type": "boolean"
+          },
+          "number": {
+            "description": "Number is that run's number in the repository, as the forge's page shows it.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "pinned": {
+            "description": "Pinned is whether universe pins the service to it.",
+            "type": "boolean"
+          },
+          "run": {
+            "description": "Run is the newest run on the commit, by its id on the forge, as `hanzo git\nruns get` takes it with the repository.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "smoked": {
+            "description": "Smoked are the image digests the pipeline booted and recorded at the\nversion's commit (refs/tags/smoked/sha256-\u003cdigest\u003e). Empty means no image of\nit was ever proven to boot, so nothing may pin it.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "state": {
+            "description": "State answers \"is this commit green?\": passed, failed, running, queued or\nnone, over the latest attempt of each workflow on it.",
+            "type": "string"
+          },
+          "tag": {
+            "description": "Tag is the version, such as v8.5.1131.",
+            "type": "string"
+          },
+          "url": {
+            "description": "URL is that run's page on the forge.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "deploy.appliedResource": {
+        "properties": {
+          "message": {
+            "description": "Message is the engine's own sentence about this object — the apiserver's\nrefusal on a failure, and typically empty on success. It is for a human\nreading a failed run, not a value to branch on.",
+            "type": "string"
+          },
+          "resource": {
+            "description": "Resource identifies the object as group/version/kind/namespace/name, the\nengine's own key. It is stable across runs, so two reports can be diffed on\nit.",
+            "type": "string"
+          },
+          "status": {
+            "description": "Status is what happened to this object, from the engine's closed\nvocabulary: `Synced` (applied), `Pruned` (deleted because the source no\nlonger declares it), `SyncFailed` (refused — read Message) and\n`PruneSkipped` (deletion was declined). It is the per-object detail behind\nthe report's counts.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "deploy.argoApp": {
+        "properties": {
+          "apiVersion": {
+            "description": "APIVersion is the constant \"argoproj.io/v1alpha1\" — the shape, not the source.\nThese are projections of operator App CRs and Hanzo CD Applications; no\nargoproj.io object is stored anywhere behind this plane.",
+            "type": "string"
+          },
+          "kind": {
+            "description": "Kind is the constant \"Application\".",
+            "type": "string"
+          },
+          "metadata": {
+            "$ref": "#/components/schemas/deploy.argoMeta",
+            "description": "Metadata is the projected object's identity."
+          },
+          "spec": {
+            "$ref": "#/components/schemas/deploy.argoSpec",
+            "description": "Spec is the desired state: where it comes from, where it lands, what project\nit belongs to."
+          },
+          "status": {
+            "$ref": "#/components/schemas/deploy.argoStatus",
+            "description": "Status is what was observed: the sync verdict, the health, and the owned\nobjects when this is a detail read."
+          }
+        },
+        "type": "object"
+      },
+      "deploy.argoAppList": {
+        "properties": {
+          "apiVersion": {
+            "description": "APIVersion is the constant \"argoproj.io/v1alpha1\".",
+            "type": "string"
+          },
+          "items": {
+            "description": "Items is one entry per operator App CR the caller may see — its own org's, or\nevery platform namespace's for a SuperAdmin — followed, for a SuperAdmin\nonly, by every Hanzo CD Application in the cluster. Empty (never null) rather\nthan absent when the caller owns nothing.",
+            "items": {
+              "$ref": "#/components/schemas/deploy.argoApp"
+            },
+            "type": "array"
+          },
+          "kind": {
+            "description": "Kind is the constant \"ApplicationList\".",
+            "type": "string"
+          },
+          "metadata": {
+            "$ref": "#/components/schemas/deploy.argoListMeta",
+            "description": "Metadata is the list envelope the SPA expects; it carries no resume point."
+          }
+        },
+        "type": "object"
+      },
+      "deploy.argoCluster": {
+        "properties": {
+          "connectionState": {
+            "$ref": "#/components/schemas/deploy.argoConnectionState",
+            "description": "ConnectionState is whether the destination is reachable."
+          },
+          "info": {
+            "$ref": "#/components/schemas/deploy.argoClusterInfo",
+            "description": "Info is the connection state again plus the count of applications targeting\nthis destination."
+          },
+          "name": {
+            "description": "Name is what the Destination column shows: \"in-cluster\" for this cluster,\notherwise whatever spec.destination.name declares, falling back to the server\nURL when it declares none.",
+            "type": "string"
+          },
+          "server": {
+            "description": "Server is the destination's API URL, and the key the list is deduplicated by.\nhttps://kubernetes.default.svc is this cluster.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "deploy.argoClusterInfo": {
+        "properties": {
+          "applicationsCount": {
+            "description": "ApplicationsCount is how many of THE CALLER'S applications reconcile into\nthis cluster, so a tenant sees its own count and a SuperAdmin the fleet's. It\nis zero for the in-cluster destination when the caller owns nothing, since\nthat destination is listed whether or not anything targets it.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "connectionState": {
+            "$ref": "#/components/schemas/deploy.argoConnectionState",
+            "description": "ConnectionState repeats the cluster's own connection state, which is where\nArgoCD's UI reads it from on this object."
+          },
+          "serverVersion": {
+            "description": "ServerVersion is the kubernetes version of the destination. Always absent:\nnothing here queries the API server for it.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "deploy.argoClusterList": {
+        "properties": {
+          "items": {
+            "description": "Items is one entry per distinct destination server, in first-seen order with\nthe in-cluster destination first. Never empty: an empty fleet still has the\none cluster it would deploy into.",
+            "items": {
+              "$ref": "#/components/schemas/deploy.argoCluster"
+            },
+            "type": "array"
+          },
+          "metadata": {
+            "$ref": "#/components/schemas/deploy.argoListMeta",
+            "description": "Metadata is the list envelope the SPA expects; it carries no resume point."
+          }
+        },
+        "type": "object"
+      },
+      "deploy.argoConnectionState": {
+        "properties": {
+          "attemptedAt": {
+            "description": "AttemptedAt is when the connection was last probed. Always absent: nothing is\nprobed, and a fabricated timestamp would claim a check that never ran.",
+            "type": "string"
+          },
+          "message": {
+            "description": "Message is why a connection failed. Always absent, since none does.",
+            "type": "string"
+          },
+          "status": {
+            "description": "Status is ArgoCD's ConnectionStatus — Successful, Failed or Unknown. Always\nSuccessful here: the destination is the cluster this process is already\nrunning in, so it is reachable by construction and there is no credential to\nprobe.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "deploy.argoDestination": {
+        "properties": {
+          "name": {
+            "description": "ArgoCD allows a destination by cluster name; omitted for the in-cluster projection.",
+            "type": "string"
+          },
+          "namespace": {
+            "description": "Namespace is where in that cluster the workload lands. \"*\" on a project's\ndestination fence means any namespace.",
+            "type": "string"
+          },
+          "server": {
+            "description": "Server is the cluster API URL the application reconciles into. Everything\nthis plane projects lands in the cluster it runs in, so it is\nhttps://kubernetes.default.svc — except on a project's destination fence,\nwhere \"*\" means any cluster.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "deploy.argoGroupKind": {
+        "properties": {
+          "group": {
+            "description": "Group is the API group a project admits, \"*\" for any. Empty names the core\ngroup.",
+            "type": "string"
+          },
+          "kind": {
+            "description": "Kind is the kind it admits, \"*\" for any.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "deploy.argoHealth": {
+        "properties": {
+          "message": {
+            "description": "Message is why the status is what it is — \"Running: no replicas ready\",\n\"iam: CrashLoopBackOff\". A Healthy object carries one too (\"Running: all\nreplicas ready\"), so this is not a failure signal. Always absent on a CD row,\nwhich reports no health message.",
+            "type": "string"
+          },
+          "status": {
+            "description": "Status is the ArgoCD health vocabulary, Capitalized: Healthy, Progressing,\nDegraded, Suspended, Missing or Unknown. For an App CR it is derived per\nobject from what the operator reconciled (a workload with every replica ready\nis Healthy, one scaled to zero is Suspended, a crash-looping pod is\nDegraded); for a CD row it is the verdict CD wrote.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "deploy.argoHistory": {
+        "properties": {
+          "deployedAt": {
+            "description": "DeployedAt is when it was deployed, RFC 3339.",
+            "type": "string"
+          },
+          "id": {
+            "description": "ID numbers the entry: CD's own history id for a CD row, the deployment's\nversion for a site.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "revision": {
+            "description": "Revision is what was deployed — a commit for a CD row, a kept release for a\nsite — and what a sync names to roll back to it.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "deploy.argoInfoItem": {
+        "properties": {
+          "name": {
+            "description": "Name is the chip's label. The only one this projection produces is\n\"Image Tag\".",
+            "type": "string"
+          },
+          "value": {
+            "description": "Value is the chip's value — for \"Image Tag\", the tag the node runs.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "deploy.argoListMeta": {
+        "properties": {
+          "resourceVersion": {
+            "description": "ResourceVersion is the k8s list version a watch would resume from. Always\nempty: every list on this plane is COMPUTED per request rather than read from\none etcd revision, so there is no point to resume from. The live view is the\nSSE stream, not a resumed watch.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "deploy.argoMeta": {
+        "properties": {
+          "creationTimestamp": {
+            "description": "CreationTimestamp is when the source object was created, RFC 3339 to the\nsecond. Empty for a synthesized project.",
+            "type": "string"
+          },
+          "labels": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "description": "Labels are the labels this projection puts on the row, not the source\nobject's full label set. An application projected from an App CR carries\nhanzo.ai/instance (its name), hanzo.ai/env (main, test or dev, from the\nnamespace it was read from) and hanzo.ai/org when the CR declares a tenant. A\nHanzo CD Application carries the CR's own labels verbatim. A project\nreflected from IAM carries hanzo.ai/org alone.",
+            "type": "object"
+          },
+          "name": {
+            "description": "Name is the projected object's name: the App CR's metadata.name for an\napplication, the CD Application's name for a CD row, and the IAM project name\nfor a project.",
+            "type": "string"
+          },
+          "namespace": {
+            "description": "Namespace is the namespace the source object was read from — the tenant or\nplatform namespace for an App CR, CD's controller namespace for a CD row.\nEmpty for a project synthesized here, which lives in no namespace.",
+            "type": "string"
+          },
+          "uid": {
+            "description": "UID is the k8s metadata.uid of the source object, which is what the SPA keys\na row on across refreshes. Empty for a synthesized project — there is no\nobject to take one from.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "deploy.argoNode": {
+        "properties": {
+          "createdAt": {
+            "description": "CreatedAt is the object's creationTimestamp, RFC 3339 UTC to the second.\nAbsent when the object carries none.",
+            "type": "string"
+          },
+          "group": {
+            "description": "Group is the object's API group: empty for the core group (Pod, Service,\nConfigMap), otherwise apps, networking.k8s.io, autoscaling or policy — and\nhanzo.ai for the App CR at the root.",
+            "type": "string"
+          },
+          "health": {
+            "$ref": "#/components/schemas/deploy.argoHealth",
+            "description": "Health is the node's own derived health. Always present on a node of this\ntree; a kind with no health signal of its own reports Healthy, since a\nConfigMap existing IS its healthy state."
+          },
+          "images": {
+            "description": "Images are the container images running on this node. Always absent — the tag\ntravels as the \"Image Tag\" chip in Info instead, which is where the SPA reads\nit on a node.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "info": {
+            "description": "Info are the chips shown on the node. At most one: the image tag — the\nRUNNING tag on a Deployment, ReplicaSet or Pod, and the DECLARED tag on the\nApp CR at the root. Absent on a node that carries no image at all.",
+            "items": {
+              "$ref": "#/components/schemas/deploy.argoInfoItem"
+            },
+            "type": "array"
+          },
+          "kind": {
+            "description": "Kind is the object kind. The root is the App CR; below it come Deployment,\nReplicaSet, Pod, Service, Ingress, HorizontalPodAutoscaler,\nPodDisruptionBudget and ConfigMap. Never Secret — the walk does not visit\nthem, so no materialized environment can reach the tree.",
+            "type": "string"
+          },
+          "name": {
+            "description": "Name is the object's metadata.name.",
+            "type": "string"
+          },
+          "namespace": {
+            "description": "Namespace is the namespace the walk ran in, the same for every node of one\ntree.",
+            "type": "string"
+          },
+          "parentRefs": {
+            "description": "ParentRefs are the node's edges UPWARD, which is how the SPA draws the DAG\nfrom this flat list. Exactly one entry where present: a depth-1 object points\nat the App CR, a ReplicaSet at its Deployment, a Pod at its ReplicaSet (or at\nthe Deployment whose selector matches it, when the ReplicaSet is gone).\nAbsent on the root.",
+            "items": {
+              "$ref": "#/components/schemas/deploy.argoResourceRef"
+            },
+            "type": "array"
+          },
+          "resourceVersion": {
+            "description": "ResourceVersion is the k8s version a watch would resume from. Always empty:\nthe tree is rebuilt from live reads on every request, including on every\nframe of the SSE stream, so there is no revision to resume from.",
+            "type": "string"
+          },
+          "uid": {
+            "description": "UID is the object's metadata.uid. Absent on a PARENT reference, which\naddresses its target by kind and name rather than by identity.",
+            "type": "string"
+          },
+          "version": {
+            "description": "Version is the object's API version as the live object reports it: v1 for\nevery kind the walk reaches except the HorizontalPodAutoscaler, which is\nautoscaling/v2.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "deploy.argoProject": {
+        "properties": {
+          "apiVersion": {
+            "description": "APIVersion is the constant \"argoproj.io/v1alpha1\". A project here is an IAM\nresource wearing that shape; no argoproj.io object is stored behind it.",
+            "type": "string"
+          },
+          "kind": {
+            "description": "Kind is the constant \"AppProject\".",
+            "type": "string"
+          },
+          "metadata": {
+            "$ref": "#/components/schemas/deploy.argoMeta",
+            "description": "Metadata is the project's identity: its name is the key an application's\nspec.project matches, and is the same string an App CR carries in its\napp.kubernetes.io/part-of label."
+          },
+          "spec": {
+            "$ref": "#/components/schemas/deploy.argoProjectSpec",
+            "description": "Spec is the fence the SPA displays — repos, destinations, admitted kinds."
+          },
+          "status": {
+            "$ref": "#/components/schemas/deploy.argoProjectStat",
+            "description": "Status is always the empty object. A project has no reconciled state here;\nthe field exists because the SPA reads it."
+          }
+        },
+        "type": "object"
+      },
+      "deploy.argoProjectList": {
+        "properties": {
+          "items": {
+            "description": "Items is the projects visible to the caller — its own organization's, or\nevery organization's for a SuperAdmin. A project named \"default\" is always\npresent and is prepended when IAM does not carry one, because that is what an\napplication with no project label groups under.",
+            "items": {
+              "$ref": "#/components/schemas/deploy.argoProject"
+            },
+            "type": "array"
+          },
+          "metadata": {
+            "$ref": "#/components/schemas/deploy.argoListMeta",
+            "description": "Metadata is the list envelope the SPA expects; it carries no resume point."
+          }
+        },
+        "type": "object"
+      },
+      "deploy.argoProjectSpec": {
+        "properties": {
+          "clusterResourceWhitelist": {
+            "description": "ClusterResourceWhitelist are the cluster-scoped kinds it may create —\n[{group:\"*\", kind:\"*\"}] on a synthesized project.",
+            "items": {
+              "$ref": "#/components/schemas/deploy.argoGroupKind"
+            },
+            "type": "array"
+          },
+          "description": {
+            "description": "Description is the project's human label: the IAM project's display name, or\nits description when it has no display name. Absent when IAM carries neither.",
+            "type": "string"
+          },
+          "destinations": {
+            "description": "Destinations are the cluster/namespace pairs it may write to — a single\n{server:\"*\", namespace:\"*\"} on a synthesized project, for the same reason.",
+            "items": {
+              "$ref": "#/components/schemas/deploy.argoDestination"
+            },
+            "type": "array"
+          },
+          "sourceRepos": {
+            "description": "SourceRepos are the git repos applications in this project may pull from.\n[\"*\"] for every project this plane synthesizes or reflects from IAM: the\nboundary that actually holds on this platform is the IAM org, resolved before\na row is ever projected, so the projected fence is deliberately permissive\nand is NOT an authorization statement.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "deploy.argoProjectStat": {
+        "properties": {},
+        "type": "object"
+      },
+      "deploy.argoResourceRef": {
+        "properties": {
+          "group": {
+            "description": "Group is the object's API group: empty for the core group (Pod, Service,\nConfigMap), otherwise apps, networking.k8s.io, autoscaling or policy — and\nhanzo.ai for the App CR at the root.",
+            "type": "string"
+          },
+          "kind": {
+            "description": "Kind is the object kind. The root is the App CR; below it come Deployment,\nReplicaSet, Pod, Service, Ingress, HorizontalPodAutoscaler,\nPodDisruptionBudget and ConfigMap. Never Secret — the walk does not visit\nthem, so no materialized environment can reach the tree.",
+            "type": "string"
+          },
+          "name": {
+            "description": "Name is the object's metadata.name.",
+            "type": "string"
+          },
+          "namespace": {
+            "description": "Namespace is the namespace the walk ran in, the same for every node of one\ntree.",
+            "type": "string"
+          },
+          "uid": {
+            "description": "UID is the object's metadata.uid. Absent on a PARENT reference, which\naddresses its target by kind and name rather than by identity.",
+            "type": "string"
+          },
+          "version": {
+            "description": "Version is the object's API version as the live object reports it: v1 for\nevery kind the walk reaches except the HorizontalPodAutoscaler, which is\nautoscaling/v2.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "deploy.argoResourceStatus": {
+        "properties": {
+          "group": {
+            "description": "Group is the object's API group: empty for the core group (Pod, Service,\nConfigMap), otherwise apps, networking.k8s.io, autoscaling or policy — and\nhanzo.ai for the App CR itself.",
+            "type": "string"
+          },
+          "health": {
+            "$ref": "#/components/schemas/deploy.argoHealth",
+            "description": "Health is this object's own health, derived from its live state by the same\nrule the resource tree uses."
+          },
+          "kind": {
+            "description": "Kind is the object kind — App, Deployment, ReplicaSet, Pod, Service, Ingress,\nHorizontalPodAutoscaler, PodDisruptionBudget, ConfigMap. Never Secret: the\nwalk that produces these does not visit them.",
+            "type": "string"
+          },
+          "name": {
+            "description": "Name is the object's metadata.name.",
+            "type": "string"
+          },
+          "namespace": {
+            "description": "Namespace is the namespace the object was found in — the same one for every\nentry of an application, since the walk is confined to it.",
+            "type": "string"
+          },
+          "status": {
+            "description": "Status is the APPLICATION's sync verdict repeated on every row, not a\nper-object one. The operator owns these children, so no child has a desired\nstate of its own to compare against.",
+            "type": "string"
+          },
+          "version": {
+            "description": "Version is the object's API version as the live object reports it: v1 for\nevery kind here except the HorizontalPodAutoscaler, which is autoscaling/v2.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "deploy.argoRevisionMetadata": {
+        "properties": {
+          "author": {
+            "description": "Author is the commit author. Always absent: an App CR pins an IMAGE, so this\nprocess has no commit to read one from and will not invent one.",
+            "type": "string"
+          },
+          "date": {
+            "description": "Date is when the App CR was created, RFC 3339 UTC — the only real timestamp\nthere is here. It is NOT the date of the revision asked for.",
+            "type": "string"
+          },
+          "message": {
+            "description": "Message is the revision asked for, echoed back — not a commit message. The\nempty revision and \"HEAD\" resolve to the image tag the CR declares\n(spec.image.tag), and anything longer than 256 characters is truncated to it.",
+            "type": "string"
+          },
+          "signatureInfo": {
+            "description": "SignatureInfo is the GPG verification result for the revision. Always absent:\nnothing here verifies a signature, and an empty field says so rather than\nimplying an unsigned commit.",
+            "type": "string"
+          },
+          "tags": {
+            "description": "Tags are the git tags pointing at the revision. Always absent, for the same\nreason as Author.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "deploy.argoSource": {
+        "properties": {
+          "path": {
+            "description": "Path is the directory within RepoURL. Display-only alongside a display-only\nRepoURL; CD's own value for a CD row.",
+            "type": "string"
+          },
+          "repoURL": {
+            "description": "RepoURL is the git repository the desired state comes from. For an\napplication projected from an App CR it is the fleet manifest repo and is\nDISPLAY ONLY — an App CR pins an image, and nothing is rendered from this\nrepo to produce it. For a CD row it is the repo CD actually polls.",
+            "type": "string"
+          },
+          "targetRevision": {
+            "description": "TargetRevision is the git ref tracked there — a branch such as \"main\".\nDisplay-only for a projected App CR; the ref CD tracks for a CD row.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "deploy.argoSpec": {
+        "properties": {
+          "destination": {
+            "$ref": "#/components/schemas/deploy.argoDestination",
+            "description": "Destination is which cluster and namespace it lands in. Zero-valued on a CD\nrow: this projection reports CD's source, not its destination."
+          },
+          "project": {
+            "description": "Project is the AppProject this application is grouped and filtered under. For\nan App CR it is the app.kubernetes.io/part-of label — the IAM project name —\nfalling back to \"default\" when the CR carries no such label.",
+            "type": "string"
+          },
+          "source": {
+            "$ref": "#/components/schemas/deploy.argoSource",
+            "description": "Source is where the desired state is declared."
+          }
+        },
+        "type": "object"
+      },
+      "deploy.argoStatus": {
+        "properties": {
+          "health": {
+            "$ref": "#/components/schemas/deploy.argoHealth",
+            "description": "Health is the application's reconciled health."
+          },
+          "history": {
+            "description": "History is the revisions the application was deployed at, OLDEST first as\nargocd orders it: what a sync may name to roll back to. Only the read of ONE\napplication answers it — a CD row's deploy log and a site's kept releases;\nan App CR keeps none.",
+            "items": {
+              "$ref": "#/components/schemas/deploy.argoHistory"
+            },
+            "type": "array"
+          },
+          "reconciledAt": {
+            "description": "ReconciledAt is when the desired state was last compared against the cluster,\nRFC 3339. Empty for an App CR — the projection derives its verdict at read\ntime and nothing records a comparison — and CD's own status.reconciledAt for\na CD row.",
+            "type": "string"
+          },
+          "resources": {
+            "description": "Resources are the objects the application owns. EMPTY on the list — filling\nit would walk the cluster once per row — and populated only by the read of\nONE application, which is what makes that the detail view.",
+            "items": {
+              "$ref": "#/components/schemas/deploy.argoResourceStatus"
+            },
+            "type": "array"
+          },
+          "summary": {
+            "$ref": "#/components/schemas/deploy.argoSummary",
+            "description": "Summary is the small aggregate the list column renders: the images."
+          },
+          "sync": {
+            "$ref": "#/components/schemas/deploy.argoSyncStatus",
+            "description": "Sync is the declared-versus-running verdict and what it was reached against."
+          }
+        },
+        "type": "object"
+      },
+      "deploy.argoSummary": {
+        "properties": {
+          "images": {
+            "description": "Images are the container images the application runs. One entry for an App\nCR, built from its spec.image as \"repository:tag\" — the bare repository when\nit declares no tag, and absent when it declares neither. Absent on a CD row,\nwhich tracks commits rather than images.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "deploy.argoSyncStatus": {
+        "properties": {
+          "revision": {
+            "description": "Revision is what Status was reached against. For an App CR that is the\ndeclared IMAGE TAG, not a commit — the CR is image-pinned. For a CD row it is\nthe commit CD last applied.",
+            "type": "string"
+          },
+          "status": {
+            "description": "Status is the ArgoCD sync vocabulary, Capitalized: Synced, OutOfSync or\nUnknown. For an App CR it compares the tag the CR DECLARES against the tag\nthe cluster's Deployment is RUNNING — equal is Synced, both known and\ndifferent is OutOfSync, either unknown is Unknown. For a CD row it is CD's\nown git-versus-cluster verdict.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "deploy.argoSyncWindows": {
+        "properties": {
+          "activeWindows": {
+            "description": "ActiveWindows are the sync windows in force right now. Always null: this\nplatform declares none, so nothing is ever in force.",
+            "items": {},
+            "type": "array"
+          },
+          "assignedWindows": {
+            "description": "AssignedWindows are the windows configured for this application at all,\nwhether or not currently in force. Always null, for the same reason.",
+            "items": {},
+            "type": "array"
+          },
+          "canSync": {
+            "description": "CanSync is whether a sync would be permitted at this moment. Always true —\nwith no windows there is nothing to deny it. A caller must not read this as\n\"a sync will succeed\"; it only means no window is blocking one.",
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
+      "deploy.argoTree": {
+        "properties": {
+          "hosts": {
+            "description": "Hosts is ArgoCD's per-node machine inventory. Always empty: this plane\nprojects applications and serves no cluster-node view.",
+            "items": {},
+            "type": "array"
+          },
+          "nodes": {
+            "description": "Nodes is the FLAT node list, root first: the App CR, then the objects the\noperator owns, then their ReplicaSets and Pods. The hierarchy is in\nParentRefs, not in the ordering.",
+            "items": {
+              "$ref": "#/components/schemas/deploy.argoNode"
+            },
+            "type": "array"
+          },
+          "orphanedNodes": {
+            "description": "OrphanedNodes are objects in the namespace belonging to no application.\nAlways empty: this walk reaches an object only THROUGH ownership from the App\nCR, so it can never hold one that is orphaned.",
+            "items": {
+              "$ref": "#/components/schemas/deploy.argoNode"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "deploy.consoleSettings": {
+        "properties": {
+          "appsInAnyNamespaceEnabled": {
+            "description": "AppsInAnyNamespaceEnabled is false: applications are projected from operator\nApp CRs in the platform namespaces, never declared in an arbitrary one.",
+            "type": "boolean"
+          },
+          "dexConfig": {
+            "description": "DexConfig carries no connectors. This console does not run Dex; its sign-in is\nGET /v1/deploy/login, which is an IAM authorization-code round trip.",
+            "properties": {
+              "connectors": {
+                "items": {
+                  "$ref": "#/components/schemas/deploy.deployEmpty"
+                },
+                "type": "array"
+              }
+            },
+            "type": "object"
+          },
+          "execEnabled": {
+            "description": "ExecEnabled is false: this plane serves no container terminal.",
+            "type": "boolean"
+          },
+          "googleAnalytics": {
+            "description": "GoogleAnalytics carries no tracking id and anonymizes users — this console\nreports no analytics.",
+            "properties": {
+              "anonymizeUsers": {
+                "type": "boolean"
+              },
+              "trackingID": {
+                "type": "string"
+              }
+            },
+            "type": "object"
+          },
+          "help": {
+            "description": "Help carries no chat link and no binary download URLs.",
+            "properties": {
+              "binaryUrls": {
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "type": "object"
+              },
+              "chatText": {
+                "type": "string"
+              },
+              "chatUrl": {
+                "type": "string"
+              }
+            },
+            "type": "object"
+          },
+          "hydratorEnabled": {
+            "description": "HydratorEnabled is false: there is no manifest hydrator on this plane.",
+            "type": "boolean"
+          },
+          "kustomizeVersions": {
+            "description": "KustomizeVersions is always empty: an App CR is an image pin, not a kustomize\nbuild.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "oidcConfig": {
+            "$ref": "#/components/schemas/deploy.deployEmpty",
+            "description": "OidcConfig is always null. The SPA's own OIDC flow is deliberately not\nconfigured — identity is owned by Hanzo IAM at the edge and minted for this\nhost by GET /v1/deploy/login."
+          },
+          "plugins": {
+            "description": "Plugins is always empty: this plane loads no argocd config-management plugins.",
+            "items": {
+              "$ref": "#/components/schemas/deploy.deployEmpty"
+            },
+            "type": "array"
+          },
+          "statusBadgeEnabled": {
+            "description": "StatusBadgeEnabled is false: no badge endpoint is served.",
+            "type": "boolean"
+          },
+          "statusBadgeRootUrl": {
+            "description": "StatusBadgeRootUrl is always empty, for the same reason.",
+            "type": "string"
+          },
+          "syncWithReplaceAllowed": {
+            "description": "SyncWithReplaceAllowed is false: a sync here asks the operator to reconcile an\nApp CR, and never replaces an object.",
+            "type": "boolean"
+          },
+          "uiBannerContent": {
+            "description": "UiBannerContent is always empty: this console shows no banner.",
+            "type": "string"
+          },
+          "uiCssURL": {
+            "description": "UiCssURL is always empty: no stylesheet is injected.",
+            "type": "string"
+          },
+          "url": {
+            "description": "Url is the console's public origin, https://cd.hanzo.ai.",
+            "type": "string"
+          },
+          "userLoginsDisabled": {
+            "description": "UserLoginsDisabled is true: the SPA must not render its own username/password\nform. Signing in goes through IAM, at GET /v1/deploy/login.",
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
+      "deploy.deployEmpty": {
+        "properties": {},
+        "type": "object"
+      },
+      "deploy.deployHealth": {
+        "properties": {
+          "crd": {
+            "description": "CRD reports whether the App custom resource is served and listable. Absent\nwhen the apiserver was unreachable, because then it is unknown rather than\nfalse.",
+            "type": "boolean"
+          },
+          "k8s": {
+            "description": "K8s reports whether the Kubernetes API is reachable. Absent when the probe\ndid not get far enough to find out.",
+            "type": "boolean"
+          },
+          "service": {
+            "description": "Service names the subsystem answering, so a probe response is attributable\nwhen several are collected together.",
+            "type": "string"
+          },
+          "status": {
+            "description": "Status is `ok` when this deployment can serve the delivery plane, and\n`degraded` otherwise. It agrees with the HTTP status by construction — see\nStatusCode.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "deploy.reconcileReport": {
+        "properties": {
+          "declared": {
+            "description": "Declared is how many objects the rendered source declares — the denominator\nthe three outcome counts below are read against. Zero means the render\nproduced nothing, which trips the prune fuse rather than sweeping the fleet.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "failed": {
+            "description": "Failed is how many objects the apply could not reconcile. Non-zero is a\nPARTIAL run reported at 200: the engine applied what it could and each\nfailure names itself in Results, so a caller reads this number rather than\nthe status code to learn whether the fleet matches the source.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "instance": {
+            "description": "Instance is the tracking id this run stamps on everything it manages, so a\nlater run can tell the objects it owns from objects another instance\ndeclares. DEPLOY_ENGINE_INSTANCE names it; the default is `universe`.",
+            "type": "string"
+          },
+          "prune": {
+            "description": "Prune reports whether DELETION was enabled for this run. False means an\nobject the source no longer declares was left alone rather than removed, so\na zero Pruned below means \"nothing to delete\" only when this is true.",
+            "type": "boolean"
+          },
+          "pruned": {
+            "description": "Pruned is how many live objects this run DELETED because the source no\nlonger declares them. Always 0 when Prune is false.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "results": {
+            "description": "Results is one entry per object the run acted on, in the order the engine\napplied them. Empty (never null) when the run reconciled nothing.",
+            "items": {
+              "$ref": "#/components/schemas/deploy.appliedResource"
+            },
+            "type": "array"
+          },
+          "revision": {
+            "description": "Revision is the source commit this run applied, as the source resolved it —\na git commit SHA, not an image tag. It is what an operator cites when asking\nwhat the cluster was last made to match.",
+            "type": "string"
+          },
+          "source": {
+            "$ref": "#/components/schemas/deploy.reconcileSource",
+            "description": "Source is the git coordinate the run rendered. It is this deployment's own\nconfiguration echoed back, never a request parameter, and it is reported so\na reader of the answer knows WHICH tree the revision names."
+          },
+          "synced": {
+            "description": "Synced is how many objects the run applied successfully.",
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "deploy.reconcileSource": {
+        "properties": {
+          "path": {
+            "description": "Path is the directory WITHIN the repository that is rendered — everything\noutside it is not this plane's desired state and is never applied.",
+            "type": "string"
+          },
+          "ref": {
+            "description": "Ref is the branch or tag the revision was resolved from.",
+            "type": "string"
+          },
+          "repo": {
+            "description": "Repo is the clone URL of the repository holding the desired state.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "deploy.sessionEnded": {
+        "properties": {
+          "loggedIn": {
+            "description": "LoggedIn is always false — this is the answer to having just signed out, so\nit states the resulting session state rather than reporting the request's\noutcome. It is not omitempty: false is the whole answer.",
+            "type": "boolean"
+          },
+          "loginUrl": {
+            "description": "LoginURL is where to sign in again. Always present, because a caller that\nhas just signed out is exactly the caller who needs it.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "deploy.sessionUser": {
+        "properties": {
+          "groups": {
+            "description": "Groups is the caller's group list, always empty here: this console\nauthorizes on the platform SuperAdmin fact alone, not on argocd RBAC groups.\nAbsent for an anonymous caller.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "iss": {
+            "description": "Iss is the token issuer as the SPA expects to see it — the literal \"argocd\",\nso the UI never triggers an SSO redirect of its own. Absent for an anonymous\ncaller.",
+            "type": "string"
+          },
+          "loggedIn": {
+            "description": "LoggedIn reports whether this browser holds a session this console accepts.",
+            "type": "boolean"
+          },
+          "loginUrl": {
+            "description": "LoginURL is where an anonymous caller signs in. Absent once signed in.",
+            "type": "string"
+          },
+          "logoutUrl": {
+            "description": "LogoutURL is where a signed-in caller ends the session. Absent when anonymous.",
+            "type": "string"
+          },
+          "username": {
+            "description": "Username is the validated principal's user ID — the opaque gateway id, which\nis what argocd's UI renders as the signed-in user here — or \"admin\" when the\nprincipal carries none. Absent when anonymous.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "deploy.syncRef": {
+        "properties": {
+          "name": {
+            "description": "Name is the application to sync, from the path. It must be a DNS-1123 label.",
+            "type": "string"
+          },
+          "revision": {
+            "description": "Revision is what to sync it to. Empty is what its source declares now: the\ncommit CD last compared with git, or what an App CR declares. Any other\nvalue is a ROLLBACK and must be an earlier revision from the application's\nown status.history: a commit CD deployed it at, or a release a site was\nkept as.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "deploy.versionMessage": {
+        "properties": {
+          "BuildDate": {
+            "description": "BuildDate is the time THIS RESPONSE was generated, in RFC 3339 — not a build\ntimestamp. There is no argocd build here to report one for.",
+            "type": "string"
+          },
+          "Compiler": {
+            "description": "Compiler is the constant \"gc\" the SPA expects; it is not read from this\nprocess.",
+            "type": "string"
+          },
+          "GoVersion": {
+            "description": "GoVersion is always empty.",
+            "type": "string"
+          },
+          "Platform": {
+            "description": "Platform is the constant \"linux/amd64\" the SPA expects; it is not this\nprocess's own GOOS/GOARCH.",
+            "type": "string"
+          },
+          "Version": {
+            "description": "Version names the projection, \"hanzo-cd (projection)\".",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "problem-details": {
+        "description": "An RFC 9457 problem document.",
+        "properties": {
+          "code": {
+            "description": "A stable token a client can branch on, when the refusal names one.",
+            "type": "string"
+          },
+          "detail": {
+            "description": "What was refused, for a person to read.",
+            "type": "string"
+          },
+          "status": {
+            "description": "The HTTP status.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "title": {
+            "description": "The status's reason phrase.",
+            "type": "string"
+          },
+          "type": {
+            "description": "about:blank",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "status",
+          "detail"
+        ],
+        "type": "object"
+      }
+    },
+    "securitySchemes": {
+      "bearer": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "The caller's credential, sent as `Authorization: Bearer \u003ctoken\u003e`. It is either an access token minted by Hanzo IAM or an API key (pk-/sk-). X-Authorization, and HTTP Basic carrying the token as the password, are accepted spellings of the same header for clients that cannot set Authorization; a browser presents the session cookie instead. Every operation requires it unless it says `security: []`."
+      }
+    }
+  }
+}

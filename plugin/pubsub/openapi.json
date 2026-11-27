@@ -1,0 +1,267 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Hanzo Cloud API",
+    "description": "Package pubsub is your message bus: publish, subscribe, and durable streams your apps read at their own pace.",
+    "version": "v1"
+  },
+  "servers": [
+    {
+      "url": "https://api.hanzo.ai"
+    }
+  ],
+  "security": [
+    {
+      "bearer": []
+    }
+  ],
+  "tags": [
+    {
+      "name": "pubsub"
+    }
+  ],
+  "paths": {
+    "/v1/pubsub/publish": {
+      "post": {
+        "operationId": "post_pubsub_publish",
+        "summary": "Puts one message on the org's bus.",
+        "description": "Puts one message on the org's bus. When a stream captures the subject\nthe write is DURABLE — the receipt names the stream and sequence only after\nJetStream has it on storage, and a repeated Nats-Msg-Id header within the\ndedup window answers duplicate instead of storing twice. When nothing\ncaptures it, the message goes out core NATS: delivered to current\nsubscribers, receipt {ok}, nothing retained.",
+        "tags": [
+          "pubsub"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "data": "{\"id\":\"o_1\"}",
+                "headers": {
+                  "Nats-Msg-Id": "o_1"
+                },
+                "subject": "orders.created"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/pubsub.busPublish"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pubsub.busAck"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/pubsub/request": {
+      "post": {
+        "operationId": "post_pubsub_request",
+        "summary": "Sends one request on the org's bus and waits for one reply — the synchronous half of pub/sub, for callers speaking to a responder subscribed on the NATS port.",
+        "description": "Sends one request on the org's bus and waits for one reply — the\nsynchronous half of pub/sub, for callers speaking to a responder subscribed\non the NATS port. 404 when nobody is listening on the subject; 408 when a\nresponder exists but no reply arrived within the timeout.",
+        "tags": [
+          "pubsub"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "data": "{\"sku\":\"gpu_1\"}",
+                "subject": "billing.quote",
+                "timeoutMs": 2000
+              },
+              "schema": {
+                "$ref": "#/components/schemas/pubsub.busRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pubsub.busMessage"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "problem-details": {
+        "description": "An RFC 9457 problem document.",
+        "properties": {
+          "code": {
+            "description": "A stable token a client can branch on, when the refusal names one.",
+            "type": "string"
+          },
+          "detail": {
+            "description": "What was refused, for a person to read.",
+            "type": "string"
+          },
+          "status": {
+            "description": "The HTTP status.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "title": {
+            "description": "The status's reason phrase.",
+            "type": "string"
+          },
+          "type": {
+            "description": "about:blank",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "status",
+          "detail"
+        ],
+        "type": "object"
+      },
+      "pubsub.busAck": {
+        "properties": {
+          "duplicate": {
+            "description": "Duplicate is true when JetStream deduplicated the message by its\nNats-Msg-Id instead of storing it again.",
+            "type": "boolean"
+          },
+          "ok": {
+            "description": "OK is true when the bus accepted the message.",
+            "type": "boolean"
+          },
+          "seq": {
+            "description": "Seq is the message's sequence in that stream.",
+            "format": "uint64",
+            "type": "integer"
+          },
+          "stream": {
+            "description": "Stream is the stream that stored the message — absent when no stream\ncaptures the subject and the message went out core (fire-and-forget).",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "pubsub.busMessage": {
+        "properties": {
+          "data": {
+            "description": "Data is the payload as UTF-8 text.",
+            "type": "string"
+          },
+          "headers": {
+            "additionalProperties": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "description": "Headers are the message's headers, when it carries any.",
+            "type": "object"
+          },
+          "seq": {
+            "description": "Seq is the message's stream sequence — fetched messages only.",
+            "format": "uint64",
+            "type": "integer"
+          },
+          "subject": {
+            "description": "Subject is the message's subject in the org's own namespace.",
+            "type": "string"
+          },
+          "time": {
+            "description": "Time is when the stream stored the message, RFC3339 — fetched messages\nonly.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "pubsub.busPublish": {
+        "properties": {
+          "data": {
+            "description": "Data is the payload, carried verbatim as UTF-8 text (typically JSON).\nBinary payloads belong on the NATS port.",
+            "type": "string"
+          },
+          "headers": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "description": "Headers are optional message headers, one value per name. A Nats-Msg-Id\nheader is JetStream's deduplication key: a repeat within the stream's\ndedup window is acknowledged as duplicate rather than stored twice.",
+            "type": "object"
+          },
+          "subject": {
+            "description": "Subject is the subject to publish to, in the org's own namespace — e.g.\norders.created. No wildcards.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "pubsub.busRequest": {
+        "properties": {
+          "data": {
+            "description": "Data is the request payload, carried verbatim as UTF-8 text.",
+            "type": "string"
+          },
+          "headers": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "description": "Headers are optional request headers, one value per name.",
+            "type": "object"
+          },
+          "subject": {
+            "description": "Subject is the subject a responder listens on, in the org's namespace.",
+            "type": "string"
+          },
+          "timeoutMs": {
+            "description": "TimeoutMs bounds the wait for a reply. 0 or less means the default of\n5000; anything above 30000 is clamped to 30000.",
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      }
+    },
+    "securitySchemes": {
+      "bearer": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "The caller's credential, sent as `Authorization: Bearer \u003ctoken\u003e`. It is either an access token minted by Hanzo IAM or an API key (pk-/sk-). X-Authorization, and HTTP Basic carrying the token as the password, are accepted spellings of the same header for clients that cannot set Authorization; a browser presents the session cookie instead. Every operation requires it unless it says `security: []`."
+      }
+    }
+  }
+}

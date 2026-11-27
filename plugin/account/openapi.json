@@ -1,0 +1,779 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Hanzo Cloud API",
+    "description": "Package account is your own account: API keys you mint and revoke, and org onboarding.",
+    "version": "v1"
+  },
+  "servers": [
+    {
+      "url": "https://api.hanzo.ai"
+    }
+  ],
+  "security": [
+    {
+      "bearer": []
+    }
+  ],
+  "tags": [
+    {
+      "name": "account"
+    }
+  ],
+  "paths": {
+    "/v1/account/appearance": {
+      "get": {
+        "operationId": "get_account_appearance",
+        "summary": "Returns the signed-in caller's own appearance preference — text size, density and accent — read from their IAM account so it is the same on every device and every Hanzo surface.",
+        "description": "Returns the signed-in caller's own appearance preference — text\nsize, density and accent — read from their IAM account so it is the same on\nevery device and every Hanzo surface. An unset preference is an empty object.\n\nA transient IAM read failure reports the empty preference rather than a 5xx, so\na surface applies its published default and never error-toasts on load — the\nsame fail-soft the key read uses.",
+        "tags": [
+          "account"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/account.appearance"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      },
+      "post": {
+        "operationId": "post_account_appearance",
+        "summary": "Stores the caller's appearance preference on their IAM account, preserving every other field of the row.",
+        "description": "Stores the caller's appearance preference on their IAM account,\npreserving every other field of the row. The accent is validated as a real\ncolour token before it is stored; an unset or invalid axis is dropped rather\nthan stored.",
+        "tags": [
+          "account"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "accent": "#8b5cf6",
+                "density": "compact",
+                "type": 1.15
+              },
+              "schema": {
+                "$ref": "#/components/schemas/account.appearance"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/account.appearance"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/account/avatar": {
+      "post": {
+        "operationId": "post_account_avatar",
+        "summary": "Set your profile photo",
+        "description": "Stores one image as the signed-in user's profile photo and answers the URL it is served from, which is also written to the user's IAM record — so every surface that already renders `avatar` picks it up with no further call.\n\nThe body is a multipart form with a `file` part. The format is decided by the BYTES, never the filename or the part's Content-Type: png, jpeg, gif and webp are accepted and everything else is refused with 415, so an SVG cannot be stored as a picture and later served as a program. Over 8 MiB is 413; empty is 400.\n\nThe photo is addressed by the sha256 of its bytes, so setting a new one yields a new URL rather than a stale cache of the old face. The caller is taken from the validated identity ONLY — there is no way to name a different subject — so this always sets your own photo, and a caller with no organization yet is refused.",
+        "tags": [
+          "account"
+        ],
+        "x-public": true
+      }
+    },
+    "/v1/account/avatar/{org}/{user}/{digest}": {
+      "get": {
+        "operationId": "get_account_avatar_by_org_by_user_by_digest",
+        "summary": "Fetch a profile photo",
+        "description": "Streams a profile photo's raw BYTES. This is the address stored on the user's IAM record and rendered directly by an `\u003cimg\u003e`, so it takes no credentials — the 64-hex content digest in the path is the capability, and it can only be produced by someone who already has the image.\n\nThe Content-Type is derived from the stored bytes and the response carries nosniff, so only a real raster image is ever served and only under its true type. Anything else — a miss, a malformed path, an object that is not an image — is one 404, and a hit caches for a year because the address is the content.",
+        "tags": [
+          "account"
+        ],
+        "parameters": [
+          {
+            "name": "org",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "user",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "digest",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "security": [],
+        "x-public": true
+      }
+    },
+    "/v1/account/csrf": {
+      "get": {
+        "operationId": "get_account_csrf",
+        "summary": "Mints the anti-forgery token a browser echoes as X-CSRF-Token on every change it asks for.",
+        "description": "Mints the anti-forgery token a browser echoes as X-CSRF-Token on\nevery change it asks for. The token is bound to the caller's validated identity\nand expires, so one minted for one identity cannot authorize a change as another.\n\nIt is answered no-store, so it is never cached by a shared proxy. This is the\nsame-origin endpoint the embedded console reads — the Same-Origin Policy is what\nstops a cross-site page from reading the response and forging a change.",
+        "tags": [
+          "account"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/account.csrfResp"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/account/embed": {
+      "get": {
+        "operationId": "get_account_embed",
+        "summary": "Reports whether one of this brand's shared embedded apps (cms, erp, help) may be framed by the caller and is actually running, so a console module can choose between the embed and the provision panel.",
+        "description": "Reports whether one of this brand's shared embedded apps (cms, erp,\nhelp) may be framed by the caller and is actually running, so a console module\ncan choose between the embed and the provision panel.\n\nIt answers two questions the browser cannot answer for itself. ENTITLEMENT is\nserver-authoritative: each app is a single shared per-BRAND instance, so only a\nmember of the owning brand org — or a SuperAdmin — is given the embed URL; every\nother caller gets phase \"not-entitled\" and no URL. REACHABILITY is a probe of\nthat origin, which a cross-origin page cannot read for itself.\n\nThe probed host is always \u003capp\u003e.\u003cthis deployment's own brand domain\u003e: no part of\nit comes from the request, so this can never be steered into probing an\narbitrary origin.",
+        "tags": [
+          "account"
+        ],
+        "parameters": [
+          {
+            "name": "app",
+            "in": "query",
+            "required": false,
+            "description": "App is the embedded app to report on: cms (Content Studio), erp or help.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "cms"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/account.embedStatusResp"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/account/keys": {
+      "get": {
+        "operationId": "get_account_keys",
+        "summary": "Returns the API keys the caller may see, newest first: their own, or every key the org holds when the caller administers it.",
+        "description": "Returns the API keys the caller may see, newest first: their own, or\nevery key the org holds when the caller administers it. Each is its own\ncredential with its own name, prefix, status, expiry and limit. Revoked keys\nstay listed. No secret material comes back; a publishable key, which is public\nby construction, carries its full value.",
+        "tags": [
+          "account"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/account.apiKeyList"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      },
+      "post": {
+        "operationId": "post_account_keys",
+        "summary": "Creates a NEW API key and returns its secret ONCE.",
+        "description": "Creates a NEW API key and returns its secret ONCE. It never revokes\nor changes any other key: every key the caller already holds keeps working.\nThe key is filed in the org the caller acts in and names them as its creator.\n\nAn org holds at most 1,000 live keys; past that the create is refused until one\nis revoked.",
+        "tags": [
+          "account"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "budget": {
+                  "month": 5000,
+                  "total": 0
+                },
+                "name": "production",
+                "rate": 600,
+                "type": "secret"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/account.keyIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/account.apiKey"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/account/keys/{id}": {
+      "delete": {
+        "operationId": "delete_account_keys_by_id",
+        "summary": "Revokes exactly one API key, by id.",
+        "description": "Revokes exactly one API key, by id. Every other key keeps working.\nThe key stays listed as revoked, with who revoked it and when, and can never be\nused again. IAM refuses it at once; cloud caches a resolved key for up to 60\nseconds, so a request inside that window may still be served.\n\nA member revokes their own keys; an org admin revokes any of the org's, and\nrevoking someone else's is recorded on the audit trail.",
+        "tags": [
+          "account"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the key to act on, from the path.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/account.apiKey"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      },
+      "patch": {
+        "operationId": "patch_account_keys_by_id",
+        "summary": "Changes one key's name, permissions, budget, rate or expiry.",
+        "description": "Changes one key's name, permissions, budget, rate or expiry. The secret\nis not reissued: the key in your deployment keeps working, under its new\npolicy. Only the person the key belongs to may edit it, and a revoked key\ncannot be edited.",
+        "tags": [
+          "account"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the key to edit, from the path.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "budget": {
+                  "month": 5000,
+                  "total": 0
+                },
+                "limit": [
+                  "read:*"
+                ],
+                "name": "staging",
+                "rate": 60
+              },
+              "schema": {
+                "$ref": "#/components/schemas/account.keyEdit"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/account.apiKey"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/account/orgs": {
+      "post": {
+        "operationId": "post_account_orgs",
+        "summary": "Creates an organization and makes the caller its owner.",
+        "description": "Creates an organization and makes the caller its owner.\n\nThe caller's own account is not touched: who they are, the org their account\nlives in and how they sign in are the same before and after. The new org is a\nseparate organization they belong to by membership, carried in the signed\n`orgs` claim of their next token, and reached by selecting it (X-Org-Id, the\norg switcher). Teammates join it the same way. The org starts at a zero\nbalance, and its default API key is minted for the creator and returned once.\n\nMoving the creator into the org instead re-keyed their identity to\n\"\u003corg\u003e/\u003cname\u003e\", and sign-in, which resolves an address in the signup org,\nthen found nobody: the person was offered a second account for their own\naddress.",
+        "tags": [
+          "account"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "name": "Acme"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/account.onboardReq"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/account.onboardResp"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "account.apiKey": {
+        "properties": {
+          "budget": {
+            "$ref": "#/components/schemas/account.keyBudget",
+            "description": "Budget is what the key may spend on models, in cents. Absent means no cap."
+          },
+          "created": {
+            "description": "Created is when the key was minted (RFC 3339).",
+            "type": "string"
+          },
+          "creator": {
+            "description": "Creator is the person the key speaks for, `\u003corg\u003e/\u003cuser\u003e`: who created it.",
+            "type": "string"
+          },
+          "expires": {
+            "description": "Expires is when the key stops working (RFC 3339). Absent means never.",
+            "type": "string"
+          },
+          "id": {
+            "description": "ID addresses this key in PATCH and DELETE /v1/account/keys/{id}.",
+            "type": "string"
+          },
+          "key": {
+            "description": "Key is the full credential. A publishable key always carries it; a secret\nkey carries it once, in the answer to the POST that created it.",
+            "type": "string"
+          },
+          "limit": {
+            "description": "Limit is what this key may reach, as `kind:name` entries — `model:zen5`,\n`project:acme`, `product:train` (read and write), `read:billing` (read only),\n`read:*` (a read-only key). Absent means the key reaches whatever its holder\ndoes.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "name": {
+            "description": "Name is the key's label, chosen by the person who made it.",
+            "type": "string"
+          },
+          "prefix": {
+            "description": "Prefix is the head of the credential this key's holder presents — the sk- of\na secret key — enough to tell which string a row is, never enough to use.\nAbsent on a key minted before prefixes were recorded.",
+            "type": "string"
+          },
+          "rate": {
+            "description": "Rate is how many requests a minute the key may make. Absent means no limit\nof its own.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "revoked": {
+            "type": "string"
+          },
+          "revoker": {
+            "description": "Revoker is who revoked the key, `\u003corg\u003e/\u003cuser\u003e`, and Revoked when.",
+            "type": "string"
+          },
+          "spend": {
+            "$ref": "#/components/schemas/account.keyBudget",
+            "description": "Spend is what the key has spent on models, in cents rounded up. Absent when\nit could not be read just now."
+          },
+          "status": {
+            "description": "Status is active, expired, revoked, or disabled (switched off in IAM).",
+            "type": "string"
+          },
+          "type": {
+            "description": "Type is the key class: secret (sk-) or publishable (pk-).",
+            "type": "string"
+          },
+          "used": {
+            "description": "Used is when the key was last used (RFC 3339). Absent means never.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "account.apiKeyList": {
+        "properties": {
+          "keys": {
+            "description": "Keys is every key the caller may see, newest first: their own, or every key\nof the org when the caller administers it. Revoked keys stay listed.",
+            "items": {
+              "$ref": "#/components/schemas/account.apiKey"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "account.appearance": {
+        "properties": {
+          "accent": {
+            "description": "Accent is the one hue — a CSS colour token (a hex, or a bounded functional\ncolour like rgb()/oklch()). Anything else is dropped rather than stored.",
+            "type": "string"
+          },
+          "density": {
+            "description": "Density is the spacing step: \"compact\", \"default\" or \"comfortable\".",
+            "type": "string"
+          },
+          "type": {
+            "description": "Type is the text-size multiplier, clamped to the ramp window [0.85, 1.4].\nAbsent (0) leaves the published default.",
+            "format": "double",
+            "type": "number"
+          }
+        },
+        "type": "object"
+      },
+      "account.csrfResp": {
+        "properties": {
+          "csrfToken": {
+            "description": "Token is the value to send back in the X-CSRF-Token header. It is bound to the\ncaller's identity, so it authorizes changes as them and as nobody else.",
+            "type": "string"
+          },
+          "expiresIn": {
+            "description": "ExpiresIn is the token's lifetime in seconds. Fetch a new one when it lapses;\na change with an expired token is refused.",
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "account.embedStatusResp": {
+        "properties": {
+          "app": {
+            "description": "App is the app this verdict is about.",
+            "type": "string"
+          },
+          "embedUrl": {
+            "description": "EmbedURL is the in-app landing URL to frame. Empty when the caller is not\nentitled — a non-entitled caller never receives it.",
+            "type": "string"
+          },
+          "entitled": {
+            "description": "Entitled is whether the caller's org may frame this brand-owned app.",
+            "type": "boolean"
+          },
+          "origin": {
+            "description": "Origin is the app's origin on this deployment's own brand domain.",
+            "type": "string"
+          },
+          "phase": {
+            "description": "Phase is the verdict in one word: not-entitled, not-provisioned or ready.",
+            "type": "string"
+          },
+          "reachable": {
+            "description": "Reachable is whether the app answered the liveness probe.",
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
+      "account.keyBudget": {
+        "properties": {
+          "month": {
+            "description": "Month is per calendar month, UTC.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "total": {
+            "description": "Total is over the key's whole life.",
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "account.keyEdit": {
+        "properties": {
+          "budget": {
+            "$ref": "#/components/schemas/account.keyBudget",
+            "description": "Budget replaces the key's spend caps, in cents; a zero drops that cap."
+          },
+          "expires": {
+            "description": "Expires replaces when the key stops working, RFC 3339. An empty string means\nnever.",
+            "type": "string"
+          },
+          "id": {
+            "description": "ID is the key to edit, from the path.",
+            "type": "string"
+          },
+          "limit": {
+            "description": "Limit replaces what the key may reach. An empty list makes it unrestricted.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "name": {
+            "description": "Name relabels the key.",
+            "type": "string"
+          },
+          "rate": {
+            "description": "Rate replaces the key's requests a minute; zero drops the limit.",
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "account.keyIn": {
+        "properties": {
+          "budget": {
+            "$ref": "#/components/schemas/account.keyBudget",
+            "description": "Budget caps what the key may spend on models, in cents, per calendar month\nand in all; a request past either is refused 402. Omitted means no cap."
+          },
+          "expires": {
+            "description": "Expires is when the key stops working, RFC 3339. Omitted means never.",
+            "type": "string"
+          },
+          "limit": {
+            "description": "Limit narrows what the key may reach, as `kind:name` entries: `model:zen5`,\n`project:acme`, `product:commerce`, or `model:*` for a whole kind. It only\never NARROWS — a key never reaches further than the person who made it.\nOmitted makes an unrestricted key.\n\nExample: {\"name\": \"ci\", \"limit\": [\"model:zen5\", \"project:acme\"]}",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "name": {
+            "description": "Name labels the key. Omitted names it \"key N\".",
+            "type": "string"
+          },
+          "rate": {
+            "description": "Rate caps the key's requests a minute; past it a request is refused 429.\nOmitted means no limit of its own.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "type": {
+            "description": "Type is the key class: \"secret\" (sk-, session-equivalent, belongs on a\nserver) or \"publishable\" (pk-, org-identifying, safe in a browser bundle).\nOmitted means secret.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "account.onboardReq": {
+        "properties": {
+          "name": {
+            "description": "Name is the organization's display name. Ignored when personal is true, which\nderives the name from the caller's own username instead.",
+            "type": "string"
+          },
+          "personal": {
+            "description": "Personal marks the organization as the caller's own space: the name is\nderived from their username and the slug auto-suffixes to stay unique.",
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
+      "account.onboardResp": {
+        "properties": {
+          "accessKey": {
+            "description": "AccessKey is the publishable half of the organization's default API key,\nheld by its creator. Absent when the key could not be minted; the creator\nthen mints one from the keys page.",
+            "type": "string"
+          },
+          "accessSecret": {
+            "description": "AccessSecret is that credential's confidential half, returned ONCE — on the\nresponse that mints it and never again. IAM keeps only its argon2id digest\nand blanks the plaintext, so this is the single moment it exists in a form\nits owner can read.",
+            "type": "string"
+          },
+          "displayName": {
+            "description": "DisplayName is the organization's human name.",
+            "type": "string"
+          },
+          "org": {
+            "description": "Org is the created organization's slug, which is what X-Org-Id carries.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "problem-details": {
+        "description": "An RFC 9457 problem document.",
+        "properties": {
+          "code": {
+            "description": "A stable token a client can branch on, when the refusal names one.",
+            "type": "string"
+          },
+          "detail": {
+            "description": "What was refused, for a person to read.",
+            "type": "string"
+          },
+          "status": {
+            "description": "The HTTP status.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "title": {
+            "description": "The status's reason phrase.",
+            "type": "string"
+          },
+          "type": {
+            "description": "about:blank",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "status",
+          "detail"
+        ],
+        "type": "object"
+      }
+    },
+    "securitySchemes": {
+      "bearer": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "The caller's credential, sent as `Authorization: Bearer \u003ctoken\u003e`. It is either an access token minted by Hanzo IAM or an API key (pk-/sk-). X-Authorization, and HTTP Basic carrying the token as the password, are accepted spellings of the same header for clients that cannot set Authorization; a browser presents the session cookie instead. Every operation requires it unless it says `security: []`."
+      }
+    }
+  }
+}

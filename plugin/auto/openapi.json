@@ -1,0 +1,2497 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Hanzo Cloud API",
+    "description": "Package auto is workflows that run themselves, on a schedule or a webhook.",
+    "version": "v1"
+  },
+  "servers": [
+    {
+      "url": "https://api.hanzo.ai"
+    }
+  ],
+  "security": [
+    {
+      "bearer": []
+    }
+  ],
+  "tags": [
+    {
+      "name": "auto"
+    }
+  ],
+  "paths": {
+    "/v1/auto/automations": {
+      "get": {
+        "operationId": "get_auto_automations",
+        "summary": "Returns your automations — another member's are never listed.",
+        "description": "Returns your automations — another member's are never listed.\n`q` keeps those whose name or instructions contain it, ignoring case; `source`\nkeeps those made in one product; `sort` is `updated` (the default, newest\nfirst), `name`, or `next` (soonest first, unscheduled last).",
+        "tags": [
+          "auto"
+        ],
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "description": "Q keeps the automations whose name or instructions contain it, ignoring case.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "required": false,
+            "description": "Sort is name, next or updated (the default, newest first).",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "source",
+            "in": "query",
+            "required": false,
+            "description": "Source keeps the automations made in one product: chat, dev, studio or workflow.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/auto.automationPage"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      },
+      "post": {
+        "operationId": "post_auto_automations",
+        "summary": "Creates an automation and arms its schedule.",
+        "description": "Creates an automation and arms its schedule. It runs as the\ncaller: their Dev run, in this org, each time it fires. `name` and\n`instructions` are required; no `schedule` runs it only on demand, no\n`permissions` is ask: it proposes what it would do and changes nothing, and\n`enabled: false` creates it off, its schedule unarmed.",
+        "tags": [
+          "auto"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "instructions": "What needs my attention today across calendar, email and messages.",
+                "name": "Daily briefing",
+                "notify": true,
+                "permissions": "ask",
+                "schedule": {
+                  "at": "08:00",
+                  "kind": "weekdays",
+                  "tz": "America/Los_Angeles"
+                }
+              },
+              "schema": {
+                "$ref": "#/components/schemas/auto.automationIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/auto.Automation"
+                }
+              }
+            },
+            "description": "created"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/auto/automations/{id}": {
+      "delete": {
+        "operationId": "delete_auto_automations_by_id",
+        "summary": "Deletes an automation, its schedule and its run history, and stops a Dev run it has going.",
+        "description": "Deletes an automation, its schedule and its run history, and\nstops a Dev run it has going. It answers no content.",
+        "tags": [
+          "auto"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the automation, from the path.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "flow_1"
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "no content"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      },
+      "get": {
+        "operationId": "get_auto_automations_by_id",
+        "summary": "Returns one automation.",
+        "description": "Returns one automation. A flow of the org that is not an\nautomation, and anything of another org, answers not-found.",
+        "tags": [
+          "auto"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the automation, from the path.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "flow_1"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/auto.Automation"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      },
+      "patch": {
+        "operationId": "patch_auto_automations_by_id",
+        "summary": "Changes an automation, for the person it runs as: any field it was created with, and `enabled`, which arms or disarms its schedule.",
+        "description": "Changes an automation, for the person it runs as: any field\nit was created with, and\n`enabled`, which arms or disarms its schedule. A field the request omits is\nleft alone; `project` or `model` sent as null (or \"\") clears it. Any change\nbut `enabled` makes the caller the person it runs as from then on. A draft is\nfinished by saving its `instructions`: it becomes an automation in place, on\nunless `enabled` says otherwise.",
+        "tags": [
+          "auto"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the automation, from the path.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "flow_1"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "id": "flow_1",
+                "schedule": {
+                  "at": "16:00",
+                  "day": "fri",
+                  "kind": "weekly",
+                  "tz": "Europe/London"
+                }
+              },
+              "schema": {
+                "$ref": "#/components/schemas/auto.automationPatch"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/auto.Automation"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/auto/automations/{id}/run": {
+      "post": {
+        "operationId": "post_auto_automations_by_id_run",
+        "summary": "Starts one run now, whether or not its schedule is armed.",
+        "description": "Starts one run now, whether or not its schedule is armed. Only\nthe person it runs as may start one; who did is kept. An\nautomation runs one at a time: while a run is going, this records a skipped\nstart and answers it. Every run first asks IAM whether the person it runs as\nis still a member of the org; one who is not makes the run refused and turns\nthe automation off.",
+        "tags": [
+          "auto"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the automation, from the path.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "flow_1"
+          }
+        ],
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/auto.runStarted"
+                }
+              }
+            },
+            "description": "created"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/auto/automations/{id}/runs": {
+      "get": {
+        "operationId": "get_auto_automations_by_id_runs",
+        "summary": "Returns one automation's runs, newest first, to the person it runs as.",
+        "description": "Returns one automation's runs, newest first, to the person\nit runs as. Each links the\nDev run it started as `transcript`. The optional `limit` bounds the page.",
+        "tags": [
+          "auto"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the automation, from the path.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "flow_1"
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Limit bounds the page (default 200, maximum 1000).",
+            "schema": {
+              "format": "int64",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/auto.automationRunPage"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/auto/automations/{id}/runs/{run}/review": {
+      "post": {
+        "operationId": "post_auto_automations_by_id_runs_by_run_review",
+        "summary": "Answers a run that holds a post for review, for the person the automation runs as: `post` true posts it to the automation's accounts and answers the run while it posts; false discards it.",
+        "description": "Answers a run that holds a post for review, for the person the\nautomation runs as: `post` true posts it to the\nautomation's accounts and answers the run while it posts; false discards it.\nA run not in review answers 409; one held longer than a day is not posted.",
+        "tags": [
+          "auto"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the automation, and Run its run in review, from the path.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "flow_1"
+          },
+          {
+            "name": "run",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "run_1"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "id": "flow_1",
+                "post": true,
+                "run": "run_1"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/auto.reviewIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/auto.AutomationRun"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/auto/cron": {
+      "post": {
+        "operationId": "post_auto_cron",
+        "summary": "Reads a schedule said in words — \"every 5 minutes\", \"weekdays at 8:30\", \"every monday at 9am\", \"tomorrow at 7pm\", \"in 20 minutes\", or a five-field cron expression — in your time zone, and answers the schedule an automation takes, said back in plain words, with when it would first run.",
+        "description": "Reads a schedule said in words — \"every 5 minutes\", \"weekdays at 8:30\",\n\"every monday at 9am\", \"tomorrow at 7pm\", \"in 20 minutes\", or a five-field\ncron expression — in your time zone, and answers the schedule an automation\ntakes, said back in plain words, with when it would first run. Nothing is\ncreated: send the schedule to POST /v1/auto/automations. A phrase that no rule\nreads is read by a model; a phrase that names no schedule answers 422.",
+        "tags": [
+          "auto"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "text": "every monday at 9am",
+                "tz": "America/Los_Angeles"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/auto.whenIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/auto.whenOut"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/auto/events": {
+      "get": {
+        "operationId": "get_auto_events",
+        "summary": "Stream your jobs and automations as they change, as Server-Sent Events",
+        "description": "Holds one text/event-stream open and writes a frame each time one of your jobs or automations changes: `event: job` with the job as GET /v1/auto/jobs/{id} answers it, and `event: automation` with the automation as GET /v1/auto/automations/{id} answers it. Only your own rows are sent; another member's never are. Authenticate with `Authorization: Bearer` — a fetch-based reader, since a browser EventSource cannot set it. A `: ping` comment is written every 15 seconds, and the server closes the stream after 15 minutes; reconnect and re-read the lists. Frames carry no `id`: the lists are the truth, and the stream is a live hint over them.",
+        "tags": [
+          "auto"
+        ],
+        "responses": {
+          "2XX": {
+            "description": "Success",
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          }
+        },
+        "x-public": true
+      }
+    },
+    "/v1/auto/flows": {
+      "get": {
+        "operationId": "get_auto_flows",
+        "summary": "Returns the caller org's automations, most-recently-updated first.",
+        "description": "Returns the caller org's automations, most-recently-updated first. The\noptional `limit` query bounds the page.",
+        "tags": [
+          "auto"
+        ],
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Limit bounds the page (default 200, maximum 1000).",
+            "schema": {
+              "format": "int64",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/auto.flowPage"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      },
+      "post": {
+        "operationId": "post_auto_flows",
+        "summary": "Creates an automation and its initial DRAFT version in one call.",
+        "description": "Creates an automation and its initial DRAFT version in one call. The\nnew flow is DISABLED — creating it does not arm its trigger; POST\n/v1/auto/flows/{id}/enable does that.",
+        "tags": [
+          "auto"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "displayName": "Nightly Sync",
+                "trigger": {
+                  "displayName": "Start",
+                  "name": "trigger",
+                  "settings": {
+                    "pieceName": "core",
+                    "triggerName": "manual"
+                  },
+                  "strategy": "MANUAL",
+                  "type": "PIECE_TRIGGER"
+                }
+              },
+              "schema": {
+                "$ref": "#/components/schemas/auto.createFlowReq"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/auto.populatedFlow"
+                }
+              }
+            },
+            "description": "created"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/auto/flows/{id}": {
+      "delete": {
+        "operationId": "delete_auto_flows_by_id",
+        "summary": "Deletes one automation, its versions and its run history.",
+        "description": "Deletes one automation, its versions and its run history. It answers\nno content, and a flow of another org answers not-found.",
+        "tags": [
+          "auto"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the flow to act on, from the path.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "flow_1"
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "no content"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      },
+      "get": {
+        "operationId": "get_auto_flows_by_id",
+        "summary": "Returns one automation and its latest version.",
+        "description": "Returns one automation and its latest version. That is the flow record\nplus the step tree the builder edits; a flow of another org answers not-found.",
+        "tags": [
+          "auto"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the flow to act on, from the path.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "flow_1"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/auto.populatedFlow"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      },
+      "patch": {
+        "operationId": "patch_auto_flows_by_id",
+        "summary": "Updates one automation's metadata in place.",
+        "description": "Updates one automation's metadata in place. Every field is optional; a\nfield the request omits is left alone. Publishing a version pins which one runs,\nand is refused unless that version belongs to this flow.",
+        "tags": [
+          "auto"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the flow to update, from the path.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "flow_1"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "folderId": "ops",
+                "id": "flow_1"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/auto.patchFlowIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/auto.Flow"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/auto/flows/{id}/disable": {
+      "post": {
+        "operationId": "post_auto_flows_by_id_disable",
+        "summary": "Disarms a flow's trigger and marks it DISABLED.",
+        "description": "Disarms a flow's trigger and marks it DISABLED. Its schedule and its\nevent subscriptions are dropped, so a disabled flow is never a live target; runs\nalready in flight are unaffected, and it can still be started on demand.",
+        "tags": [
+          "auto"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the flow to act on, from the path.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "flow_1"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/auto.Flow"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/auto/flows/{id}/enable": {
+      "post": {
+        "operationId": "post_auto_flows_by_id_enable",
+        "summary": "Arms a flow's trigger and marks it ENABLED.",
+        "description": "Arms a flow's trigger and marks it ENABLED. A POLLING trigger gets a\ncron schedule on the durable engine; a WEBHOOK trigger gets a subscription in the\nrouting index, so an inbound event starts it; a MANUAL trigger arms nothing and\nstill runs on demand.",
+        "tags": [
+          "auto"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the flow to act on, from the path.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "flow_1"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/auto.Flow"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/auto/flows/{id}/operations": {
+      "post": {
+        "operationId": "post_auto_flows_by_id_operations",
+        "summary": "Edit a flow — rename it, retarget its trigger, or add, move and delete steps",
+        "description": "Applies ONE flow operation and answers the thing it changed. The operation is named by `type`, with its arguments under `request`: `CHANGE_NAME`, `UPDATE_TRIGGER`, `ADD_ACTION`, `UPDATE_ACTION`, `MOVE_ACTION`, `DELETE_ACTION` edit the flow's LATEST version and answer with that version, and `CHANGE_STATUS` instead enables or disables the flow and answers with the FLOW. Two response shapes on one address is the rule a reader would otherwise get wrong, and it is why this route is not a typed op.\n\nEdits land on the latest version only — the published version a run executes is untouched until it is republished — and the whole resulting step tree is re-validated against the step-count and size caps after every operation, so a long sequence of `ADD_ACTION` calls cannot grow a flow past a bound one step at a time (422 when it would). Org-scoped and fails closed: a validated principal is required (401 without one), the flow and its version are read under the caller's OWN org so another tenant's id is a 404, and an operation whose `request` does not decode is a 400.",
+        "tags": [
+          "auto"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "x-public": true
+      }
+    },
+    "/v1/auto/flows/{id}/run": {
+      "post": {
+        "operationId": "post_auto_flows_by_id_run",
+        "summary": "Starts one durable run of a flow now.",
+        "description": "Starts one durable run of a flow now. It runs the flow's published\nversion if one is pinned, else its latest, and answers the run record it created.\nThe run is bounded by the org's per-minute run-start budget and its in-flight\nconcurrency ceiling; over either, or with the engine not ready, no run is started\nand no run id is burned.",
+        "tags": [
+          "auto"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the flow to act on, from the path.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "flow_1"
+          }
+        ],
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/auto.FlowRun"
+                }
+              }
+            },
+            "description": "created"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/auto/flows/{id}/versions": {
+      "get": {
+        "operationId": "get_auto_flows_by_id_versions",
+        "summary": "Returns one flow's versions, newest first.",
+        "description": "Returns one flow's versions, newest first. The optional `limit`\nquery bounds the page.",
+        "tags": [
+          "auto"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the flow whose versions to list, from the path.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "flow_1"
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Limit bounds the page (default 200, maximum 1000).",
+            "schema": {
+              "format": "int64",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/auto.versionPage"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      },
+      "post": {
+        "operationId": "post_auto_flows_by_id_versions",
+        "summary": "Adds a new DRAFT version to a flow.",
+        "description": "Adds a new DRAFT version to a flow. The version is created invalid\nunless it carries a trigger, and it does not become the running version until it\nis published (PATCH the flow's publishedVersionId) or becomes the latest.",
+        "tags": [
+          "auto"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the flow to add a version to, from the path.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "flow_1"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "displayName": "v2",
+                "id": "flow_1"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/auto.createVersionIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/auto.FlowVersion"
+                }
+              }
+            },
+            "description": "created"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/auto/hooks/{source}/{event}": {
+      "post": {
+        "operationId": "post_auto_hooks_by_source_by_event",
+        "summary": "Fire an event that starts every enabled flow subscribed to it",
+        "description": "Delivers one event to the org's automation triggers and answers `{matched:n}` — how many enabled flows had a webhook trigger on this `(source, event)` key and were started by it. A zero match is a success, not an error: nothing was subscribed.\n\nThe path is the trigger key and the JSON object body is the event payload, threaded into each started run as `{{trigger.*}}` with all of its keys intact — which is why this is not a typed op, since a declared input struct would silently DISCARD every payload key it had no field for. Re-delivery is a no-op: an `X-Idempotency-Key` header dedupes, and with none the body is content-hashed instead, so a hammer of identical posts collapses to ONE run rather than minting a fresh one per post. An in-platform producer may propagate `X-Causation-Depth` so a firing that a flow caused is bounded against a loop; an absent or invalid header reads as depth 0, an external origin.\n\nAuthenticated and org-scoped, unlike a provider's public webhook URL: a validated principal is required (401 without one) and the org is that principal's, never the body's, so a producer can only fire into its own tenant's flows. Both path segments are required (400) and a payload over the size limit is a 413.",
+        "tags": [
+          "auto"
+        ],
+        "parameters": [
+          {
+            "name": "source",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "event",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "x-public": true
+      }
+    },
+    "/v1/auto/jobs": {
+      "get": {
+        "operationId": "get_auto_jobs",
+        "summary": "Lists everything of yours that runs without you watching, across every product: each run of your automations and workflows, and every Studio render, long video or other background run a product recorded for you.",
+        "description": "Lists everything of yours that runs without you watching, across\nevery product: each run of your automations and workflows, and every Studio\nrender, long video or other background run a product recorded for you. Each\nis in one of five states — scheduled, running, succeeded, failed, cancelled —\nwith what it made (Library item ids) and what it cost when that is known.\nAnother member's jobs are never listed.",
+        "tags": [
+          "auto"
+        ],
+        "parameters": [
+          {
+            "name": "product",
+            "in": "query",
+            "required": false,
+            "description": "Product keeps one product's jobs: chat, dev, studio or workflow.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "studio"
+          },
+          {
+            "name": "state",
+            "in": "query",
+            "required": false,
+            "description": "State keeps one state: scheduled, running, succeeded, failed or cancelled.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "running"
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Limit bounds the page (default 100, at most 500).",
+            "schema": {
+              "format": "int64",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/auto.jobPage"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/auto/jobs/{id}": {
+      "get": {
+        "operationId": "get_auto_jobs_by_id",
+        "summary": "Reads one of your jobs.",
+        "description": "Reads one of your jobs. A job that is not yours answers 404, as one that\ndoes not exist.",
+        "tags": [
+          "auto"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the job, from the path: a run_ or a job_ id.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "run_3f7a…"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/auto.Job"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/auto/provider": {
+      "get": {
+        "operationId": "get_auto_provider",
+        "summary": "Returns the connector catalogue.",
+        "description": "Returns the connector catalogue. Each entry is an external service a\nflow step can invoke, carrying its auth descriptor and the input properties of its\nactions and triggers. The catalogue is the same for every tenant, so the gate is a\nvalidated principal rather than a per-org view.",
+        "tags": [
+          "auto"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/auto.Catalog"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/auto/provider/{id}/run": {
+      "post": {
+        "operationId": "post_auto_provider_by_id_run",
+        "summary": "Executes one provider action in-process and answers the outcome.",
+        "description": "Executes one provider action in-process and answers the outcome. The\ncaller's resolved credential travels in `auth`, delivered to the action\nverbatim — the runtime resolves no credential itself. An action that ran and\nfailed (or an action name the provider does not have) answers ok:false with\nthe failure message, not an HTTP error; an unknown provider is 404 and a\nmissing action 422.",
+        "tags": [
+          "auto"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the provider to run, from the path.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "notion"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "action": "create_page",
+                "auth": "secret-token",
+                "id": "notion",
+                "props": {
+                  "title": "Hello"
+                }
+              },
+              "schema": {
+                "$ref": "#/components/schemas/auto.runIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/auto.runResp"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/auto/runs": {
+      "get": {
+        "operationId": "get_auto_runs",
+        "summary": "Returns your run history, newest first: the runs of the flows you hold.",
+        "description": "Returns your run history, newest first: the runs of the flows you\nhold. The optional `flowId` query narrows it to one of them and `limit` bounds\nthe page.",
+        "tags": [
+          "auto"
+        ],
+        "parameters": [
+          {
+            "name": "flowId",
+            "in": "query",
+            "required": false,
+            "description": "FlowID narrows the history to one flow. Omit it for the whole org's runs.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Limit bounds the page (default 200, maximum 1000).",
+            "schema": {
+              "format": "int64",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/auto.runPage"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/auto/runs/{id}": {
+      "get": {
+        "operationId": "get_auto_runs_by_id",
+        "summary": "Returns one run.",
+        "description": "Returns one run. A run that has not reached a terminal status is refreshed\nfrom the durable engine first — scoped to the org's own namespace — so the caller\nsees live progress rather than the last status that happened to be persisted.",
+        "tags": [
+          "auto"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the run to read, from the path.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "run_1"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/auto.FlowRun"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/auto/runs/{id}/resume": {
+      "post": {
+        "operationId": "post_auto_runs_by_id_resume",
+        "summary": "Release a run waiting at an approval step, with the approval payload",
+        "description": "Delivers the durable `resume` signal to a run parked on a `wait_for_approval` waitpoint and answers `{resumed:true}` once the engine has taken it.\n\nThe body is an ARBITRARY JSON value — object, array, string, number — delivered VERBATIM into the workflow as that waitpoint's output, so it is what the steps after the approval read as their input. An empty body resumes with no payload. That open shape is why this route is not a typed op: an operation's input can carry the payload or the run address, never both.\n\nOrg-scoped and fails closed: a validated principal is required (401 without one), the run is read under the caller's OWN org so another tenant's run id is a 404, a body that is not JSON is a 400, and a payload over the size limit is a 413 — it becomes durable engine state, so it is bounded here rather than after it lands. The resume is audited as `automations.run.resume`.",
+        "tags": [
+          "auto"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "x-public": true
+      }
+    },
+    "/v1/auto/templates": {
+      "get": {
+        "operationId": "get_auto_templates",
+        "summary": "Returns the starter automations: a name, what it does, the instructions it runs and the schedule it suggests, in the caller's own zone.",
+        "description": "Returns the starter automations: a name, what it does, the\ninstructions it runs and the schedule it suggests, in the caller's own zone.",
+        "tags": [
+          "auto"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/auto.starterPage"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "auto.Automation": {
+        "properties": {
+          "created": {
+            "description": "Created and Updated are RFC 3339 UTC.",
+            "type": "string"
+          },
+          "dir": {
+            "description": "Dir is the folder on that machine the run works in, inside one its owner\ngranted. Null when the machine may choose its own folder.",
+            "type": "string"
+          },
+          "draft": {
+            "description": "Draft is a flow with no step yet: it has no instructions, never runs, and\nbecomes an automation when its instructions are saved.",
+            "type": "boolean"
+          },
+          "enabled": {
+            "description": "Enabled is whether its schedule is armed.",
+            "type": "boolean"
+          },
+          "event": {
+            "$ref": "#/components/schemas/auto.OutcomeTrigger",
+            "description": "Event runs the automation on a committed product outcome instead of a schedule."
+          },
+          "id": {
+            "description": "ID is the automation's id, which is also its flow's.",
+            "type": "string"
+          },
+          "instructions": {
+            "description": "Instructions are what the agent is asked to do each run.",
+            "type": "string"
+          },
+          "last": {
+            "$ref": "#/components/schemas/auto.LastRun",
+            "description": "Last is its most recent run that was not skipped; null before the first."
+          },
+          "model": {
+            "description": "Model is the model the agent thinks with; null for the default.",
+            "type": "string"
+          },
+          "name": {
+            "description": "Name is what it is called.",
+            "type": "string"
+          },
+          "next": {
+            "description": "Next is when it runs next, RFC 3339 UTC; null when manual or disabled.",
+            "type": "string"
+          },
+          "notify": {
+            "description": "Notify sends a one-line summary to the automation's person when a run ends.",
+            "type": "boolean"
+          },
+          "permissions": {
+            "description": "Permissions is auto (works and uses connectors without stopping) or ask\n(changes nothing and ends with the actions it proposes; agent.go agentTask).",
+            "type": "string"
+          },
+          "postTo": {
+            "description": "PostTo are the connected accounts each run's answer is posted to — x,\nlinkedin, facebook — after review when Permissions is ask (post.go). Never null.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "project": {
+            "description": "Project is the Dev project the run works in, by its slug; null for none.",
+            "type": "string"
+          },
+          "schedule": {
+            "$ref": "#/components/schemas/auto.Schedule",
+            "description": "Schedule is when it runs."
+          },
+          "source": {
+            "description": "Source is the product it was made in: chat, dev, studio or workflow.",
+            "type": "string"
+          },
+          "target": {
+            "description": "Target is an optional registered execution target, such as the person's local machine.",
+            "type": "string"
+          },
+          "updated": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "auto.AutomationRun": {
+        "properties": {
+          "at": {
+            "description": "At is when it started and Finished when it ended (null while it runs), RFC\n3339 UTC.",
+            "type": "string"
+          },
+          "draft": {
+            "description": "Draft is the post the agent wrote, for an automation that posts; empty\notherwise.",
+            "type": "string"
+          },
+          "finished": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "outputs": {
+            "description": "Outputs are the Library items the run made: its answer, kept as a\ndocument. Never null.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "posts": {
+            "description": "Posts are where it went: one per account, its link or the platform's\nreason it did not go. Never null.",
+            "items": {
+              "$ref": "#/components/schemas/auto.PostResult"
+            },
+            "type": "array"
+          },
+          "status": {
+            "description": "Status is succeeded, failed, running, queued, review for a post waiting\nfor its person to post or discard it, skipped for a start that found the\nprevious run still going, or refused for a run whose person is no longer a\nmember of the org.",
+            "type": "string"
+          },
+          "summary": {
+            "description": "Summary is one line on how it went.",
+            "type": "string"
+          },
+          "transcript": {
+            "description": "Transcript opens the run's Dev run; null when it started none.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "auto.Catalog": {
+        "properties": {
+          "connectorCount": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "connectors": {
+            "items": {
+              "$ref": "#/components/schemas/auto.ConnectorMetadata"
+            },
+            "type": "array"
+          },
+          "runnableCount": {
+            "description": "RunnableCount is how many of them this deployment can actually invoke. It is\nthe number that matters and it was absent: a caller read connectorCount and\nreasonably believed all of it worked.",
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "auto.ConnectorAction": {
+        "properties": {
+          "description": {
+            "type": "string"
+          },
+          "displayName": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "props": {
+            "items": {
+              "$ref": "#/components/schemas/auto.PropSpec"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "auto.ConnectorAuth": {
+        "properties": {
+          "required": {
+            "type": "boolean"
+          },
+          "type": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "auto.ConnectorMetadata": {
+        "properties": {
+          "actions": {
+            "items": {
+              "$ref": "#/components/schemas/auto.ConnectorAction"
+            },
+            "type": "array"
+          },
+          "auth": {
+            "$ref": "#/components/schemas/auto.ConnectorAuth"
+          },
+          "categories": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "description": {
+            "type": "string"
+          },
+          "displayName": {
+            "type": "string"
+          },
+          "logoUrl": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "runnable": {
+            "description": "Runnable is whether this connector's actions run HERE, so a caller can\ninvoke what the entry lists. It is the registry's answer — an action\nregistered for the connector — never a stored flag, because a stored flag\nis a second answer to a question the registry already answers.",
+            "type": "boolean"
+          },
+          "triggers": {
+            "items": {
+              "$ref": "#/components/schemas/auto.ConnectorTrigger"
+            },
+            "type": "array"
+          },
+          "version": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "auto.ConnectorTrigger": {
+        "properties": {
+          "description": {
+            "type": "string"
+          },
+          "displayName": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "props": {
+            "items": {
+              "$ref": "#/components/schemas/auto.PropSpec"
+            },
+            "type": "array"
+          },
+          "strategy": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "auto.Flow": {
+        "properties": {
+          "created": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "externalId": {
+            "type": "string"
+          },
+          "folderId": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "metadata": {},
+          "projectId": {
+            "description": "projectId == org (server-derived)",
+            "type": "string"
+          },
+          "publishedVersionId": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "updated": {
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "auto.FlowAction": {
+        "properties": {
+          "displayName": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "nextAction": {
+            "$ref": "#/components/schemas/auto.FlowAction"
+          },
+          "settings": {
+            "$ref": "#/components/schemas/auto.StepSettings"
+          },
+          "skip": {
+            "type": "boolean"
+          },
+          "type": {
+            "description": "PIECE | CODE | ROUTER | LOOP_ON_ITEMS",
+            "type": "string"
+          },
+          "valid": {
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
+      "auto.FlowRun": {
+        "properties": {
+          "created": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "finishTime": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "flowId": {
+            "type": "string"
+          },
+          "flowVersionId": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "startTime": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "status": {
+            "type": "string"
+          },
+          "updated": {
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "auto.FlowTrigger": {
+        "properties": {
+          "displayName": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "nextAction": {
+            "$ref": "#/components/schemas/auto.FlowAction"
+          },
+          "settings": {
+            "$ref": "#/components/schemas/auto.StepSettings"
+          },
+          "strategy": {
+            "type": "string"
+          },
+          "type": {
+            "description": "PIECE_TRIGGER | EMPTY",
+            "type": "string"
+          },
+          "valid": {
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
+      "auto.FlowVersion": {
+        "properties": {
+          "created": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "displayName": {
+            "type": "string"
+          },
+          "flowId": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "schemaVersion": {
+            "type": "string"
+          },
+          "state": {
+            "type": "string"
+          },
+          "trigger": {
+            "$ref": "#/components/schemas/auto.FlowTrigger"
+          },
+          "updated": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "valid": {
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
+      "auto.Job": {
+        "properties": {
+          "automation": {
+            "type": "string"
+          },
+          "cost": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "error": {
+            "type": "string"
+          },
+          "finished": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "origin": {
+            "type": "string"
+          },
+          "outputs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "product": {
+            "type": "string"
+          },
+          "progress": {
+            "format": "double",
+            "type": "number"
+          },
+          "ref": {
+            "type": "string"
+          },
+          "session": {
+            "type": "string"
+          },
+          "started": {
+            "type": "string"
+          },
+          "state": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "summary": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "updated": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "auto.LastRun": {
+        "properties": {
+          "at": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "status": {
+            "description": "Status is succeeded, failed, running or queued.",
+            "type": "string"
+          },
+          "summary": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "auto.OutcomeTrigger": {
+        "properties": {
+          "name": {
+            "description": "Name is the event, for example improvement.reviewed.",
+            "type": "string"
+          },
+          "source": {
+            "description": "Source is the producing capability, for example research.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "auto.PostResult": {
+        "properties": {
+          "error": {
+            "description": "Error is the platform's reason it did not go; absent when it did.",
+            "type": "string"
+          },
+          "to": {
+            "description": "To is the account's platform: x, linkedin or facebook.",
+            "type": "string"
+          },
+          "url": {
+            "description": "URL opens the post; absent when it did not go.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "auto.PropSpec": {
+        "properties": {
+          "description": {
+            "description": "Description says what the value is.",
+            "type": "string"
+          },
+          "displayName": {
+            "description": "DisplayName is what a form calls it.",
+            "type": "string"
+          },
+          "name": {
+            "description": "Name is the input's key in the action's input object.",
+            "type": "string"
+          },
+          "required": {
+            "description": "Required is whether the action refuses to run without it.",
+            "type": "boolean"
+          },
+          "type": {
+            "description": "Type is the JSON type the value takes: string|number|boolean|object|array.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "auto.Schedule": {
+        "properties": {
+          "at": {
+            "description": "At is the local time, HH:MM on a 24-hour clock, for daily, weekdays and\nweekly. Hourly takes its minute, and runs on the hour without one. Once\ntakes a local date and time, YYYY-MM-DDTHH:MM, and runs now without one.",
+            "type": "string"
+          },
+          "cron": {
+            "description": "Cron is a five-field cron expression (minute hour day-of-month month\nday-of-week), for kind cron only, read in TZ.",
+            "type": "string"
+          },
+          "day": {
+            "description": "Day is the weekday a weekly schedule runs on: mon, tue, wed, thu, fri, sat\nor sun.",
+            "type": "string"
+          },
+          "kind": {
+            "description": "Kind is manual, hourly, daily, weekdays, weekly, cron or once. Manual runs\nonly when asked; once runs one time and then switches itself off.",
+            "type": "string"
+          },
+          "tz": {
+            "description": "TZ is the IANA time zone every time here is read in. Empty is UTC.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "auto.Starter": {
+        "properties": {
+          "description": {
+            "type": "string"
+          },
+          "icon": {
+            "type": "string"
+          },
+          "instructions": {
+            "type": "string"
+          },
+          "key": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "schedule": {
+            "$ref": "#/components/schemas/auto.Schedule"
+          }
+        },
+        "type": "object"
+      },
+      "auto.StepSettings": {
+        "properties": {
+          "actionName": {
+            "type": "string"
+          },
+          "input": {
+            "additionalProperties": {},
+            "type": "object"
+          },
+          "pieceName": {
+            "type": "string"
+          },
+          "pieceVersion": {
+            "type": "string"
+          },
+          "triggerName": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "auto.automationIn": {
+        "properties": {
+          "dir": {
+            "description": "Dir is the folder on that machine the run works in: an absolute path inside\none of the folders its owner granted. Absent lets the machine choose. It\nneeds Target; the coding run checks the grant again and refuses 403\n`folder_not_granted` for a folder outside every grant.",
+            "type": "string"
+          },
+          "enabled": {
+            "description": "Enabled arms its schedule. Absent is true.",
+            "type": "boolean"
+          },
+          "event": {
+            "$ref": "#/components/schemas/auto.OutcomeTrigger",
+            "description": "Event arms a product-outcome trigger; it is mutually exclusive with a timed schedule."
+          },
+          "instructions": {
+            "description": "Instructions are what the agent is asked to do each run. Required.",
+            "type": "string"
+          },
+          "model": {
+            "description": "Model is the model id to think with. Optional; absent is the default.",
+            "type": "string"
+          },
+          "name": {
+            "description": "Name is what it is called. Required.",
+            "type": "string"
+          },
+          "notify": {
+            "description": "Notify sends a one-line summary when a run ends.",
+            "type": "boolean"
+          },
+          "permissions": {
+            "description": "Permissions is auto (works without stopping) or ask (proposes, changes\nnothing). Absent is ask.",
+            "type": "string"
+          },
+          "postTo": {
+            "description": "PostTo are the connected accounts each run's answer is posted to: x,\nlinkedin, facebook. Absent posts nothing.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "project": {
+            "description": "Project is a Dev project's slug to work in. Optional.",
+            "type": "string"
+          },
+          "schedule": {
+            "$ref": "#/components/schemas/auto.Schedule",
+            "description": "Schedule is when it runs. Absent runs it only on demand."
+          },
+          "source": {
+            "description": "Source is the product it is made in: chat, dev, studio or workflow. Absent\nis dev.",
+            "type": "string"
+          },
+          "target": {
+            "description": "Target selects a registered execution target for the coding run.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "auto.automationPage": {
+        "properties": {
+          "data": {
+            "description": "Data is the org's automations.",
+            "items": {
+              "$ref": "#/components/schemas/auto.Automation"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "auto.automationPatch": {
+        "properties": {
+          "dir": {
+            "description": "Dir replaces the granted folder on the target; null clears it.",
+            "type": "string"
+          },
+          "enabled": {
+            "description": "Enabled arms or disarms its schedule.",
+            "type": "boolean"
+          },
+          "event": {
+            "$ref": "#/components/schemas/auto.OutcomeTrigger",
+            "description": "Event replaces the trigger with a product outcome; null clears it."
+          },
+          "id": {
+            "description": "ID is the automation, from the path.",
+            "type": "string"
+          },
+          "instructions": {
+            "type": "string"
+          },
+          "model": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "notify": {
+            "type": "boolean"
+          },
+          "permissions": {
+            "type": "string"
+          },
+          "postTo": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "project": {
+            "type": "string"
+          },
+          "schedule": {
+            "$ref": "#/components/schemas/auto.Schedule"
+          },
+          "target": {
+            "description": "Target replaces the registered execution target; null clears it.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "auto.automationRunPage": {
+        "properties": {
+          "data": {
+            "description": "Data is the automation's runs, newest first.",
+            "items": {
+              "$ref": "#/components/schemas/auto.AutomationRun"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "auto.createFlowReq": {
+        "properties": {
+          "displayName": {
+            "description": "DisplayName names the flow's initial draft version.",
+            "type": "string"
+          },
+          "externalId": {
+            "description": "ExternalID is the caller's own id for this flow. Optional.",
+            "type": "string"
+          },
+          "folderId": {
+            "description": "FolderID groups the flow in the builder's tree. Optional.",
+            "type": "string"
+          },
+          "trigger": {
+            "$ref": "#/components/schemas/auto.FlowTrigger",
+            "description": "Trigger is the root of the step tree — how the flow starts, and the action\nchain that follows. Optional: a flow may be created empty and edited later."
+          }
+        },
+        "type": "object"
+      },
+      "auto.createVersionIn": {
+        "properties": {
+          "displayName": {
+            "description": "DisplayName names the new version.",
+            "type": "string"
+          },
+          "id": {
+            "description": "ID is the flow to add a version to, from the path.",
+            "type": "string"
+          },
+          "trigger": {
+            "$ref": "#/components/schemas/auto.FlowTrigger",
+            "description": "Trigger is the root of the version's step tree. Optional: a version with no\ntrigger is created invalid, and cannot run until one is set."
+          }
+        },
+        "type": "object"
+      },
+      "auto.flowPage": {
+        "properties": {
+          "data": {
+            "description": "Data is the page of flows, newest-updated first.",
+            "items": {
+              "$ref": "#/components/schemas/auto.Flow"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "auto.jobPage": {
+        "properties": {
+          "data": {
+            "description": "Data are your jobs, the most recently changed first.",
+            "items": {
+              "$ref": "#/components/schemas/auto.Job"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "auto.patchFlowIn": {
+        "properties": {
+          "externalId": {
+            "description": "ExternalID sets the caller's own id for this flow.",
+            "type": "string"
+          },
+          "folderId": {
+            "description": "FolderID moves the flow in the builder's tree.",
+            "type": "string"
+          },
+          "id": {
+            "description": "ID is the flow to update, from the path.",
+            "type": "string"
+          },
+          "metadata": {
+            "description": "Metadata replaces the caller's opaque JSON."
+          },
+          "publishedVersionId": {
+            "description": "PublishedVersionID pins the version runs execute. It must name a version OF\nTHIS FLOW; empty clears the pin, so runs take the latest version again.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "auto.populatedFlow": {
+        "properties": {
+          "created": {
+            "description": "Created and Updated are unix milliseconds.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "externalId": {
+            "description": "ExternalID is the caller's own id for this flow, if it set one.",
+            "type": "string"
+          },
+          "folderId": {
+            "description": "FolderID groups the flow in the builder's tree.",
+            "type": "string"
+          },
+          "id": {
+            "description": "ID is the flow's id.",
+            "type": "string"
+          },
+          "metadata": {
+            "description": "Metadata is the caller's opaque JSON, stored and returned verbatim."
+          },
+          "projectId": {
+            "description": "Org is the owning org, which this surface names projectId. Server-derived from\nthe validated principal — never read from a request.",
+            "type": "string"
+          },
+          "publishedVersionId": {
+            "description": "PublishedVersionID is the version a run executes when set; empty means the\nlatest version runs.",
+            "type": "string"
+          },
+          "status": {
+            "description": "Status is ENABLED or DISABLED — whether the flow's trigger is armed.",
+            "type": "string"
+          },
+          "updated": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "version": {
+            "$ref": "#/components/schemas/auto.FlowVersion",
+            "description": "Version is the flow's latest version — its display name and step tree."
+          }
+        },
+        "type": "object"
+      },
+      "auto.reviewIn": {
+        "properties": {
+          "id": {
+            "description": "ID is the automation, and Run its run in review, from the path.",
+            "type": "string"
+          },
+          "post": {
+            "description": "Post posts it when true and discards it when false.",
+            "type": "boolean"
+          },
+          "run": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "auto.runHandle": {
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "auto.runIn": {
+        "properties": {
+          "action": {
+            "description": "Action is the name of the provider action to invoke.",
+            "type": "string"
+          },
+          "auth": {
+            "description": "Auth is the caller's resolved credential for the provider, handed to the\naction verbatim. Its shape is whatever the provider's auth descriptor\ndeclares (a token string, an object), so it is opaque here."
+          },
+          "id": {
+            "description": "ID is the provider to run, from the path.",
+            "type": "string"
+          },
+          "props": {
+            "additionalProperties": {},
+            "description": "Props are the action's input properties, keyed by property name.",
+            "type": "object"
+          }
+        },
+        "type": "object"
+      },
+      "auto.runPage": {
+        "properties": {
+          "data": {
+            "description": "Data is the page of runs, newest first.",
+            "items": {
+              "$ref": "#/components/schemas/auto.FlowRun"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "auto.runResp": {
+        "properties": {
+          "error": {
+            "description": "Error is the provider-level failure message when not ok.",
+            "type": "string"
+          },
+          "ok": {
+            "description": "Ok reports whether the action ran to completion.",
+            "type": "boolean"
+          },
+          "output": {
+            "description": "Output is the action's result when ok. Its shape is the action's own."
+          }
+        },
+        "type": "object"
+      },
+      "auto.runStarted": {
+        "properties": {
+          "run": {
+            "$ref": "#/components/schemas/auto.runHandle",
+            "description": "Run is the run this started, or the skipped start when one was going."
+          }
+        },
+        "type": "object"
+      },
+      "auto.starterPage": {
+        "properties": {
+          "data": {
+            "description": "Data is the starters.",
+            "items": {
+              "$ref": "#/components/schemas/auto.Starter"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "auto.versionPage": {
+        "properties": {
+          "data": {
+            "description": "Data is the page of versions, newest first.",
+            "items": {
+              "$ref": "#/components/schemas/auto.FlowVersion"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "auto.whenIn": {
+        "properties": {
+          "text": {
+            "description": "Text is when it runs, as a person says it: \"every monday at 9am\".",
+            "type": "string"
+          },
+          "tz": {
+            "description": "TZ is the IANA zone the words are read in. Empty is UTC.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "auto.whenOut": {
+        "properties": {
+          "next": {
+            "description": "Next is when it would first run, RFC 3339 UTC; null when it runs only on\ndemand.",
+            "type": "string"
+          },
+          "says": {
+            "description": "Says is the schedule said back in plain words.",
+            "type": "string"
+          },
+          "schedule": {
+            "$ref": "#/components/schemas/auto.Schedule",
+            "description": "Schedule is the schedule, ready to send as an automation's `schedule`."
+          }
+        },
+        "type": "object"
+      },
+      "problem-details": {
+        "description": "An RFC 9457 problem document.",
+        "properties": {
+          "code": {
+            "description": "A stable token a client can branch on, when the refusal names one.",
+            "type": "string"
+          },
+          "detail": {
+            "description": "What was refused, for a person to read.",
+            "type": "string"
+          },
+          "status": {
+            "description": "The HTTP status.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "title": {
+            "description": "The status's reason phrase.",
+            "type": "string"
+          },
+          "type": {
+            "description": "about:blank",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "status",
+          "detail"
+        ],
+        "type": "object"
+      }
+    },
+    "securitySchemes": {
+      "bearer": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "The caller's credential, sent as `Authorization: Bearer \u003ctoken\u003e`. It is either an access token minted by Hanzo IAM or an API key (pk-/sk-). X-Authorization, and HTTP Basic carrying the token as the password, are accepted spellings of the same header for clients that cannot set Authorization; a browser presents the session cookie instead. Every operation requires it unless it says `security: []`."
+      }
+    }
+  }
+}

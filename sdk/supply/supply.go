@@ -7,6 +7,12 @@
 // Gateway stops inference at a spend limit; a model vendor stops an account that
 // is out of credit.
 //
+// Each of those used to reach the caller as whatever the transport made of it —
+// a 502 from a relay, a 429 that reads as "slow down", a 503 that reads as "we
+// are down" — so the layer that ran out was hidden, and the one response that
+// helps (raise the cap, top up the account, wait for the period to turn) waited on
+// somebody reading a log.
+//
 // THE CLASS. A stop is an [*Exhausted]: code [Code] ("budget_exhausted"), the
 // [Layer] that stopped, the provider whose account it is, and the provider's own
 // sentence. It renders as 503 with those members (HTTPError), and the fleet's

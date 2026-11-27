@@ -1,0 +1,51 @@
+{
+  "$schema": "https://schemas.agentskills.io/discovery/0.2.0/schema.json",
+  "base_url": "https://api.zoo.ngo",
+  "brand": "zoo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://zoolabs.id",
+  "mcp": {
+    "description": "Model Context Protocol over JSON-RPC 2.0 — one POST per message, stateless, protocol revision 2026-07-28. tools/list answers without a credential with one tool per subsystem (its operations in the \"op\" enum) plus \"describe\", which returns one operation's input schema. tools/call names a subsystem tool and carries {\"op\": <operation>, \"input\": <its arguments>}; it takes the same bearer the REST API does, and a call that carries none is answered 401 with a WWW-Authenticate header naming the resource metadata at /.well-known/oauth-protected-resource, which names the authorization server to sign in at. The tool surface is the public contract: the operator's admin product is not offered, and a name that would disclose a secret or mutate an identity is withheld — the list says how many, under _meta.",
+    "method": "POST",
+    "url": "https://api.zoo.ngo/v1/mcp"
+  },
+  "skill_count": 3,
+  "skills": [
+    {
+      "description": "Read content board: Aggregates the caller org's marketing content across every publishable content type into ONE queue board — the cross-type read the framework's per-DocType list cannot give..",
+      "digest": "sha256:6de4b2b32f949a9470d2ad0632e0397aa75fdd68ed86af58554d09f17d74ceaf",
+      "name": "content_board",
+      "service": "content",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/content_board/SKILL.md",
+      "works": [
+        "design",
+        "education",
+        "writing"
+      ]
+    },
+    {
+      "description": "Read content channels: Lists the distribution channels the caller's org has connected — the social integrations a publish can target..",
+      "digest": "sha256:8680e9a0c40bf217595a921029ac599af67a70ac58f8aaa07fe23cc6033ebec0",
+      "name": "content_channels",
+      "service": "content",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/content_channels/SKILL.md",
+      "works": [
+        "writing"
+      ]
+    },
+    {
+      "description": "Read content lifecycle: Returns the ONE marketing-content state machine: the ordered lifecycle states, which state a fresh document starts in, which one is publicly live, and the legal successors of every state..",
+      "digest": "sha256:7d05859635e024658c2839dac01326ac355014535959e5adec413215cfb4a585",
+      "name": "content_lifecycle",
+      "service": "content",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/content_lifecycle/SKILL.md",
+      "works": [
+        "writing"
+      ]
+    }
+  ],
+  "spec_version": "8.0.0"
+}

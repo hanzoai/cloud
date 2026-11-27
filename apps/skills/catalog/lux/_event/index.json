@@ -1,0 +1,88 @@
+{
+  "$schema": "https://schemas.agentskills.io/discovery/0.2.0/schema.json",
+  "base_url": "https://api.lux.network",
+  "brand": "lux",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://lux.id",
+  "mcp": {
+    "description": "Model Context Protocol over JSON-RPC 2.0 — one POST per message, stateless, protocol revision 2026-07-28. tools/list answers without a credential with one tool per subsystem (its operations in the \"op\" enum) plus \"describe\", which returns one operation's input schema. tools/call names a subsystem tool and carries {\"op\": <operation>, \"input\": <its arguments>}; it takes the same bearer the REST API does, and a call that carries none is answered 401 with a WWW-Authenticate header naming the resource metadata at /.well-known/oauth-protected-resource, which names the authorization server to sign in at. The tool surface is the public contract: the operator's admin product is not offered, and a name that would disclose a secret or mutate an identity is withheld — the list says how many, under _meta.",
+    "method": "POST",
+    "url": "https://api.lux.network/v1/mcp"
+  },
+  "skill_count": 9,
+  "skills": [
+    {
+      "description": "Read event economic: Returns, oldest first and paged, the payments the caller's org made or received in a year, with the ones a correction restates named and what either party disputes — for the org's admins..",
+      "digest": "sha256:1ca8d730285ebe0fa84e4806da7743943130fb65ae378cbbe3c0a73ab5235a65",
+      "name": "event_economic",
+      "service": "event",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/event_economic/SKILL.md"
+    },
+    {
+      "description": "Read event errors: Returns the caller org's most recently captured errors, newest first..",
+      "digest": "sha256:c08bdf2d6da9d511f4f62ccfbbfce37c0afee30538b76179cc731d25c8f80799",
+      "name": "event_errors",
+      "service": "event",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/event_errors/SKILL.md"
+    },
+    {
+      "description": "Read event health: Reports whether the event plane can take a write and the warehouse can answer a read..",
+      "digest": "sha256:a26941df0b8db5c1fbf0a5dc908299bd0d4483ecd69cd1f4c1194856c199efde",
+      "name": "event_health",
+      "service": "event",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/event_health/SKILL.md"
+    },
+    {
+      "description": "Read event insights: Returns the caller org's most recent product events, newest first., Reports that the unified insights surface is serving..",
+      "digest": "sha256:e8b33c931e268a1a25888cb43bd4a7af22de11998531018a8860420e79b2ebc7",
+      "name": "event_insights",
+      "service": "event",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/event_insights/SKILL.md"
+    },
+    {
+      "description": "Read event overview: Returns the caller org's analytics KPIs for one time window..",
+      "digest": "sha256:e1e5132e8c1702a9feaa744177a52e70f74280e3431d3f1cc86997dfa9dcf5fc",
+      "name": "event_overview",
+      "service": "event",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/event_overview/SKILL.md"
+    },
+    {
+      "description": "Read event pixel: A site's default pixel — a page view from an image, for a page that runs no script.",
+      "digest": "sha256:72e333fc1624d089698c38179c159eca649f347685a97eef28b4c755ba04ec62",
+      "name": "event_pixel",
+      "service": "event",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/event_pixel/SKILL.md"
+    },
+    {
+      "description": "Read event tag js: The Lux event tag — the one-line install for a surface with no bundler.",
+      "digest": "sha256:076a9bbb17499e3db2e36fc5d3d248a17053b197beffd91e51da5a8153447772",
+      "name": "event_tag-js",
+      "service": "event",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/event_tag-js/SKILL.md"
+    },
+    {
+      "description": "Read event timeseries: Returns the caller org's LLM usage over time as an evenly-spaced series..",
+      "digest": "sha256:79da3ecd887dff75e3a66b99629787526ee3da8454b07265778ea2f47a63660d",
+      "name": "event_timeseries",
+      "service": "event",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/event_timeseries/SKILL.md"
+    },
+    {
+      "description": "Read event top: Returns the caller org's ranked lenses for one window, five of them at once..",
+      "digest": "sha256:ae69c6569ea30dd088f6bf56dabbf3d92847ddbc19e9baf29cc69f0a980301c1",
+      "name": "event_top",
+      "service": "event",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/event_top/SKILL.md"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

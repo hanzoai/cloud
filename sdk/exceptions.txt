@@ -1,0 +1,31 @@
+# What the SDK still reaches that it must not (sdk/sdk_test.go). The file only
+# shrinks. "<pkg> <import>": code that moved in with its production driver, before
+# the driver moved out to internal/. "<pkg>_test <import>": a test that leans on
+# this repository's test kits.
+sdk/audit_test internal/sqltest
+sdk/dialect_test internal/sqltest
+sdk/tenure_test internal/driver/s3
+sdk/tenure_test internal/sqltest
+# Tests of the framework that run it against this repository: the identity boundary and
+# the gates in front of the apps and the host (sdk_test), which need their kits.
+sdk_test apps/auditlog
+sdk_test apps/catalog
+sdk_test apps/commerce
+sdk_test apps/event
+sdk_test apps/gateway/edge
+sdk_test apps/zen
+sdk_test client
+sdk_test client/commerce
+sdk_test finance
+sdk_test internal/aimodel
+sdk_test internal/attest
+sdk_test internal/driver/kv
+sdk_test internal/driver/kv/kvtest
+sdk_test internal/driver/postgres
+sdk_test internal/host
+sdk_test internal/planetest
+sdk_test internal/sqlcheck
+sdk_test internal/sqltest
+sdk_test manifest
+sdk_test money
+sdk_test internal/driver

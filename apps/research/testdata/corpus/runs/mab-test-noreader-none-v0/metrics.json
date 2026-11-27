@@ -1,0 +1,65 @@
+{
+ "row": "noreader",
+ "split": "test",
+ "reader": "none",
+ "k": 10,
+ "prompt_sha": "7d9cee398c4536d60756c86bd5d073679202e5a63ad594ecd1a56704873d2eee",
+ "commit": "ced158ddb3",
+ "n": 589,
+ "by_size": {
+  "mh_32k": {
+   "n": 100,
+   "substring_em": 0.32,
+   "ci95": [
+    0.22,
+    0.43
+   ]
+  },
+  "mh_64k": {
+   "n": 99,
+   "substring_em": 0.3131,
+   "ci95": [
+    0.2121,
+    0.404
+   ]
+  },
+  "mh_262k": {
+   "n": 98,
+   "substring_em": 0.2551,
+   "ci95": [
+    0.1837,
+    0.3367
+   ]
+  },
+  "sh_32k": {
+   "n": 98,
+   "substring_em": 0.9796,
+   "ci95": [
+    0.949,
+    1
+   ]
+  },
+  "sh_64k": {
+   "n": 99,
+   "substring_em": 0.9293,
+   "ci95": [
+    0.8788,
+    0.9798
+   ]
+  },
+  "sh_262k": {
+   "n": 95,
+   "substring_em": 0.9789,
+   "ci95": [
+    0.9474,
+    1
+   ]
+  }
+ },
+ "facts_per_q": 1.5,
+ "retrieval_ms_p50": 0.116,
+ "retrieval_ms_p95": 8.669,
+ "reader_calls": 0,
+ "context_tokens_per_q": 0,
+ "wall_s": 82
+}

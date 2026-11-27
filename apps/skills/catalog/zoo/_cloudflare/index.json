@@ -1,0 +1,80 @@
+{
+  "$schema": "https://schemas.agentskills.io/discovery/0.2.0/schema.json",
+  "base_url": "https://api.zoo.ngo",
+  "brand": "zoo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://zoolabs.id",
+  "mcp": {
+    "description": "Model Context Protocol over JSON-RPC 2.0 — one POST per message, stateless, protocol revision 2026-07-28. tools/list answers without a credential with one tool per subsystem (its operations in the \"op\" enum) plus \"describe\", which returns one operation's input schema. tools/call names a subsystem tool and carries {\"op\": <operation>, \"input\": <its arguments>}; it takes the same bearer the REST API does, and a call that carries none is answered 401 with a WWW-Authenticate header naming the resource metadata at /.well-known/oauth-protected-resource, which names the authorization server to sign in at. The tool surface is the public contract: the operator's admin product is not offered, and a name that would disclose a secret or mutate an identity is withheld — the list says how many, under _meta.",
+    "method": "POST",
+    "url": "https://api.zoo.ngo/v1/mcp"
+  },
+  "skill_count": 8,
+  "skills": [
+    {
+      "description": "Read cloudflare ai search: Lists the AI Search instances in the org's own namespace on its Cloudflare account., Reads one AI Search instance from the org's own namespace., Answers which Cloudflare AI Search namespace the caller's org owns..",
+      "digest": "sha256:067721f16d044be82e0d3269ed60bf0963321fac81b0c7feeb05f3abf309d22d",
+      "name": "cloudflare_ai-search",
+      "service": "cloudflare",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/cloudflare_ai-search/SKILL.md"
+    },
+    {
+      "description": "Read cloudflare d1: Lists the D1 databases on the org's Cloudflare account..",
+      "digest": "sha256:0c8cae932712dd201c55d9c2e7c30fb2ea4da0e627d60a7148f170b7b84f4b50",
+      "name": "cloudflare_d1",
+      "service": "cloudflare",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/cloudflare_d1/SKILL.md"
+    },
+    {
+      "description": "Read cloudflare kv: Lists the Workers KV namespaces on the org's Cloudflare account., Read a Workers KV value as its stored bytes.",
+      "digest": "sha256:87d3e13793be1029bdad5106ef06d928632f4adad01eef2a50242c23c570897b",
+      "name": "cloudflare_kv",
+      "service": "cloudflare",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/cloudflare_kv/SKILL.md"
+    },
+    {
+      "description": "Read cloudflare pages: Lists the org's Cloudflare Pages projects., Reads one Cloudflare Pages project — its build config, deployment configs and latest deployment..",
+      "digest": "sha256:1c768813552d84ce73ebe591ea1d6cc79ec7a28131c936d191dd6792d7b57754",
+      "name": "cloudflare_pages",
+      "service": "cloudflare",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/cloudflare_pages/SKILL.md"
+    },
+    {
+      "description": "Read cloudflare r2: Lists the R2 buckets on the org's Cloudflare account..",
+      "digest": "sha256:54e6db017e49c87d16fe5e47491ef0720a82c186896727e6ce53edcdd9b72f46",
+      "name": "cloudflare_r2",
+      "service": "cloudflare",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/cloudflare_r2/SKILL.md"
+    },
+    {
+      "description": "Read cloudflare spend limits: Lists the spending limits on the org's Cloudflare account — the Workers and Durable Objects ceilings Cloudflare stops work at — each with this billing period's spend and where it stands against the warning threshold below the cap (`warnPct`)..",
+      "digest": "sha256:ea407c0835167d5a441439fa4f52b12413eea78a7bbda2bc0ea8ccb392f12307",
+      "name": "cloudflare_spend-limits",
+      "service": "cloudflare",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/cloudflare_spend-limits/SKILL.md"
+    },
+    {
+      "description": "Read cloudflare workers: Lists the Worker scripts on the org's Cloudflare account., Reads the org account's workers.dev subdomain — the name under which every subdomain-enabled script is served., Lists the Worker routes bound within one zone — the URL patterns that dispatch to a ",
+      "digest": "sha256:c2572c99b09ca2afb703d31b3e3703a52445087573cd63061e7bc2e7bf56c327",
+      "name": "cloudflare_workers",
+      "service": "cloudflare",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/cloudflare_workers/SKILL.md"
+    },
+    {
+      "description": "Read cloudflare zones: Lists the Cloudflare zones the org's connected API token can see, paged and filtered by the query parameters Cloudflare itself accepts., Reads one Cloudflare zone the org's token can see., Reads a zone's Cloudflare traffic dashboard — requests, bandwidth, t",
+      "digest": "sha256:af03a5f74e1e7f679041fe1fa85db6229b5ac3f461ab54206a2b1f15f0d66997",
+      "name": "cloudflare_zones",
+      "service": "cloudflare",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/cloudflare_zones/SKILL.md"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

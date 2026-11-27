@@ -137,10 +137,10 @@ func confinedAllowed(scope, path, method string) error {
 	return zip.Errorf(http.StatusForbidden, "this token was delegated for model calls only; it may not reach %s %s", method, path)
 }
 
-// noRetrieval refuses a confined model call that asks the gateway to search the
-// org's document index into the prompt. A completion that reads the org's
-// documents is a read of them, and what a sandbox's model output asks for in the
-// person's name must not include the tenant's knowledge base.
+// noRetrieval refuses any confined request (model call or autonomous science
+// endpoint) that asks the gateway to search the org's document index into the
+// prompt. A request that reads the org's documents is a read of them, and what a
+// sandbox asks for in the person's name must not include the tenant's knowledge base.
 //
 // The question is ai's own (retrieval.Asked, the leaf its controllers answer it
 // with), asked of the same header and body, so this refuses exactly what would

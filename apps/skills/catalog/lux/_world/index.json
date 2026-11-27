@@ -1,0 +1,56 @@
+{
+  "$schema": "https://schemas.agentskills.io/discovery/0.2.0/schema.json",
+  "base_url": "https://api.lux.network",
+  "brand": "lux",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://lux.id",
+  "mcp": {
+    "description": "Model Context Protocol over JSON-RPC 2.0 — one POST per message, stateless, protocol revision 2026-07-28. tools/list answers without a credential with one tool per subsystem (its operations in the \"op\" enum) plus \"describe\", which returns one operation's input schema. tools/call names a subsystem tool and carries {\"op\": <operation>, \"input\": <its arguments>}; it takes the same bearer the REST API does, and a call that carries none is answered 401 with a WWW-Authenticate header naming the resource metadata at /.well-known/oauth-protected-resource, which names the authorization server to sign in at. The tool surface is the public contract: the operator's admin product is not offered, and a name that would disclose a secret or mutate an identity is withheld — the list says how many, under _meta.",
+    "method": "POST",
+    "url": "https://api.lux.network/v1/mcp"
+  },
+  "skill_count": 5,
+  "skills": [
+    {
+      "description": "Read world limits: Echoes a World plan's rate limits, alert quota and model-API grant, read straight from the live @hanzo/plans catalog, so agents and dashboards configure themselves against the catalog instead of hardcoding tier numbers..",
+      "digest": "sha256:17a02ac17fa2ca3be3e5a3506bf2fa8b62e2a5330dcb1ae5427733c2660f4c7d",
+      "name": "world_limits",
+      "service": "world",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/world_limits/SKILL.md"
+    },
+    {
+      "description": "Read world news: Returns the caller's merged world-news feed: every source their project's pipeline names — GDELT once per keyword, plus each allowlisted RSS or Atom feed — fetched concurrently, narrowed by the pipeline's keyword/region/source filters, deduplicated by link and so",
+      "digest": "sha256:c3c95f9de45719fb9d4b5a7d69b1ae91bd229c6b6ad4b574b5f6ddd0d5b93445",
+      "name": "world_news",
+      "service": "world",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/world_news/SKILL.md"
+    },
+    {
+      "description": "Read world pipeline: Returns the caller project's news pipeline: which feeds it reads and how the merged result is filtered..",
+      "digest": "sha256:19792c97ed2118b07521127d9fe1a4f132c544665b23ee346df8a989a89a3bb7",
+      "name": "world_pipeline",
+      "service": "world",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/world_pipeline/SKILL.md"
+    },
+    {
+      "description": "Read world stream: Live news refreshes for the caller's org and project, as Server-Sent Events..",
+      "digest": "sha256:9439312ba86ad04448d7a68b1a9c3eb797e00ee634aeb00687c13d8e34c0fd61",
+      "name": "world_stream",
+      "service": "world",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/world_stream/SKILL.md"
+    },
+    {
+      "description": "Read world world: Answers GET /v1/world — the product's public endpoint, naming every wire this surface answers on..",
+      "digest": "sha256:790cc7befcabfa9ef0cfe3bab94a257abdc628ba58d021b0c0deb46de9d2c95a",
+      "name": "world_world",
+      "service": "world",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/world_world/SKILL.md"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

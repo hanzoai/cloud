@@ -1,0 +1,268 @@
+// Copyright © 2026 Hanzo AI. MIT License.
+
+package commerce
+
+import (
+	"context"
+	"fmt"
+
+	"github.com/hanzoai/cloud/client"
+	financeclient "github.com/hanzoai/cloud/finance"
+	"github.com/hanzoai/cloud/internal/host"
+	"github.com/hanzoai/cloud/money"
+	"github.com/hanzoai/cloud/sdk"
+	"github.com/zap-proto/zip"
+)
+
+// The prepaid ledger is a per-org SQLite store with ONE writer, so exactly one
+// process may open it — and that process is the one that mounts commerce, because
+// installFinance builds the ledger only when commerce is enabled. Every other app
+// therefore has no ledger to read, which is not a configuration gap to fill in but
+// the single-writer property working as intended.
+//
+// So the ledger is asked, not opened. These are the ops that answer, on the
+// internal plane (ZAP on this app's canonical unix socket), and they are why
+// billing can report a balance from a process that must never touch the file.
+//
+// They stay deliberately dumb: the caller resolves WHOSE balance it wants and
+// these read it. Subject resolution needs the request — the billing account
+// claim, the user name the edge minted — and pushing that here would mean a
+// second copy of principal.Subject deriving a payer from facts it does not
+// carry. One resolver, at the edge that has the request.
+
+// callerOrg is the ONE tenancy rule these ops share: the org comes from the
+// CALLER and never from an argument. A caller that could name its own org would
+// be naming another tenant's books, and none of these inputs can express one.
+//
+// cloud.Tenant decides it: principal.Acting — from outside, the validated
+// principal — plus the one case Acting cannot admit, a call with no request
+// behind it, where the org is what a caller stated in-process. Both fail closed,
+// and neither can be mistaken for the other, which matters here because commerce
+// is reached in both shapes.
+//
+// On a request, host.ReaderOrg is the same rule in request form: the
+// validated principal's org, or nothing. It used to admit one more caller — a
+// service bearing a shared COMMERCE_SERVICE_TOKEN and naming its tenant in
+// X-Org-Id, for the ai process reading over HTTP — and that arm is gone with
+// the token; a service reads over the plane, where it states its org and the
+// first branch admits it.
+func callerOrg(ctx context.Context, op string) (string, error) {
+	if org, ok := cloud.Tenant(ctx); ok {
+		return org, nil
+	}
+	if c, onRequest := cloud.Request(ctx); onRequest {
+		if org, ok := host.ReaderOrg(c); ok {
+			return org, nil
+		}
+	}
+	return "", zip.ErrForbidden(op + ": no validated org on the call")
+}
+
+// books is the other rule they share. This process mounts commerce, so the
+// ledger is built before routes are served: nil here means the boot order
+// changed, and answering zero would report every account as broke.
+func books(op string) (money.FinanceClient, error) {
+	fin := financeclient.Current()
+	if fin == nil {
+		return nil, fmt.Errorf("%s: no ledger in the process that owns it", op)
+	}
+	return fin, nil
+}
+
+// exposeBalance publishes the ledger read. Mount calls it.
+func exposeBalance() {
+	cloud.Plane().Post("/finance/balance", planeBalance,
+		zip.WithOperationID(client.FinanceBalance),
+		zip.WithSummary("Spendable prepaid balance"))
+}
+
+// Reads one subject's spendable prepaid balance out of the ledger this process
+// owns, so a process that must never open the file can still report a balance.
+//
+// The ORG is the caller's — the gateway's assertion, or what a background job
+// stated once and explicitly — and can never be named in the input, so a caller
+// cannot read another tenant's books. The SUBJECT is the caller's to choose, but
+// only within that org: it is a wallet inside the ledger the caller's identity
+// already pinned. An empty subject reads the org's own account and an empty
+// currency reads usd. A missing ledger is an ERROR, never a zero — answering zero
+// from the process that owns the file would report every account as broke.
+//
+// The amount crosses the plane EXACTLY. Flattening it to cents here was the
+// console's understatement: every sub-cent tail of the true balance vanished
+// between the one writer and every reader.
+//
+// It answers where the money came from beside how much there is: Cash, what the
+// customer paid, Credit, what the platform minted, and Line, what is left of the
+// org's credit line — with Owed, what the account owes, and Limit, the line itself
+// (finance.Funds). A gate weighs Amount, the three together; nothing else computes
+// the split.
+//
+// A named handler, not a closure, so zipdoc can lift this prose into the registry.
+func planeBalance(ctx context.Context, in *client.BalanceIn) (*client.Balance, error) {
+	org, err := callerOrg(ctx, "balance")
+	if err != nil {
+		return nil, err
+	}
+	subject := in.Subject
+	if subject == "" {
+		subject = org
+	}
+	currency := in.Currency
+	if currency == "" {
+		currency = "usd"
+	}
+	fin, err := books("balance")
+	if err != nil {
+		return nil, err
+	}
+	funder, ok := fin.(financeclient.Funder)
+	if !ok {
+		return nil, fmt.Errorf("balance: this ledger cannot say where a balance came from")
+	}
+	// The account's own books, which off mainnet are the sandbox ones: every
+	// deposit there is written sandboxed (ledger.go), so a read of the live books
+	// answered a testnet buyer zero for credit it had just bought.
+	funds, err := funder.Funds(ctx, org, subject, sandboxed(false))
+	if err != nil {
+		return nil, fmt.Errorf("balance: read %s/%s: %w", org, subject, err)
+	}
+	return &client.Balance{
+		Amount: client.Amount(funds.Total().Unwrap()),
+		Cash:   client.Amount(funds.Cash.Unwrap()),
+		Credit: client.Amount(funds.Credit.Unwrap()),
+		Line:   client.Amount(funds.Line.Unwrap()),
+		Owed:   client.Amount(funds.Owed.Unwrap()),
+		Limit:  client.Amount(funds.Limit.Unwrap()),
+	}, nil
+}
+
+// usageReadLimit matches what the co-resident reader asks for, so the page a
+// customer sees does not change with which process answered.
+const usageReadLimit = 2000
+
+// The usage list, for the same reason as the balance and the grant: one writer,
+// and it is here.
+//
+// It sends ROWS, not a rendered view. The HTTP surface builds its own envelope
+// from these — sending the envelope would need the renderer to live with the
+// ledger, which is the import cycle that shape implies.
+func exposeUsage() {
+	cloud.Plane().Post("/finance/usage", planeUsage,
+		zip.WithOperationID(client.FinanceUsage),
+		zip.WithSummary("Recorded debits for this org"))
+}
+
+// Lists the caller org's served calls — id, model, exact amount, timestamp, and the
+// class, units, our cost and who paid that the usage log counted — most recent
+// first, a $0 call included, bounded to the same page size the co-resident reader
+// asks for so the page a customer sees does not change with which process answered.
+//
+// It takes NO input at all: the org comes from the caller and there is nothing
+// else to name, so one org can never list another's debits. It sends ROWS rather
+// than a rendered view — the HTTP surface builds its own envelope from these,
+// because sending the envelope would put the renderer next to the ledger, which
+// is the import cycle that shape implies. A ledger implementation that cannot
+// list usage is an error, not an empty page.
+//
+// Each amount is the ledger's OWN value, never rebuilt from its cent rounding:
+// reconstructing an exact plane amount from the rounding was the sharpest form of
+// the flatten, a wire type promising precision the value had already lost.
+//
+// A named handler, not a closure, so zipdoc can lift this prose into the registry.
+func planeUsage(ctx context.Context, _ *cloud.Unit) (*client.UsageRows, error) {
+	org, err := callerOrg(ctx, "usage")
+	if err != nil {
+		return nil, err
+	}
+	fin, err := books("usage")
+	if err != nil {
+		return nil, err
+	}
+	lister, ok := fin.(interface {
+		ListUsage(context.Context, string, bool, int) ([]financeclient.UsageRow, error)
+	})
+	if !ok {
+		return nil, fmt.Errorf("usage: this ledger does not list usage")
+	}
+	rows, err := lister.ListUsage(ctx, org, false, usageReadLimit)
+	if err != nil {
+		return nil, fmt.Errorf("usage: %w", err)
+	}
+	out := make([]client.UsageRow, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, client.UsageRow{
+			ID: r.ID, Model: r.Model,
+			Amount:    client.Amount(r.Amount.Unwrap()),
+			CreatedAt: r.CreatedAt,
+			Class:     r.Class, Units: r.Units, PaidBy: r.PaidBy,
+			Cost: client.Amount(r.Cost.Unwrap()),
+		})
+	}
+	return &client.UsageRows{Rows: out}, nil
+}
+
+// The ledger's entries. Three customer-facing pages read this one list, and all
+// three answered 501 from a process that does not hold the ledger.
+func exposeTxns() {
+	cloud.Plane().Post("/finance/txns", planeTxns,
+		zip.WithOperationID(client.FinanceTxns),
+		zip.WithSummary("Ledger entries for this org"))
+}
+
+// Lists the caller org's ledger entries — id, kind, ref, memo, amount and
+// timestamp — most recent first and bounded to one page. It is the movement list
+// behind the customer-facing transactions, credits and receipts pages, all three
+// of which read this one list.
+//
+// The org is the CALLER'S and cannot be named in the input, so one org can never
+// read another's entries. What the input DOES name is which books, whose wallet
+// and how many rows: `test` reads the SANDBOX ledger, a physically separate file,
+// because a caller that posted test rows into real revenue would have restated the
+// company's income with nothing downstream able to tell; `subject` is a wallet
+// INSIDE the caller's org — the same key the balance op takes, so the movements
+// and the standing total answer for one account — and empty reads every wallet in
+// the org; `limit` is a page size and 0 takes the default.
+//
+// Unlike the usage read the amount crosses as a DECIMAL STRING with its currency
+// rather than a bare quantity, because an entry is a movement a customer reads
+// rather than a number a gate does arithmetic on. A ledger implementation that
+// cannot list entries is an error, not an empty page.
+//
+// A named handler, not a closure, so zipdoc can lift this prose into the registry.
+func planeTxns(ctx context.Context, in *client.TxnsIn) (*client.Txns, error) {
+	org, err := callerOrg(ctx, "txns")
+	if err != nil {
+		return nil, err
+	}
+	fin, err := books("txns")
+	if err != nil {
+		return nil, err
+	}
+	lister, ok := fin.(interface {
+		ListEntries(context.Context, string, string, bool, int) ([]financeclient.TxnRow, error)
+	})
+	if !ok {
+		return nil, fmt.Errorf("txns: this ledger does not list entries")
+	}
+	limit := in.Limit
+	if limit <= 0 {
+		limit = usageReadLimit
+	}
+	rows, err := lister.ListEntries(ctx, org, in.Subject, in.Test, limit)
+	if err != nil {
+		return nil, fmt.Errorf("txns: %w", err)
+	}
+	out := make([]client.Txn, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, client.Txn{
+			// The kind crosses as the LEDGER'S own spelling, and the reader parses
+			// it back with finance.ParseKind. It travels as text because the wire is
+			// text; it is never re-spelled here into some other vocabulary, which is
+			// how the reader came to classify on strings this ledger never writes.
+			ID: r.ID, Kind: string(r.Kind), Ref: r.Ref, Memo: r.Memo,
+			Amount:    client.Money{Decimal: r.Amount.String(), Currency: "USD"},
+			CreatedAt: r.CreatedAt,
+		})
+	}
+	return &client.Txns{Rows: out}, nil
+}

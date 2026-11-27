@@ -1,0 +1,4521 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Hanzo Cloud API",
+    "description": "Package train is the cloud's one training endpoint, /v1/train (HIP-1333): clients the caller drives on the engine, and jobs the org's linked machines or Hanzo's executor run, whose adaptation, protection, objective and output are fields and whose artifacts, bases and evaluations are what they produce.",
+    "version": "v1"
+  },
+  "servers": [
+    {
+      "url": "https://api.hanzo.ai"
+    }
+  ],
+  "security": [
+    {
+      "bearer": []
+    }
+  ],
+  "tags": [
+    {
+      "name": "capabilities"
+    },
+    {
+      "name": "train"
+    }
+  ],
+  "paths": {
+    "/v1/capabilities": {
+      "get": {
+        "operationId": "capabilitiesList",
+        "summary": "Answers the org's capabilities by name, each with its state, its latest and installed versions, and what the installed one did live.",
+        "description": "Answers the org's capabilities by name, each with its state,\nits latest and installed versions, and what the installed one did live.",
+        "tags": [
+          "capabilities"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/train.capabilitiesOut"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      },
+      "post": {
+        "operationId": "capabilitiesCreate",
+        "summary": "Makes a capability in draft from captured corrections of one question — or cold-start from labeled (state, answer) examples of Question, encoded once over Kai's shared representation — which becomes the route it will be installed behind.",
+        "description": "Makes a capability in draft from captured corrections of one\nquestion — or cold-start from labeled (state, answer) examples of Question,\nencoded once over Kai's shared representation — which becomes the route it\nwill be installed behind. When Train is true, it immediately runs a CPU lesson\nand returns the evaluated or publishable capability. Refused: a name taken by\nanother capability or by a published job's output (409 name_taken),\ncorrections of two questions or not captured (400), and a question another of\nthe org's capabilities answers (409 route_conflict).",
+        "tags": [
+          "capabilities"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "corrections": [
+                  "cor_0123456789abcdef"
+                ],
+                "name": "refund-intent"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/train.createIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/train.Capability"
+                }
+              }
+            },
+            "description": "created"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/capabilities/capture": {
+      "get": {
+        "operationId": "capabilitiesCapture",
+        "summary": "Answers whether the org's Kai decisions keep their states for its capabilities to learn from.",
+        "description": "Answers whether the org's Kai decisions keep their states for its\ncapabilities to learn from. Off until the org turns it on or files its first\ncorrection.",
+        "tags": [
+          "capabilities"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/train.Capture"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      },
+      "put": {
+        "operationId": "capabilitiesSetCapture",
+        "summary": "Turns capture on or off for the org's Kai decisions from the next one.",
+        "description": "Turns capture on or off for the org's Kai decisions from the next\none. Off keeps what was captured until its retention ends.",
+        "tags": [
+          "capabilities"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/train.captureIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/train.Capture"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/capabilities/corrections": {
+      "get": {
+        "operationId": "capabilitiesCorrections",
+        "summary": "Answers every correction of the org's decisions, newest first, each captured (it can teach) or missing (its decision was made with capture off), and the questions they ask, each counted: what a capability is made from.",
+        "description": "Answers every correction of the org's decisions, newest first,\neach captured (it can teach) or missing (its decision was made with capture\noff), and the questions they ask, each counted: what a capability is made from.",
+        "tags": [
+          "capabilities"
+        ],
+        "parameters": [
+          {
+            "name": "question",
+            "in": "query",
+            "required": false,
+            "description": "Question keeps one question's corrections.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/train.correctionsOut"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/capabilities/{name}": {
+      "delete": {
+        "operationId": "capabilitiesDelete",
+        "summary": "Deletes a capability and its versions; their artifacts go with the org's retention.",
+        "description": "Deletes a capability and its versions; their artifacts go\nwith the org's retention. Refused 409 installed while a version is in the set:\ndisable it first.",
+        "tags": [
+          "capabilities"
+        ],
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/train.unmadeOut"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      },
+      "get": {
+        "operationId": "capabilitiesGet",
+        "summary": "Answers one capability: its versions with their evaluations, newest first, and what its installed version did live.",
+        "description": "Answers one capability: its versions with their evaluations,\nnewest first, and what its installed version did live.",
+        "tags": [
+          "capabilities"
+        ],
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/train.Capability"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/capabilities/{name}/disable": {
+      "post": {
+        "operationId": "capabilitiesDisable",
+        "summary": "Takes a capability's installed version out of the org's published set: its questions are answered by base Kai, bit for bit, from the next decision.",
+        "description": "Takes a capability's installed version out of the org's\npublished set: its questions are answered by base Kai, bit for bit, from the\nnext decision. Its versions stay, and any one that passed can be published\nagain.",
+        "tags": [
+          "capabilities"
+        ],
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/train.Capability"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/capabilities/{name}/publish": {
+      "post": {
+        "operationId": "capabilitiesPublish",
+        "summary": "Installs a version in the org's published set, where ai attaches it to the org's decisions: the version's evaluation must have passed, and it must have been taught over the base Kai serves now.",
+        "description": "Installs a version in the org's published set, where ai\nattaches it to the org's decisions: the version's evaluation must have passed,\nand it must have been taught over the base Kai serves now. Refused 409:\nnot_publishable (no passing version, or that one did not pass),\nneeds_validation (Kai's base moved since it was taught: train again),\nroute_conflict (a published job answers its question).",
+        "tags": [
+          "capabilities"
+        ],
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/train.publishCapIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/train.Capability"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/capabilities/{name}/rollback": {
+      "post": {
+        "operationId": "capabilitiesRollback",
+        "summary": "Puts the version installed before the installed one back in the org's published set: exactly that version's artifact, nothing retrained.",
+        "description": "Puts the version installed before the installed one back\nin the org's published set: exactly that version's artifact, nothing retrained.\nRefused 409 no_previous when none was installed before it, and\nneeds_validation when that one was taught over another base than Kai serves.",
+        "tags": [
+          "capabilities"
+        ],
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/train.Capability"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/capabilities/{name}/train": {
+      "post": {
+        "operationId": "capabilitiesTrain",
+        "summary": "Teaches a capability a new version from its corrections, on the CPU over the states its org's decisions captured: no row is encoded again.",
+        "description": "Teaches a capability a new version from its corrections, on\nthe CPU over the states its org's decisions captured: no row is encoded again.\nWhen Examples are provided, they are encoded once over Kai's shared\nrepresentation and any new mistakes are added to its corrections before the\nlesson runs. The smallest correction that passes evaluation is kept\n(calibration, then a head, then a boost and veto pair); its evaluation, held\nout against base Kai, says what it repaired and damaged, how often it fires,\nthat every other answer is base Kai's bit for bit, and what it costs. A\nversion that passed is publishable; one that did not is evaluated, with the\ngate's reasons. An installed capability keeps serving its installed version\nuntil a new one is published.",
+        "tags": [
+          "capabilities"
+        ],
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "corrections": [
+                  "cor_0123456789abcdef",
+                  "cor_fedcba9876543210"
+                ]
+              },
+              "schema": {
+                "$ref": "#/components/schemas/train.trainIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/train.Capability"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/capabilities/{name}/weights": {
+      "get": {
+        "operationId": "capabilitiesWeights",
+        "summary": "Answers a capability's .tar weights (base64) and shared representation metadata for its installed or newest passing version, so the org can export or open-source its trained adapter.",
+        "description": "Answers a capability's .tar weights (base64) and shared\nrepresentation metadata for its installed or newest passing version, so the\norg can export or open-source its trained adapter.",
+        "tags": [
+          "capabilities"
+        ],
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/train.CapabilityWeights"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/train/artifacts": {
+      "get": {
+        "operationId": "get_train_artifacts",
+        "summary": "Answers the org's objects — its uploads and its jobs' outputs, one per sha256 — with what produced each, whether it is published and when retention deletes it.",
+        "description": "Answers the org's objects — its uploads and its jobs'\noutputs, one per sha256 — with what produced each, whether it is published and\nwhen retention deletes it.",
+        "tags": [
+          "train"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/train.objectsOut"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      },
+      "post": {
+        "operationId": "post_train_artifacts",
+        "summary": "Records rows the org is about to upload, named by the SHA-256 of their bytes, and answers the same grant an executor's artifact gets: a presigned PUT S3 accepts only with that checksum and length, encrypted under the org's key — a PUT per 64 MiB part over 64 MiB — or stored: true when the org already holds those bytes.",
+        "description": "Records rows the org is about to upload, named by the\nSHA-256 of their bytes, and answers the same grant an executor's artifact\ngets: a presigned PUT S3 accepts only with that checksum and length, encrypted\nunder the org's key — a PUT per 64 MiB part over 64 MiB — or stored: true when\nthe org already holds those bytes. A job names them as `dataset.uri`\n`artifact:\u003csha256\u003e`, and its create reads the upload back before it is\naccepted. Storage is billed by the GB-month while the org keeps them, so an\nupload is refused 402/503 when the uploader's wallet cannot pay a month of\nkeeping these bytes with what it already keeps in the org and what the org has\npending.",
+        "tags": [
+          "train"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "kind": "dataset",
+                "name": "tickets",
+                "sha256": "…",
+                "size": 1048576
+              },
+              "schema": {
+                "$ref": "#/components/schemas/train.uploadIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/train.registerOut"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/train/artifacts/{sha256}": {
+      "delete": {
+        "operationId": "delete_train_artifacts_by_sha256",
+        "summary": "Deletes one of the org's objects — an upload or a job's output — from the store: every artifact naming it then reads deleted, and its storage is no longer billed.",
+        "description": "Deletes one of the org's objects — an upload or a job's\noutput — from the store: every artifact naming it then reads deleted, and its\nstorage is no longer billed. A published object is 409 published, and one a\njob that has not ended reads or produced is 409 in_use. Another org's sha256\nis not found, exactly as an unknown one is.",
+        "tags": [
+          "train"
+        ],
+        "parameters": [
+          {
+            "name": "sha256",
+            "in": "path",
+            "required": true,
+            "description": "SHA256 names the object, from the path.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/train.deletedOut"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      },
+      "get": {
+        "operationId": "get_train_artifacts_by_sha256",
+        "summary": "Answers one of the org's objects, as the list does, with an address that fetches its bytes for ten minutes once it is stored: how an executor reads an `artifact:\u003csha256\u003e` dataset its job names, and how the org downloads what it uploaded.",
+        "description": "Answers one of the org's objects, as the list does, with an\naddress that fetches its bytes for ten minutes once it is stored: how an\nexecutor reads an `artifact:\u003csha256\u003e` dataset its job names, and how the org\ndownloads what it uploaded. Another org's sha256 is not found, exactly as an\nunknown one is.",
+        "tags": [
+          "train"
+        ],
+        "parameters": [
+          {
+            "name": "sha256",
+            "in": "path",
+            "required": true,
+            "description": "SHA256 names the object, from the path.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/train.Object"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/train/clients": {
+      "get": {
+        "operationId": "get_train_clients",
+        "summary": "Answers the org's live clients as the engine reports them.",
+        "description": "Answers the org's live clients as the engine reports them. A\nclient the engine no longer holds is dropped.",
+        "tags": [
+          "train"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/train.clientList"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      },
+      "post": {
+        "operationId": "post_train_clients",
+        "summary": "Loads base_model on the engine with a LoRA adapter and answers the client, loading; poll it until ready.",
+        "description": "Loads base_model on the engine with a LoRA adapter and answers\nthe client, loading; poll it until ready. The wire is the engine's own\ncreate → forward_backward → optim_step → sample → save_weights loop, so a loop\nwritten against the engine runs here with only the path changed. The\ncapability fields are validated as a job's are: adaptation is lora, protect is\nrefused, and kai is not a client base. A client holds a model in the memory every\norg's inference shares, so only a SuperAdmin creates one until the engine isolates\norgs. An org holds at most TRAIN_CLIENTS live clients and the engine at most\nTRAIN_ENGINE_CLIENTS across every org; past that the answer is 503 engine_full.",
+        "tags": [
+          "train"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "base_model": "HuggingFaceTB/SmolLM2-135M",
+                "lora_config": {
+                  "alpha": 32,
+                  "rank": 16
+                }
+              },
+              "schema": {
+                "$ref": "#/components/schemas/train.createClientIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/train/clients/{id}": {
+      "delete": {
+        "operationId": "delete_train_clients_by_id",
+        "summary": "Drops one of the org's clients and frees its memory on the engine.",
+        "description": "Drops one of the org's clients and frees its memory on the engine.",
+        "tags": [
+          "train"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID names the client.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      },
+      "get": {
+        "operationId": "get_train_clients_by_id",
+        "summary": "Answers one of the org's clients with its loss history.",
+        "description": "Answers one of the org's clients with its loss history.",
+        "tags": [
+          "train"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID names the client.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/train/clients/{id}/forward_backward": {
+      "post": {
+        "operationId": "post_train_clients_by_id_forward_backward",
+        "summary": "Accumulates the gradients of a batch on the client.",
+        "description": "Accumulates the gradients of a batch on the client.",
+        "tags": [
+          "train"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID names the client.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "tc-…"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "data": [
+                  {
+                    "completion": "4",
+                    "prompt": "2+2="
+                  }
+                ],
+                "id": "tc-…"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/train.forwardIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/train/clients/{id}/optim_step": {
+      "post": {
+        "operationId": "post_train_clients_by_id_optim_step",
+        "summary": "Applies the optimizer to the accumulated gradients.",
+        "description": "Applies the optimizer to the accumulated gradients.",
+        "tags": [
+          "train"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID names the client.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/train.optimIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/train/clients/{id}/sample": {
+      "post": {
+        "operationId": "post_train_clients_by_id_sample",
+        "summary": "Decodes from the client's current weights.",
+        "description": "Decodes from the client's current weights.",
+        "tags": [
+          "train"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID names the client.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/train.sampleIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/train/clients/{id}/save_weights": {
+      "post": {
+        "operationId": "post_train_clients_by_id_save_weights",
+        "summary": "Writes the client's adapter on the engine.",
+        "description": "Writes the client's adapter on the engine.",
+        "tags": [
+          "train"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID names the client.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/train.saveIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/train/jobs": {
+      "get": {
+        "operationId": "get_train_jobs",
+        "summary": "Answers the org's jobs, newest first, narrowed by ?status=.",
+        "description": "Answers the org's jobs, newest first, narrowed by ?status=.",
+        "tags": [
+          "train"
+        ],
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "description": "Status narrows to one status.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Limit bounds the answer; default 50, at most 500.",
+            "schema": {
+              "format": "int64",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/train.jobsOut"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      },
+      "post": {
+        "operationId": "post_train_jobs",
+        "summary": "Creates a job that teaches base_model one capability: the data, the objective, how the trained parameters are represented (adaptation), what they must not damage and by how much (protect), where it runs and how far (resources), the suites it is judged on (evaluation) and what it produces (output).",
+        "description": "Creates a job that teaches base_model one capability: the data,\nthe objective, how the trained parameters are represented (adaptation), what they\nmust not damage and by how much (protect), where it runs and how far\n(resources), the suites it is judged on (evaluation) and what it produces\n(output). It is validated in one order — shape, base, the agreement of the\nartifacts it names, then each choice against what that base runs today — and\nthe first failure is the answer: a 400 problem carrying `code`, and `supported`\nwhen a choice is not run for that base. A dataset the org uploaded\n(`artifact:\u003csha256\u003e`) is read back here if it has not been. A job that names\nthe org's machines is queued for them; one that names none is queued for\nHanzo's executor, charged to the caller's wallet by the device-second inside its\nbudget, which it must name, and is refused 402 when that wallet cannot hold its\nfirst window on its own. An org has at most 64 jobs that have not ended (409\njob_limit). auto is resolved here and `adaptation.chose` says to what and why.",
+        "tags": [
+          "train"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "adaptation": {
+                  "mode": "full"
+                },
+                "base_model": "kai",
+                "dataset": {
+                  "uri": "stage:a11"
+                },
+                "evaluation": {
+                  "suites": [
+                    "labels"
+                  ]
+                },
+                "output": {
+                  "kind": "capability",
+                  "name": "open-labels"
+                },
+                "protect": {
+                  "budget": {
+                    "accuracy": 0.02,
+                    "ece": 0.03
+                  },
+                  "distillation": true,
+                  "projection": {
+                    "strength": 0.5
+                  },
+                  "suites": [
+                    "typed_decisions"
+                  ]
+                },
+                "resources": {
+                  "machines": [
+                    "dgx"
+                  ],
+                  "steps": 2000
+                },
+                "revision": "a7"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/train.Spec"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/train.Job"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/train/jobs/claim": {
+      "post": {
+        "operationId": "post_train_jobs_claim",
+        "summary": "ClaimTrainTask is an executor's long poll for work: it names the machine it runs on, its devices and what its build runs, and is answered, within 25 seconds, one task it can run — a job's lead first; a join once its lead has said where it coordinates — or 204.",
+        "description": "ClaimTrainTask is an executor's long poll for work: it names the machine it\nruns on, its devices and what its build runs, and is answered, within 25\nseconds, one task it can run — a job's lead first; a join once its lead has\nsaid where it coordinates — or 204. The answer carries the task's lease, once,\nwhich every report for the task must carry; the device-seconds held for it;\nand how often it must report. An executor acting as a principal of an org\nclaims that org's tasks placed on its machine and can claim no other org's. A\nplatform claim (SuperAdmin alone) is Hanzo's executor: it is answered a task of\nany org's job that names no machines, its first window held against the job's\npayer first, and the claim is put on the platform's audit trail.",
+        "tags": [
+          "train"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "bases": [
+                  "kai"
+                ],
+                "devices": [
+                  "cuda"
+                ],
+                "machine": "dgx",
+                "supports": {
+                  "adaptations": [
+                    "full",
+                    "readout"
+                  ],
+                  "outputs": [
+                    "capability",
+                    "checkpoint"
+                  ],
+                  "protect": [
+                    "projection",
+                    "distillation"
+                  ],
+                  "terms": [
+                    "pairwise_margin",
+                    "hard_margin",
+                    "consistency"
+                  ]
+                }
+              },
+              "schema": {
+                "$ref": "#/components/schemas/train.claimIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/train.Assignment"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/train/jobs/{id}": {
+      "get": {
+        "operationId": "get_train_jobs_by_id",
+        "summary": "Answers one job: what it asked for, its status and tasks, its artifacts, its result and verdict, and whether it was published.",
+        "description": "Answers one job: what it asked for, its status and tasks, its\nartifacts, its result and verdict, and whether it was published. A job of\nanother org is not found, exactly as an unknown id is.",
+        "tags": [
+          "train"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID names the job.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/train.Job"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/train/jobs/{id}/artifacts": {
+      "get": {
+        "operationId": "get_train_jobs_by_id_artifacts",
+        "summary": "Answers a job's artifacts — checkpoint, capability, lora, basis or merged, each named by the SHA-256 of its bytes — with a download address that lives ten minutes for each one stored.",
+        "description": "Answers a job's artifacts — checkpoint, capability, lora,\nbasis or merged, each named by the SHA-256 of its bytes — with a download\naddress that lives ten minutes for each one stored. One deleted, by the org or\nby retention, reads deleted and has none.",
+        "tags": [
+          "train"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID names the job.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/train.artifactsOut"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      },
+      "post": {
+        "operationId": "post_train_jobs_by_id_artifacts",
+        "summary": "Records an output its executor is about to store, named by the SHA-256 of its bytes, and answers a presigned PUT for exactly that object under the org's prefix — S3 accepts it only with the checksum and encrypts it under the org's key — or, over 64 MiB, a presigned PUT per 64 MiB part, or stored: true when the org already holds those bytes.",
+        "description": "Records an output its executor is about to store, named by\nthe SHA-256 of its bytes, and answers a presigned PUT for exactly that object\nunder the org's prefix — S3 accepts it only with the checksum and encrypts it\nunder the org's key — or, over 64 MiB, a presigned PUT per 64 MiB part, or\nstored: true when the org already holds those bytes. The executor then reports\nan artifact event naming it, and the object is read back, those bytes and\nsealed under the org's key, before it counts as stored.",
+        "tags": [
+          "train"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID names the job, from the path.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "job_0123456789abcdef"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "id": "job_0123456789abcdef",
+                "kind": "capability",
+                "lease": "trl_…",
+                "name": "open-labels",
+                "sha256": "…",
+                "size": 1048576,
+                "task": "tsk_0123456789abcdef"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/train.registerIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/train.registerOut"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/train/jobs/{id}/cancel": {
+      "post": {
+        "operationId": "post_train_jobs_by_id_cancel",
+        "summary": "Stops a job that has not ended.",
+        "description": "Stops a job that has not ended. Its executors learn it on their\nnext report and stop their trainers; a job that already ended is a 409.",
+        "tags": [
+          "train"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID names the job.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/train.Job"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/train/jobs/{id}/events": {
+      "get": {
+        "operationId": "get_train_jobs_by_id_events",
+        "summary": "Answers a job's events after a cursor — status changes, the coordinator's address, metrics, log lines, artifacts and the result — waiting up to `wait` seconds for the first new one, so a caller following a run holds one request at a time.",
+        "description": "Answers a job's events after a cursor — status changes, the\ncoordinator's address, metrics, log lines, artifacts and the result — waiting up\nto `wait` seconds for the first new one, so a caller following a run holds one\nrequest at a time.",
+        "tags": [
+          "train"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID names the job.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "after",
+            "in": "query",
+            "required": false,
+            "description": "After is the last seq the caller holds; 0 reads from the start.",
+            "schema": {
+              "format": "int64",
+              "type": "integer"
+            }
+          },
+          {
+            "name": "wait",
+            "in": "query",
+            "required": false,
+            "description": "Wait is how many seconds to hold the request for a first new event, at most 25.",
+            "schema": {
+              "format": "int64",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/train.eventsOut"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      },
+      "post": {
+        "operationId": "post_train_jobs_by_id_events",
+        "summary": "ReportTrainTask is an executor's report for the task it holds: status changes, the lead's coordinator address, metrics, log lines, stored artifacts and, last, the lead's result.",
+        "description": "ReportTrainTask is an executor's report for the task it holds: status changes,\nthe lead's coordinator address, metrics, log lines, stored artifacts and, last,\nthe lead's result. It must carry the task's lease; a report under any other is\n409 lease_lost and the executor stops. A report with no events is a heartbeat,\ndue at least every `report` seconds the claim answered — a task silent for the\nlease's life is lost, and a lost lead fails its job. Each report meters the\ntask by the clock: its devices times the seconds since it was claimed, no more\nthan is held, charged to the job's payer for a job Hanzo runs. The answer says\nhow many device-seconds are held now. When the next window cannot be held and\nwhat is held runs low, the job ends stopped and the answer says cancel: kill\nthe trainer and report nothing more. Once the job has ended a report records\nnothing and answers the job's status; cancel says it was cancelled or stopped.",
+        "tags": [
+          "train"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID names the job, from the path.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "job_0123456789abcdef"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "events": [
+                  {
+                    "name": "nll",
+                    "step": 100,
+                    "type": "metric",
+                    "value": 0.66
+                  }
+                ],
+                "id": "job_0123456789abcdef",
+                "lease": "trl_…",
+                "task": "tsk_0123456789abcdef"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/train.reportIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/train.reportOut"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/train/jobs/{id}/metrics": {
+      "get": {
+        "operationId": "get_train_jobs_by_id_metrics",
+        "summary": "Answers a job's metric series — loss, throughput and each validation suite's numbers as the executor reported them — one per name, each point [step, value, unix seconds].",
+        "description": "Answers a job's metric series — loss, throughput and each\nvalidation suite's numbers as the executor reported them — one per name, each\npoint [step, value, unix seconds].",
+        "tags": [
+          "train"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID names the job.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/train.metricsOut"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/train/jobs/{id}/publish": {
+      "post": {
+        "operationId": "post_train_jobs_by_id_publish",
+        "summary": "Publishes a job's output under a name.",
+        "description": "Publishes a job's output under a name. Only a succeeded job's\noutput is publishable; a rejected one broke its regression budget and needs\nforce, which the record keeps. The output must be stored. A capability is\npublished with its route — the question keys it answers and, per key, the\nexact question (`{\"type\": \"choice\"|\"score\"|\"noul\", \"labels\": [...]}`) — the\nbase SHA-256 its result names, and its form: head for a readout, full for\nevery other adaptation. A route that claims a question another of the org's\npublished capabilities claims is 409 route_conflict. A name the org already\npublished moves to this job. A head's tar is copied first to the serving store,\nthe models bucket's capabilities/\u003corg\u003e/\u003csha256\u003e, where the decision service\nfetches it; ai attaches the org's published capabilities to its decisions.",
+        "tags": [
+          "train"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID names the job.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "job_0123456789abcdef"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "id": "job_0123456789abcdef",
+                "name": "triage",
+                "route": {
+                  "keys": [
+                    "topic"
+                  ],
+                  "options": {
+                    "topic": {
+                      "labels": [
+                        "billing",
+                        "bug",
+                        "other"
+                      ],
+                      "type": "choice"
+                    }
+                  }
+                }
+              },
+              "schema": {
+                "$ref": "#/components/schemas/train.publishIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/train.Job"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/train/models": {
+      "get": {
+        "operationId": "get_train_models",
+        "summary": "Answers each base the caller can train today, in one shape: the base, the methods it trains by (adaptations), where it runs (runs: Hanzo's devices or the org's machines) with what one device-second costs there in nano-USD, then the resources that run it (nouns), its executor and devices, and the protections, objective terms, outputs and dataset schemes it takes.",
+        "description": "Answers each base the caller can train today, in one shape:\nthe base, the methods it trains by (adaptations), where it runs (runs: Hanzo's\ndevices or the org's machines) with what one device-second costs there in\nnano-USD, then the resources that run it (nouns), its executor and devices, and\nthe protections, objective terms, outputs and dataset schemes it takes. Bases\nare ordered by name, a base's runs by place, then price. A create is validated\nagainst the same rows, and a noun the caller cannot start is not listed: the\nengine's clients are a SuperAdmin's.",
+        "tags": [
+          "train"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/train.catalog"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/train/policies/{name}": {
+      "get": {
+        "operationId": "policiesGet",
+        "summary": "Answers the Enso policy registry: what the Enso catalog serves now, each paid tier's route and price and whether the promoted version leads it; the upstreams the tiers route to; every version, newest first, with the tiers it sets and whether it can be promoted on the catalog as it serves; every promotion and rollback; and what each rollback would serve and change.",
+        "description": "Answers the Enso policy registry: what the Enso catalog serves now,\neach paid tier's route and price and whether the promoted version leads it; the\nupstreams the tiers route to; every version, newest first, with the tiers it\nsets and whether it can be promoted on the catalog as it serves; every\npromotion and rollback; and what each rollback would serve and change.\nSuperAdmin only. A catalog that cannot be read is said in serving.error, and\nevery version reads unservable for it.",
+        "tags": [
+          "train"
+        ],
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "description": "Name is the policy: enso.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/train.PolicyBoard"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      },
+      "post": {
+        "operationId": "policiesCreate",
+        "summary": "Makes a draft version from an enso.policy/1 file the engine's tuner wrote: validated (its schema, the answers it names, every benchmark's tiers and scores), kept canonical and pinned by the sha256 of those bytes.",
+        "description": "Makes a draft version from an enso.policy/1 file the engine's tuner\nwrote: validated (its schema, the answers it names, every benchmark's tiers and\nscores), kept canonical and pinned by the sha256 of those bytes. Nothing serves\nuntil it is promoted. Refused 400 naming every problem with the file, 409 exists\nwhen a version already holds the same file, 503 when the act cannot be audited.\nSuperAdmin only.",
+        "tags": [
+          "train"
+        ],
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "description": "Name is the policy: enso.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/train.createPolicyIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/train.PolicyVersion"
+                }
+              }
+            },
+            "description": "created"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/train/policies/{name}/diff": {
+      "get": {
+        "operationId": "policiesDiff",
+        "summary": "Answers what changed from one version to another: the answers each was tuned on, the arms each knows, and per benchmark its pool, its best single arm, and each tier's cascade, budget and scores on new questions (held out) and the sealed set (lockbox).",
+        "description": "Answers what changed from one version to another: the answers each\nwas tuned on, the arms each knows, and per benchmark its pool, its best single\narm, and each tier's cascade, budget and scores on new questions (held out) and\nthe sealed set (lockbox). SuperAdmin only.",
+        "tags": [
+          "train"
+        ],
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "from",
+            "in": "query",
+            "required": false,
+            "description": "From is the version compared from: the promoted one when absent, else the\none before To; 0 when there is none, every part of To then new.",
+            "schema": {
+              "format": "int64",
+              "type": "integer"
+            }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "required": false,
+            "description": "To is the version compared to: the newest when absent.",
+            "schema": {
+              "format": "int64",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/train.PolicyDiff"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/train/policies/{name}/promote": {
+      "post": {
+        "operationId": "policiesPromote",
+        "summary": "Serves a version: each of its tiers' arms is put first on that tier's route in the Enso catalog, the rest of each route kept behind it in the order it had before any policy, and the engine serves the result at once.",
+        "description": "Serves a version: each of its tiers' arms is put first on that\ntier's route in the Enso catalog, the rest of each route kept behind it in the\norder it had before any policy, and the engine serves the result at once. The\nversion must be servable on the catalog as it serves (each tier asks one arm,\nthe same on every benchmark, whose upstream is on that paid tier's route), the\nprice guard must take the result, and the catalog it sends must be the one\nreviewed (next). A promoted version a new release of the catalog stands over can\nbe promoted again. Refused 409: moved (another version serves than base),\npromoted (it serves already), not_servable (with every reason), changed (the\ncatalog moved since it was reviewed); 404 for a version that is not there, 503\nwhen the catalog cannot be read or the act cannot be audited, 502 when the\ncatalog would not take it, and 500 when it took it and ai or this registry did\nnot record it. SuperAdmin only.",
+        "tags": [
+          "train"
+        ],
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "base": 1,
+                "next": "4f1c…",
+                "note": "held out 92.1% at $3.10 per 1k on flash",
+                "version": 2
+              },
+              "schema": {
+                "$ref": "#/components/schemas/train.promotePolicyIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/train.PolicyBoard"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/train/policies/{name}/rollback": {
+      "post": {
+        "operationId": "policiesRollback",
+        "summary": "Serves the version promoted before the one that serves, compiled again onto the catalog as it serves; a tier only the one rolled back set goes back to the order its route had before any policy.",
+        "description": "Serves the version promoted before the one that serves, compiled\nagain onto the catalog as it serves; a tier only the one rolled back set goes\nback to the order its route had before any policy. Past the first promotion, or\nwith origin, every tier a policy set goes back to that order. Only order moves:\nevery rung is the catalog's own as it serves. Refused 409: moved,\nnothing_promoted, not_servable (the version before can no longer be served: roll\nback with origin), changed; 503, 502 and 500 as a promotion is. SuperAdmin only.",
+        "tags": [
+          "train"
+        ],
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/train.rollbackPolicyIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/train.PolicyBoard"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/train/policies/{name}/versions/{version}": {
+      "get": {
+        "operationId": "policiesVersion",
+        "summary": "Answers one version: its file, the tiers it sets, whether it can be promoted on the catalog as it serves and why not, each route promoting it would change, the catalog lines that would change, the digest of the catalog it would send (which a promotion names), and why the price guard would refuse the result, if it would.",
+        "description": "Answers one version: its file, the tiers it sets, whether it can\nbe promoted on the catalog as it serves and why not, each route promoting it\nwould change, the catalog lines that would change, the digest of the catalog it\nwould send (which a promotion names), and why the price guard would refuse the\nresult, if it would. Nothing is applied. SuperAdmin only.",
+        "tags": [
+          "train"
+        ],
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "version",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "format": "int64",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/train.PolicyVersion"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/train/published": {
+      "get": {
+        "operationId": "get_train_published",
+        "summary": "Answers every org's published capabilities — org, name, artifact sha256, base sha256, form (head or full), route and when — each with a download address that lives ten minutes: what the decision service polls to install them.",
+        "description": "Answers every org's published capabilities —\norg, name, artifact sha256, base sha256, form (head or full), route and when —\neach with a download address that lives ten minutes: what the decision service\npolls to install them. `revision` names the list; a poll that sends the\nrevision it holds is answered `changed: false` and no capabilities while it is\ncurrent, so polling costs a read of the records and signs nothing. It reads\nevery org, so it takes the platform credential (SuperAdmin) and answers anyone\nelse 403. An org whose store cannot be read, or that this process holds and\ndoes not own, fails the answer (503) rather than being left out, because a list\nmissing an org reads as that org's capabilities unpublished.",
+        "tags": [
+          "train"
+        ],
+        "parameters": [
+          {
+            "name": "revision",
+            "in": "query",
+            "required": false,
+            "description": "Revision is the revision the caller holds. While it is current the answer\ncarries no capabilities and changed is false; omit it for the whole list\nwith fresh URLs.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/train.publishedOut"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "problem-details": {
+        "description": "An RFC 9457 problem document.",
+        "properties": {
+          "code": {
+            "description": "A stable token a client can branch on, when the refusal names one.",
+            "type": "string"
+          },
+          "detail": {
+            "description": "What was refused, for a person to read.",
+            "type": "string"
+          },
+          "status": {
+            "description": "The HTTP status.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "title": {
+            "description": "The status's reason phrase.",
+            "type": "string"
+          },
+          "type": {
+            "description": "about:blank",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "status",
+          "detail"
+        ],
+        "type": "object"
+      },
+      "train.Adaptation": {
+        "properties": {
+          "alpha": {
+            "description": "Alpha is an adapter's scale.",
+            "format": "double",
+            "type": "number"
+          },
+          "basis": {
+            "description": "Basis is a basis artifact, by sha256 or `basis://\u003cbase\u003e/\u003cname\u003e`.",
+            "type": "string"
+          },
+          "chose": {
+            "$ref": "#/components/schemas/train.Chose",
+            "description": "Chose is what auto resolved to and why; absent unless auto was asked."
+          },
+          "mode": {
+            "description": "Mode is full, readout (the head alone, over the frozen base), lora, qlora,\nbasis or auto.",
+            "type": "string"
+          },
+          "rank": {
+            "description": "Rank is an adapter's rank, or how many of a basis's directions are used.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "residual_rank": {
+            "description": "ResidualRank is the rank of an orthonormal residual learned beside a basis's\ncoefficients; 0 trains the coefficients alone.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "sources": {
+            "description": "Sources are lora artifacts (sha256) a basis is built from, in place of Basis.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "targets": {
+            "description": "Targets are the modules an adapter or a basis attaches to.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "train.Assignment": {
+        "properties": {
+          "job": {
+            "$ref": "#/components/schemas/train.Job",
+            "description": "Job is the job it belongs to."
+          },
+          "org": {
+            "description": "Org is the job's org. A platform executor reports for the task acting in it.",
+            "type": "string"
+          },
+          "task": {
+            "$ref": "#/components/schemas/train.Claimed",
+            "description": "Task is the unit this executor now holds."
+          }
+        },
+        "type": "object"
+      },
+      "train.Budget": {
+        "properties": {
+          "accuracy": {
+            "description": "Accuracy is the largest accuracy drop allowed.",
+            "format": "double",
+            "type": "number"
+          },
+          "ece": {
+            "description": "ECE is the largest calibration-error rise allowed.",
+            "format": "double",
+            "type": "number"
+          }
+        },
+        "type": "object"
+      },
+      "train.Capability": {
+        "properties": {
+          "by": {
+            "type": "string"
+          },
+          "corrections": {
+            "description": "Corrections are the corrections it is taught from.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "created": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "installed": {
+            "description": "Installed is the version in the org's published set, 0 when none.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "live": {
+            "$ref": "#/components/schemas/train.Live",
+            "description": "Live is what its installed version did since it went in."
+          },
+          "name": {
+            "description": "Name is its name, one per org; it is the name its versions install under.",
+            "type": "string"
+          },
+          "question": {
+            "$ref": "#/components/schemas/train.Question",
+            "description": "Question is what it answers: the route it is installed behind."
+          },
+          "state": {
+            "description": "State is where it is in its life: draft, trained, evaluated, publishable,\ninstalled, active, disabled or needs_validation.",
+            "type": "string"
+          },
+          "updated": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "version": {
+            "description": "Version is its latest version, 0 in draft.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "versions": {
+            "description": "Versions are its versions, newest first (one capability read).",
+            "items": {
+              "$ref": "#/components/schemas/train.Version"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "train.CapabilityWeights": {
+        "properties": {
+          "base_sha256": {
+            "type": "string"
+          },
+          "bytes": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "form": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "representation": {
+            "type": "string"
+          },
+          "sha256": {
+            "type": "string"
+          },
+          "tar": {
+            "type": "string"
+          },
+          "version": {
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "train.Capture": {
+        "properties": {
+          "on": {
+            "type": "boolean"
+          },
+          "retention_days": {
+            "description": "RetentionDays is how long a decision's states are kept unless a correction\nnames it.",
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "train.Chose": {
+        "properties": {
+          "mode": {
+            "description": "Mode is the mode the job runs.",
+            "type": "string"
+          },
+          "why": {
+            "description": "Why says what decided it.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "train.Claimed": {
+        "properties": {
+          "coordinator": {
+            "description": "Coordinator is where a join task reaches its lead.",
+            "type": "string"
+          },
+          "device": {
+            "description": "Device is the accelerator kind it runs on, and Devices how many of them.",
+            "type": "string"
+          },
+          "devices": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "held": {
+            "description": "Held is the device-seconds held for it. The cloud meters the task by the\nclock and stops its job before it runs past them.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "id": {
+            "description": "ID names the task.",
+            "type": "string"
+          },
+          "job": {
+            "description": "Job names its job.",
+            "type": "string"
+          },
+          "lease": {
+            "description": "Lease authenticates every report for the task; it is answered once.",
+            "type": "string"
+          },
+          "report": {
+            "description": "Report is the most seconds that may pass between its reports.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "role": {
+            "description": "Role is lead or join.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "train.Correction": {
+        "properties": {
+          "answer": {
+            "type": "string"
+          },
+          "at": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "base": {
+            "type": "string"
+          },
+          "by": {
+            "type": "string"
+          },
+          "cohort": {
+            "type": "string"
+          },
+          "decision": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "labels": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "note": {
+            "type": "string"
+          },
+          "question": {
+            "type": "string"
+          },
+          "state": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "train.CorrectionGroup": {
+        "properties": {
+          "corrections": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "key": {
+            "type": "string"
+          },
+          "labels": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "type": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "train.Dataset": {
+        "properties": {
+          "splits": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "description": "Splits maps a role (train, validation) to the dataset's own split name.",
+            "type": "object"
+          },
+          "uri": {
+            "description": "URI names the data.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "train.Download": {
+        "properties": {
+          "created": {
+            "description": "Created is when it was registered, unix seconds.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "expires": {
+            "description": "Expires is when URL stops working, unix seconds.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "job": {
+            "description": "Job is the job that produced it; empty for an upload.",
+            "type": "string"
+          },
+          "kind": {
+            "description": "Kind is checkpoint, lora, capability, basis or merged, or dataset for an upload.",
+            "type": "string"
+          },
+          "meta": {
+            "description": "Meta describes it: its base and revision, its modules, a basis's address."
+          },
+          "name": {
+            "description": "Name labels it.",
+            "type": "string"
+          },
+          "sha256": {
+            "description": "SHA256 is the hex digest of its bytes, and its name in the object store.",
+            "type": "string"
+          },
+          "size": {
+            "description": "Size is its byte count.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "state": {
+            "description": "State is pending until its bytes are read back, then stored; deleted once\nthe org deleted it or it outlived its retention unpublished.",
+            "type": "string"
+          },
+          "url": {
+            "description": "URL fetches the bytes until Expires; absent until the artifact is stored.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "train.Evaluation": {
+        "properties": {
+          "suites": {
+            "description": "Suites are the suites the job is meant to improve.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "train.ExampleIn": {
+        "properties": {
+          "answer": {
+            "description": "Answer is the right option label for the question.",
+            "type": "string"
+          },
+          "note": {
+            "description": "Note says why, for the person reading it later.",
+            "type": "string"
+          },
+          "state": {
+            "description": "State is the decision state (a JSON string or object) Kai reads."
+          }
+        },
+        "type": "object"
+      },
+      "train.Family": {
+        "properties": {
+          "adaptations": {
+            "description": "Adaptations are the methods it trains by: a create's adaptation.mode.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "base": {
+            "description": "Base is the base model: `kai`, or `engine` for the models the engine loads.",
+            "type": "string"
+          },
+          "datasets": {
+            "description": "Datasets are the dataset URI schemes it reads.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "devices": {
+            "description": "Devices are the accelerator kinds it runs on, wherever it runs.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "executor": {
+            "description": "Executor is what runs it.",
+            "type": "string"
+          },
+          "nouns": {
+            "description": "Nouns are the resources that run it: jobs, clients.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "outputs": {
+            "description": "Outputs are the output kinds it produces.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "protect": {
+            "description": "Protect are the protections it runs: projection, distillation, capabilities.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "runs": {
+            "description": "Runs are where it runs, each with what a device-second costs there.",
+            "items": {
+              "$ref": "#/components/schemas/train.Run"
+            },
+            "type": "array"
+          },
+          "terms": {
+            "description": "Terms are the objective terms it runs.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "train.Install": {
+        "properties": {
+          "base_sha256": {
+            "description": "BaseSHA256 is the base's weights' SHA-256 it applies to.",
+            "type": "string"
+          },
+          "expires": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "form": {
+            "description": "Form is head, a head over the frozen base; calibration, the base's own\nanswer moved; pair, a boost and a veto over a noul; or full, an update to\nthe whole model.",
+            "type": "string"
+          },
+          "name": {
+            "description": "Name is its published name, one per org.",
+            "type": "string"
+          },
+          "org": {
+            "description": "Org is the org it is published in, and answers for.",
+            "type": "string"
+          },
+          "published": {
+            "description": "Published is when, unix seconds.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "representation": {
+            "description": "Representation is what it reads of Kai, a capability's: when named, what it\nbinds to in place of BaseSHA256, so a release that keeps it keeps the\ncapability.",
+            "type": "string"
+          },
+          "route": {
+            "$ref": "#/components/schemas/train.Route",
+            "description": "Route is which questions it answers."
+          },
+          "sha256": {
+            "description": "SHA256 is the capability artifact's: the tar its URL fetches.",
+            "type": "string"
+          },
+          "url": {
+            "description": "URL fetches the artifact until Expires, unix seconds.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "train.Job": {
+        "properties": {
+          "adaptation": {
+            "$ref": "#/components/schemas/train.Adaptation",
+            "description": "Adaptation is how the update is parameterized."
+          },
+          "artifacts": {
+            "description": "Artifacts are its outputs.",
+            "items": {
+              "$ref": "#/components/schemas/train.artifact"
+            },
+            "type": "array"
+          },
+          "base_model": {
+            "description": "BaseModel is the base the capability is taught to: `kai`, or a model the engine\nloads for a client.",
+            "type": "string"
+          },
+          "created": {
+            "description": "Created, Started and Ended are unix seconds; 0 is not yet.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "created_by": {
+            "description": "CreatedBy is the principal that created it.",
+            "type": "string"
+          },
+          "dataset": {
+            "$ref": "#/components/schemas/train.Dataset",
+            "description": "Dataset is what the job trains on."
+          },
+          "ended": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "error": {
+            "description": "Error says why a job failed or stopped. A job stopped at what its payer or\nits own bounds could hold says budget, max_seconds, insufficient_balance,\nspend_cap, balance_unavailable or no_payer.",
+            "type": "string"
+          },
+          "evaluation": {
+            "$ref": "#/components/schemas/train.Evaluation",
+            "description": "Evaluation names the target suites the result reports."
+          },
+          "from": {
+            "description": "From is an artifact the job starts from, by sha256.",
+            "type": "string"
+          },
+          "id": {
+            "description": "ID names the job.",
+            "type": "string"
+          },
+          "objective": {
+            "$ref": "#/components/schemas/train.Objective",
+            "description": "Objective is the loss and the terms beside it."
+          },
+          "output": {
+            "$ref": "#/components/schemas/train.Output",
+            "description": "Output is what the job produces."
+          },
+          "project": {
+            "description": "Project is the creator's project scope.",
+            "type": "string"
+          },
+          "protect": {
+            "$ref": "#/components/schemas/train.Protect",
+            "description": "Protect names what the base already does that must hold, and the budget."
+          },
+          "published": {
+            "description": "Published is the publish record, once published."
+          },
+          "resources": {
+            "$ref": "#/components/schemas/train.Resources",
+            "description": "Resources places and bounds the run."
+          },
+          "result": {
+            "description": "Result is the lead's evaluation and verdict, once reported."
+          },
+          "revision": {
+            "description": "Revision pins the base. For kai: a finished run's name on the executor, or\n`hub:\u003crepo\u003e@\u003crev\u003e`.",
+            "type": "string"
+          },
+          "started": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "status": {
+            "description": "Status is queued, running, evaluating, succeeded, rejected, failed,\ncancelled or stopped.",
+            "type": "string"
+          },
+          "tasks": {
+            "description": "Tasks are its units of execution.",
+            "items": {
+              "$ref": "#/components/schemas/train.TaskView"
+            },
+            "type": "array"
+          },
+          "usage": {
+            "$ref": "#/components/schemas/train.Usage",
+            "description": "Usage is what its tasks used and what that cost."
+          }
+        },
+        "type": "object"
+      },
+      "train.Live": {
+        "properties": {
+          "damage": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "damage_rate": {
+            "format": "double",
+            "type": "number"
+          },
+          "fires": {
+            "description": "Fires counts decisions it answered otherwise than the base would have.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "last_fired": {
+            "description": "LastFired is when it last fired, unix seconds; 0 never.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "neutral": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "repair_rate": {
+            "format": "double",
+            "type": "number"
+          },
+          "repairs": {
+            "description": "Repairs are fires that changed the label and no correction contradicts;\nDamage, fires whose label a correction put back to the base's; Neutral,\nfires that kept the base's label.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "version": {
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "train.Object": {
+        "properties": {
+          "expires": {
+            "description": "Expires is when retention deletes it unless published, unix seconds; absent\nwhile it is published, pending, or retention keeps everything.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "jobs": {
+            "description": "Jobs are the jobs that produced or hold it; none for an upload.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "kind": {
+            "description": "Kind is dataset for an upload, else the output kind a job produced it as.",
+            "type": "string"
+          },
+          "name": {
+            "description": "Name labels it.",
+            "type": "string"
+          },
+          "published": {
+            "description": "Published says a job of the org has it published.",
+            "type": "boolean"
+          },
+          "sha256": {
+            "description": "SHA256 names the bytes.",
+            "type": "string"
+          },
+          "size": {
+            "description": "Size is its byte count.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "state": {
+            "description": "State is pending until its bytes are read back, then stored.",
+            "type": "string"
+          },
+          "stored": {
+            "description": "Stored is when its bytes were read back, unix seconds.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "url": {
+            "description": "URL fetches the bytes for ten minutes, on a read of one stored object.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "train.Objective": {
+        "properties": {
+          "loss": {
+            "description": "Loss is `cross_entropy`.",
+            "type": "string"
+          },
+          "terms": {
+            "description": "Terms are added to each row's loss.",
+            "items": {
+              "$ref": "#/components/schemas/train.Term"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "train.Options": {
+        "properties": {
+          "labels": {
+            "description": "Labels are its option labels, in order: a choice's criteria, a score's levels\nas text, a noul's two sides.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "type": {
+            "description": "Type is choice, score or noul.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "train.Output": {
+        "properties": {
+          "kind": {
+            "description": "Kind is checkpoint, lora, capability, basis or merged.",
+            "type": "string"
+          },
+          "name": {
+            "description": "Name labels it.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "train.PolicyBenchDiff": {
+        "properties": {
+          "bench": {
+            "type": "string"
+          },
+          "best_single": {
+            "$ref": "#/components/schemas/train.PolicyScores"
+          },
+          "pool": {
+            "$ref": "#/components/schemas/train.PolicyNames"
+          },
+          "tiers": {
+            "items": {
+              "$ref": "#/components/schemas/train.PolicyTierDiff"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "train.PolicyBoard": {
+        "properties": {
+          "history": {
+            "description": "History is every promotion and rollback, newest first.",
+            "items": {
+              "$ref": "#/components/schemas/train.PolicyEvent"
+            },
+            "type": "array"
+          },
+          "name": {
+            "description": "Name is the policy's name: enso.",
+            "type": "string"
+          },
+          "promoted": {
+            "description": "Promoted is the version whose tiers serve, 0 when none does.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "rollbacks": {
+            "description": "Rollbacks are what a rollback would serve, while a version is promoted: the\nversion promoted before it (or the catalog's own routes), and, when that is\na version, the catalog's own routes directly. Each says what it changes.",
+            "items": {
+              "$ref": "#/components/schemas/train.PolicyRollback"
+            },
+            "type": "array"
+          },
+          "serving": {
+            "$ref": "#/components/schemas/train.PolicyServing",
+            "description": "Serving is what the Enso catalog serves now."
+          },
+          "versions": {
+            "description": "Versions are every version, newest first, without their files.",
+            "items": {
+              "$ref": "#/components/schemas/train.PolicyVersion"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "train.PolicyChain": {
+        "properties": {
+          "after": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "before": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "model": {
+            "type": "string"
+          },
+          "tier": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "train.PolicyDiff": {
+        "properties": {
+          "benches": {
+            "items": {
+              "$ref": "#/components/schemas/train.PolicyBenchDiff"
+            },
+            "type": "array"
+          },
+          "from": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "models": {
+            "$ref": "#/components/schemas/train.PolicyNames"
+          },
+          "source": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "to": {
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "train.PolicyEvent": {
+        "properties": {
+          "action": {
+            "description": "Action is promote or rollback.",
+            "type": "string"
+          },
+          "at": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "by": {
+            "type": "string"
+          },
+          "chains": {
+            "description": "Chains are the tiers' routes it changed, before and after.",
+            "items": {
+              "$ref": "#/components/schemas/train.PolicyChain"
+            },
+            "type": "array"
+          },
+          "note": {
+            "type": "string"
+          },
+          "prior": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "routing": {
+            "description": "Routing is the catalog version the ai process recorded for it.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "version": {
+            "description": "Version is the version serving after it, 0 for the routes that served before\nany policy; Prior, the one serving before it.",
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "train.PolicyLead": {
+        "properties": {
+          "arm": {
+            "type": "string"
+          },
+          "upstream": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "train.PolicyNames": {
+        "properties": {
+          "added": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "removed": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "train.PolicyRollback": {
+        "properties": {
+          "chains": {
+            "description": "Chains are each route it changes, as it serves and as it would.",
+            "items": {
+              "$ref": "#/components/schemas/train.PolicyChain"
+            },
+            "type": "array"
+          },
+          "next": {
+            "description": "Next is the sha256 of the catalog it sends, which the rollback names.",
+            "type": "string"
+          },
+          "origin": {
+            "description": "Origin rolls straight back to the catalog's own routes, past every version.",
+            "type": "boolean"
+          },
+          "reasons": {
+            "description": "Reasons are why it cannot be made, none when it can.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "to": {
+            "description": "To is the version it serves, 0 for the catalog's own routes.",
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "train.PolicyScore": {
+        "properties": {
+          "accuracy": {
+            "format": "double",
+            "type": "number"
+          },
+          "latency_p50_s": {
+            "format": "double",
+            "type": "number"
+          },
+          "latency_p95_s": {
+            "format": "double",
+            "type": "number"
+          },
+          "n": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "usd_per_1k": {
+            "format": "double",
+            "type": "number"
+          }
+        },
+        "type": "object"
+      },
+      "train.PolicyScores": {
+        "properties": {
+          "from": {
+            "$ref": "#/components/schemas/train.PolicyScore"
+          },
+          "to": {
+            "$ref": "#/components/schemas/train.PolicyScore"
+          }
+        },
+        "type": "object"
+      },
+      "train.PolicyServing": {
+        "properties": {
+          "arms": {
+            "description": "Arms are every upstream a paid model routes to: the models a policy's tiers\ncan lead with.",
+            "items": {
+              "$ref": "#/components/schemas/train.PolicyServingArm"
+            },
+            "type": "array"
+          },
+          "drift": {
+            "description": "Drift says the engine serves something other than that version; Redeployed,\na deployment it was not made over, which is left standing.",
+            "type": "boolean"
+          },
+          "error": {
+            "description": "Error is why the catalog could not be read, \"\" when it was.",
+            "type": "string"
+          },
+          "redeployed": {
+            "type": "boolean"
+          },
+          "routing": {
+            "description": "Routing is the ai process's newest version of the catalog, 0 before the first.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "tiers": {
+            "description": "Tiers are the paid Enso models, each with its route and price.",
+            "items": {
+              "$ref": "#/components/schemas/train.PolicyServingTier"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "train.PolicyServingArm": {
+        "properties": {
+          "models": {
+            "description": "Models are the paid models whose route names it.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "provider": {
+            "type": "string"
+          },
+          "upstream": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "train.PolicyServingTier": {
+        "properties": {
+          "lead": {
+            "description": "Lead is the promoted version whose arm leads its route, 0 when its lead is\nnot the promoted policy's.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "model": {
+            "description": "Model is the Enso model.",
+            "type": "string"
+          },
+          "price": {
+            "$ref": "#/components/schemas/train.Price",
+            "description": "Price is what a million of its tokens bill, absent when the price could not\nbe read."
+          },
+          "refused": {
+            "description": "Refused is why the price guard refuses it, \"\" while it serves.",
+            "type": "string"
+          },
+          "route": {
+            "description": "Route is its upstreams in the order they are asked.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "tier": {
+            "description": "Tier is the policy tier it serves (flash for enso-flash).",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "train.PolicyStages": {
+        "properties": {
+          "from": {
+            "items": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "type": "array"
+          },
+          "to": {
+            "items": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "train.PolicyTierDiff": {
+        "properties": {
+          "arms": {
+            "$ref": "#/components/schemas/train.PolicyStages"
+          },
+          "budget": {
+            "items": {
+              "format": "double",
+              "type": "number"
+            },
+            "type": "array"
+          },
+          "heldout": {
+            "$ref": "#/components/schemas/train.PolicyScores"
+          },
+          "lockbox": {
+            "$ref": "#/components/schemas/train.PolicyScores"
+          },
+          "tier": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "train.PolicyVersion": {
+        "properties": {
+          "at": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "benches": {
+            "description": "Benches are the benchmarks it was tuned on.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "by": {
+            "type": "string"
+          },
+          "chains": {
+            "description": "Chains are, on one version's read, each route promoting the version would\nchange, as it serves and as it would.",
+            "items": {
+              "$ref": "#/components/schemas/train.PolicyChain"
+            },
+            "type": "array"
+          },
+          "diff": {
+            "description": "Diff is, on one version's read, the catalog lines promoting it would change.",
+            "type": "string"
+          },
+          "digest": {
+            "description": "Digest is the digest of the answers it was tuned on (source.digest).",
+            "type": "string"
+          },
+          "document": {
+            "description": "Document is, on one version's read, the policy file."
+          },
+          "leads": {
+            "description": "Leads says, of a promoted version, that every tier it sets leads with its arm\nin the catalog as it serves; a promoted version that does not (a new release\nof the catalog stands over it) can be promoted again.",
+            "type": "boolean"
+          },
+          "next": {
+            "description": "Next is, on one version's read, the sha256 of the catalog promoting it would\nsend: a promotion names it, and is refused when the catalog has moved since.",
+            "type": "string"
+          },
+          "note": {
+            "type": "string"
+          },
+          "reasons": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "servable": {
+            "description": "Servable says it can be promoted on the catalog as it serves; Reasons, why\nnot, each a sentence.",
+            "type": "boolean"
+          },
+          "sha256": {
+            "description": "SHA256 is the digest of its canonical file: the version's identity.",
+            "type": "string"
+          },
+          "state": {
+            "description": "State is promoted (its tiers serve), previous (promoted, beneath the one that\nserves: a rollback serves it again) or draft.",
+            "type": "string"
+          },
+          "tiers": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/train.PolicyLead"
+            },
+            "description": "Tiers are the routes it sets: each tier's arm and the upstream it names.",
+            "type": "object"
+          },
+          "version": {
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "train.Price": {
+        "properties": {
+          "cacheRead": {
+            "description": "CacheRead is a prompt token read from the provider's cache, dollars a\nmillion; \"\" where the price states none.",
+            "type": "string"
+          },
+          "cacheWrite": {
+            "description": "CacheWrite is a prompt token written to the provider's cache, dollars a\nmillion; \"\" where the price states none.",
+            "type": "string"
+          },
+          "input": {
+            "description": "Input is a fresh prompt token's price, dollars a million.",
+            "type": "string"
+          },
+          "output": {
+            "description": "Output is a completion token's price, dollars a million.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "train.Projection": {
+        "properties": {
+          "strength": {
+            "description": "Strength is λ in [0, 1]; absent is 1, the whole of P g removed.",
+            "format": "double",
+            "type": "number"
+          }
+        },
+        "type": "object"
+      },
+      "train.Protect": {
+        "properties": {
+          "budget": {
+            "$ref": "#/components/schemas/train.Budget",
+            "description": "Budget bounds the regression per protected suite."
+          },
+          "capabilities": {
+            "description": "Capabilities are capability artifacts, by sha256.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "distillation": {
+            "description": "Distillation adds KL to the base's answers on a preservation set drawn from\nthe suites.",
+            "type": "boolean"
+          },
+          "projection": {
+            "$ref": "#/components/schemas/train.Projection",
+            "description": "Projection projects every update off the protected directions — the suites'\ngradient subspace at the base and each named capability's subspace — by its\nstrength; absent is no projection."
+          },
+          "suites": {
+            "description": "Suites are capabilities the base already has, by suite.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "train.Question": {
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "labels": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "type": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "train.Resources": {
+        "properties": {
+          "budget": {
+            "description": "Budget bounds what the job's compute costs, in US cents; 0 is none beyond\nthe payer's balance. Only a job Hanzo runs costs anything, so only it takes one.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "devices": {
+            "description": "Devices are the accelerator kinds the job may run on — cuda, rocm, metal,\nvulkan, cpu; none named is any its base runs.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "machines": {
+            "description": "Machines are the org's linked machines by name; the first leads. When it\nnames none, Hanzo's executor runs the job and its compute is charged by the\ndevice-second.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "max_seconds": {
+            "description": "MaxSeconds bounds the device-seconds the job's tasks use together; 0 is none.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "steps": {
+            "description": "Steps bounds optimizer steps; 0 runs the plan.",
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "train.Route": {
+        "properties": {
+          "keys": {
+            "description": "Keys are the question keys it answers.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "options": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/train.Options"
+            },
+            "description": "Options narrows a key to one question: a question under that key routes here\nonly when its type and option labels are exactly these. A key not named here\nroutes whatever its question.",
+            "type": "object"
+          }
+        },
+        "type": "object"
+      },
+      "train.Run": {
+        "properties": {
+          "devices": {
+            "description": "Devices are the accelerator kinds it runs on there; none is the executor's own.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "price_nano_usd": {
+            "description": "Price is what one device-second costs there, in nano-USD: 0 on the org's\nmachines.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "where": {
+            "description": "Where is hanzo, Hanzo's devices, charged by the device-second to the payer\ninside the job's budget; or machines, the org's linked machines, charged\nnothing.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "train.Spec": {
+        "properties": {
+          "adaptation": {
+            "$ref": "#/components/schemas/train.Adaptation",
+            "description": "Adaptation is how the update is parameterized."
+          },
+          "base_model": {
+            "description": "BaseModel is the base the capability is taught to: `kai`, or a model the engine\nloads for a client.",
+            "type": "string"
+          },
+          "dataset": {
+            "$ref": "#/components/schemas/train.Dataset",
+            "description": "Dataset is what the job trains on."
+          },
+          "evaluation": {
+            "$ref": "#/components/schemas/train.Evaluation",
+            "description": "Evaluation names the target suites the result reports."
+          },
+          "from": {
+            "description": "From is an artifact the job starts from, by sha256.",
+            "type": "string"
+          },
+          "objective": {
+            "$ref": "#/components/schemas/train.Objective",
+            "description": "Objective is the loss and the terms beside it."
+          },
+          "output": {
+            "$ref": "#/components/schemas/train.Output",
+            "description": "Output is what the job produces."
+          },
+          "protect": {
+            "$ref": "#/components/schemas/train.Protect",
+            "description": "Protect names what the base already does that must hold, and the budget."
+          },
+          "resources": {
+            "$ref": "#/components/schemas/train.Resources",
+            "description": "Resources places and bounds the run."
+          },
+          "revision": {
+            "description": "Revision pins the base. For kai: a finished run's name on the executor, or\n`hub:\u003crepo\u003e@\u003crev\u003e`.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "train.Supports": {
+        "properties": {
+          "adaptations": {
+            "description": "Adaptations are the modes it runs.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "outputs": {
+            "description": "Outputs are the output kinds it produces.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "protect": {
+            "description": "Protect are the protections it runs: projection, distillation, capabilities.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "terms": {
+            "description": "Terms are the objective terms it runs.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "train.TaskView": {
+        "properties": {
+          "device": {
+            "description": "Device is the accelerator class it runs on — gpu or cpu — and Devices how many.",
+            "type": "string"
+          },
+          "devices": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "held": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "host": {
+            "description": "Host is the machine that claimed it.",
+            "type": "string"
+          },
+          "id": {
+            "description": "ID names the task.",
+            "type": "string"
+          },
+          "machine": {
+            "description": "Machine is the machine it was placed on, or empty for any.",
+            "type": "string"
+          },
+          "role": {
+            "description": "Role is lead or join.",
+            "type": "string"
+          },
+          "seconds": {
+            "description": "Seconds are the device-seconds its reports metered, and Held those held for it.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "seen": {
+            "description": "Seen is its last report, unix seconds.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "status": {
+            "description": "Status is open, claimed, done or lost.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "train.Term": {
+        "properties": {
+          "kind": {
+            "description": "Kind names the term.",
+            "type": "string"
+          },
+          "margin": {
+            "description": "Margin is a hinge's margin, in logits.",
+            "format": "double",
+            "type": "number"
+          },
+          "weight": {
+            "description": "Weight scales it; 0 is off.",
+            "format": "double",
+            "type": "number"
+          }
+        },
+        "type": "object"
+      },
+      "train.Usage": {
+        "properties": {
+          "cost_micro_usd": {
+            "description": "CostMicroUSD is what Seconds were charged, in micro-USD: 0 on the org's own machines.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "held": {
+            "description": "Held are the device-seconds held beyond Seconds; 0 once it ended.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "seconds": {
+            "description": "Seconds are the device-seconds used.",
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "train.Version": {
+        "properties": {
+          "at": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "base_sha256": {
+            "description": "BaseSHA256 is Kai's weights it was taught over.",
+            "type": "string"
+          },
+          "by": {
+            "type": "string"
+          },
+          "bytes": {
+            "description": "Bytes is its artifact's size.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "corrections": {
+            "description": "Corrections are the corrections it was taught from.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "evaluation": {
+            "description": "Evaluation is its evaluation record, in the shared /evals words."
+          },
+          "form": {
+            "description": "Form is calibration, head or pair; Rank its place, 1 the smallest.",
+            "type": "string"
+          },
+          "passed": {
+            "description": "Passed says its evaluation passed the gate: it is publishable.",
+            "type": "boolean"
+          },
+          "questions": {
+            "description": "Questions are the question keys it answers.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "rank": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "representation": {
+            "description": "Representation is what it reads of Kai (the weights, tokenizer, layout and\npooling, hashed): the only Kai it serves on, whatever the release.",
+            "type": "string"
+          },
+          "sha256": {
+            "description": "SHA256 is its artifact's: the tar the decision service installs.",
+            "type": "string"
+          },
+          "version": {
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "train.artifact": {
+        "properties": {
+          "created": {
+            "description": "Created is when it was registered, unix seconds.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "job": {
+            "description": "Job is the job that produced it; empty for an upload.",
+            "type": "string"
+          },
+          "kind": {
+            "description": "Kind is checkpoint, lora, capability, basis or merged, or dataset for an upload.",
+            "type": "string"
+          },
+          "meta": {
+            "description": "Meta describes it: its base and revision, its modules, a basis's address."
+          },
+          "name": {
+            "description": "Name labels it.",
+            "type": "string"
+          },
+          "sha256": {
+            "description": "SHA256 is the hex digest of its bytes, and its name in the object store.",
+            "type": "string"
+          },
+          "size": {
+            "description": "Size is its byte count.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "state": {
+            "description": "State is pending until its bytes are read back, then stored; deleted once\nthe org deleted it or it outlived its retention unpublished.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "train.artifactsOut": {
+        "properties": {
+          "data": {
+            "description": "Data is the job's artifacts.",
+            "items": {
+              "$ref": "#/components/schemas/train.Download"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "train.capabilitiesOut": {
+        "properties": {
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/train.Capability"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "train.captureIn": {
+        "properties": {
+          "on": {
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
+      "train.catalog": {
+        "properties": {
+          "data": {
+            "description": "Data is every base the caller can train, each with its methods, where it\nruns and what a device-second costs there.",
+            "items": {
+              "$ref": "#/components/schemas/train.Family"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "train.claimIn": {
+        "properties": {
+          "bases": {
+            "description": "Bases are the base models its trainer runs.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "devices": {
+            "description": "Devices are its accelerators, one entry per device: cuda, rocm, metal,\nvulkan, cpu. A task runs on those of one kind its job allows.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "machine": {
+            "description": "Machine is the machine claiming, by name: one of the org's linked machines,\nor for a platform claim the Hanzo host.",
+            "type": "string"
+          },
+          "platform": {
+            "description": "Platform claims for Hanzo's executor: a task of any org's job that names no\nmachines. A SuperAdmin's claim alone, and on the platform's audit trail.",
+            "type": "boolean"
+          },
+          "supports": {
+            "$ref": "#/components/schemas/train.Supports",
+            "description": "Supports is what its build runs."
+          }
+        },
+        "type": "object"
+      },
+      "train.clientList": {
+        "properties": {
+          "clients": {
+            "description": "Clients are the org's live clients, as the engine reports them.",
+            "items": {},
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "train.correctionsOut": {
+        "properties": {
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/train.Correction"
+            },
+            "type": "array"
+          },
+          "questions": {
+            "items": {
+              "$ref": "#/components/schemas/train.CorrectionGroup"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "train.createClientIn": {
+        "properties": {
+          "adaptation": {
+            "$ref": "#/components/schemas/train.Adaptation",
+            "description": "Adaptation is lora, the one mode clients run; its shape is lora_config."
+          },
+          "base_model": {
+            "description": "BaseModel is a model the engine loads: a Hugging Face repo id or a local path.",
+            "type": "string"
+          },
+          "lora_config": {
+            "description": "LoraConfig is the adapter's shape, as the engine's wire takes it."
+          },
+          "protect": {
+            "$ref": "#/components/schemas/train.Protect",
+            "description": "Protect is refused: clients protect nothing yet."
+          }
+        },
+        "type": "object"
+      },
+      "train.createIn": {
+        "properties": {
+          "corrections": {
+            "description": "Corrections are the corrections it is taught from: captured corrections of\none question, which becomes its route.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "examples": {
+            "description": "Examples are cold-start (state, answer) pairs encoded once over Kai's\nshared representation and filed as captures and corrections of Question.",
+            "items": {
+              "$ref": "#/components/schemas/train.ExampleIn"
+            },
+            "type": "array"
+          },
+          "name": {
+            "description": "Name is its name: lowercase words joined by hyphens, at most 64.",
+            "type": "string"
+          },
+          "question": {
+            "$ref": "#/components/schemas/train.Question",
+            "description": "Question is the route it answers when created cold-start from Examples\nwithout prior captured corrections."
+          },
+          "train": {
+            "description": "Train runs a lesson immediately after creating the capability.",
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
+      "train.createPolicyIn": {
+        "properties": {
+          "document": {
+            "description": "Document is the enso.policy/1 file the tuner wrote."
+          },
+          "name": {
+            "description": "Name is the policy: enso.",
+            "type": "string"
+          },
+          "note": {
+            "description": "Note is why, kept with the version.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "train.deletedOut": {
+        "properties": {
+          "deleted": {
+            "description": "Deleted is true.",
+            "type": "boolean"
+          },
+          "sha256": {
+            "description": "SHA256 names the object deleted.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "train.event": {
+        "properties": {
+          "at": {
+            "description": "At is when it was recorded, unix seconds.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "event": {
+            "description": "Body is the event as its executor reported it."
+          },
+          "seq": {
+            "description": "Seq orders the job's events from 1.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "task": {
+            "description": "Task is the task that reported it.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "train.eventsOut": {
+        "properties": {
+          "data": {
+            "description": "Data is the events after the cursor, in order.",
+            "items": {
+              "$ref": "#/components/schemas/train.event"
+            },
+            "type": "array"
+          },
+          "next": {
+            "description": "Next is the cursor to pass as after.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "status": {
+            "description": "Status is the job's status as of this answer.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "train.forwardIn": {
+        "properties": {
+          "data": {
+            "description": "Data are the examples: {prompt, completion} text, or tokenized datums.",
+            "items": {},
+            "type": "array"
+          },
+          "id": {
+            "description": "ID names the client.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "train.jobsOut": {
+        "properties": {
+          "data": {
+            "description": "Data is the org's jobs, newest first.",
+            "items": {
+              "$ref": "#/components/schemas/train.Job"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "train.metricsOut": {
+        "properties": {
+          "data": {
+            "description": "Data is one series per metric name.",
+            "items": {
+              "$ref": "#/components/schemas/train.series"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "train.objectsOut": {
+        "properties": {
+          "data": {
+            "description": "Data is the org's objects, newest first.",
+            "items": {
+              "$ref": "#/components/schemas/train.Object"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "train.optimIn": {
+        "properties": {
+          "adam_params": {
+            "description": "AdamParams are the optimizer's parameters for this step."
+          },
+          "id": {
+            "description": "ID names the client.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "train.part": {
+        "properties": {
+          "headers": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "description": "Headers must be sent verbatim; the signature covers them.",
+            "type": "object"
+          },
+          "number": {
+            "description": "Number orders the part from 1.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "offset": {
+            "description": "Offset is the part's first byte in the object.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "size": {
+            "description": "Size is the part's byte count.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "url": {
+            "description": "URL is the presigned address to PUT the range to.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "train.promotePolicyIn": {
+        "properties": {
+          "base": {
+            "description": "Base is the version serving when the promotion was reviewed, 0 for none: a\npromotion made while another serves is refused.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          },
+          "next": {
+            "description": "Next is the sha256 of the catalog the promotion was reviewed against (the\nversion's read says it): refused when the catalog has moved since.",
+            "type": "string"
+          },
+          "note": {
+            "description": "Note is why, kept with the promotion.",
+            "type": "string"
+          },
+          "version": {
+            "description": "Version is the version to serve.",
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "train.publishCapIn": {
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "version": {
+            "description": "Version is the version to install; the newest that passed when absent.",
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "train.publishIn": {
+        "properties": {
+          "force": {
+            "description": "Force publishes a rejected job's output, and is recorded.",
+            "type": "boolean"
+          },
+          "id": {
+            "description": "ID names the job.",
+            "type": "string"
+          },
+          "name": {
+            "description": "Name is the published name; the output's name when absent. Publishing a\nname the org already published replaces that capability.",
+            "type": "string"
+          },
+          "route": {
+            "$ref": "#/components/schemas/train.Route",
+            "description": "Route is which questions the capability answers: required to publish a\ncapability, refused for any other output."
+          }
+        },
+        "type": "object"
+      },
+      "train.publishedOut": {
+        "properties": {
+          "changed": {
+            "description": "Changed is false when the caller's revision is current.",
+            "type": "boolean"
+          },
+          "data": {
+            "description": "Data is every org's published capabilities, by org then name; empty when\nnothing changed.",
+            "items": {
+              "$ref": "#/components/schemas/train.Install"
+            },
+            "type": "array"
+          },
+          "revision": {
+            "description": "Revision names this list: it moves when a capability is published,\nreplaced or moved to another name, and at nothing else.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "train.registerIn": {
+        "properties": {
+          "id": {
+            "description": "ID names the job, from the path.",
+            "type": "string"
+          },
+          "kind": {
+            "description": "Kind is checkpoint, lora, capability, basis or merged.",
+            "type": "string"
+          },
+          "lease": {
+            "description": "Lease is the task's lease.",
+            "type": "string"
+          },
+          "meta": {
+            "additionalProperties": {},
+            "description": "Meta describes it: its base and revision, its modules, a basis's address.",
+            "type": "object"
+          },
+          "name": {
+            "description": "Name labels it.",
+            "type": "string"
+          },
+          "sha256": {
+            "description": "SHA256 is the hex digest of the bytes.",
+            "type": "string"
+          },
+          "size": {
+            "description": "Size is the byte count.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "task": {
+            "description": "Task is the reporting task.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "train.registerOut": {
+        "properties": {
+          "sha256": {
+            "description": "SHA256 names the artifact.",
+            "type": "string"
+          },
+          "stored": {
+            "description": "Stored says the org already holds these bytes: nothing to upload.",
+            "type": "boolean"
+          },
+          "upload": {
+            "$ref": "#/components/schemas/train.upload",
+            "description": "Upload is the grant to PUT the bytes, when they are not stored."
+          }
+        },
+        "type": "object"
+      },
+      "train.reportIn": {
+        "properties": {
+          "events": {
+            "description": "Events are the task's new events, in order.",
+            "items": {},
+            "type": "array"
+          },
+          "id": {
+            "description": "ID names the job, from the path.",
+            "type": "string"
+          },
+          "lease": {
+            "description": "Lease is the task's lease, as the claim answered it.",
+            "type": "string"
+          },
+          "task": {
+            "description": "Task is the reporting task.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "train.reportOut": {
+        "properties": {
+          "cancel": {
+            "description": "Cancel says the job was cancelled, or stopped at what its payer or its own\nbounds could hold: kill the trainer, report nothing more.",
+            "type": "boolean"
+          },
+          "held": {
+            "description": "Held is the device-seconds held for the task now.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "seq": {
+            "description": "Seq is the job's last event seq.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "status": {
+            "description": "Status is the job's status after this report.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "train.rollbackPolicyIn": {
+        "properties": {
+          "base": {
+            "description": "Base is the version serving when the rollback was reviewed: a rollback made\nwhile another serves is refused.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          },
+          "next": {
+            "description": "Next is the sha256 of the catalog the rollback was reviewed against (the\nregistry's read says it): refused when the catalog has moved since.",
+            "type": "string"
+          },
+          "note": {
+            "description": "Note is why, kept with the rollback.",
+            "type": "string"
+          },
+          "origin": {
+            "description": "Origin rolls straight back to the catalog's own routes, past every version.",
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
+      "train.sampleIn": {
+        "properties": {
+          "id": {
+            "description": "ID names the client.",
+            "type": "string"
+          },
+          "num_samples": {
+            "description": "NumSamples is how many sequences to decode.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "prompt": {
+            "description": "Prompt is a text prompt; exactly one of prompt and tokens.",
+            "type": "string"
+          },
+          "sampling_params": {
+            "description": "SamplingParams are the decoding parameters."
+          },
+          "tokens": {
+            "description": "Tokens is a tokenized prompt.",
+            "items": {
+              "format": "uint32",
+              "type": "integer"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "train.saveIn": {
+        "properties": {
+          "id": {
+            "description": "ID names the client.",
+            "type": "string"
+          },
+          "name": {
+            "description": "Name is the adapter's name.",
+            "type": "string"
+          },
+          "output": {
+            "$ref": "#/components/schemas/train.Output",
+            "description": "Output is lora, the one kind a client writes."
+          }
+        },
+        "type": "object"
+      },
+      "train.series": {
+        "properties": {
+          "name": {
+            "description": "Name is the metric.",
+            "type": "string"
+          },
+          "points": {
+            "description": "Points are [step, value, at] in step order.",
+            "items": {
+              "items": {
+                "format": "double",
+                "type": "number"
+              },
+              "type": "array"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "train.trainIn": {
+        "properties": {
+          "corrections": {
+            "description": "Corrections, when given, replace the corrections it is taught from: captured\ncorrections of its question.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "examples": {
+            "description": "Examples, when given, encode additional (state, answer) pairs over Kai's\nshared representation and append any new corrections to the capability.",
+            "items": {
+              "$ref": "#/components/schemas/train.ExampleIn"
+            },
+            "type": "array"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "train.unmadeOut": {
+        "properties": {
+          "deleted": {
+            "type": "boolean"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "train.upload": {
+        "properties": {
+          "expires": {
+            "description": "Expires is when the grant stops being accepted, unix seconds.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "headers": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "description": "Headers must be sent verbatim with the single PUT; the signature covers them.",
+            "type": "object"
+          },
+          "method": {
+            "description": "Method is PUT.",
+            "type": "string"
+          },
+          "parts": {
+            "description": "Parts are the object's consecutive byte ranges, each PUT to its own address.",
+            "items": {
+              "$ref": "#/components/schemas/train.part"
+            },
+            "type": "array"
+          },
+          "url": {
+            "description": "URL is the presigned address of a single PUT; empty when Parts is given.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "train.uploadIn": {
+        "properties": {
+          "kind": {
+            "description": "Kind is dataset: JSON Lines rows a job reads as `artifact:\u003csha256\u003e`.",
+            "type": "string"
+          },
+          "name": {
+            "description": "Name labels it.",
+            "type": "string"
+          },
+          "sha256": {
+            "description": "SHA256 is the hex digest of the bytes.",
+            "type": "string"
+          },
+          "size": {
+            "description": "Size is the byte count.",
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      }
+    },
+    "securitySchemes": {
+      "bearer": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "The caller's credential, sent as `Authorization: Bearer \u003ctoken\u003e`. It is either an access token minted by Hanzo IAM or an API key (pk-/sk-). X-Authorization, and HTTP Basic carrying the token as the password, are accepted spellings of the same header for clients that cannot set Authorization; a browser presents the session cookie instead. Every operation requires it unless it says `security: []`."
+      }
+    }
+  }
+}

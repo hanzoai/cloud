@@ -8,25 +8,30 @@ package cloud
 //
 // # What the plane socket is, and what it is not
 //
+// This used to dial the peer's canonical socket — zip.SocketPath("ai"),
+// /var/lib/cloud/run/ai.sock — and speak ordinary HTTP to it, on the belief that
+// "an app's routes ride its unix socket exactly as they ride a public listener".
 // That belief is wrong twice, and each half is independently fatal.
 //
-// 	THE WIRE IS NOT HTTP. That socket is served by zaphttp.Server (zip
-// 	transport.go: the "zap" scheme, the default for a bare address) — a framed
-// 	binary protocol with its own codec. A cleartext HTTP request is not slower
-// 	there, it is unintelligible: the peer reads a malformed frame and closes, so
-// 	the caller gets `Post "http://ai/v1/chat/completions": EOF` on every request,
-// 	any method, any path, first connection, peer perfectly healthy.
+//	THE WIRE IS NOT HTTP. That socket is served by zaphttp.Server (zip
+//	transport.go: the "zap" scheme, the default for a bare address) — a framed
+//	binary protocol with its own codec. A cleartext HTTP request is not slower
+//	there, it is unintelligible: the peer reads a malformed frame and closes, so
+//	the caller gets `Post "http://ai/v1/chat/completions": EOF` on every request,
+//	any method, any path, first connection, peer perfectly healthy.
 //
-// 	THE SURFACE IS NOT THE APP'S. What binds there is the app's PLANE — the
-// 	typed-op endpoint at /.well-known/zip/op/<name>, which is what plane.Call uses
-// 	(client/ask.go: "ServePlane binds before the app's own listener"). The app's
-// 	own HTTP routes are on a listener the plane socket knows nothing about, so
-// 	/v1/chat/completions is a 404 there even when the wire is spoken correctly.
-// 	Over ZAP, ai.sock answers 404 for /v1/models and /v1/chat/completions alike,
-// 	while ai's own listener answers 200 and 401.
+//	THE SURFACE IS NOT THE APP'S. What binds there is the app's PLANE — the
+//	typed-op endpoint at /.well-known/zip/op/<name>, which is what plane.Call uses
+//	(client/ask.go: "ServePlane binds before the app's own listener"). The app's
+//	own HTTP routes are on a listener the plane socket knows nothing about, so
+//	/v1/chat/completions is a 404 there even when the wire is spoken correctly.
+//	Measured on a healthy pod: over ZAP, ai.sock answers 404 for /v1/models and
+//	/v1/chat/completions alike, while ai's own listener answers 200 and 401.
 //
-// Together they mean a completion sent to the plane socket as HTTP fails with EOF
-// before the peer logs anything, because the request never arrives.
+// Together they are why @hanzo in Slack answered "the agent hit an error handling
+// that": the model call EOF'd, agents recorded an honest error-status run, and the
+// bridge turned that into its generic reply. `ai` never logged the request because
+// the request never arrived.
 //
 // # The address that does serve it
 //

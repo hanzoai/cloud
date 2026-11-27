@@ -1,0 +1,336 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Hanzo Cloud API",
+    "description": "Package auditlog is your org's tamper-evident audit trail: every security-relevant event, hash-chained and readable.",
+    "version": "v1"
+  },
+  "servers": [
+    {
+      "url": "https://api.hanzo.ai"
+    }
+  ],
+  "security": [
+    {
+      "bearer": []
+    }
+  ],
+  "tags": [
+    {
+      "name": "audit"
+    }
+  ],
+  "paths": {
+    "/v1/audit": {
+      "get": {
+        "operationId": "get_audit",
+        "summary": "Reads the caller's OWN org audit trail, newest first, with the total the filter matched so a console can page it.",
+        "description": "Reads the caller's OWN org audit trail, newest first, with the total the\nfilter matched so a console can page it.\n\nEvery filter is optional and applies WITHIN the caller's org — the org itself is\nthe validated principal's and can never be widened by a request. Fails closed:\nan absent principal is a true \"not signed in\" (401), and a deployment with no\nlocal tamper-evident store answers an honest 501 rather than silently serving\nsomebody else's trail.",
+        "tags": [
+          "audit"
+        ],
+        "parameters": [
+          {
+            "name": "sub",
+            "in": "query",
+            "required": false,
+            "description": "Sub narrows the trail to one actor — the validated subject that made the\nrequest. Blank means every actor in the org.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "action",
+            "in": "query",
+            "required": false,
+            "description": "Action narrows it to one action name, e.g. \"machine.create\".",
+            "schema": {
+              "type": "string"
+            },
+            "example": "machine.create"
+          },
+          {
+            "name": "resource",
+            "in": "query",
+            "required": false,
+            "description": "Resource narrows it to one resource TYPE, e.g. \"apikey\".",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "resourceId",
+            "in": "query",
+            "required": false,
+            "description": "ResourceID narrows it to one resource instance.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "result",
+            "in": "query",
+            "required": false,
+            "description": "Result narrows it to one outcome: \"success\", \"deny\" or \"error\".",
+            "schema": {
+              "type": "string"
+            },
+            "example": "success"
+          },
+          {
+            "name": "since",
+            "in": "query",
+            "required": false,
+            "description": "Since is the inclusive lower time bound, RFC3339. An unparseable value is\nignored rather than refused — one malformed filter must not hide the trail.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "2026-07-01T00:00:00Z"
+          },
+          {
+            "name": "until",
+            "in": "query",
+            "required": false,
+            "description": "Until is the upper time bound, RFC3339, with the same tolerance.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "required": false,
+            "description": "PageSize is rows per page, default 100. A value that is not a positive\ninteger falls back to the default.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "50"
+          },
+          {
+            "name": "p",
+            "in": "query",
+            "required": false,
+            "description": "Page is the 1-based page number, driving the offset. Anything below 2 reads\nthe first page.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/audit.trailPage"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "audit.Act": {
+        "properties": {
+          "name": {
+            "description": "Name is the operator's IAM username.",
+            "type": "string"
+          },
+          "owner": {
+            "description": "Owner is the org of the operator's IAM row: \"admin\" for a SuperAdmin.",
+            "type": "string"
+          },
+          "sub": {
+            "description": "Sub is the operator's IAM subject.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "audit.Wire": {
+        "properties": {
+          "act": {
+            "$ref": "#/components/schemas/audit.Act",
+            "description": "Act is present ONLY on an action taken in a support session: the platform\noperator IAM signed in AS this row's sub, while org, sub and email stay the\nperson's. A console row carrying `act` was done by the operator it names."
+          },
+          "action": {
+            "description": "Action is the verb that was performed. It is the event's name, not the HTTP\nmethod — a request-sourced record carries both, and the pair is what makes a\nrow readable (\"grant.create\" at POST /v1/admin/grants).",
+            "type": "string"
+          },
+          "after": {
+            "description": "After is the changed thing as the action left it, redacted the same way."
+          },
+          "agent": {
+            "description": "Agent is present ONLY on an action a delegated token took: who acted for\nthis row's sub — the deployment that ran their work in a sandbox — while\norg, sub and email stay the person's, who is billed for it.",
+            "type": "string"
+          },
+          "authMethod": {
+            "description": "Auth is the credential the actor presented: \"jwt\", \"api-key\", or \"none\".",
+            "type": "string"
+          },
+          "before": {
+            "description": "Before is the changed thing as it stood before the action, as JSON, with every\nsecret-shaped field already redacted. Only an emit point that changed something\nsets it; a request-sourced row never does."
+          },
+          "email": {
+            "description": "Email is the actor's validated address, absent when the credential carried\nnone. It comes from the verified token, never from a client header.",
+            "type": "string"
+          },
+          "hash": {
+            "description": "Hash is this record's SHA-256 over its own canonical JSON with both hash\nfields cleared, folded with prevHash. Recomputing it from the row's other\nfields is what proves the row has not been edited.",
+            "type": "string"
+          },
+          "home": {
+            "description": "Home is present ONLY on a cross-org action: the org the actor came FROM,\nwhile Org is the org they acted IN. A console row carrying `home` is a\nplatform-admin impersonation and should be rendered as one.",
+            "type": "string"
+          },
+          "isAdmin": {
+            "description": "IsAdmin is the VALIDATED platform-SuperAdmin bit at decision time\n(owner == \"admin\", principal.Super), never the client's own claim to be one.",
+            "type": "boolean"
+          },
+          "method": {
+            "description": "Method is the HTTP verb, on a record a request produced. Absent on an event\nemitted from inside the binary with no request behind it.",
+            "type": "string"
+          },
+          "org": {
+            "description": "Org is the tenant the action was taken IN — the effective org, which for\neveryone but an impersonating SuperAdmin is also the actor's own. Empty on an\nunauthenticated request.",
+            "type": "string"
+          },
+          "path": {
+            "description": "Path is the request's route. Any segment shaped like a credential is replaced\nbefore the record is written, so a key that rides in a path is not preserved\nhere by the very control meant to watch it.",
+            "type": "string"
+          },
+          "prevHash": {
+            "description": "PrevHash is the hash of record seq-1, which is what links the rows into a\nchain: a deleted or reordered record breaks the recomputation at that point.\nThe first record of a chain carries 64 zeros rather than an empty string, so\n\"start of chain\" and \"field missing\" cannot look alike.",
+            "type": "string"
+          },
+          "reason": {
+            "description": "Reason is a short explanation for a deny or an error (\"SuperAdmin required\",\n\"insufficient_balance\"). It is never a secret and never a raw upstream error\nbody; absent on a success.",
+            "type": "string"
+          },
+          "requestId": {
+            "description": "RequestID ties this row to the request-line log and any downstream trace — the\nX-Request-Id the pipeline minted for that request.",
+            "type": "string"
+          },
+          "resource": {
+            "description": "Resource is the KIND of thing acted upon (\"org\", \"role\", \"secret\",\n\"provider-config\", \"credit\"). Where a mutation has no finer semantics than its\nroute, this is the route family and resourceId is empty — the action and the\npath already pin the object.",
+            "type": "string"
+          },
+          "resourceId": {
+            "description": "ResourceID is the specific instance, absent when the kind alone identifies it.",
+            "type": "string"
+          },
+          "result": {
+            "description": "Result is how the action ended: \"success\", \"deny\" or \"error\". A deny is a\ndecision this binary made and is as much evidence as a success.",
+            "type": "string"
+          },
+          "seq": {
+            "description": "Seq is the record's position in the chain, 0-based and gapless. The Recorder\nassigns it under its own lock, so it is a true total order: seq n+1 was\nwritten after seq n, and a missing number is a missing record.",
+            "format": "uint64",
+            "type": "integer"
+          },
+          "sourceIp": {
+            "description": "SourceIP is the client address the edge resolved for the request, after the\nproxy chain — the address a responder would act on, not the socket peer.",
+            "type": "string"
+          },
+          "status": {
+            "description": "Status is the HTTP status the caller received. It is the outcome as the client\nsaw it, so a 200 carrying a domain refusal still reads 200 here.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "sub": {
+            "description": "Sub is the acting user (the IAM subject). Empty for a machine principal or an\nanonymous request, which is how a service action is told from a person's.",
+            "type": "string"
+          },
+          "time": {
+            "description": "Time is when the action happened, RFC3339Nano in UTC. The stored column has\nthe same precision and sorts the same way, so a client can range and order on\nthis string verbatim.",
+            "type": "string"
+          },
+          "userAgent": {
+            "description": "UserAgent is the client the request announced itself as. Client-supplied, so\nit is evidence about what claimed to act, not proof of it.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "audit.trailPage": {
+        "properties": {
+          "data": {
+            "description": "Data is one page of the org's events, newest first. Empty, never null.",
+            "items": {
+              "$ref": "#/components/schemas/audit.Wire"
+            },
+            "type": "array"
+          },
+          "msg": {
+            "description": "Msg is the envelope's message slot, empty on success.",
+            "type": "string"
+          },
+          "status": {
+            "description": "Status is the envelope's status slot, \"ok\" on success.",
+            "type": "string"
+          },
+          "total": {
+            "description": "Total is how many events match the filter, across all pages — what a pager\nneeds to size itself.",
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "problem-details": {
+        "description": "An RFC 9457 problem document.",
+        "properties": {
+          "code": {
+            "description": "A stable token a client can branch on, when the refusal names one.",
+            "type": "string"
+          },
+          "detail": {
+            "description": "What was refused, for a person to read.",
+            "type": "string"
+          },
+          "status": {
+            "description": "The HTTP status.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "title": {
+            "description": "The status's reason phrase.",
+            "type": "string"
+          },
+          "type": {
+            "description": "about:blank",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "status",
+          "detail"
+        ],
+        "type": "object"
+      }
+    },
+    "securitySchemes": {
+      "bearer": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "The caller's credential, sent as `Authorization: Bearer \u003ctoken\u003e`. It is either an access token minted by Hanzo IAM or an API key (pk-/sk-). X-Authorization, and HTTP Basic carrying the token as the password, are accepted spellings of the same header for clients that cannot set Authorization; a browser presents the session cookie instead. Every operation requires it unless it says `security: []`."
+      }
+    }
+  }
+}

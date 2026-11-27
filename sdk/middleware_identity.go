@@ -49,9 +49,9 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
-	"github.com/hanzoai/authz"
 	"github.com/hanzoai/cloud/sdk/brand"
 	"github.com/hanzoai/cloud/sdk/principal"
+	"github.com/hanzoai/authz"
 	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
 )
@@ -517,7 +517,7 @@ func sanitizeSubScopes(c *zip.Ctx, org, project, app, billingAccount string) {
 // decided below the boundary from its signed membership set; a key carries none,
 // so the key's own resolution asks IAM whether its holder acts there
 // (iamKeys.resolveIn) — the selection never silently falls back to the key's org,
-// which billed the wrong tenant (#429).
+// which billed the wrong tenant (hanzo-inc/cloud#429).
 func validatedPrincipal(c *zip.Ctx, v *Boundary, selected string) (claims *idClaims, refusal error, strike bool) {
 	if v == nil {
 		return nil, nil, false
@@ -748,7 +748,7 @@ func (c *idClaims) admits(z *zip.Ctx) error {
 	// sandbox reaching past its run, which is worth seeing before it succeeds.
 	if c.confined {
 		err := confinedAllowed(c.Scope, path, z.Method())
-		if err == nil && inferenceOnly(path, z.Method()) == nil {
+		if err == nil {
 			err = noRetrieval(z)
 		}
 		if err != nil {
@@ -913,4 +913,15 @@ func CallerIssuer(c *zip.Ctx) string {
 		return ""
 	}
 	return claimedIssuer(tok)
+}
+
+// BearerAudience returns the primary `aud` (or `azp`) of an already-validated
+// JWT bearer, so a downstream server (such as hanzo-dev in a sandbox cell) can
+// pin HANZO_DEV_IAM_CLIENT_ID to the caller's actual OAuth client rather than
+// rejecting non-hanzo-app tokens (e.g. hanzo CLI `admin-cli`) with an empty 401.
+func BearerAudience(tok string) string {
+	if tok == "" || IsAPIKey(tok) {
+		return ""
+	}
+	return claimedAudience(tok)
 }

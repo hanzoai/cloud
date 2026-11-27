@@ -2,12 +2,12 @@
 # postgres.sh COMMAND [ARG...]
 #
 # Runs COMMAND with CLOUD_TEST_SQL_DSN naming a throwaway PostgreSQL, the server
-# sdk/sqltest runs every ported store against beside SQLite. The server is the
+# internal/sqltest runs every ported store against beside SQLite. The server is the
 # pinned official build (the zonky embedded-postgres-binaries on Maven Central,
 # sha256 below), unpacked into a private run directory, started with a fresh
 # cluster, and stopped and deleted when COMMAND returns. It needs curl, unzip, tar
 # and xz, and no container runtime, package manager or root: the CI runner has no
-# docker daemon, and a service container cannot be declared.
+# docker daemon, and a service cannot be declared in hanzo.yml.
 #
 # THE SERVER IS REACHABLE BY ITS OWNER AND NO ONE ELSE. It listens on no TCP port,
 # only on a unix socket in a 0700 directory, so "trust" authentication admits
@@ -26,7 +26,7 @@
 #
 # Linux only: it needs setpriv (util-linux), stat -c and a /var/tmp that is local.
 #
-#   scripts/postgres.sh go test ./sdk/audit/...
+#   scripts/postgres.sh go test ./apps/flags/...
 set -euo pipefail
 
 for tool in curl unzip tar xz setpriv flock; do
@@ -127,7 +127,7 @@ printf 'CREATE ROLE cloud LOGIN CREATEDB;\n' |
 # No TCP (listen_addresses=''), the socket in the run directory and only its owner's,
 # and fsync off because this cluster lives for one command.
 #
-# NO AUTOVACUUM. sdk/sqltest drops each test's database WITH (FORCE) as `cloud`,
+# NO AUTOVACUUM. internal/sqltest drops each test's database WITH (FORCE) as `cloud`,
 # which may terminate only its own role's sessions. An autovacuum worker that has
 # attached to that database belongs to no role `cloud` holds, so the drop answered
 # "permission denied to terminate process" (SQLSTATE 42501) and failed whichever

@@ -1,0 +1,247 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Hanzo Cloud API",
+    "description": "Package base is managed Hanzo Base: a hosted backend for your app — collections, records, access rules and sign-in.",
+    "version": "v1"
+  },
+  "servers": [
+    {
+      "url": "https://api.hanzo.ai"
+    }
+  ],
+  "security": [
+    {
+      "bearer": []
+    }
+  ],
+  "tags": [
+    {
+      "name": "base"
+    }
+  ],
+  "paths": {
+    "/v1/base/bases": {
+      "get": {
+        "operationId": "get_base_bases",
+        "summary": "Lists every Base the caller can reach, one per org their token carries.",
+        "description": "Lists every Base the caller can reach, one per org their token carries.\n\nThe orgs come from IAM's signed membership set, so the list is exactly the\norgs the caller is a member of and cannot be widened by asking. It is the\naccount-wide view: a Base is per org, so this is one entry per org and there\nis nothing to page.\n\nA caller with no membership set — a machine credential, an API key — reaches\nno Base and receives an empty list rather than a refusal, because holding no\nmembership is an answer and not a failure.",
+        "tags": [
+          "base"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": [
+                  {
+                    "bytes": 430080,
+                    "exists": true,
+                    "org": "hanzo"
+                  }
+                ],
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/base.baseView"
+                  },
+                  "type": "array"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/base/bases/{org}": {
+      "get": {
+        "operationId": "get_base_bases_by_org",
+        "summary": "Describes ONE org's Base — whether its store exists, and what it occupies.",
+        "description": "Describes ONE org's Base — whether its store exists, and what it occupies.\n\nThe org must be one the caller's token carries; any other is not found, so\nthis cannot be used to learn which orgs exist. That check is the same\nmembership set the listing is built from, which is why the two can never\ndisagree about what a caller may see.",
+        "tags": [
+          "base"
+        ],
+        "parameters": [
+          {
+            "name": "org",
+            "in": "path",
+            "required": true,
+            "description": "Org is the org whose Base to describe, from the path. An org the caller's\ntoken does not carry is not found — the same answer a nonexistent one\ngets, so the listing cannot be used to discover which orgs exist.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "bytes": 430080,
+                  "exists": true,
+                  "org": "hanzo"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/base.baseView"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/base/graphql": {
+      "get": {
+        "operationId": "get_base_graphql",
+        "summary": "Read your org Base's GraphQL schema",
+        "description": "The schema of the caller's org Base as GraphQL SDL: a type per collection with its fields, relations and the records pointing at it, a filter input per collection, orderBy, connections, aggregates and the writes. It is that org's own, so it changes with its collections. /v1/graphql carries the same schema under `base`.",
+        "tags": [
+          "base"
+        ],
+        "x-public": true
+      },
+      "post": {
+        "operationId": "post_base_graphql",
+        "summary": "Query or write your org Base with GraphQL",
+        "description": "Runs one GraphQL request against the caller's org Base. Every field is answered by the Base's own record, aggregate and history routes as the caller, so what a field reads or writes is what the same request over /v1/base/collections may. No subscriptions: realtime is /v1/base/realtime.",
+        "tags": [
+          "base"
+        ],
+        "x-public": true
+      }
+    },
+    "/v1/base/health": {
+      "get": {
+        "operationId": "get_base_health",
+        "summary": "Reports that the base subsystem is serving.",
+        "description": "Reports that the base subsystem is serving.\n\nIt is deliberately INDEPENDENT of whether this deployment actually embeds the\nBase engine: the route answers before the CLOUD_BASE_EMBED gate and before the\n/v1/base/* wildcard, so a liveness probe measures the process rather than an\noptional feature, and the wildcard can never shadow it. It reads no tenant, so a\nprober that sends no principal is answered rather than refused.",
+        "tags": [
+          "base"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/base.baseHealth"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "base.baseHealth": {
+        "properties": {
+          "service": {
+            "description": "Service is \"base\" — which subsystem answered.",
+            "type": "string"
+          },
+          "status": {
+            "description": "Status is \"ok\" when the subsystem is serving.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "base.baseView": {
+        "properties": {
+          "bytes": {
+            "description": "Bytes is the store's size on disk, present only once it exists. It is what\nthis Base occupies, not a quota.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "exists": {
+            "description": "Exists reports whether this Base's store has been provisioned. False is an\norg nobody has stored anything for yet, which is a state to name rather\nthan an error: the store is created the first time anything writes.",
+            "type": "boolean"
+          },
+          "org": {
+            "description": "Org is the org this Base belongs to. It is the address every other Base\ncall is scoped by, and a Base has no name of its own.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "problem-details": {
+        "description": "An RFC 9457 problem document.",
+        "properties": {
+          "code": {
+            "description": "A stable token a client can branch on, when the refusal names one.",
+            "type": "string"
+          },
+          "detail": {
+            "description": "What was refused, for a person to read.",
+            "type": "string"
+          },
+          "status": {
+            "description": "The HTTP status.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "title": {
+            "description": "The status's reason phrase.",
+            "type": "string"
+          },
+          "type": {
+            "description": "about:blank",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "status",
+          "detail"
+        ],
+        "type": "object"
+      }
+    },
+    "securitySchemes": {
+      "bearer": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "The caller's credential, sent as `Authorization: Bearer \u003ctoken\u003e`. It is either an access token minted by Hanzo IAM or an API key (pk-/sk-). X-Authorization, and HTTP Basic carrying the token as the password, are accepted spellings of the same header for clients that cannot set Authorization; a browser presents the session cookie instead. Every operation requires it unless it says `security: []`."
+      }
+    }
+  }
+}

@@ -376,7 +376,7 @@ func Agent(host string) (Info, bool) {
 // on them is answered as the brand's API. It decides only where the agent
 // discovery documents answer — OAuth metadata and the MCP card (openapi/agent.go,
 // apps/sites agentDocs) — so a scanner reading any of a brand's hosts learns how
-// to reach its API (#420, #421). Everything else keeps Agent.
+// to reach its API (hanzo-inc/cloud#420, #421). Everything else keeps Agent.
 func Claimed(host string) (Info, bool) {
 	if b, ok := Agent(host); ok {
 		return b, true

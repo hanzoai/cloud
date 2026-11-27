@@ -1,0 +1,987 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Hanzo Cloud API",
+    "description": "Package functions is your serverless code: publish it, call it over HTTP, watch every run and what it cost.",
+    "version": "v1"
+  },
+  "servers": [
+    {
+      "url": "https://api.hanzo.ai"
+    }
+  ],
+  "security": [
+    {
+      "bearer": []
+    }
+  ],
+  "tags": [
+    {
+      "name": "function"
+    }
+  ],
+  "paths": {
+    "/v1/function": {
+      "get": {
+        "operationId": "get_function",
+        "summary": "Is every serverless function the caller's org has published, each with its real 7-day rollup.",
+        "description": "Is every serverless function the caller's org has published, each with its\nreal 7-day rollup.\n\nA row carries the function's runtime, resource limits, deployment target and its\ninvoke endpoint, plus envCount — how many secrets it mounts. The rollup fields\nare ABSENT rather than zero when the function has not run in the window, so a\nconsole renders \"—\" instead of a fabricated 0.\n\nRequires a validated principal; the listing is scoped to its org.",
+        "tags": [
+          "function"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/function.fnList"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      },
+      "post": {
+        "operationId": "post_function",
+        "summary": "Publishes a serverless function under the caller's org and answers 201 with it.",
+        "description": "Publishes a serverless function under the caller's org and answers 201\nwith it.\n\nThe name is the key and is claimed once; the names that would shadow a\ncollection route are reserved. runtime and environment are the same field —\neither spelling is accepted — and default to node.\n\nBounds are clamped rather than refused where a clamp is honest: a timeout above\nthe 900-second ceiling becomes the ceiling instead of silently reverting to the\n30-second default, and an omitted memory limit becomes 256Mi. target=fleet runs\non the org's own GPU fleet and supports runtime=python only.\n\nRequires a validated principal; the function is owned by that principal's org.",
+        "tags": [
+          "function"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/function.definition"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/function.functionView"
+                }
+              }
+            },
+            "description": "created"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/function/deployments": {
+      "get": {
+        "operationId": "get_function_deployments",
+        "summary": "Is what is live right now — each function's current record IS its live deployment, so this is the deployment inventory.",
+        "description": "Is what is live right now — each function's current record IS its\nlive deployment, so this is the deployment inventory.\n\nThere is no deployment history behind it: a function has one record, and\npublishing replaces it. The 7-day rollup is deliberately absent here, because\nthis read is about what is deployed rather than about how it has performed.",
+        "tags": [
+          "function"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/function.fnList"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/function/metrics": {
+      "get": {
+        "operationId": "get_function_metrics",
+        "summary": "Is the org's serverless dashboard over a window: a per-function invocation costLine and how those invocations ended.",
+        "description": "Is the org's serverless dashboard over a window: a per-function\ninvocation costLine and how those invocations ended.\n\nEvery point is a REAL count of rows that fell in that bucket — nothing is\ninterpolated or invented, so an empty window draws a flat line rather than a\nfabricated one.\n\ncostCents is null and stays null: there is no per-invocation cost source to read,\nand reporting a number computed some other way would be a guess presented as a\nmeasurement. Requires a validated principal; the read is scoped to its org.",
+        "tags": [
+          "function"
+        ],
+        "parameters": [
+          {
+            "name": "range",
+            "in": "query",
+            "required": false,
+            "description": "Range is 1H, 6H, 24H (the default), 7D or 30D. Anything else falls back to\n24H rather than failing.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/function.usage"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/function/secrets": {
+      "get": {
+        "operationId": "get_function_secrets",
+        "summary": "Is the NAMES of the secrets the caller org's functions mount.",
+        "description": "Is the NAMES of the secrets the caller org's functions mount.\n\nValues are NEVER read or returned — this surface knows which names a function\nasks for and nothing about what is behind them, which is what makes it safe to\nlist at all. One row per distinct (namespace, name).",
+        "tags": [
+          "function"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/function.secretList"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/function/triggers": {
+      "get": {
+        "operationId": "get_function_triggers",
+        "summary": "Is what calls the caller org's functions — one row per function.",
+        "description": "Is what calls the caller org's functions — one row per function.\n\nEvery function has exactly one trigger today, its HTTP invoke endpoint, so this\nis the function list read as \"how is each of these reached\".",
+        "tags": [
+          "function"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/function.triggerList"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/function/{name}": {
+      "delete": {
+        "operationId": "delete_function_by_name",
+        "summary": "Removes one of the caller org's functions and answers 204.",
+        "description": "Removes one of the caller org's functions and answers 204.\n\nA name this org does not hold is 404 — never a silent success — and a name\nbelonging to another tenant is the same 404, because the delete is predicated on\nthe validated org.",
+        "tags": [
+          "function"
+        ],
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "description": "Name is the function the URL names.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "no content"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      },
+      "get": {
+        "operationId": "get_function_by_name",
+        "summary": "Is one function with everything a detail page needs in one round-trip: its definition, its 7-day rollup, its trigger, its twenty most recent invocations and the NAMES of the secrets it mounts.",
+        "description": "Is one function with everything a detail page needs in one round-trip: its\ndefinition, its 7-day rollup, its trigger, its twenty most recent invocations\nand the NAMES of the secrets it mounts.\n\nSecret values are never read or returned. A name the caller's org does not hold\nis 404, which is also what another tenant's function looks like from here.",
+        "tags": [
+          "function"
+        ],
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "description": "Name is the function the URL names.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/function.functionDetail"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/function/{name}/invocations": {
+      "get": {
+        "operationId": "get_function_by_name_invocations",
+        "summary": "Is one function's past runs, newest first — each with its status, HTTP code, method, time and duration.",
+        "description": "Is one function's past runs, newest first — each with its status,\nHTTP code, method, time and duration.\n\nThese are real recorded rows, not a projection: an invocation appears here only\nonce it actually ran. Requires a validated principal; the read is scoped to its\norg.",
+        "tags": [
+          "function"
+        ],
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "description": "Name is the function the URL names.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Limit caps the page, defaulting to 100.",
+            "schema": {
+              "format": "int64",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/function.invocationList"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/function/{name}/invoke": {
+      "post": {
+        "operationId": "post_function_by_name_invoke",
+        "summary": "Runs a function and records a REAL invocation.",
+        "description": "Runs a function and records a REAL invocation.\n\nThe answer is the invocation record whatever happened to it: 200 when the org's\ncode ran clean, 502 when it ran and failed, 503 when this deployment has no\nsandbox to run code in. The record IS the evidence, so it rides the failure\nrather than being replaced by an error envelope.\n\nBilling is two-part and both parts are prepaid-then-metered on the one shared\nmeter: a flat per-invocation request fee, gated BEFORE any sandbox compute runs\nso an unfunded org gets 402 and nothing executes, and a usage-native\nGB-seconds compute debit taken after the run. Either is independently free when\nits fee is zero, so an operator can bill by request alone, by compute alone, or\nby both — and a zero request fee removes the balance gate with it.\n\nA TRANSPORT failure is not charged: the sandbox being unreachable ran no\nbillable compute. Code that ran and exited non-zero IS charged — that is a\nsuccessful invocation of a failing program, not a billing failure.\n\nWhen the sandbox is not configured on this deployment, a non-fleet function\nfails closed before anything is recorded — no execution and no fabricated\noutput. Scoped to the caller's org; requires a validated principal.",
+        "tags": [
+          "function"
+        ],
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/function.invokeReq"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/function.invocationView"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/function.invocationView"
+                }
+              }
+            },
+            "description": "bad gateway"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/function.invocationView"
+                }
+              }
+            },
+            "description": "service unavailable"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/function/{name}/logs": {
+      "get": {
+        "operationId": "get_function_by_name_logs",
+        "summary": "Is the output of a function's most recent run — its error text when that run failed, else what it printed.",
+        "description": "Is the output of a function's most recent run — its error text when that\nrun failed, else what it printed.\n\nIt is the LAST run only, and it is empty when the function has never run. There\nis no log retention behind this beyond the recorded invocation itself.",
+        "tags": [
+          "function"
+        ],
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "description": "Name is the function the URL names.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/function.logLines"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "function.costLine": {
+        "properties": {
+          "key": {
+            "description": "the function the line is about",
+            "type": "string"
+          },
+          "points": {
+            "description": "one point per bucket, oldest first",
+            "items": {
+              "$ref": "#/components/schemas/function.pointView"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "function.definition": {
+        "properties": {
+          "code": {
+            "description": "Code is the source to run, capped so one function cannot amplify the store.",
+            "type": "string"
+          },
+          "envNames": {
+            "description": "EnvNames are the secret NAMES to mount. Values live in the secret store and\nare never carried here.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "environment": {
+            "description": "Environment is a second spelling of runtime, accepted so a console that says\n\"environment\" needs no translation.",
+            "type": "string"
+          },
+          "handler": {
+            "description": "Handler is the entry point within the code.",
+            "type": "string"
+          },
+          "image": {
+            "description": "Image names a prebuilt image to run instead of source.",
+            "type": "string"
+          },
+          "memoryLimit": {
+            "description": "MemoryLimit is the memory the function runs with, defaulting to 256Mi. It is\nalso the multiplier on the GB-seconds compute charge.",
+            "type": "string"
+          },
+          "name": {
+            "description": "Name is the function's org-unique handle and the segment that addresses it,\nmatching ^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$. The names that would shadow a\ncollection route are reserved.",
+            "type": "string"
+          },
+          "namespace": {
+            "description": "Namespace groups functions for display. It is cosmetic — the org is the\nisolation key — and is normalised to a DNS-safe label.",
+            "type": "string"
+          },
+          "runtime": {
+            "description": "Runtime is the language the code runs under: node, python or deno.",
+            "type": "string"
+          },
+          "target": {
+            "description": "Target is where the function runs: sandbox (the default) or fleet, the org's\nown GPU fleet. fleet supports runtime=python only.",
+            "type": "string"
+          },
+          "timeoutSec": {
+            "description": "TimeoutSec is the per-invocation deadline, defaulting to 30 and clamped at\n900 — a larger value is capped rather than reset to the default.",
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "type": "object"
+      },
+      "function.fnList": {
+        "properties": {
+          "functions": {
+            "description": "Functions is one row per published function.",
+            "items": {
+              "$ref": "#/components/schemas/function.functionView"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "function.functionDetail": {
+        "properties": {
+          "avgDurationMs": {
+            "description": "mean wall-clock of those runs",
+            "format": "double",
+            "type": "number"
+          },
+          "createdAt": {
+            "description": "when it was first published",
+            "type": "string"
+          },
+          "endpoint": {
+            "description": "the path that invokes it",
+            "type": "string"
+          },
+          "envCount": {
+            "description": "how many secret NAMES it mounts; values are never carried",
+            "format": "int64",
+            "type": "integer"
+          },
+          "environment": {
+            "description": "the language it runs under",
+            "type": "string"
+          },
+          "errors7d": {
+            "description": "how many of those runs failed",
+            "format": "int64",
+            "type": "integer"
+          },
+          "image": {
+            "description": "the prebuilt image it runs, when it runs one instead of source",
+            "type": "string"
+          },
+          "invocations7d": {
+            "description": "runs in the last 7 days; ABSENT, never 0, when it has not run",
+            "format": "int64",
+            "type": "integer"
+          },
+          "lastDeployedAt": {
+            "description": "when its code last changed",
+            "type": "string"
+          },
+          "memoryLimit": {
+            "description": "the memory it runs with, and the multiplier on its compute charge",
+            "type": "string"
+          },
+          "name": {
+            "description": "the function's org-unique handle",
+            "type": "string"
+          },
+          "namespace": {
+            "description": "the display group it belongs to; the org is the isolation key",
+            "type": "string"
+          },
+          "recentInvocations": {
+            "description": "RecentInvocations is its twenty most recent runs, newest first.",
+            "items": {
+              "$ref": "#/components/schemas/function.invocationView"
+            },
+            "type": "array"
+          },
+          "secrets": {
+            "description": "Secrets are the NAMES it mounts. Values are never read or returned.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "status": {
+            "description": "whether it is ready to serve",
+            "type": "string"
+          },
+          "successRate": {
+            "description": "share of those runs that succeeded, 0..1",
+            "format": "double",
+            "type": "number"
+          },
+          "target": {
+            "description": "where it runs: empty for the sandbox, \"fleet\" for the org's GPU fleet",
+            "type": "string"
+          },
+          "timeoutSec": {
+            "description": "its per-invocation deadline",
+            "format": "int64",
+            "type": "integer"
+          },
+          "triggers": {
+            "description": "Triggers is how this function is reached.",
+            "items": {
+              "$ref": "#/components/schemas/function.triggerView"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "function.functionView": {
+        "properties": {
+          "avgDurationMs": {
+            "description": "mean wall-clock of those runs",
+            "format": "double",
+            "type": "number"
+          },
+          "createdAt": {
+            "description": "when it was first published",
+            "type": "string"
+          },
+          "endpoint": {
+            "description": "the path that invokes it",
+            "type": "string"
+          },
+          "envCount": {
+            "description": "how many secret NAMES it mounts; values are never carried",
+            "format": "int64",
+            "type": "integer"
+          },
+          "environment": {
+            "description": "the language it runs under",
+            "type": "string"
+          },
+          "errors7d": {
+            "description": "how many of those runs failed",
+            "format": "int64",
+            "type": "integer"
+          },
+          "image": {
+            "description": "the prebuilt image it runs, when it runs one instead of source",
+            "type": "string"
+          },
+          "invocations7d": {
+            "description": "runs in the last 7 days; ABSENT, never 0, when it has not run",
+            "format": "int64",
+            "type": "integer"
+          },
+          "lastDeployedAt": {
+            "description": "when its code last changed",
+            "type": "string"
+          },
+          "memoryLimit": {
+            "description": "the memory it runs with, and the multiplier on its compute charge",
+            "type": "string"
+          },
+          "name": {
+            "description": "the function's org-unique handle",
+            "type": "string"
+          },
+          "namespace": {
+            "description": "the display group it belongs to; the org is the isolation key",
+            "type": "string"
+          },
+          "status": {
+            "description": "whether it is ready to serve",
+            "type": "string"
+          },
+          "successRate": {
+            "description": "share of those runs that succeeded, 0..1",
+            "format": "double",
+            "type": "number"
+          },
+          "target": {
+            "description": "where it runs: empty for the sandbox, \"fleet\" for the org's GPU fleet",
+            "type": "string"
+          },
+          "timeoutSec": {
+            "description": "its per-invocation deadline",
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "function.invocationList": {
+        "properties": {
+          "invocations": {
+            "description": "Invocations is one row per past run, newest first.",
+            "items": {
+              "$ref": "#/components/schemas/function.invocationView"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "function.invocationView": {
+        "properties": {
+          "durationMs": {
+            "description": "how long it took",
+            "format": "int64",
+            "type": "integer"
+          },
+          "id": {
+            "description": "the invocation's handle",
+            "type": "string"
+          },
+          "method": {
+            "description": "the HTTP method that triggered it",
+            "type": "string"
+          },
+          "status": {
+            "description": "how the run ended: ok, error or timeout",
+            "type": "string"
+          },
+          "statusCode": {
+            "description": "Code is the status the function's OWN code answered with, which is not the\nstatus of the reply — a program can answer 500 through a healthy sandbox.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "time": {
+            "description": "when it ran, RFC3339",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "function.invokeReq": {
+        "properties": {
+          "input": {
+            "description": "Input is what the function is given on stdin. It is opaque to this surface.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "function.logLines": {
+        "properties": {
+          "logs": {
+            "description": "Logs is that run's error text when it failed, else its output. It is empty\nwhen the function has never run.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "function.pointView": {
+        "properties": {
+          "t": {
+            "description": "the bucket's start, RFC3339 (UTC)",
+            "type": "string"
+          },
+          "v": {
+            "description": "how many invocations fell in it — a real count, never interpolated",
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "function.secretList": {
+        "properties": {
+          "secrets": {
+            "description": "Secrets is one row per distinct (namespace, name) a function mounts. Values\nare NEVER read or returned.",
+            "items": {
+              "$ref": "#/components/schemas/function.secretView"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "function.secretView": {
+        "properties": {
+          "mountedBy": {
+            "description": "MountedBy is a function that mounts it.",
+            "type": "string"
+          },
+          "name": {
+            "description": "Name is the environment variable the function mounts.",
+            "type": "string"
+          },
+          "namespace": {
+            "description": "Namespace is the group the mounting function belongs to.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "function.statusBreakdown": {
+        "properties": {
+          "error": {
+            "description": "invocations that ran and failed",
+            "format": "int64",
+            "type": "integer"
+          },
+          "success": {
+            "description": "invocations whose code ran and wrote nothing to stderr",
+            "format": "int64",
+            "type": "integer"
+          },
+          "timeout": {
+            "description": "invocations that hit their configured deadline",
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "function.triggerList": {
+        "properties": {
+          "triggers": {
+            "description": "Triggers is one row per function, describing how it is reached.",
+            "items": {
+              "$ref": "#/components/schemas/function.triggerView"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "function.triggerView": {
+        "properties": {
+          "enabled": {
+            "description": "whether it currently fires",
+            "type": "boolean"
+          },
+          "functionName": {
+            "description": "the function it calls",
+            "type": "string"
+          },
+          "id": {
+            "description": "the trigger's handle",
+            "type": "string"
+          },
+          "name": {
+            "description": "a human label for it",
+            "type": "string"
+          },
+          "target": {
+            "description": "the path it calls",
+            "type": "string"
+          },
+          "type": {
+            "description": "what kind of trigger it is; HTTP is the only one today",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "function.usage": {
+        "properties": {
+          "costCents": {
+            "description": "null — no per-invocation cost source",
+            "format": "int64",
+            "type": "integer"
+          },
+          "series": {
+            "description": "one line per function that ran in the window",
+            "items": {
+              "$ref": "#/components/schemas/function.costLine"
+            },
+            "type": "array"
+          },
+          "status": {
+            "$ref": "#/components/schemas/function.statusBreakdown",
+            "description": "how those invocations ended"
+          }
+        },
+        "type": "object"
+      },
+      "problem-details": {
+        "description": "An RFC 9457 problem document.",
+        "properties": {
+          "code": {
+            "description": "A stable token a client can branch on, when the refusal names one.",
+            "type": "string"
+          },
+          "detail": {
+            "description": "What was refused, for a person to read.",
+            "type": "string"
+          },
+          "status": {
+            "description": "The HTTP status.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "title": {
+            "description": "The status's reason phrase.",
+            "type": "string"
+          },
+          "type": {
+            "description": "about:blank",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "status",
+          "detail"
+        ],
+        "type": "object"
+      }
+    },
+    "securitySchemes": {
+      "bearer": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "The caller's credential, sent as `Authorization: Bearer \u003ctoken\u003e`. It is either an access token minted by Hanzo IAM or an API key (pk-/sk-). X-Authorization, and HTTP Basic carrying the token as the password, are accepted spellings of the same header for clients that cannot set Authorization; a browser presents the session cookie instead. Every operation requires it unless it says `security: []`."
+      }
+    }
+  }
+}

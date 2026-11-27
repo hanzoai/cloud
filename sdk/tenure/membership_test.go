@@ -77,8 +77,11 @@ func TestMembershipKeepsLastGoodOnError(t *testing.T) {
 	}
 }
 
-// StaticSource reads NO environment. A source given nothing must yield nothing,
-// so the fencer has nobody to elect rather than somebody wrong.
+// StaticSource reads NO environment. It used to fall back to CLOUD_REPLICAS,
+// which is an integer replica count everywhere else in this binary — so "3"
+// parsed here as a peer named "3", and a set of one bogus member elects a writer
+// with confidence. A source given nothing must yield nothing, so the fencer has
+// nobody to elect rather than somebody wrong.
 func TestStaticSourceReadsNoEnvironment(t *testing.T) {
 	t.Setenv("CLOUD_REPLICAS", "3")
 	got, err := StaticSource()(context.Background())

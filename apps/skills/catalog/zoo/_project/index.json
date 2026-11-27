@@ -1,0 +1,86 @@
+{
+  "$schema": "https://schemas.agentskills.io/discovery/0.2.0/schema.json",
+  "base_url": "https://api.zoo.ngo",
+  "brand": "zoo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://zoolabs.id",
+  "mcp": {
+    "description": "Model Context Protocol over JSON-RPC 2.0 — one POST per message, stateless, protocol revision 2026-07-28. tools/list answers without a credential with one tool per subsystem (its operations in the \"op\" enum) plus \"describe\", which returns one operation's input schema. tools/call names a subsystem tool and carries {\"op\": <operation>, \"input\": <its arguments>}; it takes the same bearer the REST API does, and a call that carries none is answered 401 with a WWW-Authenticate header naming the resource metadata at /.well-known/oauth-protected-resource, which names the authorization server to sign in at. The tool surface is the public contract: the operator's admin product is not offered, and a name that would disclose a secret or mutate an identity is withheld — the list says how many, under _meta.",
+    "method": "POST",
+    "url": "https://api.zoo.ngo/v1/mcp"
+  },
+  "skill_count": 8,
+  "skills": [
+    {
+      "description": "Read project deployments: Returns a project's deploy history, newest version first., Returns one deployment of a project by id., Returns every object under a deployment's prefix as the object store itself records it: each key relative to the prefix, its size in bytes and its ETag",
+      "digest": "sha256:c1f041f57914effdcc025657b9042e58c69eb1a784c39e86a559b2eaf6304476",
+      "name": "project_deployments",
+      "service": "project",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/project_deployments/SKILL.md",
+      "works": [
+        "engineering"
+      ]
+    },
+    {
+      "description": "Read project domains: Returns every custom hostname this site holds: the live ones, plus any pending claim with the DNS records it still owes..",
+      "digest": "sha256:997ea62ea5f7df188e6922a637b70f99a5f6e2e00d138b845475d23eb0f93a1a",
+      "name": "project_domains",
+      "service": "project",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/project_domains/SKILL.md"
+    },
+    {
+      "description": "Read project edge: health reports whether a publish reaches readers, rather than whether it was accepted..",
+      "digest": "sha256:51b15ec675b2f9959641c5047c294605f129bbf6065ca77b271512a4a4a71249",
+      "name": "project_edge",
+      "service": "project",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/project_edge/SKILL.md"
+    },
+    {
+      "description": "Read project project: Returns every project your org owns., Returns one project of yours by slug — its settings, its live URL and the deployment currently serving it..",
+      "digest": "sha256:ac3688aa3b5f9b3ec9f92bc2332aa7833e785dbb6a823b0a4992b6737fea25c6",
+      "name": "project_project",
+      "service": "project",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/project_project/SKILL.md",
+      "works": [
+        "product"
+      ]
+    },
+    {
+      "description": "Read project releases: Returns a site's releases newest-first, marking the active one — the rollback menu..",
+      "digest": "sha256:1a1093f4046c307f780506bd83c9892ed284fc7c51a3daba6d80ede53761acc8",
+      "name": "project_releases",
+      "service": "project",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/project_releases/SKILL.md"
+    },
+    {
+      "description": "Read project shot: Get a PNG of the project's live site.",
+      "digest": "sha256:4d063e74918fb5294c75196462f62e5c50b7ad51a4b1a2bca9a392e4b89fa0fe",
+      "name": "project_shot",
+      "service": "project",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/project_shot/SKILL.md"
+    },
+    {
+      "description": "Read project sites: Returns the org's deployed sites at the pretty URLs they serve at., Returns one site — the same row ListSites carries, for one slug..",
+      "digest": "sha256:a9efb14dc3afd6de9ee39f09ff5d68b9ec7983482bf4f346e9f945540c20a379",
+      "name": "project_sites",
+      "service": "project",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/project_sites/SKILL.md"
+    },
+    {
+      "description": "Read project tags: The site's browser tag set for the hosted tag — which pixels to inject, by publishable key.",
+      "digest": "sha256:1abb48cba949f1b62b779de18752e5cdbd30af06c6f9877052ce937f399f161e",
+      "name": "project_tags",
+      "service": "project",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/project_tags/SKILL.md"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

@@ -1,0 +1,88 @@
+{
+  "$schema": "https://schemas.agentskills.io/discovery/0.2.0/schema.json",
+  "base_url": "https://api.zoo.ngo",
+  "brand": "zoo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://zoolabs.id",
+  "mcp": {
+    "description": "Model Context Protocol over JSON-RPC 2.0 — one POST per message, stateless, protocol revision 2026-07-28. tools/list answers without a credential with one tool per subsystem (its operations in the \"op\" enum) plus \"describe\", which returns one operation's input schema. tools/call names a subsystem tool and carries {\"op\": <operation>, \"input\": <its arguments>}; it takes the same bearer the REST API does, and a call that carries none is answered 401 with a WWW-Authenticate header naming the resource metadata at /.well-known/oauth-protected-resource, which names the authorization server to sign in at. The tool surface is the public contract: the operator's admin product is not offered, and a name that would disclose a secret or mutate an identity is withheld — the list says how many, under _meta.",
+    "method": "POST",
+    "url": "https://api.zoo.ngo/v1/mcp"
+  },
+  "skill_count": 9,
+  "skills": [
+    {
+      "description": "Read platform apps: Answers what this organisation has declared, joined with what the delivery plane has done about it., Answers ONE declaration — what git says this app is, before the delivery plane has had any say in it., Answers ONE app's reconciliation alone — the poll a depl",
+      "digest": "sha256:0bf25ce67dfe8c3295891ec08b5b5fce3f32518a575654d6fb4bcdbbfb7852bb",
+      "name": "platform_apps",
+      "service": "platform",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/platform_apps/SKILL.md"
+    },
+    {
+      "description": "Read platform builds: Returns real build records for your org..",
+      "digest": "sha256:489ab808a0f9994293ddea193dea8d088c639b19561fa55aa42fed4c3601fe9b",
+      "name": "platform_builds",
+      "service": "platform",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/platform_builds/SKILL.md"
+    },
+    {
+      "description": "Read platform cd: Answers every Application the delivery plane holds..",
+      "digest": "sha256:5aa2533bec4ddee9f73646ba867dba2ba090875e4b368f2634677d382fb4f337",
+      "name": "platform_cd",
+      "service": "platform",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/platform_cd/SKILL.md"
+    },
+    {
+      "description": "Read platform environments: Returns your deploy targets, and what is running on each..",
+      "digest": "sha256:c665043e80ba9ee5d26f381aab824bd6714bcb5617c8d611e9fa4620d98c0468",
+      "name": "platform_environments",
+      "service": "platform",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/platform_environments/SKILL.md"
+    },
+    {
+      "description": "Read platform fleet: Returns the platform's own service tier, and where it has drifted., Returns one platform service, resolved to production by default..",
+      "digest": "sha256:6d568f0cc76e71cd4a23e1b4fe66d54b006fb9ebae5f9fe61a390f49fa784397",
+      "name": "platform_fleet",
+      "service": "platform",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/platform_fleet/SKILL.md"
+    },
+    {
+      "description": "Read platform health: Reports whether this control plane can actually deploy anything..",
+      "digest": "sha256:7c97936eea80127cd3a6f8b57ff6bc22caaf5c8ee51d08c21c9552945b656259",
+      "name": "platform_health",
+      "service": "platform",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/platform_health/SKILL.md"
+    },
+    {
+      "description": "Read platform pipelines: Returns one build-and-deploy pipeline per app, with its latest run..",
+      "digest": "sha256:d765a6c93c2fbbb3a54ec28220308d9fab13453dbfc7ebf188e8a57bef784f23",
+      "name": "platform_pipelines",
+      "service": "platform",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/platform_pipelines/SKILL.md"
+    },
+    {
+      "description": "Read platform projects: Answers every project the caller may see, with how its apps stand., Answers one project and every app in it., Returns the applications in one project, with what the cluster says about them..",
+      "digest": "sha256:62f98e12e3d11d57d9980e5fab8a68913950eb02c524317d7d606a158e82beaa",
+      "name": "platform_projects",
+      "service": "platform",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/platform_projects/SKILL.md"
+    },
+    {
+      "description": "Read platform releases: Returns the versions that actually reached the cluster..",
+      "digest": "sha256:8061b5a93bdb9ee62245e4e91acf0fe67ed7e48c3eeda0f665122291e7ea65fd",
+      "name": "platform_releases",
+      "service": "platform",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/platform_releases/SKILL.md"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

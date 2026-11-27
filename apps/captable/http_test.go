@@ -1,0 +1,176 @@
+package captable
+
+import (
+	"bytes"
+	"encoding/json"
+	"io"
+	"net/http"
+	"net/http/httptest"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/hanzoai/cloud/internal/sqltest"
+	"github.com/hanzoai/cloud/sdk"
+	luxlog "github.com/luxfi/log"
+	"github.com/zap-proto/zip"
+)
+
+// compose installs what the program's composer installs — cloud.Bridge, once at
+// the app root. A subsystem never installs its own, so a test app owes the same
+// root install; without it every org-scoped op answers a 403 no production
+// program would produce.
+func compose(app *zip.App) { app.Use(cloud.Bridge()) }
+
+// mountApp builds a bare zip.App (no SanitizeIdentity middleware, so X-Org-Id +
+// X-User-Id are trusted verbatim — the standard cloud leaf test harness) and
+// mounts the captable leaf on it. This exercises the REAL HTTP path: routing →
+// body decode → principal gate → NewBase dispatch → per-tenant Base → response,
+// the same path the live binary serves under CLOUD_ENABLE=captable.
+func mountApp(t *testing.T) *zip.App {
+	t.Helper()
+	app := zip.New(zip.Config{Logger: luxlog.New("test")})
+	compose(app)
+	t.Setenv("CLOUD_DATA_DIR", t.TempDir())
+	if err := Use(app, cloud.Deps{}); err != nil {
+		t.Fatalf("Use:  %v", err)
+	}
+	t.Cleanup(func() { _ = Shutdown(nil) })
+	return app
+}
+
+func req(t *testing.T, app *zip.App, method, path, org string, body any) (int, []byte) {
+	t.Helper()
+	code, b, _ := probe(t, app, method, path, org, body)
+	return code, b
+}
+
+// probe is req plus the response's Content-Type. The relay wire includes that
+// header — the bundle's own envelopes go out under the bare `application/json`,
+// fiber's typed JSON writer adds `; charset=utf-8` — so a test that pins the
+// refusal wire has to be able to read it.
+func probe(t *testing.T, app *zip.App, method, path, org string, body any) (int, []byte, string) {
+	t.Helper()
+	var r io.Reader
+	if body != nil {
+		b, _ := json.Marshal(body)
+		r = bytes.NewReader(b)
+	}
+	rq := httptest.NewRequest(method, path, r)
+	if body != nil {
+		rq.Header.Set("Content-Type", "application/json")
+	}
+	if org != "" {
+		rq.Header.Set("X-Org-Id", org)
+		rq.Header.Set("X-User-Id", "u_"+org)       // validated principal (principal.Org gates on it)
+		rq.Header.Set("X-User-IsOrgAdmin", "true") // the org's owner administers it
+	}
+	// A generous timeout: fiber's 1s default is too tight for the in-memory harness
+	// under an occasional GC / cold-sqlite pause (the goja dispatch does real DB
+	// work), which would flake this suite.
+	resp, err := app.Test(rq, zip.TestConfig{Timeout: 30 * time.Second, FailOnTimeout: true})
+	if err != nil {
+		t.Fatalf("Test %s %s: %v", method, path, err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	b, _ := io.ReadAll(resp.Body)
+	return resp.StatusCode, b, resp.Header.Get("Content-Type")
+}
+
+// TestHTTPEndToEnd is the wire proof of the full captable fold over Base: the
+// principal gate, stakeholder create→read-back, security issuance reflected in
+// the computed cap table, the bundle's OWN 404 (not a proxy 502), and
+// cross-tenant isolation.
+func TestHTTPEndToEnd(t *testing.T) {
+	sqltest.Engines(t, func(t *testing.T, _ sqltest.Open) {
+		app := mountApp(t)
+
+		// No validated principal → 401 (the tenant gate).
+		if code, _ := req(t, app, http.MethodGet, "/v1/captable/stakeholders", "", nil); code != http.StatusUnauthorized {
+			t.Fatalf("no-org GET want 401, got %d", code)
+		}
+
+		// A missing round → the BUNDLE's own 404 JSON (a proxy would 502).
+		code, body := req(t, app, http.MethodGet, "/v1/captable/rounds/does-not-exist", "acme", nil)
+		if code != http.StatusNotFound {
+			t.Fatalf("missing round want 404, got %d (%s)", code, body)
+		}
+		if !strings.Contains(string(body), "round not found") {
+			t.Fatalf("expected the bundle's own 404 body, got %s", body)
+		}
+
+		// Create a stakeholder, then read it back.
+		code, body = req(t, app, http.MethodPost, "/v1/captable/stakeholders", "acme", map[string]any{
+			"name": "Ada Lovelace", "email": "ada@example.com",
+			"stakeholderType": "INDIVIDUAL", "currentRelationship": "FOUNDER",
+		})
+		if code != http.StatusCreated {
+			t.Fatalf("create stakeholder want 201, got %d (%s)", code, body)
+		}
+		code, body = req(t, app, http.MethodGet, "/v1/captable/stakeholders", "acme", nil)
+		if code != http.StatusOK {
+			t.Fatalf("list stakeholders want 200, got %d", code)
+		}
+		var stakeholders []map[string]any
+		if err := json.Unmarshal(body, &stakeholders); err != nil || len(stakeholders) != 1 {
+			t.Fatalf("read-back mismatch: %v (%s)", err, body)
+		}
+		if stakeholders[0]["email"] != "ada@example.com" {
+			t.Fatalf("read-back wrong stakeholder: %s", body)
+		}
+		founderID := stakeholders[0]["id"].(string)
+
+		// Issue a share class + 1,000,000 shares.
+		code, body = req(t, app, http.MethodPost, "/v1/captable/classes", "acme", map[string]any{
+			"name": "Common", "classType": "COMMON", "initialSharesAuthorized": 10000000,
+			"boardApprovalDate": "2026-01-01", "stockholderApprovalDate": "2026-01-02",
+			"votesPerShare": 1, "parValue": 0.0001, "pricePerShare": 0.0001, "seniority": 0,
+			"conversionRights": "CONVERTS_TO_FUTURE_ROUND", "convertsToShareClassId": nil,
+			"liquidationPreferenceMultiple": 1, "participationCapMultiple": 0,
+		})
+		if code != http.StatusCreated {
+			t.Fatalf("create share class want 201, got %d (%s)", code, body)
+		}
+		code, body = req(t, app, http.MethodGet, "/v1/captable/classes", "acme", nil)
+		if code != http.StatusOK {
+			t.Fatalf("list share classes: %d", code)
+		}
+		var classes []map[string]any
+		_ = json.Unmarshal(body, &classes)
+		shareClassID := classes[0]["id"].(string)
+
+		code, body = req(t, app, http.MethodPost, "/v1/captable/shares", "acme", map[string]any{
+			"stakeholderId": founderID, "shareClassId": shareClassID, "certificateId": "CS-1",
+			"quantity": 1000000, "status": "ACTIVE", "issueDate": "2026-01-03",
+			"boardApprovalDate": "2026-01-03", "cliffYears": 0, "vestingYears": 4,
+		})
+		if code != http.StatusCreated {
+			t.Fatalf("issue share want 201, got %d (%s)", code, body)
+		}
+
+		// The computed cap table must reflect the issuance.
+		code, body = req(t, app, http.MethodGet, "/v1/captable/summary", "acme", nil)
+		if code != http.StatusOK {
+			t.Fatalf("cap table want 200, got %d", code)
+		}
+		var ct map[string]any
+		_ = json.Unmarshal(body, &ct)
+		if ct["totals"].(map[string]any)["outstandingShares"].(float64) != 1000000 {
+			t.Fatalf("cap table did not reflect issuance: %s", body)
+		}
+		if pct := ct["byStakeholder"].([]any)[0].(map[string]any)["ownershipPct"].(float64); pct != 100 {
+			t.Fatalf("founder ownership want 100%%, got %v", pct)
+		}
+
+		// Cross-tenant isolation: globex sees none of acme's stakeholders.
+		code, body = req(t, app, http.MethodGet, "/v1/captable/stakeholders", "globex", nil)
+		if code != http.StatusOK {
+			t.Fatalf("globex list: %d", code)
+		}
+		var other []map[string]any
+		_ = json.Unmarshal(body, &other)
+		if len(other) != 0 {
+			t.Fatalf("cross-tenant leak: globex saw %d rows", len(other))
+		}
+	})
+}

@@ -1,0 +1,40 @@
+{
+  "$schema": "https://schemas.agentskills.io/discovery/0.2.0/schema.json",
+  "base_url": "https://api.hanzo.ai",
+  "brand": "hanzo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://hanzo.id",
+  "mcp": {
+    "description": "Model Context Protocol over JSON-RPC 2.0 — one POST per message, stateless, protocol revision 2026-07-28. tools/list answers without a credential with one tool per subsystem (its operations in the \"op\" enum) plus \"describe\", which returns one operation's input schema. tools/call names a subsystem tool and carries {\"op\": <operation>, \"input\": <its arguments>}; it takes the same bearer the REST API does, and a call that carries none is answered 401 with a WWW-Authenticate header naming the resource metadata at /.well-known/oauth-protected-resource, which names the authorization server to sign in at. The tool surface is the public contract: the operator's admin product is not offered, and a name that would disclose a secret or mutate an identity is withheld — the list says how many, under _meta.",
+    "method": "POST",
+    "url": "https://api.hanzo.ai/v1/mcp"
+  },
+  "skill_count": 3,
+  "skills": [
+    {
+      "description": "Read base bases: Lists every Base the caller can reach, one per org their token carries., Describes ONE org's Base — whether its store exists, and what it occupies..",
+      "digest": "sha256:f585e9c176a946d3cf837e7074bb3079eef5a21ee55ba9042cdc20d48a672555",
+      "name": "base_bases",
+      "service": "base",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/base_bases/SKILL.md"
+    },
+    {
+      "description": "Read base graphql: Read your org Base's GraphQL schema.",
+      "digest": "sha256:8570454fa00778db94013b03a3910b9d9b9e6868c5f30651d9d9ee8876ca2b7e",
+      "name": "base_graphql",
+      "service": "base",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/base_graphql/SKILL.md"
+    },
+    {
+      "description": "Read base health: Reports that the base subsystem is serving..",
+      "digest": "sha256:dc0433eec40b086248042d62bbbf36da0bc6eb3e871c752ccd93f1fbe4ff6db8",
+      "name": "base_health",
+      "service": "base",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/base_health/SKILL.md"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

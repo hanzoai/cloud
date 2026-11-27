@@ -2,6 +2,7 @@ package coord
 
 import (
 	"context"
+	"errors"
 	"time"
 )
 
@@ -81,6 +82,41 @@ func (c *Coord) Unquota(ctx context.Context, name string, keys []string) {
 		c.log.warn("unquota", "coord: the shared count is not answering; giving back in this process's", "quota", name, "err", err)
 	}
 	_ = c.local.Unquota(ctx, full)
+}
+
+// ErrHeld is a lease someone else holds.
+var ErrHeld = errors.New("coord: the lease is held")
+
+// Lease is the right to do one thing at a time across every pod: it answers the function
+// that takes the lease on key under name for at most ttl. That function answers the one that
+// gives the lease back, and the time the holder has left of it, so it can bound its work
+// inside it. A holder that dies loses the lease after ttl, so size ttl above the work and
+// below the wait a caller can bear. Giving the lease back after ttl has gone does nothing: by then it may be
+// another taker's, and lowering the count would let a third in beside them. Time is
+// measured from before the lease was asked for, on the monotonic clock, so a holder never
+// thinks it has longer than the count does. It is a Quota of one: a second taker is
+// ErrHeld, and a KV that cannot be asked on a deployment of several writers gives each pod a
+// share of one, which is none, so no pod is granted a lease it cannot be sure is exclusive.
+// A deployment of one writer is this process and counts exactly.
+func (c *Coord) Lease(name, key string, ttl time.Duration) func(ctx context.Context) (release func(), held time.Duration, err error) {
+	return func(ctx context.Context) (func(), time.Duration, error) {
+		start := time.Now()
+		if _, ok := c.Quota(ctx, name, []Window{{Key: key, Limit: 1, TTL: ttl}}); !ok {
+			return nil, 0, ErrHeld
+		}
+		// What is left of the lease, counted from before the store was asked: a slow answer
+		// takes its delay out of the holder's time. None left is a lease already over.
+		left := ttl - time.Since(start)
+		if left <= 0 {
+			return nil, 0, ErrHeld
+		}
+		return func() {
+			if time.Since(start) >= ttl {
+				return
+			}
+			c.Unquota(context.WithoutCancel(ctx), name, []string{key})
+		}, left, nil
+	}
 }
 
 // Counted is what each key under name has been charged by Quota, read without

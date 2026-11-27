@@ -3,7 +3,7 @@ package audit
 import (
 	"context"
 	"encoding/json"
-	"github.com/hanzoai/cloud/sdk/sqltest"
+	"github.com/hanzoai/cloud/internal/sqltest"
 	"testing"
 )
 

@@ -1,0 +1,57 @@
+# Addresses private.yaml publishes that the deployed api does NOT route.
+#
+# The INTERNAL document, because routing is not an audience question: an operator
+# address that 404s is as dark as a customer one, and probing the customer
+# contract alone would stop asking about the whole /v1/admin family.
+#
+# THIS FILE MAY ONLY SHRINK. openapi/reach.py probes every GET and HEAD the
+# document publishes — literal AND parameterised, filling each {param} with a
+# sentinel — against the host that is serving THIS release, since car 2 has
+# already proved `x-api-version` is ours and both sides are the same version. It
+# refuses:
+#
+#   a 404 that is not listed here  → a NEW dark address; the release goes red
+#   a line here that now answers   → delete the line, in the same commit
+#
+# Each line is a defect with an owner, not an exemption. An address in this
+# document is a method in every generated SDK, a tool in the MCP list and a
+# command in the CLI, so a line here is a call every client offers and no caller
+# can make.
+#
+# IT IS EMPTY, and that is a measurement, not a default. Probed against
+# api.hanzo.ai at v1.801.350: zero dark, across 748 addresses — 554 literal and
+# 194 parameterised. The parameterised ones had never been probed by anything
+# until the run that wrote this line: they are 36% of the document, and the only
+# thing that had ever been true of them was that nobody had looked. Anything that
+# appears here from now on arrived after this line.
+#
+# It did not start empty. Fourteen `/v1/pricing/*` addresses were dark — answered
+# by a Cloudflare worker that intercepted `/v1/pricing*` and `/v1/models*` by
+# naive prefix match and 404ed anything its ten-key KV lacked, while the origin
+# implemented every one of them twice over and never received the request. That
+# is closed: those paths now answer 200 from `server: hanzo`, the origin took
+# them back, and one path has one owner again — the one that can describe
+# itself. The remaining three (`/v1/billing/{gpu-eligibility,payment-methods,
+# payment-config}`) were a stale subset publishing addresses one binary had
+# already renamed; regenerating the document retired them.
+#
+# If you are adding a line: name the owner in a comment above it. A ratchet
+# nobody can read becomes an allowlist, and an allowlist is how a defect
+# becomes a feature.
+
+# ── hanzoai/o11y: liveness is not a customer address, and a callback is not a GET
+# Owner: hanzoai/o11y. /healthz, /livez and /readyz are zip's OPS surface — a
+# SECOND listener a deployment brings up when it names OPS_PORT, never the public
+# one (HIP-0119 §1) — so publishing them on the public document names an address
+# the public listener is not meant to answer. Measured: GET 404, POST 405, i.e.
+# something is routed there and it is not this. The two /complete/* addresses are
+# OAuth callbacks, which a bare GET with no code or state cannot satisfy.
+# The repair is in o11y's own projection, not in a route here.
+#
+# /readyz READS DIFFERENTLY BETWEEN PROBES, and it is the only line here that
+# does: back-to-back runs called it healed and then dark, the second naming
+# cloudflare as what answered. So the verdict on it describes the edge that day
+# rather than the origin, and the line stays until the origin is what replies —
+# the same reason the /v1/pricing/* lines above were not deleted while a worker
+# was answering for them. Deleting it on the healed reading puts it back on the
+# next run that sees the edge, and the ratchet only shrinks in one direction.

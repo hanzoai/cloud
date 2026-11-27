@@ -1,0 +1,222 @@
+package x402
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"net/http"
+	"time"
+
+	"github.com/hanzoai/cloud/apps/wallet"
+	"github.com/hanzoai/cloud/client"
+	commercepeer "github.com/hanzoai/cloud/client/commerce"
+	marketplacepeer "github.com/hanzoai/cloud/client/marketplace"
+	walletpeer "github.com/hanzoai/cloud/client/wallet"
+	"github.com/hanzoai/cloud/money"
+	"github.com/hanzoai/cloud/sdk"
+	"github.com/hanzoai/account"
+	"github.com/zap-proto/zip"
+)
+
+// peer.go — the three things a settlement needs that this process does not own.
+//
+// x402 is the RAIL and nothing else. What a resource costs and who is paid is the
+// marketplace's table; which address and ledger subject a payout wallet is, is
+// wallets'; the books both halves are written to are commerce's. Each of those was
+// reached through a process-global — x402.reg, wallets' live singleton,
+// finance.Current — and the fleet runs one binary per app, so in the shipped x402
+// process all three are nil and the rail could enforce nothing.
+//
+// So each is asked of the process that owns it, exactly as resource_billing_peer.go
+// asks commerce whether a create may run. The in-process client stays the FAST PATH
+// when the owner happens to be co-resident (a test, a fused composition); the plane
+// is the same policy over a socket when it is not. One policy, two transports.
+//
+// Every one of these fails CLOSED, and each says so in its own terms:
+//
+//   - the PRICE is unknown ⇒ error, never "free". A rail that reads its own
+//     outage as "nothing is priced" sells everything for nothing.
+//   - the PAYEE is unknown ⇒ not resolvable ⇒ 503. Nothing is served, nothing moves.
+//   - the LEDGER is unreachable ⇒ error ⇒ no settlement, no receipt, no dispatch.
+//
+// The PRICE has no exception, and it held one: cloud.ErrNoPeer — read as "no
+// marketplace in this fleet" — answered "nothing is priced". The plane cannot report
+// that fact. reach() calls an app absent when it cannot reach it and no ROUTER is
+// there to say otherwise (peer.go, and a killed peer leaves a socket file that
+// refuses every connection), so a marketplace that DIED read as a fleet that never
+// had one — and this process, which cannot price anything without that table, then
+// answered free for the entire catalogue.
+//
+// The exception bought nothing either: manifest/apps.go IS the fleet and it lists
+// marketplace beside x402, so a rail deployed without its table is a
+// misconfiguration, and one that refuses loudly costs less than one that quietly
+// sells the shop for nothing.
+
+// peerCallTimeout bounds one hop. A settlement is on the caller's request path,
+// so a peer that hangs must become a refusal rather than a held connection.
+const peerCallTimeout = 10 * time.Second
+
+// peerCtx states the tenant ONE hop acts for, on a context with no request behind
+// it — the one place zip reads a stated caller.
+//
+// A request-derived context cannot express it. zip prefers the gateway's assertion
+// and returns before it looks at a stated caller, so cloud.For inside a typed
+// handler forwards the INBOUND org and silently drops the one named here. The
+// payee's org is not the payer's, so that would credit the buyer's own ledger with
+// the seller's earnings and nothing would look wrong anywhere.
+//
+// It also detaches from the caller's cancellation, for the reason the resource
+// meter's debit does: money already owed must not be abandoned because a client
+// hung up mid-settlement.
+func peerCtx(org string) (context.Context, context.CancelFunc) {
+	return context.WithTimeout(cloud.For(context.Background(), org), peerCallTimeout)
+}
+
+// pricePeer asks the marketplace what a resource costs, when the table is not in
+// this process. Its answer is the same triple the in-process Registry returns.
+func pricePeer(ctx context.Context, resource string) (Terms, bool, error) {
+	cctx, cancel := context.WithTimeout(ctx, peerCallTimeout)
+	defer cancel()
+
+	out, err := marketplacepeer.MarketPrice(cctx, &client.PriceIn{Resource: resource})
+	switch {
+	case err != nil:
+		// Unreached is UNKNOWN, and an unknown price is never zero.
+		return Terms{}, false, fmt.Errorf("x402: price %s: %w", resource, err)
+	case out == nil:
+		// A void reply from a price table is not "free". Nothing answered.
+		return Terms{}, false, fmt.Errorf("x402: price %s: marketplace answered nothing", resource)
+	case !out.Priced:
+		return Terms{}, false, nil
+	}
+	amount, err := out.Amount.Parse()
+	if err != nil {
+		// A price that cannot be read is not a price of zero.
+		return Terms{}, false, fmt.Errorf("x402: price %s: %w", resource, err)
+	}
+	if amount.Sign() <= 0 {
+		return Terms{}, false, nil
+	}
+	return Terms{
+		Amount:            money.FromDecimal(amount.Decimal()),
+		RecipientOrg:      out.RecipientOrg,
+		RecipientWalletID: out.RecipientWalletID,
+		Asset:             out.Asset,
+		Network:           out.Network,
+		Category:          out.Category,
+		PayTo:             out.PayTo,
+	}, true, nil
+}
+
+// payeeOf resolves the payout wallet a listing named — in this process when wallets
+// is here, over the plane when it is not.
+//
+// The org is the LISTING's publisher and is stated as the tenant the call acts for,
+// so the lookup is scoped exactly as the in-process one is: wallets resolves an id
+// only within the org it is asked for, and a wallet outside that org resolves to
+// nothing. A buyer cannot redirect a credit over a socket any more than it could in
+// memory, because the org never came from the buyer either way.
+func payeeOf(ctx context.Context, org, walletID string) (wallet.PaymentTarget, bool) {
+	if target, ok := wallet.ResolvePaymentTarget(ctx, org, walletID); ok {
+		return target, true
+	}
+	if wallet.Live() {
+		return wallet.PaymentTarget{}, false // wallets is HERE and says no such wallet
+	}
+	return payeePeer(org, walletID)
+}
+
+func payeePeer(org, walletID string) (wallet.PaymentTarget, bool) {
+	cctx, cancel := peerCtx(org)
+	defer cancel()
+
+	out, err := walletpeer.WalletsPayee(cctx, &client.PayeeIn{WalletID: walletID})
+	if err != nil || out == nil || !out.Found {
+		return wallet.PaymentTarget{}, false
+	}
+	return wallet.PaymentTarget{Address: out.Address, Org: org, Subject: out.Subject}, true
+}
+
+// debitPeer draws the payment through the process that owns the ledger, with the
+// settlement id as the draw's ref, which is what makes a retried authorization
+// charge once. A wallet that cannot cover it answers 402, and that is [errShort]:
+// nothing moved.
+func debitPeer(st *Settlement, amount money.Amount) error {
+	cctx, cancel := peerCtx(st.PayerOrg)
+	defer cancel()
+
+	_, err := commercepeer.FinanceDraw(cctx, &client.DrawIn{
+		Subject: st.wallet(),
+		Amount:  client.Amount(amount.Unwrap()),
+		Ref:     st.ID,
+		Memo:    st.Resource,
+	})
+	var he *zip.HTTPError
+	if errors.As(err, &he) && he.Status == http.StatusPaymentRequired {
+		return fmt.Errorf("%w: %v", errShort, err)
+	}
+	if err != nil {
+		return fmt.Errorf("x402: draw from the payer over the plane: %w", err)
+	}
+	return nil
+}
+
+// holdPeer sets a payment aside through the process that owns the ledger. A wallet
+// that cannot cover it answers 402, and that is [errShort]: nothing moved.
+func holdPeer(payer account.Account, id, resource string, amount money.Amount) error {
+	cctx, cancel := peerCtx(payer.Org())
+	defer cancel()
+
+	_, err := commercepeer.FinanceHold(cctx, &client.HoldIn{
+		Subject: payer.Subject(),
+		Amount:  client.Amount(amount.Unwrap()),
+		Ref:     id,
+		Memo:    resource,
+	})
+	var he *zip.HTTPError
+	switch {
+	case errors.As(err, &he) && he.Status == http.StatusPaymentRequired:
+		return fmt.Errorf("%w: %v", errShort, err)
+	case errors.As(err, &he) && he.Status == http.StatusConflict:
+		return fmt.Errorf("%w: %v", errGivenUp, err)
+	case err != nil:
+		return fmt.Errorf("x402: hold the payment over the plane: %w", err)
+	}
+	return nil
+}
+
+// returnPeer gives a hold back through the process that owns the ledger.
+func returnPeer(payer account.Account, id, resource string) (money.Amount, error) {
+	cctx, cancel := peerCtx(payer.Org())
+	defer cancel()
+
+	out, err := commercepeer.FinanceReturn(cctx, &client.ReturnIn{Subject: payer.Subject(), Ref: id, Memo: resource})
+	if err != nil {
+		return money.Zero(), fmt.Errorf("x402: return the payment over the plane: %w", err)
+	}
+	back, err := out.Amount.Parse()
+	if err != nil {
+		return money.Zero(), fmt.Errorf("x402: return the payment over the plane: %w", err)
+	}
+	return money.FromDecimal(back.Decimal()), nil
+}
+
+// creditPeer credits a subject through the process that owns the ledger, keyed on
+// ref so the credit is exactly-once whatever retries it.
+func creditPeer(org, subject string, amount money.Amount, ref, notes string) error {
+	cctx, cancel := peerCtx(org)
+	defer cancel()
+
+	_, err := commercepeer.FinanceCredit(cctx,
+		&client.CreditIn{
+			Subject: subject,
+			Amount:  client.Amount(amount.Unwrap()),
+			Ref:     ref,
+			Notes:   notes,
+			Tags:    "x402",
+		})
+	if err != nil {
+		return fmt.Errorf("x402: credit %s over the plane: %w", subject, err)
+	}
+	return nil
+}

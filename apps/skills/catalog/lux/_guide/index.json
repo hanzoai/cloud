@@ -1,0 +1,94 @@
+{
+  "$schema": "https://schemas.agentskills.io/discovery/0.2.0/schema.json",
+  "base_url": "https://api.lux.network",
+  "brand": "lux",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://lux.id",
+  "mcp": {
+    "description": "Model Context Protocol over JSON-RPC 2.0 — one POST per message, stateless, protocol revision 2026-07-28. tools/list answers without a credential with one tool per subsystem (its operations in the \"op\" enum) plus \"describe\", which returns one operation's input schema. tools/call names a subsystem tool and carries {\"op\": <operation>, \"input\": <its arguments>}; it takes the same bearer the REST API does, and a call that carries none is answered 401 with a WWW-Authenticate header naming the resource metadata at /.well-known/oauth-protected-resource, which names the authorization server to sign in at. The tool surface is the public contract: the operator's admin product is not offered, and a name that would disclose a secret or mutate an identity is withheld — the list says how many, under _meta.",
+    "method": "POST",
+    "url": "https://api.lux.network/v1/mcp"
+  },
+  "skill_count": 9,
+  "skills": [
+    {
+      "description": "Read guide actions: Returns the caller org's Business AI action ledger, most recent first: every \"do it for me\" tool call, the arguments it ran with, its result and whether it succeeded..",
+      "digest": "sha256:86d35531ddef3963ca0841cacb781a4d96b782b16d9f85c56f8ab08595d7ca72",
+      "name": "guide_actions",
+      "service": "guide",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/guide_actions/SKILL.md"
+    },
+    {
+      "description": "Read guide analytics: Returns the caller org's funnel from the analytics lens plus the GTM recommendations derived from it..",
+      "digest": "sha256:0baefa15616420d0de2291c06816e9d6561c0634bcb7b3f08f5b99f1834ecfeb",
+      "name": "guide_analytics",
+      "service": "guide",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/guide_analytics/SKILL.md"
+    },
+    {
+      "description": "Read guide curriculum: Returns the journey the caller's org is actually running, and whether it comes from the org's OWN override (custom) or from the platform default — the brand blueprint, else the embedded fixture..",
+      "digest": "sha256:2de6c155ac4d6416c669d08a2df7d53bb0c35dab59e2209befd874b2966be020",
+      "name": "guide_curriculum",
+      "service": "guide",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/guide_curriculum/SKILL.md"
+    },
+    {
+      "description": "Read guide guide: Returns the caller org's launch journey: the active curriculum's version and title, every step with its state, whether it is available, what blocks it and whether the Business AI can run it, the done/total/percent progress with the next step to take, and the org",
+      "digest": "sha256:a3f11705e3ddef990b4ac9e446673358b6e0e0f43f81480b702f8fa16aeb1657",
+      "name": "guide_guide",
+      "service": "guide",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/guide_guide/SKILL.md"
+    },
+    {
+      "description": "Read guide portfolio: Returns the studio's portfolio operations rollup: stage, status, checklist progress, decisions waiting on people, latest evidence, failed runs, and spend for every venture operated by the studio organization..",
+      "digest": "sha256:33be35c5e6062eeb1950c11c61bceccff9fbcd5b9f4292be8a24494b2b404daa",
+      "name": "guide_portfolio",
+      "service": "guide",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/guide_portfolio/SKILL.md"
+    },
+    {
+      "description": "Read guide profile: Returns the caller org's OBSERVED growth profile — the signal set, the classified growth stage, and the org's own key metrics..",
+      "digest": "sha256:52e5f76293e4de4d4d443ce776c91c74e893c0a34e12a3fa1149c86e94baa08a",
+      "name": "guide_profile",
+      "service": "guide",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/guide_profile/SKILL.md"
+    },
+    {
+      "description": "Read guide strategies: Returns the ENABLED tactics corpus for the caller's org: the tactics library narrowed by the explicit category/workload filters AND by the org's OBSERVED growth stage and capability signals (a tactic's tags are preconditions, so it surfaces only once the or",
+      "digest": "sha256:55c9631f29f09045d50cac4c2bd50c19f80b2bf01a2b39a7b370bbbd05ce9eb7",
+      "name": "guide_strategies",
+      "service": "guide",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/guide_strategies/SKILL.md",
+      "works": [
+        "product"
+      ]
+    },
+    {
+      "description": "Read guide suggest: Returns the caller org's next-best quests: the available, non-terminal steps of its journey ranked by how much downstream work each unblocks, each with the grounded reason it is a good next move and whether the Business AI can run it, plus the org's funnel and",
+      "digest": "sha256:52b751ddbecb424dee7b5494894dea0df8b0e9450ca1bedcffff1198fe3c338d",
+      "name": "guide_suggest",
+      "service": "guide",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/guide_suggest/SKILL.md",
+      "works": [
+        "director"
+      ]
+    },
+    {
+      "description": "Read guide ventures: Returns every venture in the caller studio organization's portfolio that the caller is authorized to access, with its live checklist progress and shared studio templates., Returns one venture from the caller studio's portfolio by slug, including its setup che",
+      "digest": "sha256:c0f88a54dc87f030446cade3f603303752035cac2fe6c95757b768c94acc9aa6",
+      "name": "guide_ventures",
+      "service": "guide",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/guide_ventures/SKILL.md"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

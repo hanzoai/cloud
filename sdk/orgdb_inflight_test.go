@@ -20,11 +20,12 @@ import (
 // closing that channel is not bookkeeping — it is the only thing that ever wakes
 // those waiters, and it has to happen on EVERY exit from the open.
 //
-// A panic anywhere in the hydrate or the open therefore left the entry in the
-// map with its channel open forever: every later caller for that org blocked,
-// permanently, for the life of the process. Nothing logged it, the pod stayed
-// Ready, and only the namespaces that had already opened cleanly kept working —
-// which reads exactly like a partial outage of unknown cause.
+// It used to happen only on a normal return. A panic anywhere in the hydrate or
+// the open therefore left the entry in the map with its channel open forever:
+// every later caller for that org blocked, permanently, for the life of the
+// process. Nothing logged it, the pod stayed Ready, and only the namespaces that
+// had already opened cleanly kept working — which reads exactly like a partial
+// outage of unknown cause.
 //
 // Mutation-checked: drop the `defer` in forNS and the second open below never
 // returns, so this test fails on the timeout rather than silently passing.

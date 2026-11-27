@@ -1,0 +1,206 @@
+# universe charts/app/values/hanzo/kms-grants.yaml: the grants.yaml it ships.
+enforce: false
+grants:
+# ── from the charts: kms_grants.py derives these, and CI holds them equal ──
+- holder: hanzo-chat
+  org: hanzo
+  from: charts
+  read:
+  - {path: /chat-secrets, env: prod, keys: [AGE_IDENTITY, AGE_RECIPIENT]}
+  - {path: /hanzo-s3, env: prod, keys: [access-key, secret-key]}
+- holder: hanzo-livekit
+  org: hanzo
+  from: charts
+  read:
+  - {path: /livekit-secrets, env: prod, keys: [keys.yaml]}
+- holder: hanzo-operator
+  org: hanzo
+  from: charts
+  read:
+  - {path: /, env: prod, keys: [COMMERCE_SERVICE_TOKEN, CONSOLE_PUBLIC_KEY, CONSOLE_SECRET_KEY]}
+  - {path: /adnexus-datastore, env: prod, keys: [DATASTORE_PASSWORD]}
+  - {path: /adnexus-sql, env: prod, keys: [SQL_PASSWORD]}
+  - {path: /ai, env: prod, keys: [OPENROUTER_API_KEY, OPENROUTER_API_KEYS, OPENROUTER_API_KEY_2, OPENROUTER_API_KEY_3, OPENROUTER_API_KEY_4, OPENROUTER_API_KEY_5, OPENROUTER_API_KEY_6, OPENROUTER_API_KEY_7]}
+  - {path: /aml, env: prod, keys: [AML_TOKEN_KEY]}
+  - {path: /base-iam-secret, env: prod, keys: [IAM_CLIENT_ID, IAM_CLIENT_SECRET]}
+  - {path: /bootnode-iam, env: prod, keys: [KMS_CLIENT_ID, KMS_CLIENT_SECRET]}
+  - {path: /bootnode-secrets, env: prod, keys: [COMMERCE_WEBHOOK_SECRET, HANZO_AI_API_KEY, api-key-salt, database-url, datastore-url, jwt-secret]}
+  - {path: /bot-browser, env: prod, keys: [NOVNC_PASSWORD]}
+  - {path: /bot-secrets, env: prod, keys: [ANTHROPIC_API_KEY, API_KEY, BOT_GATEWAY_TOKEN, COMMERCE_TOKEN, HANZO_API_KEY, KMS_CLIENT_SECRET, KV_URL]}
+  - {path: /captable-secrets, env: prod, keys: [DATABASE_URL, HANZO_IAM_CLIENT_SECRET, NEXTAUTH_SECRET, UPLOAD_ACCESS_KEY_ID, UPLOAD_SECRET_ACCESS_KEY]}
+  - {path: /cd, env: prod, keys: [forge-token, token]}
+  - {path: /chat-guest-key, env: prod, keys: [API_KEY]}
+  - {path: /chat-secrets, env: prod, keys: [ANTHROPIC_API_KEY, API_KEY, COMMERCE_TOKEN, CREDS_IV, CREDS_KEY, HANZO_API_KEY, JWT_REFRESH_SECRET, JWT_SECRET, MEILI_MASTER_KEY, MONGO_PASSWORD, MONGO_URI, OPENAI_API_KEY, OPENID_CLIENT_SECRET, WEBSEARCH_API_KEY]}
+  - {path: /cloud, env: prod, keys: [CI_GIT_TOKEN, CLOUD_AGENT_KEY, CLOUD_AI_API_KEY, CODE_EXEC_API_KEY, O11Y_DATASTORE_DSN, O11Y_TOKENIZER_JWT_SECRET, SPARK_VIDEO_API_KEY, WIDGET_KEYS, WIDGET_KEY_OWNERS]}
+  - {path: /cloud, env: testnet, keys: [CLOUD_KMS_MASTER_KEY, SQUARE_SANDBOX_ACCESS_TOKEN, SQUARE_SANDBOX_APPLICATION_ID, SQUARE_SANDBOX_LOCATION_ID]}
+  - {path: /cloud-api-secrets, env: prod, keys: [O11Y_ERRORTRACKING_INGEST_SECRET]}
+  - {path: /cloud-sign, env: prod, keys: [CLOUD_SIGN_CERT_PEM, CLOUD_SIGN_KEY_PEM]}
+  - {path: /cloudflare-api-credentials, env: prod, keys: [APIKEY, EMAIL]}
+  - {path: /cms, env: prod, keys: [PAYLOAD_SECRET]}
+  - {path: /commerce-secrets, env: prod, keys: [HUSD_TREASURY_KEY, MPC_API_KEY, SQUARE_ACCESS_TOKEN, SQUARE_APPLICATION_ID, SQUARE_ENVIRONMENT, SQUARE_LOCATION_ID, SQUARE_SANDBOX_ACCESS_TOKEN, SQUARE_SANDBOX_APPLICATION_ID, SQUARE_SANDBOX_LOCATION_ID, SQUARE_WEBHOOK_SIGNATURE_KEY]}
+  - {path: /ghcr-secret, env: prod, keys: [.dockerconfigjson]}
+  - {path: /hanzo-s3, env: prod, keys: [access-key, endpoint, external-endpoint, region, secret-key]}
+  - {path: /iam-service-token, env: prod, keys: [IAM_SERVICE_TOKEN]}
+  - {path: /iam/clients/hanzo-bot, env: prod, keys: [clientSecret]}
+  - {path: /iam/clients/hanzo-link, env: prod, keys: [clientId, clientSecret]}
+  - {path: /iam/clients/hanzo-visor, env: prod, keys: [clientSecret]}
+  - {path: /integrations, env: prod, keys: [CLOUD_INTEGRATIONS_STATE_KEY]}
+  - {path: /integrations/cloudflare, env: prod, keys: [OAUTH_CLIENT_ID, OAUTH_CLIENT_SECRET]}
+  - {path: /mcp-gateway, env: prod, keys: [ZROK2_ENABLE_TOKEN]}
+  - {path: /mpc, env: default, keys: [MPC_INTERNAL_API_KEY]}
+  - {path: /mpc-secrets, env: prod, keys: [jwt-secret, mpc-password]}
+  - {path: /platform, env: prod, keys: [GITHUB_APP_CLIENT_SECRET, PLATFORM_BUILD_CALLBACK_TOKEN]}
+  - {path: /registry-credentials, env: prod, keys: [.dockerconfigjson]}
+  - {path: /s3, env: prod, keys: [BACKUP_ACCESS_KEY, BACKUP_SECRET_KEY]}
+  - {path: /superbase-iam, env: prod, keys: [IAM_CLIENT_ID, IAM_CLIENT_SECRET]}
+  - {path: /team, env: prod, keys: [SERVER_SECRET, iam_client_id, iam_client_secret]}
+  - {path: /vector, env: prod, keys: [VECTOR_API_KEY]}
+  - {path: /world-secrets, env: prod, keys: [DIGITALOCEAN_ACCESS_TOKEN, HANZO_AI_KEY, HANZO_AI_MODEL]}
+  - {path: /zrok-oauth, env: prod, keys: [ZROK_OAUTH_CLIENT_ID, ZROK_OAUTH_CLIENT_SECRET, ZROK_OAUTH_ENCRYPTION_KEY, ZROK_OAUTH_SIGNING_KEY]}
+- holder: hanzo-pkg
+  org: hanzo
+  from: charts
+  read:
+  - {path: /pkg, env: prod, keys: [htpasswd]}
+- holder: hanzo-visor
+  org: hanzo
+  from: charts
+  read:
+  - {path: /visor-config, env: prod, keys: [VISOR_CONFIG__APP_CONF]}
+# ── declared by hand ────────────────────────────────────────────────
+- holder: hanzo-operator
+  org: hanzo
+  why: >-
+    A live KMSSecret projects it, and no chart and no manifest the
+    cluster syncs declares that reader, so no derivation can find it.
+  read:
+  - {path: /cloudflare, env: prod, keys: [CF_API_EMAIL, CF_API_KEY]}
+- holder: hanzo-ci
+  org: hanzo
+  why: >-
+    The build workflows (hanzoai/ci build.yml and every repo's hanzo.yml,
+    all at /deploy@prod) and the publish jobs read these with the CI
+    KMS_CLIENT_ID. No chart declares a CI reader. The site action
+    (hanzoai/ci .github/actions/site) reads the deploy token at the org
+    root, so a site repo holding this identity needs it there too.
+  read:
+  - {path: /deploy, env: prod, keys: [GITHUB_TOKEN, PACKAGE_TOKEN, KUBECONFIG, REGISTRY_USER, REGISTRY_PASSWORD, UNIVERSE_PIN_TOKEN, PUBLISHABLE_KEY, EVENT_INGEST_KEY, HANZO_DEPLOY_TOKEN, VITE_MAPBOX_TOKEN]}
+  - {path: /, env: prod, keys: [NPM_TOKEN, HANZO_DEPLOY_TOKEN, CARGO_REGISTRY_TOKEN, PYPI_TOKEN, DECK_PASS, MAVEN_CENTRAL_USERNAME, MAVEN_CENTRAL_PASSWORD, MAVEN_GPG_PRIVATE_KEY, MAVEN_GPG_PASSPHRASE]}
+  - {path: /review, env: prod, keys: [IAM_CLIENT_ID, IAM_CLIENT_SECRET]}
+  - {path: /platform, env: prod, keys: [PLATFORM_BUILD_CALLBACK_TOKEN]}
+  - {path: /insights, env: prod, keys: [E2E_PASSWORD]}
+  - {path: /storage, env: prod, keys: ["*"]}
+  - {path: /s3-credentials, env: prod, keys: ["*"]}
+  - {path: /python-sdk-publish, env: prod, keys: [PYPI_TOKEN, HANZO_AI_PYPI_TOKEN]}
+  - {path: /extension-publish, env: prod, keys: [CHROME_EXTENSION_ID, CHROME_CLIENT_ID, CHROME_CLIENT_SECRET, CHROME_REFRESH_TOKEN, AMO_API_KEY, AMO_API_SECRET]}
+- holder: hanzo-sites-ci
+  org: hanzo
+  why: >-
+    The site lane of hanzoai/ci build.yml, run for the hanzo-apps site
+    repos, reads at /deploy@prod (the kms.path default): the deploy token
+    that publishes a release, and the publishable key a site build inlines.
+    It also reads the deploy set the build lane reads (clone, package,
+    registry, cluster) and the deploy token at the org root.
+  read:
+  - {path: /, env: prod, keys: [HANZO_DEPLOY_TOKEN]}
+  - {path: /deploy, env: prod, keys: [GITHUB_TOKEN, HANZO_DEPLOY_TOKEN, KUBECONFIG, PACKAGE_TOKEN, PUBLISHABLE_KEY, REGISTRY_PASSWORD, REGISTRY_USER]}
+- holder: lux-ci
+  org: lux
+  why: build.yml reads the deploy set for lux* repos, and npm publishes with NPM_TOKEN.
+  read:
+  - {path: /, env: prod, keys: [NPM_TOKEN]}
+  - {path: /deploy, env: prod, keys: [GITHUB_TOKEN, PACKAGE_TOKEN, KUBECONFIG, REGISTRY_USER, REGISTRY_PASSWORD, UNIVERSE_PIN_TOKEN, PUBLISHABLE_KEY, EVENT_INGEST_KEY, HANZO_DEPLOY_TOKEN, VITE_MAPBOX_TOKEN]}
+- holder: zoo-ci
+  org: zoo
+  why: build.yml reads the deploy set for zoo repos; zoo's CI keeps its own under /ci.
+  read:
+  - {path: /ci, env: prod, keys: ["*"]}
+  - {path: /deploy, env: prod, keys: [GITHUB_TOKEN, PACKAGE_TOKEN, KUBECONFIG, REGISTRY_USER, REGISTRY_PASSWORD, UNIVERSE_PIN_TOKEN, PUBLISHABLE_KEY, EVENT_INGEST_KEY, HANZO_DEPLOY_TOKEN, VITE_MAPBOX_TOKEN]}
+- holder: hanzo-admin-agent
+  org: hanzo
+  why: >-
+    cloud's own release pipeline (hanzo-inc/cloud .hanzo/workflows/cicd.yml)
+    logs in as hanzo-admin-agent: the reviewer reads its IAM client.
+    Its pin step is hanzo-cloud-release's, below. hanzoai/ci build.yml
+    logs in as the same client for every hanzo-org repo it builds and
+    reads the deploy set: clone, package, registry and deploy.
+  read:
+  - {path: /deploy, env: prod, keys: [GITHUB_TOKEN, PACKAGE_TOKEN, KUBECONFIG, REGISTRY_USER, REGISTRY_PASSWORD, UNIVERSE_PIN_TOKEN]}
+  - {path: /review, env: prod, keys: [IAM_CLIENT_ID, IAM_CLIENT_SECRET]}
+  - {path: /cloud, env: prod, keys: [GH_TOKEN]}
+  # Webby AI's Intel Hub (webby-ai/intel-hub, built from its forge mirror
+  # hanzoai/intel-hub) sets kms.path /deploy/webby-ai: the publishable key
+  # its build inlines and the deploy token for Webby AI's own Sites project.
+  # Read only, this path only (owner, 2026-09-30).
+  - {path: /deploy/webby-ai, env: prod, keys: ["*"]}
+- holder: hanzo-cloud-release
+  org: hanzo
+  why: >-
+    hanzo-inc/cloud's pin step (.hanzo/workflows/cicd.yml) logs in as
+    hanzo-cloud-release and signs a one-hour hanzoai/universe token with
+    the platform GitHub App key. The App id is public (GET
+    /apps/hanzo-platform); the key is the one secret it reads.
+  read:
+  - {path: /platform, env: prod, keys: [GITHUB_APP_ID, GITHUB_APP_PRIVATE_KEY]}
+- holder: hanzo-platform
+  org: hanzo
+  why: >-
+    cloud's platform app logs in as hanzo-platform and reads the deploy set
+    a build it runs is handed (clone, package, registry, cluster, deploy
+    token) and the npm token at the org root. It is also the hanzoai
+    GitHub org's KMS_CLIENT_ID, and the hanzoai/ci site action a hanzoai
+    site repo publishes with reads the deploy token at the org root.
+  read:
+  - {path: /, env: prod, keys: [NPM_TOKEN, HANZO_DEPLOY_TOKEN]}
+  - {path: /deploy, env: prod, keys: [GITHUB_TOKEN, HANZO_DEPLOY_TOKEN, KUBECONFIG, PACKAGE_TOKEN, REGISTRY_PASSWORD, REGISTRY_USER]}
+- holder: hanzo/z
+  org: hanzo
+  why: >-
+    The owner's hanzo-cli: the zap links it dials, the CI identities it
+    rotates (hanzo-ci, lux-ci, zoo-ci), the deploy tokens it reads and
+    replaces, and the test accounts the end-to-end suites seal at /e2e.
+  read:
+  - {path: /zap/links/a, env: prod, keys: ["*"]}
+  - {path: /zap/links/z, env: prod, keys: ["*"]}
+  - {path: /iam/clients/hanzo-ci, env: prod, keys: [KMS_CLIENT_ID, KMS_CLIENT_SECRET]}
+  - {path: /iam/clients/lux-ci, env: prod, keys: [KMS_CLIENT_ID, KMS_CLIENT_SECRET]}
+  - {path: /iam/clients/zoo-ci, env: prod, keys: [KMS_CLIENT_ID, KMS_CLIENT_SECRET]}
+  - {path: /deploy, env: prod, keys: [GITHUB_TOKEN, PACKAGE_TOKEN]}
+  - {path: /e2e, env: prod, keys: ["*"]}
+  write:
+  - {path: /e2e, env: prod, keys: ["*"]}
+  - {path: /iam/clients/hanzo-ci, env: prod, keys: [KMS_CLIENT_ID, KMS_CLIENT_SECRET]}
+  - {path: /iam/clients/lux-ci, env: prod, keys: [KMS_CLIENT_ID, KMS_CLIENT_SECRET]}
+  - {path: /iam/clients/zoo-ci, env: prod, keys: [KMS_CLIENT_ID, KMS_CLIENT_SECRET]}
+  - {path: /deploy, env: prod, keys: [PACKAGE_TOKEN]}
+- holder: hanzo/a
+  org: hanzo
+  why: The second hanzo-cli login on the owner's machines, which dials the zap links under /zap/links/z.
+  read:
+  - {path: /zap/links/z, env: prod, keys: ["*"]}
+- holder: hanzo-bootnode
+  org: hanzo
+  from: charts/app/values/hanzo/bootnode.yaml
+  why: >-
+    bootnode's pod logs in with its own client (HANZO_KMS_CLIENT_ID, from
+    bootnode-iam-creds) and reads its folder at env production. Probably
+    inert; it stays only if the enforce: false measurement shows reads.
+  read:
+  - {path: /bootnode, env: production, keys: ["*"]}
+- holder: hanzo-world-svc
+  org: hanzo
+  from: charts/app/values/hanzo/world.yaml
+  why: >-
+    world's pod logs in with the IAM app world-svc (KMS_CLIENT_ID, from
+    hanzo-world-iam-creds; iam-provision.yaml declares it). No chart says
+    what it reads, so it holds nothing yet: its would-deny lines under
+    enforce: false are the list to grant here before the enforce line goes.
+- holder: hanzo-bot
+  org: hanzo
+  from: charts/app/values/hanzo/bot-gateway.yaml
+  why: >-
+    bot-gateway's pod is handed KMS_CLIENT_SECRET (env, and a key of its
+    /bot-secrets KMSSecret) beside IAM_CLIENT_ID hanzo-bot, the only client
+    it names. It sets no KMS_CLIENT_ID, so a KMS login from it names no
+    client and is probably inert; it holds nothing until the enforce: false
+    measurement shows reads under hanzo-bot.

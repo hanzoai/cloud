@@ -1,0 +1,56 @@
+{
+  "$schema": "https://schemas.agentskills.io/discovery/0.2.0/schema.json",
+  "base_url": "https://api.lux.network",
+  "brand": "lux",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://lux.id",
+  "mcp": {
+    "description": "Model Context Protocol over JSON-RPC 2.0 — one POST per message, stateless, protocol revision 2026-07-28. tools/list answers without a credential with one tool per subsystem (its operations in the \"op\" enum) plus \"describe\", which returns one operation's input schema. tools/call names a subsystem tool and carries {\"op\": <operation>, \"input\": <its arguments>}; it takes the same bearer the REST API does, and a call that carries none is answered 401 with a WWW-Authenticate header naming the resource metadata at /.well-known/oauth-protected-resource, which names the authorization server to sign in at. The tool surface is the public contract: the operator's admin product is not offered, and a name that would disclose a secret or mutate an identity is withheld — the list says how many, under _meta.",
+    "method": "POST",
+    "url": "https://api.lux.network/v1/mcp"
+  },
+  "skill_count": 5,
+  "skills": [
+    {
+      "description": "Read risk features: The feature catalogue: what the model reads, and what your surface carries.",
+      "digest": "sha256:b4c4afb7d3367c67ba3c18ecd05fba945602ccdb232750e0f7d181b81c35f943",
+      "name": "risk_features",
+      "service": "risk",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/risk_features/SKILL.md"
+    },
+    {
+      "description": "Read risk health: Whether the risk model plane can actually work right now.",
+      "digest": "sha256:51dce7aa8e261bfcacd0ea4b8831dca83aea73fca8ecfa4c633dd9767efa7ce6",
+      "name": "risk_health",
+      "service": "risk",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/risk_health/SKILL.md"
+    },
+    {
+      "description": "Read risk policy: Your organisation's decision-regime history, and which version is in force.",
+      "digest": "sha256:072cc38028cc0473c66ca3c737505a57597eae0ad039889874611872d5139946",
+      "name": "risk_policy",
+      "service": "risk",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/risk_policy/SKILL.md"
+    },
+    {
+      "description": "Read risk search: Read back one exhaustive search.",
+      "digest": "sha256:7fb76541a15c972b2875011e34063af8917e35c65e8ee4f2cb6772cd1aa62c36",
+      "name": "risk_search",
+      "service": "risk",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/risk_search/SKILL.md"
+    },
+    {
+      "description": "Read risk state: Report your organisation's model: what it learned, and what it realised.",
+      "digest": "sha256:0630587da40e927916a814d4e39e7fc539d0178eb0c9bd8873c56dca7453a5e8",
+      "name": "risk_state",
+      "service": "risk",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/risk_state/SKILL.md"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

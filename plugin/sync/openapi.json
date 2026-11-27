@@ -1,0 +1,546 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Hanzo Cloud API",
+    "description": "Package sync is data sync: link two endpoints and keep them in step, on a webhook, on a schedule, or on demand.",
+    "version": "v1"
+  },
+  "servers": [
+    {
+      "url": "https://api.hanzo.ai"
+    }
+  ],
+  "security": [
+    {
+      "bearer": []
+    }
+  ],
+  "tags": [
+    {
+      "name": "sync"
+    }
+  ],
+  "paths": {
+    "/v1/sync": {
+      "get": {
+        "operationId": "get_sync",
+        "summary": "Returns every sync link the caller's org has, each with its two endpoints, its direction and trigger policy, the time it last reconciled, and for a repo link its native copy on the forge — the address to clone it from, its default branch and whether it is in step.",
+        "description": "Returns every sync link the caller's org has, each with its two endpoints, its\ndirection and trigger policy, the time it last reconciled, and for a repo link its\nnative copy on the forge — the address to clone it from, its default branch and\nwhether it is in step. Scoped to the caller's own org — another tenant's links are\nstructurally unreachable.",
+        "tags": [
+          "sync"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/sync.syncList"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      },
+      "post": {
+        "operationId": "post_sync",
+        "summary": "Declares a sync between two endpoints and returns it.",
+        "description": "Declares a sync between two endpoints and returns it. It is an UPSERT:\nre-declaring the same source and target updates that link rather than piling up\nduplicates, so a console that re-submits is safe. The org comes from the validated\nprincipal, never from the request, so a sync can only ever bind endpoints inside\nthe caller's own org. A git source must be an https clone URL on the provider's own\nhost with no embedded credentials; a target left empty is derived as a native\nrepository named after the source. A source naming only a GitHub account\n(https://github.com/\u003caccount\u003e) links the whole account: every repository the org's\nGitHub installation grants on it gets a repo link of its own, with this link's\ndirection and trigger, and so does every repository created there later. With run=true the first reconcile is queued in\nthe background, so a large initial import never blocks this response.",
+        "tags": [
+          "sync"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "run": true,
+                "source": {
+                  "locator": "https://github.com/acme/site",
+                  "provider": "github"
+                }
+              },
+              "schema": {
+                "$ref": "#/components/schemas/sync.syncReq"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/sync.syncView"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/sync/{id}": {
+      "delete": {
+        "operationId": "delete_sync_by_id",
+        "summary": "Removes one sync and tears down the outbound mirror it derived, answering 204.",
+        "description": "Removes one sync and tears down the outbound mirror it derived, answering\n204. The teardown is the point: without it an unsynced repository would keep\nforce-pushing to the upstream it is no longer linked to. Org-scoped, so another\ntenant's id is the same 404 an unknown id gives.",
+        "tags": [
+          "sync"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the sync to act on, from the path.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "sync_1"
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "no content"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      },
+      "get": {
+        "operationId": "get_sync_by_id",
+        "summary": "Returns one sync by id.",
+        "description": "Returns one sync by id. It is org-scoped: an id belonging to another tenant is\nthe same 404 an unknown id gives, so a probe learns nothing about what exists.",
+        "tags": [
+          "sync"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the sync to act on, from the path.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "sync_1"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/sync.syncView"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      },
+      "patch": {
+        "operationId": "patch_sync_by_id",
+        "summary": "Updates one sync's mutable policy — direction, trigger and actor — in place.",
+        "description": "Updates one sync's mutable policy — direction, trigger and actor — in place.\nThe endpoints and the kind are immutable: re-pointing a sync is a delete and a\ncreate, so a link can never silently start syncing somewhere else. A field the\nrequest omits is left as it was. Changing the direction immediately reconciles the\nderived outbound mirror, so turning push off stops the upstream being written to\nrather than merely recording the intent.",
+        "tags": [
+          "sync"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the sync to update, from the path.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "sync_1"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "direction": "pull",
+                "id": "sync_1"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/sync.patchSyncIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/sync.syncView"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/sync/{id}/run": {
+      "post": {
+        "operationId": "post_sync_by_id_run",
+        "summary": "Reconciles one sync now — the manual re-sync, and the initial import for a link created without run=true.",
+        "description": "Reconciles one sync now — the manual re-sync, and the initial import for a link\ncreated without run=true. The work is handed to a bounded background worker and the\ncall answers 202 immediately, so a large mirror-in never holds the request open;\nqueued=true means accepted, not finished.",
+        "tags": [
+          "sync"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the sync to act on, from the path.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "sync_1"
+          }
+        ],
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/sync.syncQueued"
+                }
+              }
+            },
+            "description": "accepted"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "problem-details": {
+        "description": "An RFC 9457 problem document.",
+        "properties": {
+          "code": {
+            "description": "A stable token a client can branch on, when the refusal names one.",
+            "type": "string"
+          },
+          "detail": {
+            "description": "What was refused, for a person to read.",
+            "type": "string"
+          },
+          "status": {
+            "description": "The HTTP status.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "title": {
+            "description": "The status's reason phrase.",
+            "type": "string"
+          },
+          "type": {
+            "description": "about:blank",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "status",
+          "detail"
+        ],
+        "type": "object"
+      },
+      "sync.endpointReq": {
+        "properties": {
+          "connector": {
+            "description": "Connector names the stored credential to reach this endpoint with.",
+            "type": "string"
+          },
+          "locator": {
+            "description": "Locator addresses the resource. For a git source it is the https clone URL on\nthe provider's own host, with no embedded credentials; for a native target it\nis the repository name.",
+            "type": "string"
+          },
+          "provider": {
+            "description": "Provider is the platform: github or gitlab for a source; a target defaults to\nthe native Hanzo Git plane.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "sync.endpointView": {
+        "properties": {
+          "connector": {
+            "description": "Connector names a connected account from the org's connector registry, when the\nendpoint reaches its provider through one. Absent means the locator stands on\nits own; the pair below is always sufficient either way.",
+            "type": "string"
+          },
+          "locator": {
+            "description": "Locator addresses the thing INSIDE that provider, in the provider's own terms —\nan https clone URL for a hosted forge, a bare repository name for hanzo-git. It\nnever carries a credential.",
+            "type": "string"
+          },
+          "provider": {
+            "description": "Provider is the concrete integration: \"github\", \"gitlab\" or \"hanzo-git\".",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "sync.nativeView": {
+        "properties": {
+          "advancedAt": {
+            "description": "AdvancedAt is when an import or a push last moved one of its refs, RFC3339\nin UTC. Absent until one has.",
+            "type": "string"
+          },
+          "branch": {
+            "description": "Branch is the forge's default branch, which an import sets to the\nupstream's once that branch has landed.",
+            "type": "string"
+          },
+          "clone": {
+            "description": "Clone is the https address to clone it from.",
+            "type": "string"
+          },
+          "sizeBytes": {
+            "description": "SizeBytes is the repository's size on the forge, in bytes.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "ssh": {
+            "description": "SSH is the ssh address to clone it from, when the forge serves one.",
+            "type": "string"
+          },
+          "status": {
+            "description": "Status is one of \"synced\" (the forge holds it and no ref is in conflict),\n\"conflict\" (an upstream ref diverged and the forge kept its own history),\n\"pending\" (the forge does not hold it yet) or \"paused\" (the link's\ndirection is off).",
+            "type": "string"
+          },
+          "url": {
+            "description": "URL is the repository's page on the forge.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "sync.patchSyncIn": {
+        "properties": {
+          "actor": {
+            "description": "Actor is the loop-guard identity the sync writes as. Omitted, the stored actor\nstands.",
+            "type": "string"
+          },
+          "direction": {
+            "description": "Direction is both, pull, push or off. Omitted, the stored direction stands.",
+            "type": "string"
+          },
+          "id": {
+            "description": "ID is the sync to update, from the path.",
+            "type": "string"
+          },
+          "kind": {
+            "description": "Kind names a different kind of sync, and is refused, for the same reason.",
+            "type": "string"
+          },
+          "source": {
+            "$ref": "#/components/schemas/sync.endpointReq",
+            "description": "Source, Target and Kind are DECLARED HERE IN ORDER TO BE REFUSED.\n\nThey are immutable by design — re-pointing a sync is a delete and a create, so\na link can never silently start syncing somewhere else — but an UNDECLARED\nfield is dropped by the binder before the handler sees it, so a request asking\nto repoint answered 200, changed nothing, and said nothing. The operator then\nbelieves a moved repository has been repointed and it has not.\n\nLive: a sync still naming github.com/hanzoai/cloud after the repository moved\nto hanzo-inc/cloud failed every reconcile with \"Repository not found\", and the\nPATCH that appeared to fix it did nothing at all. Declaring the fields is what\nlets the documented immutability actually answer.\nSource names a new upstream, and is refused. Delete this sync and create the\none you want."
+          },
+          "target": {
+            "$ref": "#/components/schemas/sync.endpointReq",
+            "description": "Target names a new native repository, and is refused, for the same reason."
+          },
+          "trigger": {
+            "description": "Trigger is webhook, poll or manual. Omitted, the stored trigger stands.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "sync.syncList": {
+        "properties": {
+          "data": {
+            "description": "Data is the org's syncs, each with its endpoints, policy and last-synced time.",
+            "items": {
+              "$ref": "#/components/schemas/sync.syncView"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "sync.syncQueued": {
+        "properties": {
+          "id": {
+            "description": "ID is the sync the reconcile was queued for.",
+            "type": "string"
+          },
+          "queued": {
+            "description": "Queued is true when the reconcile was accepted; it has not run yet.",
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
+      "sync.syncReq": {
+        "properties": {
+          "actor": {
+            "description": "Actor is the identity the sync writes as, used as the loop guard so its own\nwrites do not re-trigger it. Defaults to the deployment's GIT_SYNC_ACTOR.",
+            "type": "string"
+          },
+          "direction": {
+            "description": "Direction is both (the default), pull, push or off.",
+            "type": "string"
+          },
+          "kind": {
+            "description": "Kind is what is being synced. Only \"git\" today, which is also the default.",
+            "type": "string"
+          },
+          "run": {
+            "description": "Run reconciles once immediately after the upsert, in the background.",
+            "type": "boolean"
+          },
+          "source": {
+            "$ref": "#/components/schemas/sync.endpointReq",
+            "description": "Source is the upstream end. Required."
+          },
+          "target": {
+            "$ref": "#/components/schemas/sync.endpointReq",
+            "description": "Target is the downstream end. Optional for git: a native repository named\nafter the source is derived when it is omitted."
+          },
+          "trigger": {
+            "description": "Trigger is what starts a reconcile: webhook (the default), poll or manual.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "sync.syncView": {
+        "properties": {
+          "actor": {
+            "description": "Actor is the identity a reconcile writes AS. It is the loop guard: a change\nthis identity made is one we already have, so it is not synced back.",
+            "type": "string"
+          },
+          "createdAt": {
+            "description": "CreatedAt is when the link was first declared, RFC3339 in UTC.",
+            "type": "string"
+          },
+          "direction": {
+            "description": "Direction is which way work flows: \"both\", \"pull\" (target ← source), \"push\"\n(source → target), or \"off\" — which keeps the link declared and moves nothing.",
+            "type": "string"
+          },
+          "id": {
+            "description": "ID is the link's handle, derived from its source and target — which is what\nmakes re-declaring the same pair an update rather than a duplicate.",
+            "type": "string"
+          },
+          "kind": {
+            "description": "Kind is what is being synced. \"git\" today; the field exists so a storage or\ndatabase link is a value here rather than a second route family.",
+            "type": "string"
+          },
+          "native": {
+            "$ref": "#/components/schemas/sync.nativeView",
+            "description": "Native is the repo link's copy on the forge: where it lives and how it\nstands. Absent for an account link, and absent when the forge could not be\nread — an unread forge is not reported as a healthy one."
+          },
+          "scope": {
+            "description": "Scope is \"repo\" for a link to one repository, or \"account\" for a link to a\nwhole GitHub account, which declares a repo link for every repository the\naccount holds — the ones created later included.",
+            "type": "string"
+          },
+          "source": {
+            "$ref": "#/components/schemas/sync.endpointView",
+            "description": "Source is the side read FROM on a pull."
+          },
+          "target": {
+            "$ref": "#/components/schemas/sync.endpointView",
+            "description": "Target is the side written TO on a push."
+          },
+          "trigger": {
+            "description": "Trigger is what starts a reconcile: \"webhook\" (the provider tells us),\n\"poll\" (we ask on a schedule), or \"manual\" (only an explicit call).",
+            "type": "string"
+          },
+          "updatedAt": {
+            "description": "UpdatedAt is bumped by every reconcile, so it reads as the LAST-SYNCED time\nrather than the last edit. Absent until the first one runs.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      }
+    },
+    "securitySchemes": {
+      "bearer": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "The caller's credential, sent as `Authorization: Bearer \u003ctoken\u003e`. It is either an access token minted by Hanzo IAM or an API key (pk-/sk-). X-Authorization, and HTTP Basic carrying the token as the password, are accepted spellings of the same header for clients that cannot set Authorization; a browser presents the session cookie instead. Every operation requires it unless it says `security: []`."
+      }
+    }
+  }
+}

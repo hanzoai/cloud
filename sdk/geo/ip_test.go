@@ -2,10 +2,11 @@ package geo
 
 // The client-address rule, and the attack it exists to stop.
 //
-// That entry is whatever the client typed, so one host could present a million
-// distinct "clients" — defeating the per-IP edge limit keyed on it, writing a
-// chosen address into audit rows, and feeding the abuse sensor's address table
-// without bound from an unauthenticated request.
+// THE DEFECT THIS REPLACES: IP returned the LEFT-MOST X-Forwarded-For entry
+// with no check on who wrote it. That entry is whatever the client typed, so one
+// host could present a million distinct "clients" — defeating the per-IP edge
+// limit keyed on it, writing a chosen address into audit rows, and feeding the
+// abuse sensor's address table without bound from an unauthenticated request.
 
 import (
 	"net"
@@ -95,6 +96,7 @@ func TestClientAddr(t *testing.T) {
 	}
 }
 
+// edge is a Cloudflare edge address, the one measured in cloud's own request log.
 const edge = "104.22.100.153"
 
 // The Cloudflare rule. The ingress (10.0.0.5) appends the hop it saw; when that hop
@@ -382,9 +384,9 @@ func TestClientCountry(t *testing.T) {
 		{"an IPv6 Cloudflare hop is a Cloudflare hop",
 			"10.0.0.5", xff("2001:db8:1::7, 2606:4700:10::1"), xff("DE"), "DE"},
 
-		// The peer is our ingress, so the old rule read the header; the hop is the
-		// caller itself, reaching the origin around Cloudflare, so the header is its
-		// own writing.
+		// THE DEFECT. The peer is our ingress, so the old rule read the header; the
+		// hop is the caller itself, reaching the origin around Cloudflare, so the
+		// header is its own writing.
 		{"a non-Cloudflare hop behind our ingress states nothing",
 			"10.0.0.5", xff("203.0.113.9"), xff("US"), ""},
 		{"a non-Cloudflare hop cannot state a listed jurisdiction either",
@@ -527,8 +529,10 @@ func TestTheNetHTTPFormAgreesWithTheZipForm(t *testing.T) {
 	}
 }
 
-// INSIDE A SUBSYSTEM THE SOCKET IS NOBODY. IP read in the child is the caller:
-// the host resolves it where the connection is and stamps it, and the child
+// INSIDE A SUBSYSTEM THE SOCKET IS NOBODY. The host reaches each child over a unix
+// socket, so the child's socket peer is one value for every caller — the key the kms
+// login, account and node limiters used to count by. IP read in the child is the
+// caller: the host resolves it where the connection is and stamps it, and the child
 // reads the stamp.
 func TestTheChildSeesTheCallerNotTheSocket(t *testing.T) {
 	type seen struct{ peer, caller string }

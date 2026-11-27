@@ -1,0 +1,32 @@
+{
+  "$schema": "https://schemas.agentskills.io/discovery/0.2.0/schema.json",
+  "base_url": "https://api.lux.network",
+  "brand": "lux",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://lux.id",
+  "mcp": {
+    "description": "Model Context Protocol over JSON-RPC 2.0 — one POST per message, stateless, protocol revision 2026-07-28. tools/list answers without a credential with one tool per subsystem (its operations in the \"op\" enum) plus \"describe\", which returns one operation's input schema. tools/call names a subsystem tool and carries {\"op\": <operation>, \"input\": <its arguments>}; it takes the same bearer the REST API does, and a call that carries none is answered 401 with a WWW-Authenticate header naming the resource metadata at /.well-known/oauth-protected-resource, which names the authorization server to sign in at. The tool surface is the public contract: the operator's admin product is not offered, and a name that would disclose a secret or mutate an identity is withheld — the list says how many, under _meta.",
+    "method": "POST",
+    "url": "https://api.lux.network/v1/mcp"
+  },
+  "skill_count": 2,
+  "skills": [
+    {
+      "description": "Read x402 prices: Lists the flat fees this deployment sells per request over x402: one function invoke, one agent run, one provisioned resource of each kind., Answers one fee's x402 challenge: always 402, with the PAYMENT-REQUIRED header the fee's route sends an unfunded caller, ",
+      "digest": "sha256:9ea691bd1328ad632d90325c50e06511b7b130460964c54ee4642d1c73f65247",
+      "name": "x402_prices",
+      "service": "x402",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/x402_prices/SKILL.md"
+    },
+    {
+      "description": "Read x402 settlements: Lists the caller's x402 receipts, newest first: as payer, what its wallet paid; as payee, what its org was paid — each settled payment with what it bought, both parties, the exact amount and when., Reads one x402 payment receipt by id..",
+      "digest": "sha256:bf3019bdf15f7265d787f2715f01344a6f390153b8140e45cc8b1cc27e4a2ca6",
+      "name": "x402_settlements",
+      "service": "x402",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/x402_settlements/SKILL.md"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

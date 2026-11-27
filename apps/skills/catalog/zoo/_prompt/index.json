@@ -1,0 +1,40 @@
+{
+  "$schema": "https://schemas.agentskills.io/discovery/0.2.0/schema.json",
+  "base_url": "https://api.zoo.ngo",
+  "brand": "zoo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://zoolabs.id",
+  "mcp": {
+    "description": "Model Context Protocol over JSON-RPC 2.0 — one POST per message, stateless, protocol revision 2026-07-28. tools/list answers without a credential with one tool per subsystem (its operations in the \"op\" enum) plus \"describe\", which returns one operation's input schema. tools/call names a subsystem tool and carries {\"op\": <operation>, \"input\": <its arguments>}; it takes the same bearer the REST API does, and a call that carries none is answered 401 with a WWW-Authenticate header naming the resource metadata at /.well-known/oauth-protected-resource, which names the authorization server to sign in at. The tool surface is the public contract: the operator's admin product is not offered, and a name that would disclose a secret or mutate an identity is withheld — the list says how many, under _meta.",
+    "method": "POST",
+    "url": "https://api.zoo.ngo/v1/mcp"
+  },
+  "skill_count": 3,
+  "skills": [
+    {
+      "description": "Read prompt catalog: Returns the read-only starter prompt library shipped with the binary — reference content every tenant sees the same, NOT the caller's own prompts and never mixed into them..",
+      "digest": "sha256:c8c3a75df4bd33b0d046143b2641bf8432ac83927d6d7e0cbea9776938a49d87",
+      "name": "prompt_catalog",
+      "service": "prompt",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/prompt_catalog/SKILL.md"
+    },
+    {
+      "description": "Read prompt metrics: Returns real per-prompt statistics for the caller's org: how many versions each prompt has, which one is current, and when it was created and last changed..",
+      "digest": "sha256:5b4765a695eb62dfbcec82d5b14d966f61c9ba83f889223269371b46ec94d87a",
+      "name": "prompt_metrics",
+      "service": "prompt",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/prompt_metrics/SKILL.md"
+    },
+    {
+      "description": "Read prompt prompt: Returns the caller org's prompt library as one row per prompt: its name, type, every version number it has, its taxonomy and when it last changed., Returns one of the caller org's prompts: its CURRENT template text plus the metadata of every version it has had",
+      "digest": "sha256:fb30a56f550b974ba5b66516bbc76ed81113185b119cc4fc13574654de41bc50",
+      "name": "prompt_prompt",
+      "service": "prompt",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/prompt_prompt/SKILL.md"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

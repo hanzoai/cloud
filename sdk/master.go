@@ -61,7 +61,8 @@ const (
 
 	// RingVaultEnv names the org the share set is filed under. The ring scopes
 	// every answer by it and refuses a request that names only a key, so
-	// without this the call cannot succeed.
+	// without this the call cannot succeed — which is why this path, though
+	// written and shipped, had never once opened anything.
 	RingVaultEnv = "CLOUD_KMS_MPC_VAULT"
 )
 

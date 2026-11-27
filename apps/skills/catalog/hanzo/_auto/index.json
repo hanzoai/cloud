@@ -1,0 +1,72 @@
+{
+  "$schema": "https://schemas.agentskills.io/discovery/0.2.0/schema.json",
+  "base_url": "https://api.hanzo.ai",
+  "brand": "hanzo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://hanzo.id",
+  "mcp": {
+    "description": "Model Context Protocol over JSON-RPC 2.0 — one POST per message, stateless, protocol revision 2026-07-28. tools/list answers without a credential with one tool per subsystem (its operations in the \"op\" enum) plus \"describe\", which returns one operation's input schema. tools/call names a subsystem tool and carries {\"op\": <operation>, \"input\": <its arguments>}; it takes the same bearer the REST API does, and a call that carries none is answered 401 with a WWW-Authenticate header naming the resource metadata at /.well-known/oauth-protected-resource, which names the authorization server to sign in at. The tool surface is the public contract: the operator's admin product is not offered, and a name that would disclose a secret or mutate an identity is withheld — the list says how many, under _meta.",
+    "method": "POST",
+    "url": "https://api.hanzo.ai/v1/mcp"
+  },
+  "skill_count": 7,
+  "skills": [
+    {
+      "description": "Read auto automations: Returns your automations — another member's are never listed., Returns one automation., Returns one automation's runs, newest first, to the person it runs as..",
+      "digest": "sha256:01275a7a98e41fedfd5f3640107e8f2b86d2e32f983a8ffe1189021fe5bbdefe",
+      "name": "auto_automations",
+      "service": "auto",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/auto_automations/SKILL.md"
+    },
+    {
+      "description": "Read auto events: Stream your jobs and automations as they change, as Server-Sent Events.",
+      "digest": "sha256:45d37ab583ab0046c4600f91a8d9072a8aebf2ed569cf90c6e8eeaba699470c9",
+      "name": "auto_events",
+      "service": "auto",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/auto_events/SKILL.md"
+    },
+    {
+      "description": "Read auto flows: Returns the caller org's automations, most-recently-updated first., Returns one automation and its latest version., Returns one flow's versions, newest first..",
+      "digest": "sha256:8e958bfa980d68c6c316721466d3073d10b716afe110750e7e299a739b31eedb",
+      "name": "auto_flows",
+      "service": "auto",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/auto_flows/SKILL.md"
+    },
+    {
+      "description": "Read auto jobs: Lists everything of yours that runs without you watching, across every product: each run of your automations and workflows, and every Studio render, long video or other background run a product recorded for you., Reads one of your jobs..",
+      "digest": "sha256:f982339e1cbd8fa4d80247169c9a4b9669ff94bf635e337f6d4c7c1da7425046",
+      "name": "auto_jobs",
+      "service": "auto",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/auto_jobs/SKILL.md"
+    },
+    {
+      "description": "Read auto provider: Returns the connector catalogue..",
+      "digest": "sha256:34c8c202b410405af1328934130e49686531186d672719ea8fd31a7553314a11",
+      "name": "auto_provider",
+      "service": "auto",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/auto_provider/SKILL.md"
+    },
+    {
+      "description": "Read auto runs: Returns your run history, newest first: the runs of the flows you hold., Returns one run..",
+      "digest": "sha256:0f71df9aeecd7cbec7ea9199a7f53ccbf1582f2e91f752cbcaf81e426e8005a1",
+      "name": "auto_runs",
+      "service": "auto",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/auto_runs/SKILL.md"
+    },
+    {
+      "description": "Read auto templates: Returns the starter automations: a name, what it does, the instructions it runs and the schedule it suggests, in the caller's own zone..",
+      "digest": "sha256:722219dcc16f9409de9cb3ae11dc418ee1418f47c2d0eb7c6ae6a9b4308a27bf",
+      "name": "auto_templates",
+      "service": "auto",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/auto_templates/SKILL.md"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

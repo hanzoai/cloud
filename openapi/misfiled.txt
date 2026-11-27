@@ -1,0 +1,13 @@
+# Addresses answered by an app that is not named in them. THIS FILE MAY ONLY SHRINK.
+#
+# One line per (address root, app). HIP-0139 §3: every route a capability serves
+# is under /v1/<app>; a line here is an address that is not yet, and each is
+# closed by fold, split or rename (§7). TestNoOperationIsMisfiled refuses a pair
+# this file does not carry and drops a line the document no longer has.
+#
+# Exempt by rule, never listed: /.well-known/* (RFC 8615), the OpenAI- and
+# Anthropic-compatible wire served by ai, and /v1/admin/<app> served by <app>.
+/v1/build platform
+/v1/capabilities train
+/v1/connection provider
+/v1/dev sandbox

@@ -1,0 +1,70 @@
+package transport
+
+import (
+	"context"
+	"strings"
+	"time"
+
+	"github.com/hanzoai/cloud/client"
+	"github.com/hanzoai/cloud/sdk"
+)
+
+// teams.go is the Teams transport: envelope normalization from the ingress
+// client and egress through the ONE existing Bot Connector send path
+// (provider.SendTeams).
+
+// teamsEndpoint is the send path; tests spy it, prod never repoints.
+var teamsEndpoint = func(ctx context.Context, org, serviceURL, conversationID, text string) error {
+	_, err := post(ctx, org, client.ChatSendIn{Provider: "teams", Root: serviceURL, Channel: conversationID, Text: text})
+	return err
+}
+
+var teamsTransport = transport{
+	id:        "teams",
+	caps:      capabilities{DM: true, Group: true},
+	normalize: teamsNormalize,
+	send:      teamsEgress,
+}
+
+// teamsNormalize maps a Teams Inbound (ExternalID = AAD tenant id, User =
+// aadObjectId or from.id, Channel = conversation id, no ThreadID) into the
+// envelope. Bot Framework contract: channel/group-chat conversation ids are
+// 19:...@thread.*; personal chats are a:.... Unknown shapes classify DM —
+// the fail-safe direction, since dmPolicy defaults to pairing (strictest).
+func teamsNormalize(ev client.TransportIngestIn) (Message, bool) {
+	in := ev
+	kind := ChannelDM
+	if strings.HasPrefix(in.Channel, "19:") {
+		kind = ChannelGroup
+	}
+	return Message{
+		Transport:   "teams",
+		Account:     strings.ToLower(in.ExternalID),
+		Sender:      Sender{ExternalID: in.User, Org: ev.Org},
+		Channel:     Channel{ID: in.Channel, Kind: kind},
+		Text:        in.Text,
+		Idempotency: in.DedupeKey,
+	}, true
+}
+
+// teamsEgress sends via the Bot Connector at the stored reply root. The
+// serviceURL is learned ONLY from JWT-verified inbound
+// (TransportIngestIn.ReplyRoot); nothing else may mint it — that is both the security invariant
+// (no attacker-chosen serviceURL) and the tenancy gate (an org can drive only
+// conversations it was messaged from).
+func teamsEgress(ctx context.Context, s *cloud.Service[state], org string, m Message) (Delivery, error) {
+	now := time.Now().Unix()
+	root, ok, err := s.State.store.routeFor(ctx, org, "teams", m.Channel.ID, now)
+	if err != nil {
+		return Delivery{}, err
+	}
+	if !ok || root == "" {
+		return Delivery{}, errNoRoute
+	}
+	if err := teamsEndpoint(ctx, org, root, m.Channel.ID, renderText(m)); err != nil {
+		return Delivery{}, err
+	}
+	// The Bot Connector activity id is not surfaced by the existing helper —
+	// accepted tradeoff; the receipt carries the send time only.
+	return Delivery{MessageID: "", Timestamp: now}, nil
+}

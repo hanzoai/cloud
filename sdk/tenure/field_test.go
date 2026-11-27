@@ -11,8 +11,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/hanzoai/cloud/internal/sqltest"
 	"github.com/hanzoai/cek"
-	"github.com/hanzoai/cloud/sdk/sqltest"
 	"github.com/hanzoai/namespace"
 	"golang.org/x/crypto/chacha20poly1305"
 )

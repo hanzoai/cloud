@@ -1,0 +1,72 @@
+{
+  "$schema": "https://schemas.agentskills.io/discovery/0.2.0/schema.json",
+  "base_url": "https://api.hanzo.ai",
+  "brand": "hanzo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://hanzo.id",
+  "mcp": {
+    "description": "Model Context Protocol over JSON-RPC 2.0 — one POST per message, stateless, protocol revision 2026-07-28. tools/list answers without a credential with one tool per subsystem (its operations in the \"op\" enum) plus \"describe\", which returns one operation's input schema. tools/call names a subsystem tool and carries {\"op\": <operation>, \"input\": <its arguments>}; it takes the same bearer the REST API does, and a call that carries none is answered 401 with a WWW-Authenticate header naming the resource metadata at /.well-known/oauth-protected-resource, which names the authorization server to sign in at. The tool surface is the public contract: the operator's admin product is not offered, and a name that would disclose a secret or mutate an identity is withheld — the list says how many, under _meta.",
+    "method": "POST",
+    "url": "https://api.hanzo.ai/v1/mcp"
+  },
+  "skill_count": 7,
+  "skills": [
+    {
+      "description": "Read patent approvals: Returns the decision trail — each person's current word on each disclosure..",
+      "digest": "sha256:874607209ab03aaf08f6bc77b9f4cf8e165fdc4f65ed23e225fcadf798d94853",
+      "name": "patent_approvals",
+      "service": "patent",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/patent_approvals/SKILL.md"
+    },
+    {
+      "description": "Read patent disclosures: Returns the canonical disclosures, each carrying its current approvals..",
+      "digest": "sha256:50026a6232ddf35ed6d19bdcdc6f57cd3f3a9a372f77440b64c3ad2d2c715a05",
+      "name": "patent_disclosures",
+      "service": "patent",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/patent_disclosures/SKILL.md"
+    },
+    {
+      "description": "Read patent health: Reports what this deployment actually guarantees about the records it keeps, in honest states..",
+      "digest": "sha256:d33d6399e95c28cc323743dc9cc3002d794830a2e6a6fe5668e4da28b75041df",
+      "name": "patent_health",
+      "service": "patent",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/patent_health/SKILL.md"
+    },
+    {
+      "description": "Read patent ideas: Returns the caller org's canonical conception entries, oldest appended first, which is the order the log says they were thought..",
+      "digest": "sha256:e61762000cd413cda166fc846ef42685dcba7ff7bb5db570f04aec62be249fa3",
+      "name": "patent_ideas",
+      "service": "patent",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/patent_ideas/SKILL.md"
+    },
+    {
+      "description": "Read patent implementations: Returns the canonical implementation records with their citations..",
+      "digest": "sha256:96a10d07b8f6b464d82a90c336a13ea149d16047ae100eaa64c77b09c9fa62b3",
+      "name": "patent_implementations",
+      "service": "patent",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/patent_implementations/SKILL.md"
+    },
+    {
+      "description": "Read patent proof: Folds the caller's record set and answers the ordering question over it..",
+      "digest": "sha256:2ffc7da5fe88ecc02cf3a3f53417c29f29ab2c729dd3cfed37d2cb5adedaee3e",
+      "name": "patent_proof",
+      "service": "patent",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/patent_proof/SKILL.md"
+    },
+    {
+      "description": "Read patent timeline: Returns every retained version of one entry, in append order..",
+      "digest": "sha256:82c531dcb8f741155ecd257b371cc6896aa5ad191a42bb4b39e620d2a7a07ce8",
+      "name": "patent_timeline",
+      "service": "patent",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/patent_timeline/SKILL.md"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

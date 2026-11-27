@@ -1,0 +1,40 @@
+{
+  "$schema": "https://schemas.agentskills.io/discovery/0.2.0/schema.json",
+  "base_url": "https://api.lux.network",
+  "brand": "lux",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://lux.id",
+  "mcp": {
+    "description": "Model Context Protocol over JSON-RPC 2.0 — one POST per message, stateless, protocol revision 2026-07-28. tools/list answers without a credential with one tool per subsystem (its operations in the \"op\" enum) plus \"describe\", which returns one operation's input schema. tools/call names a subsystem tool and carries {\"op\": <operation>, \"input\": <its arguments>}; it takes the same bearer the REST API does, and a call that carries none is answered 401 with a WWW-Authenticate header naming the resource metadata at /.well-known/oauth-protected-resource, which names the authorization server to sign in at. The tool surface is the public contract: the operator's admin product is not offered, and a name that would disclose a secret or mutate an identity is withheld — the list says how many, under _meta.",
+    "method": "POST",
+    "url": "https://api.lux.network/v1/mcp"
+  },
+  "skill_count": 3,
+  "skills": [
+    {
+      "description": "Read bot members: Returns the caller org's bots as space members — each with the member account uuid and the Person reference the roster addresses it by..",
+      "digest": "sha256:d839e838359e16b23c5759d18bd585bfbee3efccfcc17cb8144c12e5f7b104db",
+      "name": "bot_members",
+      "service": "bot",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/bot_members/SKILL.md"
+    },
+    {
+      "description": "Read bot runs: Returns the caller org's live bot runs, read from the bot runtime and projected into the console contract with each run's live session URL derived here..",
+      "digest": "sha256:9e4bcae1f43b978223b4fc2189344927422b129a87fbd864524659e2a29ce455",
+      "name": "bot_runs",
+      "service": "bot",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/bot_runs/SKILL.md"
+    },
+    {
+      "description": "Read bot runtime: Relay one of the bot runtime's own operational paths.",
+      "digest": "sha256:f44a2287632e29beda6751e6e0624d010fb07ad2817f1671fb23c677720e7982",
+      "name": "bot_runtime",
+      "service": "bot",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/bot_runtime/SKILL.md"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

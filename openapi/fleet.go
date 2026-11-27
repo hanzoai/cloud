@@ -1,0 +1,247 @@
+package openapi
+
+import (
+	"encoding/json"
+	"fmt"
+
+	"github.com/hanzoai/cloud/sdk/spec"
+	"github.com/zap-proto/zip"
+)
+
+// The IDENTITY of the Hanzo Cloud API document, in one place.
+//
+// There are now four projections of this one API, and they are compared against
+// each other by TEST:
+//
+//	each app binary's own subset   `<app> openapi`, one file per app
+//	the composed fleet document       Compose() over those subsets — private.yaml
+//	its public projection          Publish() over that — openapi.yaml
+//	the live endpoint              GET /v1/openapi.json, the public projection
+//
+// And one projection OF the public contract, downstream and in another repo:
+// hanzoai/openapi's hanzo.yaml, which every published SDK is generated from.
+// It refutes itself against the LIVE endpoint above (`publish.py --served`),
+// because that is the only one of these a repo without a checkout can read — and
+// the two now describe one audience, so the refutation is a comparison of two
+// readings rather than of two surfaces.
+//
+// An info block that differed between them would make two documents OF THE SAME
+// API compare unequal for a reason that has nothing to do with the API — which
+// would break the composition proof (compose_test.go) over a title string. So the
+// identity is a value, defined once and read by all four, not a literal copied
+// into each caller.
+//
+// Version is the API CONTRACT version, never the build's. The build's version is
+// stamped per release and putting it here would make every build differ from the
+// committed golden. House law is /v1 forever, so this is "v1" forever; the
+// document's own shape is versioned by its `openapi` field.
+//
+// THE DESCRIPTION SAYS WHAT PRODUCED THE DOCUMENT, and it is not what it used to
+// say. It read "Generated from the live router — every operation below is a route
+// the unified cloud binary actually serves." No producer can make that claim.
+//
+// There is no unified cloud binary; there is a light host that mounts no
+// subsystem and 116 app binaries that each project their OWN router when they are
+// BUILT. What the host serves is the compose of those projections ([UseFleet]),
+// so nothing in production reads a live router, and the artifact is only as fresh
+// as the last `make -f mk/fleet.mk describe`. It shipped stale — one binary answered
+// a renamed billing route under its new name while still publishing the old one,
+// because the rename commit did not regenerate the subset.
+//
+// A false provenance is worse than a missing one, because it is READ. hanzoai/cli's
+// genspec quoted this exact sentence as the correctness argument for dropping
+// operations from its capture: "a route that is not mounted cannot appear in it."
+// Every projection downstream — eight SDKs, the MCP tool list, the CLI, the docs —
+// inherits whatever this claims.
+//
+// So it claims exactly what is true and no more: each operation is a route the
+// subsystem that publishes it registered in its own router. What it does NOT
+// prove, and what only a probe of the deployed host can: that the edge delivers
+// that path to that subsystem. It did not, for all 23 of pricing's, until the
+// ingress carve that gave them to an edge worker was deleted.
+var (
+	fleetInfo = spec.Info{
+		Title:   "Hanzo Cloud API",
+		Version: "v1",
+		Description: "Composed from each subsystem's own projection of its router, in the fleet's " +
+			"mount order — every operation below is a route the subsystem that publishes it " +
+			"registered. Tagged by product: the first path segment after /v1/.",
+	}
+	fleetServer = spec.Server{URL: "https://api.hanzo.ai"}
+
+	// publicInfo is the identity of the PUBLIC projection (openapi/public.go).
+	//
+	// The same API, the same version, the same server — because it IS the same
+	// API, and a client generated from either document calls the same host. Only
+	// the description differs, and it differs because it has one fact to add that
+	// the reader cannot get anywhere else: this document is the customer surface,
+	// and the operator's /v1/admin family, the relay routes and the legacy
+	// spellings are served beside it without being part of it.
+	publicInfo = spec.Info{
+		Title:   fleetInfo.Title,
+		Version: fleetInfo.Version,
+		Description: "The Hanzo Cloud API as a customer calls it: every operation under /v1/ except " +
+			"the operator's admin product, relay routes, legacy spellings and capabilities still " +
+			"reached by flag. Tagged by product: the first path segment after /v1/.",
+	}
+)
+
+// FleetSpec projects app into THE Hanzo Cloud API document: Spec, carrying the
+// one identity above.
+//
+// Every producer of a published spec calls this — the monolith's golden, each
+// app binary's subset, and the compose's output. Spec stays exported for the
+// callers that want a document of their own (the live endpoint names the
+// deployment's brand), but nothing that writes an artifact should be choosing
+// its own title.
+func FleetSpec(app *zip.App) (*spec.Document, error) {
+	return spec.Of(app, fleetInfo, fleetServer)
+}
+
+// Subsets decodes the apps' own documents, in the order given — which callers
+// take from manifest.Names(), the fleet's mount order, so a conflict is reported
+// as the router would meet it.
+//
+// read answers with one app's subset bytes. WHERE those bytes come from is the
+// caller's, because there are two callers and ONE set of files: the drift gate
+// reads the working tree it is about to compare against (openapi/compose_test.go),
+// and the light host reads what it embedded from that same tree at build time
+// (plugin.Spec). Neither is a second source — check regenerates the files
+// both read, from source, and fails on any diff.
+//
+// stage answers with one app's stage (HIP-0139 §8), and it is a function for the
+// same reason read is: the fact lives in manifest.Apps, and this package cannot
+// import manifest because manifest's own tests import this one. Production passes
+// manifest.StageOf. It cannot be read out of the subset, because the app that
+// wrote the subset does not know it — see [Part].
+//
+// A missing subset is refused rather than skipped. Skipping it would publish a
+// fleet document with one app's whole surface quietly absent, which is precisely
+// the failure mode plugin/ingress cost eight paths to.
+//
+// AND EACH SUBSET IS CHECKED FOR THE INVARIANT ITS GENERATOR ALREADY OWES, at the
+// one place the app's NAME is still in hand. [From] refuses to emit a document
+// whose operationIds collide, so a generated subset cannot arrive broken — but
+// "generated" was an assumption about a committed file, and a file can be edited.
+// One was: /v1/billing/methods was hand-written into commerce's subset by copying
+// the /v1/billing/portal/methods block, operationId and prose together, so two
+// paths claimed get_v1_billing_portal_methods and the fleet could not be composed at
+// all. [Compose] did catch it — but a collision INSIDE one part reaches Compose as a
+// collision between two paths with no app attached, so the report named the two
+// addresses and left which of 123 subsets to a search. Here the answer is the
+// loop variable.
+//
+// It is the same check, not a second one: uniqueOperationIDs is the single
+// statement of the rule, asked once per part here and once over the whole
+// composition there, because a part being injective and the compose being injective
+// are different facts and neither implies the other.
+func Subsets(apps []string, read func(app string) []byte, stage func(app string) string) ([]Part, error) {
+	out := make([]Part, 0, len(apps))
+	for _, name := range apps {
+		raw := read(name)
+		if len(raw) == 0 {
+			return nil, fmt.Errorf("%s publishes no subset — every app describes itself; run `make -f mk/fleet.mk describe`", name)
+		}
+		var doc spec.Document
+		if err := json.Unmarshal(raw, &doc); err != nil {
+			return nil, fmt.Errorf("%s subset: %w", name, err)
+		}
+		if err := spec.UniqueOperationIDs(&doc); err != nil {
+			return nil, fmt.Errorf("%s subset: %w — its own generator refuses this, so the file was "+
+				"not generated; run `make -C apps/%s describe` rather than editing it", name, err, name)
+		}
+		out = append(out, Part{App: name, Stage: stage(name), Doc: &doc})
+	}
+	return out, nil
+}
+
+// core is the operations no app owns: the endpoint that serves the document, its
+// command projection, the agent MCP server (openapi/mcp.go) and the hypermedia
+// index a client discovers the rest from (openapi/index.go), and the agent's door
+// (openapi/agent.go). They are MOUNTED
+// and projected rather than written down — a hand-kept literal would be a
+// second definition of a route the host already serves, free to disagree with
+// the address the fleet actually answers on.
+func core() (Part, error) {
+	app := zip.New(zip.Config{DisableStartupMessage: true})
+	Use(app, spec.Info{})
+	useEndpoint(app)
+	stubIndex(app)
+	declare(app)
+	doc, err := FleetSpec(app)
+	if err != nil {
+		return Part{}, fmt.Errorf("core: %w", err)
+	}
+	// The host is a capability too (HIP-0139 §1), and a capability describes
+	// itself in its own words: this sentence is what its tag carries, where an
+	// app's package doc carries the rest of the fleet's.
+	doc.Info.Description = "The served contract: the OpenAPI document every client, " +
+		"tool list and command group is generated from, its command projection, " +
+		"the agent endpoint that offers the same operations over MCP, and the index a " +
+		"client follows from the API root to reach any of it."
+	return Part{App: Self, Doc: doc}, nil
+}
+
+// Self is the host's own capability (HIP-0139 §3.2): the operations no app owns.
+const Self = "openapi"
+
+// Fleet is THE published Hanzo Cloud API document: the compose of every app's own
+// subset plus core.
+//
+// ONE definition, called by both things that must agree about it — the gate that
+// WRITES openapi.yaml (openapi/compose_test.go) and the host that SERVES it
+// (UseFleet). That is what makes "the served document is the committed
+// artifact" true by construction rather than by two pieces of code happening to
+// agree; a drift between them is not expressible.
+func Fleet(subsets []Part) (*spec.Document, error) {
+	c, err := core()
+	if err != nil {
+		return nil, err
+	}
+	parts := make([]Part, 0, len(subsets)+1)
+	parts = append(parts, subsets...)
+	parts = append(parts, c)
+	return Compose(parts)
+}
+
+// UseFleet serves the fleet's PUBLIC CONTRACT at Path: the composition of what
+// this deployment's plugins serve, composed from the subsets their binaries
+// projected when they were built, and then projected to the customer surface
+// ([Publish]).
+//
+// The projection is here, not at the caller, because this endpoint and
+// openapi.yaml are one artifact — cmd/cloud/openapi_test.go holds the served
+// bytes against the committed file — and a projection applied at only one of the
+// two is how they come to differ. It answered with the INTERNAL document until
+// this was written, so an unauthenticated GET returned the operator's whole
+// /v1/admin family and every alpha capability, which is the same reach a
+// generated SDK has: the audience rule was stated in one place and applied in
+// another.
+//
+// It exists because [Mount]'s answer is WRONG on the light host, and wrong in the
+// way that is hardest to see. The host mounts no subsystem — that laziness is
+// what makes 113 of them affordable — so its live router is 113 proxy prefixes
+// and a console catch-all, and reading it describes the ROUTER, not the API. Nor
+// can the host mount them to find out: waking the fleet to answer a public GET
+// is exactly the cost lazy mounting exists to avoid.
+//
+// So the host answers from the build-time projection instead. It is the same
+// question every other projection answers ("what does the fleet serve") sourced
+// from the only place the host can honestly read it. The compose runs ONCE, on the
+// first request, off bytes already in the binary: no subsystem starts, no socket
+// opens, and a deployment that never gets asked never pays.
+//
+// Unauthenticated for the reasons stated on [Mount]: same document, same endpoint.
+func UseFleet(app *zip.App, subsets func() ([]Part, error)) {
+	serve(app, func() (*spec.Document, error) {
+		parts, err := subsets()
+		if err != nil {
+			return nil, err
+		}
+		composed, err := Fleet(parts)
+		if err != nil {
+			return nil, err
+		}
+		return Publish(composed)
+	})
+}

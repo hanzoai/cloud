@@ -1,0 +1,56 @@
+{
+  "$schema": "https://schemas.agentskills.io/discovery/0.2.0/schema.json",
+  "base_url": "https://api.hanzo.ai",
+  "brand": "hanzo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://hanzo.id",
+  "mcp": {
+    "description": "Model Context Protocol over JSON-RPC 2.0 — one POST per message, stateless, protocol revision 2026-07-28. tools/list answers without a credential with one tool per subsystem (its operations in the \"op\" enum) plus \"describe\", which returns one operation's input schema. tools/call names a subsystem tool and carries {\"op\": <operation>, \"input\": <its arguments>}; it takes the same bearer the REST API does, and a call that carries none is answered 401 with a WWW-Authenticate header naming the resource metadata at /.well-known/oauth-protected-resource, which names the authorization server to sign in at. The tool surface is the public contract: the operator's admin product is not offered, and a name that would disclose a secret or mutate an identity is withheld — the list says how many, under _meta.",
+    "method": "POST",
+    "url": "https://api.hanzo.ai/v1/mcp"
+  },
+  "skill_count": 5,
+  "skills": [
+    {
+      "description": "Read marketplace jobs: Lists the jobs the caller's org is a party to, newest first: as buyer, the work it hired — with the quotes it has not paid and the jobs being funded, each with the attempt that made it, so a hire whose answer was lost is found here — and as seller, the work",
+      "digest": "sha256:453b259e769a2b4dacdbd549eea6b9dd04d839d1d38dd0b88b4d62716002eb03",
+      "name": "marketplace_jobs",
+      "service": "marketplace",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/marketplace_jobs/SKILL.md"
+    },
+    {
+      "description": "Read marketplace listings: Returns the listings the caller's own org has published — what this org is offering, not what it can buy — optionally of one kind..",
+      "digest": "sha256:a2481048dd2fbaf3eebca20aff7e3df9225d7afecb1c1d36dae11f6d5d8adef2",
+      "name": "marketplace_listings",
+      "service": "marketplace",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/marketplace_listings/SKILL.md"
+    },
+    {
+      "description": "Read marketplace marketplace: Lists every tool and agent the caller can reach in their own org and project, enriched with any public listing's title, category and price, and with installed=true on the ones already activated for that scope..",
+      "digest": "sha256:7a611684426ae7f09a16088afb2ecbec0ae9fbe96849735933c869a512fa2c2c",
+      "name": "marketplace_marketplace",
+      "service": "marketplace",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/marketplace_marketplace/SKILL.md"
+    },
+    {
+      "description": "Read marketplace seller: Answers where the caller's org stands as a seller, in one read: its founders' identity verification (KYC) and legal entity (KYB), its tax form and whether it is certified and valid, its own sanctions screening — only what an org may see about itself — the",
+      "digest": "sha256:ff319583e03dac33275f69890cc7ef9780867426aecb8c13d278c3d794c2e36d",
+      "name": "marketplace_seller",
+      "service": "marketplace",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/marketplace_seller/SKILL.md"
+    },
+    {
+      "description": "Read marketplace shop: Searches every public listing of every kind — agents and personas to hire, apps, skills, Kai capabilities, MCP servers and tools — newest first, with facets by kind, category, price and rating, paged., Reads one public listing as the shop shows it — its sel",
+      "digest": "sha256:bd305456f6f98dff812a2feeb3f1e47b1a723298c0e09a569b79160a73b0327f",
+      "name": "marketplace_shop",
+      "service": "marketplace",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/marketplace_shop/SKILL.md"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

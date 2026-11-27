@@ -1,0 +1,72 @@
+{
+  "$schema": "https://schemas.agentskills.io/discovery/0.2.0/schema.json",
+  "base_url": "https://api.hanzo.ai",
+  "brand": "hanzo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://hanzo.id",
+  "mcp": {
+    "description": "Model Context Protocol over JSON-RPC 2.0 — one POST per message, stateless, protocol revision 2026-07-28. tools/list answers without a credential with one tool per subsystem (its operations in the \"op\" enum) plus \"describe\", which returns one operation's input schema. tools/call names a subsystem tool and carries {\"op\": <operation>, \"input\": <its arguments>}; it takes the same bearer the REST API does, and a call that carries none is answered 401 with a WWW-Authenticate header naming the resource metadata at /.well-known/oauth-protected-resource, which names the authorization server to sign in at. The tool surface is the public contract: the operator's admin product is not offered, and a name that would disclose a secret or mutate an identity is withheld — the list says how many, under _meta.",
+    "method": "POST",
+    "url": "https://api.hanzo.ai/v1/mcp"
+  },
+  "skill_count": 7,
+  "skills": [
+    {
+      "description": "Read provisioning datastore: Lists the caller org's Hanzo Datastore warehouses., Returns one Hanzo Datastore warehouse's metadata..",
+      "digest": "sha256:62b55b184fd4eabcaa953fb3c4d402bbe26e5d710dc7fa8e441a447d58bdbc3f",
+      "name": "provisioning_datastore",
+      "service": "provisioning",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/provisioning_datastore/SKILL.md"
+    },
+    {
+      "description": "Read provisioning docdb: Lists the caller org's Hanzo DocDB document databases., Returns one Hanzo DocDB database's metadata..",
+      "digest": "sha256:b9a21ec7b283ec71c4bc001fee7e8e5e26cd3fc911e74bb159bea69aa1b5d798",
+      "name": "provisioning_docdb",
+      "service": "provisioning",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/provisioning_docdb/SKILL.md"
+    },
+    {
+      "description": "Read provisioning kv: Lists the caller org's Hanzo KV stores., Returns one Hanzo KV store's metadata..",
+      "digest": "sha256:2ed7f9475375161889e505902ec6e074478df7804bf9e6f36b67a731d0bac888",
+      "name": "provisioning_kv",
+      "service": "provisioning",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/provisioning_kv/SKILL.md"
+    },
+    {
+      "description": "Read provisioning s3: Lists the caller org's object-storage buckets., Returns one bucket's metadata..",
+      "digest": "sha256:acdaf33d131146bcff4e1195792af7cdde75f4f9421f1205fc330f29adc96827",
+      "name": "provisioning_s3",
+      "service": "provisioning",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/provisioning_s3/SKILL.md"
+    },
+    {
+      "description": "Read provisioning search: Lists the caller org's search indexes., Returns one search index's metadata..",
+      "digest": "sha256:8ca0534d1a578af60011a798b4475089859db2193a5958bcac2bd512290ad763",
+      "name": "provisioning_search",
+      "service": "provisioning",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/provisioning_search/SKILL.md"
+    },
+    {
+      "description": "Read provisioning sql: Lists the caller org's Hanzo SQL databases., Returns one Hanzo SQL database's metadata..",
+      "digest": "sha256:90526189527e551fdd6ad978dfcb03e04f69a2dcfc4c8487d0ee1597801f0861",
+      "name": "provisioning_sql",
+      "service": "provisioning",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/provisioning_sql/SKILL.md"
+    },
+    {
+      "description": "Read provisioning vector: Lists the caller org's vector collections., Returns one vector collection's metadata..",
+      "digest": "sha256:b6a5f8e9a00f51fe91e860640ae4c82fea6bfdaed4d30a8e31f5fc0369a48c15",
+      "name": "provisioning_vector",
+      "service": "provisioning",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/provisioning_vector/SKILL.md"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

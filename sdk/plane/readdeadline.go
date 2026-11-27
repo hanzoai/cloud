@@ -3,13 +3,23 @@ package plane
 // readdeadline.go widens the plane's RESPONSE-READ deadline so a call that is
 // legitimately slow is not cut off by a transport default.
 //
+// # The bug this fixes
 //
-// zap-proto/http sets a 30 second response-read deadline on every dialled
-// transport, so a call whose callee finishes later is cut off by the caller even
-// though the work completes: the reply is written to a socket nobody is reading.
-// That is the worst shape a timeout can have — the callee logs success and only
-// the caller reports failure — so the deadline is widened here instead of left to
-// the transport default.
+// Every @hanzo turn in Slack answered "the agent hit an error handling that",
+// and the bridge logged:
+//
+//	zip: call agents_run_on_behalf at /var/lib/cloud/run/agents.sock:
+//	zaphttp: read response: i/o timeout
+//
+// zap-proto/http@v0.3.1 sets `readTimeout: 30 * time.Second` (client.go:72) on
+// every dialled transport. An agent turn runs a real model completion, and enso
+// spends 40s+ on one — measured in production at 41,153ms server-side, answered
+// 200 by both `ai` and `agents`. So the work SUCCEEDED and the caller had already
+// hung up on it. The reply was written to a socket nobody was reading.
+//
+// That is the worst shape a timeout can have: the expensive work is done and
+// paid for, the callee logs success, and only the caller reports failure — so
+// every log you would naturally check says the system is healthy.
 //
 // # Why the context budget did not save it
 //
@@ -24,7 +34,7 @@ package plane
 // zip resolves a scheme to a Transport through a registry (zip.RegisterTransport,
 // transport.go:109) and its default `zap` Dial is one line:
 //
-// 	Dial: func(addr string) Client { return zaphttp.Dial(networkOf(addr), addr) }
+//	Dial: func(addr string) Client { return zaphttp.Dial(networkOf(addr), addr) }
 //
 // So the client already exists: re-register the same scheme with the same dialler
 // and one call to the knob zap-proto/http exports for exactly this

@@ -1,0 +1,40 @@
+{
+  "$schema": "https://schemas.agentskills.io/discovery/0.2.0/schema.json",
+  "base_url": "https://api.hanzo.ai",
+  "brand": "hanzo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://hanzo.id",
+  "mcp": {
+    "description": "Model Context Protocol over JSON-RPC 2.0 — one POST per message, stateless, protocol revision 2026-07-28. tools/list answers without a credential with one tool per subsystem (its operations in the \"op\" enum) plus \"describe\", which returns one operation's input schema. tools/call names a subsystem tool and carries {\"op\": <operation>, \"input\": <its arguments>}; it takes the same bearer the REST API does, and a call that carries none is answered 401 with a WWW-Authenticate header naming the resource metadata at /.well-known/oauth-protected-resource, which names the authorization server to sign in at. The tool surface is the public contract: the operator's admin product is not offered, and a name that would disclose a secret or mutate an identity is withheld — the list says how many, under _meta.",
+    "method": "POST",
+    "url": "https://api.hanzo.ai/v1/mcp"
+  },
+  "skill_count": 3,
+  "skills": [
+    {
+      "description": "Read usage analytics: Is the entitlement-GATED per-provider breakdown of the caller org's LLM usage — the paid lens over the same warehouse ledger GET /v1/usage/summary reads its totals from., Echoes a plan's resolved analytics entitlement so a dashboard can configure itself agai",
+      "digest": "sha256:28861259206c5e27bb273204a40e2f9f82470170f4fd13dc6d14d7313574d4dd",
+      "name": "usage_analytics",
+      "service": "usage",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/usage_analytics/SKILL.md"
+    },
+    {
+      "description": "Read usage samples: Is the PER-PROVIDER view: one connected account's own consumption of its own plan — \"my plan is 47% through its 6h window, resets at 14:20\"..",
+      "digest": "sha256:98662c3970e023bb96c99c4cd7baf8be81d455ac4a7f8687f574b52073057071",
+      "name": "usage_samples",
+      "service": "usage",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/usage_samples/SKILL.md"
+    },
+    {
+      "description": "Read usage summary: Answers GET /v1/usage/summary: the caller's own usage footprint over one window — the categorized spend roll-up from the commerce ledger, the org's LLM usage totals from the warehouse (with what the prompt cache served and saved), the org's Kai decisions, and ",
+      "digest": "sha256:31f3ee54571fe801216da354dcabff581d8009fe8e142368346680ac5165e737",
+      "name": "usage_summary",
+      "service": "usage",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/usage_summary/SKILL.md"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

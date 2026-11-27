@@ -87,12 +87,13 @@ func RegisterPushBuilder(f func(ctx context.Context, ev GitPushEvent) (int, erro
 // builder when platform is co-resident, the platform app over the plane when it
 // is not.
 //
-// The push lands on GIT's embedded server and the builder belongs to PLATFORM —
-// two apps, therefore two processes, so the builder was nil on every push that
-// has ever landed in the split fleet. Each one returned success to a caller that
-// had committed the client's objects and then triggered nothing, and no log line
-// anywhere recorded that a build had not happened. "It compiles" and "HTTP 200"
-// both held the whole time.
+// IT USED TO RETURN NIL WHEN NOTHING WAS REGISTERED, and that nil was the single
+// most expensive value in this package. The push lands on GIT's embedded server
+// and the builder belongs to PLATFORM — two apps, therefore two processes, so the
+// builder was nil on every push that has ever landed in the split fleet. Each one
+// returned success to a caller that had committed the client's objects and then
+// triggered nothing, and no log line anywhere recorded that a build had not
+// happened. "It compiles" and "HTTP 200" both held the whole time.
 //
 // Best-effort stays the CALLER's contract, not this function's silence: a push
 // already committed must not fail because a build could not be triggered. But the
@@ -150,8 +151,9 @@ func RegisterServiceReleaser(f func(ctx context.Context, ev ServiceReleaseEvent)
 // Service CR's spec.image (the operator then reconciles the Deployment). The
 // releaser enforces the clean-semver gate and CR-name resolution; this is only the dispatch.
 //
-// The proving build and the CR control plane are different apps, so that was
-// every release.
+// Like OnGitPush it used to return nil when unregistered, with the same result:
+// a release that patched no CR, reported as a successful rollout. The proving
+// build and the CR control plane are different apps, so that was every release.
 //
 // There is no ServiceReleaserRegistered() any more. A bool cannot carry "the app
 // is elsewhere": it answered false both for a fleet with no paas control plane

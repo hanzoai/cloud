@@ -1,0 +1,143 @@
+package marketplace
+
+// payments.go closes BOTH halves of the pay-per-use path this subsystem opens the
+// moment a listing is allowed to declare a price. A price nobody can pay is not a
+// price; it is a lie in the shop window.
+//
+//	registry  →  x402.Publish     the resource→Terms table x402 enforces against:
+//	                              what a listed tool costs and which wallet is paid.
+//	charger   →  tools.SetCharger the client tools.Registry.Dispatch settles through,
+//	                              which is x402.Settle on that same resource.
+//
+// ONE table, two ways onto it. The marketplace declares what is priced and who is
+// paid; x402 enforces it; the tool plane knows neither. Nothing else in the fleet
+// decides what a listed tool costs.
+//
+// CO-RESIDENCY. All three clients are process-globals (x402.reg, tools.std,
+// wallets.mounted), so this wiring binds within ONE process — and the shipped fleet
+// runs one process per app, where it binds nothing. That is why the same table is
+// also published on the internal plane (rpc.go) and the same settlement is also
+// reachable over it (apps/x402/rpc.go): one policy, two transports. The package doc
+// in marketplace.go names the four ops and what each closes.
+
+import (
+	"context"
+	"errors"
+	"fmt"
+
+	"github.com/hanzoai/cloud/apps/tools"
+	"github.com/hanzoai/cloud/apps/x402"
+	"github.com/hanzoai/cloud/client"
+)
+
+// The tool→resource naming is client.ToolResource / client.ToolOf, not a rule of this
+// package's own. It was one, and it could be while the price table and the tool
+// plane shared a process; they no longer do, and a spelling each end owns half of is
+// how a caller asks for "tool:x" while the table is keyed on something else and
+// every listed tool quietly reads as free. One spelling, in the leaf both import.
+
+// registry is the x402 price table: resource → Terms, answered from the listing
+// store. It is the ONE authority on what a listed tool costs and who is paid for it.
+type registry struct{ store *Store }
+
+// Price resolves a resource's payment terms for x402.
+//
+// The recipient is taken from the ROW — the listing's own publisher org and the
+// payout wallet it named, or the job's seller and the wallet the job pays — never
+// from anything the caller said. wallets resolves a wallet id only within the org
+// it is asked for, so terms built this way cannot name a wallet outside the
+// seller's org, and a buyer cannot redirect a credit at all.
+//
+// Two things are priced: a PLATFORM TOOL, per call, at the platform's cheapest
+// public listing of it; and a JOB, once, at the amount its parties agreed — while
+// it is still payable, and never after it ended. ok=false means FREE (no
+// enforcement): an unlisted tool, a listing with no price, a job that ended, and
+// any resource that is neither (every request path the Enforce middleware asks
+// about) all land here. A store failure is an ERROR, so x402 fails closed rather
+// than serving a priced thing for nothing.
+//
+// A tool is priced by the ROW THAT RAN, never by its name. The resource names the
+// source the dispatch resolved: a connector action or a first-party service is the
+// same tool for every org, and the platform, which owns it, may sell it; any other
+// source is the caller's own row — its function, agent, skill or server — which no
+// other org's scope lists and nobody else sold, so running it costs its owner
+// nothing here.
+//
+// A job's terms pin the payee address its authorization was signed to, as the rail
+// answered it when the job was funded: the seller may rotate its payout wallet's
+// keys while the job runs, and the payment the buyer signed still names the
+// address the wallet had.
+func (g *registry) Price(ctx context.Context, resource string) (x402.Terms, bool, error) {
+	if id, ok := client.JobOf(resource); ok {
+		j, payable, err := g.store.payable(ctx, id)
+		if err != nil {
+			return x402.Terms{}, false, fmt.Errorf("marketplace: price %s: %w", resource, err)
+		}
+		if !payable || j.Escrow.Rail != RailX402 {
+			return x402.Terms{}, false, nil
+		}
+		return x402.Terms{Amount: j.Amount, RecipientOrg: j.SellerOrg, RecipientWalletID: j.recipient, Category: j.Category,
+			PayTo: j.Escrow.PayTo}, true, nil
+	}
+	if _, _, ok := client.CapabilityOf(resource); ok {
+		l, ok, err := g.store.CheapestPublicForCapability(ctx, resource)
+		if err != nil {
+			return x402.Terms{}, false, fmt.Errorf("marketplace: price %s: %w", resource, err)
+		}
+		if !ok {
+			return x402.Terms{}, false, nil
+		}
+		return x402.Terms{
+			Amount:            l.Price,
+			RecipientOrg:      l.PublisherOrg,
+			RecipientWalletID: l.Recipient,
+			Category:          client.CategoryService,
+		}, true, nil
+	}
+	source, _, ok := client.ToolOf(resource)
+	if !ok || !tools.Source(source).Platform() {
+		return x402.Terms{}, false, nil // not a platform tool, capability, or job — this table prices nothing else
+	}
+	l, ok, err := g.store.CheapestPublicForTool(ctx, resource)
+	if err != nil {
+		return x402.Terms{}, false, fmt.Errorf("marketplace: price %s: %w", resource, err)
+	}
+	if !ok {
+		return x402.Terms{}, false, nil
+	}
+	return x402.Terms{
+		Amount:            l.Price,
+		RecipientOrg:      l.PublisherOrg,
+		RecipientWalletID: l.Recipient,
+		Category:          client.CategoryService,
+	}, true, nil
+}
+
+// charger is the tool plane's payment client: it settles a tool call through the x402
+// flow — challenge, verify, settle once — against the price table above.
+//
+// It holds NO state. Everything it needs is already somewhere authoritative: the
+// resource — the tool and the source it ran from — arrives as the argument, the
+// payer is the attested principal on the context, and the price and payee are the
+// registry's. That is the whole point of the client being this narrow.
+type charger struct{}
+
+// Charge settles one tool call, or refuses it.
+//
+// A FREE tool costs nothing and returns nil — including off the HTTP path, where
+// there is no request to attest a payer, because a free call needs none.
+//
+// A PRICED tool with no payment is refused with tools.ErrPaymentRequired, which the
+// tool surface answers 402 with; x402 has already written the challenge to the
+// response's PAYMENT-REQUIRED header, so the client learns the amount, the payee
+// address and the network, signs an EIP-3009 authorization over exactly those
+// terms, and retries. Every other failure — the rail down, the payee wallet unresolvable,
+// a caller with no billable ledger — is returned as-is and fails the call CLOSED. A
+// tool that cannot be paid for is never served free.
+func (charger) Charge(ctx context.Context, resource string) error {
+	err := x402.Settle(ctx, resource)
+	if errors.Is(err, x402.ErrPaymentRequired) {
+		return fmt.Errorf("%w: %v", tools.ErrPaymentRequired, err)
+	}
+	return err
+}

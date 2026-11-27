@@ -1,0 +1,226 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Hanzo Cloud API",
+    "description": "Package explorer is chain data: your block indexers and how far each has caught up, plus the on-chain price feeds.",
+    "version": "v1"
+  },
+  "servers": [
+    {
+      "url": "https://api.hanzo.ai"
+    }
+  ],
+  "security": [
+    {
+      "bearer": []
+    }
+  ],
+  "tags": [
+    {
+      "name": "explorer"
+    }
+  ],
+  "paths": {
+    "/v1/explorer/indexers": {
+      "get": {
+        "operationId": "get_explorer_indexers",
+        "summary": "Reports the deployment's chain indexer(s) and how far each has indexed.",
+        "description": "Reports the deployment's chain indexer(s) and how far each has\nindexed. Identity and health come from the indexer's /health; the latest indexed\nblock (height + time) from its /v1/explorer/blocks. The row EXISTS if EITHER call\nreaches the indexer; when the indexer is entirely unreachable the answer degrades\nto an honest-EMPTY list at 200, not a 502. No chain HEAD is exposed by the indexer\nREST, so `lag` is honestly omitted rather than fabricated.",
+        "tags": [
+          "explorer"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/explorer.indexersOut"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/explorer/oracles": {
+      "get": {
+        "operationId": "get_explorer_oracles",
+        "summary": "Reports the on-chain price/data oracles from the graph's O-Chain PriceFeed registry.",
+        "description": "Reports the on-chain price/data oracles from the graph's O-Chain\nPriceFeed registry. A reachable graph with no feeds answers an honest empty list;\nan unreachable or erroring graph likewise degrades to an empty list at 200 rather\nthan a 502, so the console never error-toasts. No feed is ever fabricated.",
+        "tags": [
+          "explorer"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/explorer.oraclesOut"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "explorer.indexerView": {
+        "properties": {
+          "chain": {
+            "description": "Chain is the chain this indexer indexes, as the indexer names it.",
+            "type": "string"
+          },
+          "height": {
+            "description": "Height is the latest INDEXED block height, as a decimal string. Absent when\nnothing has been indexed yet.",
+            "type": "string"
+          },
+          "id": {
+            "description": "ID identifies the indexer: its chain name, else its chain id, else the brand.",
+            "type": "string"
+          },
+          "lag": {
+            "description": "Lag is how far behind the chain HEAD this indexer is. The indexer REST does not\nexpose the head, so it is always absent rather than a fabricated zero.",
+            "type": "string"
+          },
+          "network": {
+            "description": "Network is the deployment's network tier: mainnet, testnet or devnet.",
+            "type": "string"
+          },
+          "status": {
+            "description": "Status is \"degraded\" when /health explicitly reports unhealthy, else \"active\".",
+            "type": "string"
+          },
+          "updatedAt": {
+            "description": "UpdatedAt is the latest indexed block's timestamp, RFC 3339 UTC.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "explorer.indexersOut": {
+        "properties": {
+          "indexers": {
+            "description": "Indexers is one row per reachable chain indexer, or an empty list when the\nindexer is unreachable — never a fabricated row.",
+            "items": {
+              "$ref": "#/components/schemas/explorer.indexerView"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "explorer.oracleView": {
+        "properties": {
+          "feed": {
+            "description": "Feed is the trading pair this feed prices.",
+            "type": "string"
+          },
+          "id": {
+            "description": "ID is the feed's own id, else its trading pair.",
+            "type": "string"
+          },
+          "name": {
+            "description": "Name is the feed's display name — the trading pair, e.g. \"LUX/USD\".",
+            "type": "string"
+          },
+          "source": {
+            "description": "Source is the oracle network the feed originates from; \"O-Chain\" by default.",
+            "type": "string"
+          },
+          "status": {
+            "description": "Status is \"active\" for a listed feed.",
+            "type": "string"
+          },
+          "updatedAt": {
+            "description": "UpdatedAt is the feed's own timestamp, RFC 3339 UTC.",
+            "type": "string"
+          },
+          "value": {
+            "description": "Value is the feed's price, verbatim as the registry carries it.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "explorer.oraclesOut": {
+        "properties": {
+          "oracles": {
+            "description": "Oracles is one row per on-chain price feed, or an empty list when the graph is\nunreachable or carries none — never a fabricated feed.",
+            "items": {
+              "$ref": "#/components/schemas/explorer.oracleView"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "problem-details": {
+        "description": "An RFC 9457 problem document.",
+        "properties": {
+          "code": {
+            "description": "A stable token a client can branch on, when the refusal names one.",
+            "type": "string"
+          },
+          "detail": {
+            "description": "What was refused, for a person to read.",
+            "type": "string"
+          },
+          "status": {
+            "description": "The HTTP status.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "title": {
+            "description": "The status's reason phrase.",
+            "type": "string"
+          },
+          "type": {
+            "description": "about:blank",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "status",
+          "detail"
+        ],
+        "type": "object"
+      }
+    },
+    "securitySchemes": {
+      "bearer": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "The caller's credential, sent as `Authorization: Bearer \u003ctoken\u003e`. It is either an access token minted by Hanzo IAM or an API key (pk-/sk-). X-Authorization, and HTTP Basic carrying the token as the password, are accepted spellings of the same header for clients that cannot set Authorization; a browser presents the session cookie instead. Every operation requires it unless it says `security: []`."
+      }
+    }
+  }
+}

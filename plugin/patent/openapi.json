@@ -1,0 +1,1500 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Hanzo Cloud API",
+    "description": "Package patent is the record of who thought of what, and when the machine was asked to write it.",
+    "version": "v1"
+  },
+  "servers": [
+    {
+      "url": "https://api.hanzo.ai"
+    }
+  ],
+  "security": [
+    {
+      "bearer": []
+    }
+  ],
+  "tags": [
+    {
+      "name": "patent"
+    }
+  ],
+  "paths": {
+    "/v1/patent/approvals": {
+      "get": {
+        "operationId": "get_patent_approvals",
+        "summary": "Returns the decision trail — each person's current word on each disclosure.",
+        "description": "Returns the decision trail — each person's current word on\neach disclosure. ?disclosure= narrows to one document.",
+        "tags": [
+          "patent"
+        ],
+        "parameters": [
+          {
+            "name": "disclosure",
+            "in": "query",
+            "required": false,
+            "description": "Disclosure narrows to the decisions on one document.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "project",
+            "in": "query",
+            "required": false,
+            "description": "Project narrows to one project.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/patent.approvalsOut"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      },
+      "post": {
+        "operationId": "post_patent_approvals",
+        "summary": "Appends one person's decision about one disclosure.",
+        "description": "Appends one person's decision about one disclosure. The\napprover is the validated principal and nothing else, so no caller records a\nsign-off on someone else's behalf — which is the only way this field would be\nworth reading.",
+        "tags": [
+          "patent"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "approvals": [
+                  {
+                    "comment": "research log reviewed, the mechanism is ours",
+                    "decision": "approved",
+                    "disclosure_id": "router-v2",
+                    "role": "cto"
+                  }
+                ]
+              },
+              "schema": {
+                "$ref": "#/components/schemas/patent.approvalBatch"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/patent.patentWriteOut"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/patent/disclosures": {
+      "get": {
+        "operationId": "get_patent_disclosures",
+        "summary": "Returns the canonical disclosures, each carrying its current approvals.",
+        "description": "Returns the canonical disclosures, each carrying its\ncurrent approvals.",
+        "tags": [
+          "patent"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "query",
+            "required": false,
+            "description": "ID reads one disclosure.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "description": "Status narrows to one status.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "project",
+            "in": "query",
+            "required": false,
+            "description": "Project narrows to one project.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/patent.discsOut"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      },
+      "post": {
+        "operationId": "post_patent_disclosures",
+        "summary": "Appends the assembled document and the record ids it rests on.",
+        "description": "Appends the assembled document and the record ids it\nrests on. The document is a rendering of what the log already holds, and its\ncitations are what let a reader check it instead of taking it.",
+        "tags": [
+          "patent"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/patent.disclosureBatch"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/patent.patentWriteOut"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/patent/grants": {
+      "post": {
+        "operationId": "post_patent_grants",
+        "summary": "Makes the decision a recording never implied: whether an idea, implementation or disclosure stays private to its author's project, opens to the org, or goes public.",
+        "description": "Makes the decision a recording never implied: whether an\nidea, implementation or disclosure stays private to its author's project, opens\nto the org, or goes public. Publication of a conception entry is a\ndisclosure under 35 U.S.C. §102 in every jurisdiction that reads it that way,\nso it is always a separate call and never a side effect of writing one down.",
+        "tags": [
+          "patent"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/patent.grantIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/patent.patentGrantOut"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/patent/health": {
+      "get": {
+        "operationId": "get_patent_health",
+        "summary": "Reports what this deployment actually guarantees about the records it keeps, in honest states.",
+        "description": "Reports what this deployment actually guarantees about the\nrecords it keeps, in honest states. Anchored and durable are the two that\nchange what a record is worth, and an unwired one reads as unwired rather than\nas a green light.",
+        "tags": [
+          "patent"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/patent.patentHealth"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/patent/ideas": {
+      "get": {
+        "operationId": "get_patent_ideas",
+        "summary": "Returns the caller org's canonical conception entries, oldest appended first, which is the order the log says they were thought.",
+        "description": "Returns the caller org's canonical conception entries, oldest\nappended first, which is the order the log says they were thought. ?id= narrows\nto one, ?kind= to one kind, ?project= to one project.",
+        "tags": [
+          "patent"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "query",
+            "required": false,
+            "description": "ID reads one entry, which is how a single idea is addressed — there is no\nsecond route for it.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "kind",
+            "in": "query",
+            "required": false,
+            "description": "Kind narrows to one kind of conception entry.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "project",
+            "in": "query",
+            "required": false,
+            "description": "Project narrows to one project; empty reads the org's whole set.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/patent.ideasOut"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      },
+      "post": {
+        "operationId": "post_patent_ideas",
+        "summary": "Appends conception entries.",
+        "description": "Appends conception entries. A write states the idea and\nnothing else: the project, the author, the clock, the append order and the\ncontent digest are all the server's, and a correction appends a version rather\nthan editing the entry — which is the property that makes any of it usable as\nevidence at all.",
+        "tags": [
+          "patent"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "ideas": [
+                  {
+                    "id": "route-by-queue-depth",
+                    "kind": "mechanism",
+                    "statement": "..."
+                  }
+                ]
+              },
+              "schema": {
+                "$ref": "#/components/schemas/patent.ideaBatch"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/patent.patentWriteOut"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/patent/implementations": {
+      "get": {
+        "operationId": "get_patent_implementations",
+        "summary": "Returns the canonical implementation records with their citations.",
+        "description": "Returns the canonical implementation records with\ntheir citations. ?idea= is the query the record exists to answer: which\nartifacts rest on this one conception entry.",
+        "tags": [
+          "patent"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "query",
+            "required": false,
+            "description": "ID reads one implementation.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "idea",
+            "in": "query",
+            "required": false,
+            "description": "Idea narrows to implementations citing one conception entry — which is\nhow a correction finds every artifact built on the idea it invalidates.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "project",
+            "in": "query",
+            "required": false,
+            "description": "Project narrows to one project.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/patent.implsOut"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      },
+      "post": {
+        "operationId": "post_patent_implementations",
+        "summary": "Appends the machine's half of the record, and the idea citation is the load-bearing field: it is what lets a reader see that the conception came first.",
+        "description": "Appends the machine's half of the record, and the\nidea citation is the load-bearing field: it is what lets a reader see that the\nconception came first. An entry citing no idea is refused rather than filed.",
+        "tags": [
+          "patent"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "implementations": [
+                  {
+                    "git_sha": "...",
+                    "id": "router-v2",
+                    "idea_ids": [
+                      "route-by-queue-depth"
+                    ],
+                    "model": "zen6-coder"
+                  }
+                ]
+              },
+              "schema": {
+                "$ref": "#/components/schemas/patent.implBatch"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/patent.patentWriteOut"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/patent/proof": {
+      "get": {
+        "operationId": "get_patent_proof",
+        "summary": "Folds the caller's record set and answers the ordering question over it.",
+        "description": "Folds the caller's record set and answers the ordering question\nover it.\n\n?disclosure= proves one document's set, ?idea= proves one entry and everything\nciting it, and neither proves the whole org. The answer is computed per request\nand writes nothing.",
+        "tags": [
+          "patent"
+        ],
+        "parameters": [
+          {
+            "name": "disclosure",
+            "in": "query",
+            "required": false,
+            "description": "Disclosure folds the record set one document rests on, and reports on\nthat set alone — which is what an attorney asks for.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "idea",
+            "in": "query",
+            "required": false,
+            "description": "Idea narrows to the one entry and the artifacts citing it.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "project",
+            "in": "query",
+            "required": false,
+            "description": "Project narrows inside the org; empty reads the caller's scope.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/patent.PatentProof"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/patent/timeline": {
+      "get": {
+        "operationId": "get_patent_timeline",
+        "summary": "Returns every retained version of one entry, in append order.",
+        "description": "Returns every retained version of one entry, in append\norder. ?id= names it and ?kind= says which log; a retraction is shown as the\nwithdrawal it is rather than hidden.",
+        "tags": [
+          "patent"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "query",
+            "required": false,
+            "description": "ID is the entry's stable id. Required.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "kind",
+            "in": "query",
+            "required": false,
+            "description": "Kind is idea, implementation or disclosure — which log to read.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "project",
+            "in": "query",
+            "required": false,
+            "description": "Project narrows inside the org; empty is the caller's own scope.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/patent.PatentTimeline"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "patent.PatentAnchor": {
+        "properties": {
+          "at": {
+            "description": "At is when the commitment was made, RFC3339, when there is one.",
+            "type": "string"
+          },
+          "commitment": {
+            "description": "Commitment is the fold root the anchor would name.",
+            "type": "string"
+          },
+          "reference": {
+            "description": "Reference is where a third party can check it — a block, an index, a\npublished headline. Empty means nothing outside this response names it.",
+            "type": "string"
+          },
+          "status": {
+            "description": "Status is unanchored or anchored. Nothing else: an anchored answer arrives\nonly from a real commitment, and this app never invents a transaction id.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "patent.PatentApproval": {
+        "properties": {
+          "authored_by": {
+            "description": "AuthoredBy is the validated principal who decided. The same rule as\neverywhere here: it comes from the credential, never the body, so one\nperson cannot record a decision on another's behalf.",
+            "type": "string"
+          },
+          "canonical": {
+            "description": "Canonical is DERIVED on read: this author's latest word on this\ndisclosure.",
+            "type": "boolean"
+          },
+          "comment": {
+            "description": "Comment is the reviewer's note — the part an inventor reads.",
+            "type": "string"
+          },
+          "content_hash": {
+            "description": "ContentHash is the server's digest of the recorded content.",
+            "type": "string"
+          },
+          "decision": {
+            "description": "Decision is approved, rejected or needs-work. A needs-work is dated and\nretained exactly like a sign-off, because it IS one.",
+            "type": "string"
+          },
+          "disclosure_id": {
+            "description": "DisclosureID is the document this decides on. Required.",
+            "type": "string"
+          },
+          "id": {
+            "description": "ID is the server's handle for this decision, derived from the disclosure\nand its author. Read-only: a caller cannot name someone else's approval.",
+            "type": "string"
+          },
+          "project": {
+            "description": "Project is the SERVER's scope value.",
+            "type": "string"
+          },
+          "recorded_at": {
+            "description": "RecordedAt is the server's clock.",
+            "type": "string"
+          },
+          "revision": {
+            "description": "Revision is original, corrected or retracted.",
+            "type": "string"
+          },
+          "role": {
+            "description": "Role is the capacity the person acted in: author, cto, reviewer, attorney\nor counsel. Required, because \"approved\" by nobody is not a fact.",
+            "type": "string"
+          },
+          "seq": {
+            "description": "Seq is the append order.",
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "patent.PatentCoverage": {
+        "properties": {
+          "approvals": {
+            "description": "Approvals is how many decisions it covered.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "disclosures": {
+            "description": "Disclosures is how many documents it covered.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "ideas": {
+            "description": "Ideas is how many conception entries the fold covered.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "implementations": {
+            "description": "Implementations is how many implementation records it covered.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "versions": {
+            "description": "Versions is how many RETAINED versions were folded, which is at least the\nsum above and is the number that says corrections happened.",
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "patent.PatentDisclosure": {
+        "properties": {
+          "approvals": {
+            "description": "Approvals is DERIVED on read: the current decision of record from each\nperson who has ruled on this disclosure. Never an input — a caller cannot\napprove its own document by writing a field in it.",
+            "items": {
+              "$ref": "#/components/schemas/patent.PatentApproval"
+            },
+            "type": "array"
+          },
+          "authored_by": {
+            "description": "AuthoredBy is the validated principal who recorded this version.",
+            "type": "string"
+          },
+          "body": {
+            "description": "Body is the document's text. Its digest is published beside it so a reader\ncan tell a stored body from a re-sent one.",
+            "type": "string"
+          },
+          "body_sha256": {
+            "description": "BodySHA256 is the SERVER's digest of body. On a read it is the address of\nwhat is stored; a body is never hashed from what a reader sent.",
+            "type": "string"
+          },
+          "canonical": {
+            "description": "Canonical is DERIVED on read.",
+            "type": "boolean"
+          },
+          "claims": {
+            "description": "Claims is the draft claim set, or a pointer to where it lives.",
+            "type": "string"
+          },
+          "content_hash": {
+            "description": "ContentHash is the server's digest of the recorded content.",
+            "type": "string"
+          },
+          "filing_ref": {
+            "description": "FilingRef is a filing number a human recorded here after filing. Empty\nmeans nothing has been filed, and no code path fills it.",
+            "type": "string"
+          },
+          "id": {
+            "description": "ID is the disclosure's stable id. Required.",
+            "type": "string"
+          },
+          "idea_ids": {
+            "description": "IdeaIDs are the conception entries this disclosure is built from. The\nevidence half; a disclosure citing none is an assertion.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "implementation_ids": {
+            "description": "ImplementationIDs are the artifacts it describes.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "project": {
+            "description": "Project is the SERVER's scope value.",
+            "type": "string"
+          },
+          "recorded_at": {
+            "description": "RecordedAt is the server's clock.",
+            "type": "string"
+          },
+          "revision": {
+            "description": "Revision is original, corrected or retracted.",
+            "type": "string"
+          },
+          "seq": {
+            "description": "Seq is the append order.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "status": {
+            "description": "Status is draft, reviewed, approved or filed. `approved` means the\napprovals below carry a decision for each required role, which is DERIVED\non read, not a word a caller sets and gets believed.",
+            "type": "string"
+          },
+          "summary": {
+            "description": "Summary is the invention in one paragraph, for the reader who decides\nwhether to read the rest.",
+            "type": "string"
+          },
+          "title": {
+            "description": "Title names the invention the way the document does.",
+            "type": "string"
+          },
+          "visibility": {
+            "description": "Visibility is private, org or public; forced private on a write.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "patent.PatentGap": {
+        "properties": {
+          "field": {
+            "description": "Field is the wire name, e.g. prior_art.",
+            "type": "string"
+          },
+          "missing": {
+            "description": "Missing is how many covered records leave it empty.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "why": {
+            "description": "Why names what the absence costs, so a gap is a decision to fix rather\nthan a lint warning.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "patent.PatentIdea": {
+        "properties": {
+          "alternatives": {
+            "description": "Alternatives are the routes considered and rejected, each with its reason.",
+            "items": {
+              "$ref": "#/components/schemas/patent.PatentRejectedAlternative"
+            },
+            "type": "array"
+          },
+          "authored_by": {
+            "description": "AuthoredBy is the validated principal who recorded this version — an IAM\nsubject, never a body field. It is the §115 answer, and a model has none.",
+            "type": "string"
+          },
+          "canonical": {
+            "description": "Canonical is DERIVED on read: a version is canonical when it is the\nlatest-appended non-retracted version of its id.",
+            "type": "boolean"
+          },
+          "content_hash": {
+            "description": "ContentHash is the SERVER's digest of the recorded content and this\nversion's identity. Computed on a write; read back on a read.",
+            "type": "string"
+          },
+          "id": {
+            "description": "ID is the entry's stable id, the key its versions accrue under:\nlowercase, terse, and named for the idea rather than the file —\nlatency-aware-request-routing. Required on a write.",
+            "type": "string"
+          },
+          "kind": {
+            "description": "Kind is what kind of conception this is: problem, alternative,\narchitecture, mechanism, decision or rejection. Required on a write.",
+            "type": "string"
+          },
+          "notes": {
+            "description": "Notes is anything a later reader needs that the fields above cannot carry.",
+            "type": "string"
+          },
+          "prior_art": {
+            "description": "PriorArt is what the author knows already existed, named as the author\nknows it. It is a statement of the inventor's awareness, not a search\nresult, and it is not a substitute for one.",
+            "type": "string"
+          },
+          "problem": {
+            "description": "Problem is the technical problem being solved, and why the existing\napproaches fail at it.",
+            "type": "string"
+          },
+          "project": {
+            "description": "Project is the sub-scope inside the org this entry is filed under. On a\nwrite it is the SERVER's value and a project in the body is ignored.",
+            "type": "string"
+          },
+          "recorded_at": {
+            "description": "RecordedAt is when this store accepted the version, RFC3339, from the\nserver clock.",
+            "type": "string"
+          },
+          "revision": {
+            "description": "Revision is the producer's declared kind of this version: original,\ncorrected or retracted. A retracted latest version WITHDRAWS the id; every\nearlier version stays retained.",
+            "type": "string"
+          },
+          "seq": {
+            "description": "Seq is this version's place in the store's append order. The ordering\nauthority; never a client value.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "signature": {
+            "$ref": "#/components/schemas/patent.PatentSignature",
+            "description": "PatentSignature is an optional detached signature over this entry's digest."
+          },
+          "statement": {
+            "description": "Statement is the operative idea in the author's own prose — definite\nenough that a reader could implement it from this alone. Required, and the\nfield an examiner would actually read.",
+            "type": "string"
+          },
+          "title": {
+            "description": "Title is the one-line name of the entry.",
+            "type": "string"
+          },
+          "visibility": {
+            "description": "Visibility is private, org or public. A write forces private.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "patent.PatentImplementation": {
+        "properties": {
+          "artifact_sha256": {
+            "description": "ArtifactSHA256 is the digest of the recorded artifact — a diff, a file, a\nbuild — when the caller has one and wants it addressed by content.",
+            "type": "string"
+          },
+          "authored_by": {
+            "description": "AuthoredBy is the validated principal who recorded this. Authorship of the\nIDEA is PatentIdea.AuthoredBy — this field records who filed the\nimplementation record, which is not the same question.",
+            "type": "string"
+          },
+          "canonical": {
+            "description": "Canonical is DERIVED on read.",
+            "type": "boolean"
+          },
+          "content_hash": {
+            "description": "ContentHash is the server's digest of the recorded content.",
+            "type": "string"
+          },
+          "generated": {
+            "description": "Generated says the recorded artifact was produced with a model's\nassistance rather than typed by hand.",
+            "type": "boolean"
+          },
+          "git_branch": {
+            "description": "GitBranch is the branch that commit was on.",
+            "type": "string"
+          },
+          "git_dirty": {
+            "description": "GitDirty says the working tree carried uncommitted changes when this was\nrecorded. It is recorded because an exact commit claim that is not true is\nworse than no commit claim.",
+            "type": "boolean"
+          },
+          "git_sha": {
+            "description": "GitSHA is the commit. Together with Seq it is what makes the claim checkable\noutside this app: a reader can go read the code.",
+            "type": "string"
+          },
+          "human_review": {
+            "description": "HumanReview is what a person did with the output: accepted, edited,\nrewritten, or none. `none` on a novel mechanism is the disposition to\nknow about.",
+            "type": "string"
+          },
+          "id": {
+            "description": "ID is this implementation's stable id — usually the artifact or change it\nrecords, e.g. router-v2-generated. Required.",
+            "type": "string"
+          },
+          "idea_ids": {
+            "description": "IdeaIDs names the conceptions this implements. REQUIRED and non-empty:\nan implementation citing nothing is the inverted order the guidance is\nwritten against, and filing it silently would be the worst thing this\nsurface could do.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "model": {
+            "description": "Model names the system that produced the code, as it was addressed. This is\nthe field that answers \"how much of this was a tool\" without a guess.",
+            "type": "string"
+          },
+          "notes": {
+            "description": "Notes is anything a later reader needs.",
+            "type": "string"
+          },
+          "project": {
+            "description": "Project is the SERVER's scope value.",
+            "type": "string"
+          },
+          "prompt_sha256": {
+            "description": "PromptSHA256 is the digest of the prompt, not the prompt. The text often\ncarries third-party material; the digest lets a later reader prove the\nsame request was made.",
+            "type": "string"
+          },
+          "recorded_at": {
+            "description": "RecordedAt is the server's clock.",
+            "type": "string"
+          },
+          "repo": {
+            "description": "Repo is the repository the work landed in.",
+            "type": "string"
+          },
+          "revision": {
+            "description": "Revision is original, corrected or retracted.",
+            "type": "string"
+          },
+          "seq": {
+            "description": "Seq is the append order, which is what GET /v1/patent/proof compares\nagainst the cited ideas.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "visibility": {
+            "description": "Visibility is private, org or public; forced private on a write.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "patent.PatentOrderCheck": {
+        "properties": {
+          "gap_seq": {
+            "description": "GapSeq is how many appends separate them, negative when the implementation\nprecedes the idea. It is a distance in the LOG rather than in seconds,\nbecause seconds are comparable only within one server's clock.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "idea": {
+            "description": "Idea is the conception it cites.",
+            "type": "string"
+          },
+          "implementation": {
+            "description": "Implementation is the artifact being examined.",
+            "type": "string"
+          },
+          "verdict": {
+            "description": "Verdict is before, after or unproven.",
+            "type": "string"
+          },
+          "why": {
+            "description": "Why states, in one sentence, what the verdict is resting on. A verdict\nwithout its basis is the thing this whole surface exists to avoid.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "patent.PatentProof": {
+        "properties": {
+          "anchor": {
+            "$ref": "#/components/schemas/patent.PatentAnchor",
+            "description": "PatentAnchor is the external standing of this exact root."
+          },
+          "coverage": {
+            "$ref": "#/components/schemas/patent.PatentCoverage",
+            "description": "Coverage counts what the fold held, per kind, so a short list reads as a\nshort log and not as a complete one."
+          },
+          "gaps": {
+            "description": "Gaps names every field of the covered records that states nothing, with\nhow many records leave it unstated.",
+            "items": {
+              "$ref": "#/components/schemas/patent.PatentGap"
+            },
+            "type": "array"
+          },
+          "order": {
+            "description": "Order is one verdict per implementation-idea pair.",
+            "items": {
+              "$ref": "#/components/schemas/patent.PatentOrderCheck"
+            },
+            "type": "array"
+          },
+          "project": {
+            "description": "Project is the scope the fold covered.",
+            "type": "string"
+          },
+          "records": {
+            "description": "Records are the entries folded, oldest clock first.",
+            "items": {
+              "$ref": "#/components/schemas/patent.PatentProofEntry"
+            },
+            "type": "array"
+          },
+          "root": {
+            "description": "Root is the fold digest over every record in append order.",
+            "type": "string"
+          },
+          "verdict": {
+            "description": "Verdict is the whole answer in one word: supported when every pair is\n`before`, contested when any is `after`, unproven when any is missing, and\nempty when there was nothing to fold. It is the WORST pair, because a chain\nwith one inverted edge is not a chain.",
+            "type": "string"
+          },
+          "verified_at": {
+            "description": "VerifiedAt is when this fold was computed. The records can have grown since;\nthe root is the set as of here.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "patent.PatentProofEntry": {
+        "properties": {
+          "authored_by": {
+            "description": "AuthoredBy is the validated subject on the record.",
+            "type": "string"
+          },
+          "content_hash": {
+            "description": "ContentHash is the server's digest of the recorded content.",
+            "type": "string"
+          },
+          "digest": {
+            "description": "Digest is what the fold consumed: content hash and clock together, so two\nversions of one id with identical content still differ in the fold.",
+            "type": "string"
+          },
+          "id": {
+            "description": "ID is the record's stable id.",
+            "type": "string"
+          },
+          "kind": {
+            "description": "Kind is idea, implementation, disclosure or approval.",
+            "type": "string"
+          },
+          "recorded_at": {
+            "description": "RecordedAt is the server clock at the append.",
+            "type": "string"
+          },
+          "revision": {
+            "description": "Revision is original, corrected or retracted.",
+            "type": "string"
+          },
+          "seq": {
+            "description": "Seq is the append clock value. The ordering authority.",
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "patent.PatentRejectedAlternative": {
+        "properties": {
+          "option": {
+            "description": "Option is the approach, in the author's words.",
+            "type": "string"
+          },
+          "reason": {
+            "description": "Reason is why it was rejected — the constraint or failure that decided it.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "patent.PatentSignature": {
+        "properties": {
+          "algo": {
+            "description": "Algo names the scheme, e.g. ed25519. Empty means the record does not say.",
+            "type": "string"
+          },
+          "key_id": {
+            "description": "KeyID names the key that signed. It is a reference, not public bytes.",
+            "type": "string"
+          },
+          "value": {
+            "description": "Value is the signature, base64.",
+            "type": "string"
+          },
+          "verified": {
+            "description": "Verified is the SERVER's answer to whether it checked this signature. It is\nfalse on a deployment with no verifier wired, and a record carrying an\nunchecked signature says so rather than borrowing credibility.",
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
+      "patent.PatentTimeline": {
+        "properties": {
+          "found": {
+            "description": "Found is false when no version of that id exists in this org.",
+            "type": "boolean"
+          },
+          "id": {
+            "description": "ID is the entry named.",
+            "type": "string"
+          },
+          "kind": {
+            "description": "Kind is which log was read.",
+            "type": "string"
+          },
+          "project": {
+            "description": "Project is the scope it is filed under.",
+            "type": "string"
+          },
+          "retained": {
+            "description": "Retained is len(versions).",
+            "format": "int64",
+            "type": "integer"
+          },
+          "versions": {
+            "description": "Versions are every retained version, oldest append first.",
+            "items": {
+              "$ref": "#/components/schemas/patent.PatentTimelineEntry"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "patent.PatentTimelineEntry": {
+        "properties": {
+          "authored_by": {
+            "description": "AuthoredBy is the validated subject who appended it.",
+            "type": "string"
+          },
+          "canonical": {
+            "description": "Canonical marks the version a listing would return: the latest non-retracted\none. Exactly one entry per id is canonical, or none, when the latest retracts.",
+            "type": "boolean"
+          },
+          "content_hash": {
+            "description": "ContentHash is this version's identity.",
+            "type": "string"
+          },
+          "recorded_at": {
+            "description": "RecordedAt is the server clock at the append.",
+            "type": "string"
+          },
+          "revision": {
+            "description": "Revision is original, corrected or retracted.",
+            "type": "string"
+          },
+          "seq": {
+            "description": "Seq is the append clock value this version was stamped with.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "superseded": {
+            "description": "Superseded marks a retained version that a later one replaced. Retained and\nsuperseded are both true of most of a long history, and that is the point.",
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
+      "patent.approvalBatch": {
+        "properties": {
+          "approvals": {
+            "description": "Approvals are the decisions to append, at most 2000.",
+            "items": {
+              "$ref": "#/components/schemas/patent.PatentApproval"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "patent.approvalsOut": {
+        "properties": {
+          "data": {
+            "description": "Data are the current decisions of record, oldest append first.",
+            "items": {
+              "$ref": "#/components/schemas/patent.PatentApproval"
+            },
+            "type": "array"
+          },
+          "total": {
+            "description": "Total is len(data).",
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "patent.disclosureBatch": {
+        "properties": {
+          "disclosures": {
+            "description": "Disclosures are the documents to append, at most 2000.",
+            "items": {
+              "$ref": "#/components/schemas/patent.PatentDisclosure"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "patent.discsOut": {
+        "properties": {
+          "data": {
+            "description": "Data are the canonical disclosures, oldest append first.",
+            "items": {
+              "$ref": "#/components/schemas/patent.PatentDisclosure"
+            },
+            "type": "array"
+          },
+          "total": {
+            "description": "Total is len(data).",
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "patent.grantIn": {
+        "properties": {
+          "id": {
+            "description": "ID is the record's stable id.",
+            "type": "string"
+          },
+          "kind": {
+            "description": "Kind is idea, implementation or disclosure — what the id names.",
+            "type": "string"
+          },
+          "project": {
+            "description": "Project locates the record inside the caller's own org.",
+            "type": "string"
+          },
+          "visibility": {
+            "description": "Visibility is private, org or public.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "patent.ideaBatch": {
+        "properties": {
+          "ideas": {
+            "description": "Ideas are the entries to append, at most 2000.",
+            "items": {
+              "$ref": "#/components/schemas/patent.PatentIdea"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "patent.ideasOut": {
+        "properties": {
+          "data": {
+            "description": "Data are the canonical entries, oldest append first.",
+            "items": {
+              "$ref": "#/components/schemas/patent.PatentIdea"
+            },
+            "type": "array"
+          },
+          "total": {
+            "description": "Total is len(data).",
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "patent.implBatch": {
+        "properties": {
+          "implementations": {
+            "description": "Implementations are the records to append, at most 2000.",
+            "items": {
+              "$ref": "#/components/schemas/patent.PatentImplementation"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "patent.implsOut": {
+        "properties": {
+          "data": {
+            "description": "Data are the canonical records, oldest append first.",
+            "items": {
+              "$ref": "#/components/schemas/patent.PatentImplementation"
+            },
+            "type": "array"
+          },
+          "total": {
+            "description": "Total is len(data).",
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "patent.patentGrantOut": {
+        "properties": {
+          "updated": {
+            "description": "Updated is how many records the grant moved to the visibility asked for.\nIt counts every RETAINED version of the target, so it is at least one.",
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "patent.patentHealth": {
+        "properties": {
+          "anchored": {
+            "description": "Anchored is whether record roots are committed outside this platform.\nFalse is the common case and the important one: without it the chain\nproves order WITHIN the platform's own honesty and nothing beyond it.",
+            "type": "boolean"
+          },
+          "durable": {
+            "description": "Durable is whether acknowledged writes are fenced to a durable object.\nFalse means a store is local to this pod: the records stand, failover does\nnot carry them.",
+            "type": "boolean"
+          },
+          "now": {
+            "description": "RecordedAt is the server's time now, RFC3339 — so a reader can tell how\nstale its own view is.",
+            "type": "string"
+          },
+          "signature_verification": {
+            "description": "SignatureVerification is whether the server can verify a submitted\ndetached signature. Attribution does not depend on it — the author of\nevery record is the validated principal, never a body field — but a\nrecord carrying a signature it cannot check says so.",
+            "type": "boolean"
+          },
+          "stamped_by": {
+            "description": "ServerClockSays is what stamps a record: always \"server\", because no\nclient-supplied timestamp is read anywhere in this package.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "patent.patentWriteOut": {
+        "properties": {
+          "canonical": {
+            "description": "Canonical is how many entries the org's log now holds for this kind.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "project": {
+            "description": "Project is the scope the batch was filed under, as the server decided it.",
+            "type": "string"
+          },
+          "recorded": {
+            "description": "Recorded is how many new versions this call appended.",
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "problem-details": {
+        "description": "An RFC 9457 problem document.",
+        "properties": {
+          "code": {
+            "description": "A stable token a client can branch on, when the refusal names one.",
+            "type": "string"
+          },
+          "detail": {
+            "description": "What was refused, for a person to read.",
+            "type": "string"
+          },
+          "status": {
+            "description": "The HTTP status.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "title": {
+            "description": "The status's reason phrase.",
+            "type": "string"
+          },
+          "type": {
+            "description": "about:blank",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "status",
+          "detail"
+        ],
+        "type": "object"
+      }
+    },
+    "securitySchemes": {
+      "bearer": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "The caller's credential, sent as `Authorization: Bearer \u003ctoken\u003e`. It is either an access token minted by Hanzo IAM or an API key (pk-/sk-). X-Authorization, and HTTP Basic carrying the token as the password, are accepted spellings of the same header for clients that cannot set Authorization; a browser presents the session cookie instead. Every operation requires it unless it says `security: []`."
+      }
+    }
+  }
+}

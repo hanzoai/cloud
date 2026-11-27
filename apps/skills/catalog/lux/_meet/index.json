@@ -1,0 +1,51 @@
+{
+  "$schema": "https://schemas.agentskills.io/discovery/0.2.0/schema.json",
+  "base_url": "https://api.lux.network",
+  "brand": "lux",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://lux.id",
+  "mcp": {
+    "description": "Model Context Protocol over JSON-RPC 2.0 — one POST per message, stateless, protocol revision 2026-07-28. tools/list answers without a credential with one tool per subsystem (its operations in the \"op\" enum) plus \"describe\", which returns one operation's input schema. tools/call names a subsystem tool and carries {\"op\": <operation>, \"input\": <its arguments>}; it takes the same bearer the REST API does, and a call that carries none is answered 401 with a WWW-Authenticate header naming the resource metadata at /.well-known/oauth-protected-resource, which names the authorization server to sign in at. The tool surface is the public contract: the operator's admin product is not offered, and a name that would disclose a secret or mutate an identity is withheld — the list says how many, under _meta.",
+    "method": "POST",
+    "url": "https://api.lux.network/v1/mcp"
+  },
+  "skill_count": 4,
+  "skills": [
+    {
+      "description": "Read meet call: Where a room's call happens.",
+      "digest": "sha256:69cb693a8abb29e48c5e87f84ac04f406ec26a23d10097f2d974e05d850fa9c3",
+      "name": "meet_call",
+      "service": "meet",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/meet_call/SKILL.md"
+    },
+    {
+      "description": "Read meet health: Reports whether the office can mint join tokens..",
+      "digest": "sha256:2573e480b978c09be8a2c4cedc00a1aca5e55eaa61726411cad37424723e7068",
+      "name": "meet_health",
+      "service": "meet",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/meet_health/SKILL.md"
+    },
+    {
+      "description": "Read meet record: What is being recorded in a room, and where the file goes.",
+      "digest": "sha256:d0176ad29f39fcb1eb8c6799361f8d6bc6a261829a028bc9129770b631b49761",
+      "name": "meet_record",
+      "service": "meet",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/meet_record/SKILL.md"
+    },
+    {
+      "description": "Read meet session: What this caller may open a room in.",
+      "digest": "sha256:37b2b784d083354d78ad741802a98238f608c5b5de1f9d5e5420e45cc7c63667",
+      "name": "meet_session",
+      "service": "meet",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/meet_session/SKILL.md",
+      "works": [
+        "education"
+      ]
+    }
+  ],
+  "spec_version": "8.0.0"
+}

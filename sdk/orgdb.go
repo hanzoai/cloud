@@ -39,7 +39,9 @@ import (
 // "own a database" one decision, and they are made by different things at
 // different times — the name by the request, the ownership by an election.
 //
-// The type is org.Durability and is spelled that way everywhere.
+// The type is org.Durability and is spelled that way everywhere. It used to have
+// a second name here — `type Durability = org.Durability` — which bought nothing
+// and cost the reader a hop to find out the two were the same thing.
 
 // OrgDB is the ONE way any cloud subsystem opens a per-entity database
 // (HIP-0302 physical isolation). It resolves the namespace to its path, creates
@@ -77,10 +79,12 @@ func OrgDB(dataDir string, ns namespace.Namespace, subsystem string) (*sql.DB, e
 // customer books, the ledger.
 
 // openOrgDB opens the SQLite file under the single-writer discipline every org
-// store shares: one connection, which serializes writes against the file lock
-// and makes a read-modify-write such as todo's per-project issue-number
-// allocation a safe transaction. On hanzo-sql the same call is a pool on the
-// store's schema, and the serialization is the database's (dialect.Lock).
+// store shares: one connection, which serializes writes against the file lock and
+// makes a read-modify-write such as todo's per-project issue-number allocation
+// a safe transaction. The WAL/foreign-key/busy-timeout pragmas this used to set by
+// hand are the driver's, applied per connection (see locus). On hanzo-sql the
+// same call is a pool on the store's schema, and the serialization is the
+// database's (dialect.Lock).
 //
 // A subsystem that is not ported stays its file with the DSN set, and a store of one
 // that the registry says is on hanzo-sql is refused, since opening its file would split
@@ -659,9 +663,12 @@ func (c *OrgStore[T]) touch(ns namespace.Namespace) { c.used[ns] = time.Now() }
 // caller uses it after the call returns, so evicting the least recently USED
 // store closes a database out from under whoever is holding it: under load a
 // store touched a millisecond ago is still the coldest of N, and a rank-ordered
-// eviction picks it. A store touched within idleAfter is therefore NEVER a
-// candidate, however many others arrive: no request holds a handle for minutes,
-// so a store past that deadline is one nobody is inside.
+// eviction picks it. That is not a theoretical race — it was measured on the
+// first draft of this function, which lost 21 acknowledged writes across a 40-org
+// run and answered `sql: database is closed` to four live writers. A store
+// touched within idleAfter is therefore NEVER a candidate, however many others
+// arrive: no request holds a handle for minutes, so a store past that deadline is
+// one nobody is inside.
 //
 // IT WILL EXCEED THE BOUND RATHER THAN TAKE A LIVE STORE, and that direction is
 // chosen. If nothing is idle enough, the open set stays over maxOpen and says so
@@ -1147,10 +1154,13 @@ func (c *OrgStore[T]) promote(ns namespace.Namespace, path string, old T, oldDur
 // (the caller retries on the new owner).
 //
 // WITHOUT A DURABILITY THERE ARE TWO ANSWERS AND THEY ARE NOT THE SAME. A lone
-// writer's committed write is already as durable as the deployment is configured
-// to be, so the ship is a successful no-op and always was. But a deployment with
-// SEVERAL writers and no fence can prove nothing: no round orders the two
-// copies, so an acknowledgement here is a claim the deployment cannot support.
+// writer's committed write is already as durable as the deployment is configured to
+// be, so the ship is a successful no-op and always was. But a deployment with
+// SEVERAL writers and no fence can prove nothing: no round orders the two copies,
+// so an acknowledgement here is a claim the deployment cannot support. It used to
+// ack anyway, which is how the end-of-lease path went on billing customers in the
+// one regime whose whole point is that nobody may — the gate refused the sweep and
+// the ship waved the debit through behind it.
 //
 // So it REFUSES, and the refusal is what defers the debit rather than doubling it:
 // no watermark becomes durable, so the whole gap bills once, on whichever replica

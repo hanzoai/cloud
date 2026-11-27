@@ -1,0 +1,671 @@
+// Copyright © 2026 Hanzo AI. MIT License.
+
+package client
+
+import (
+	"encoding/base64"
+	"encoding/json"
+	"net/http"
+	"sort"
+	"strings"
+	"sync"
+	"time"
+
+	"github.com/hanzoai/cloud/manifest"
+	"github.com/hanzoai/cloud/sdk/brand"
+	"github.com/hanzoai/cloud/sdk/env"
+	"github.com/hanzoai/cloud/sdk/mcp"
+	"github.com/hanzoai/cloud/sdk/scrub"
+	"github.com/valyala/fasthttp"
+	"github.com/zap-proto/zip"
+)
+
+// The surface's ONE agent MCP server, composed AT THE MOMENT OF ASKING.
+//
+// zip serves this MCP server for an app out of that app's own typed-op registry,
+// plus whatever build-time catalogues a host handed it. The light host has
+// neither: it registers no op of its own, and the catalogues are gone. What it
+// has is CHILDREN, and an MCP server whose whole content is "what my children
+// serve right now" is a different mechanism from "what I was compiled knowing",
+// so the host owns it here rather than configuring zip's (cmd/cloud disables that
+// one, so there is exactly one handler at this address and not two chained by the
+// router).
+//
+// Every method below is answered from the children. Nothing is remembered
+// between requests except how to ROUTE a name — which app listed it, and which
+// operation the MCP server published it as. Both are written by one gather and
+// neither is a catalogue: see [MCP.owner].
+
+// The revision this server answers in is the one the client asked for when the
+// server speaks it, else the newest (mcp.Negotiate) — the negotiation zip's own
+// door runs for every child, over the same revision set (mcp.Revisions), so the
+// surface and its subsystems answer one client in one revision. It moves with
+// zip and only with zip: 2026-07-28 landed in zip v1.28.1, which answers
+// server/discover and declares the stateless revision this server has in fact
+// always served — nothing here is remembered between requests except how to
+// ROUTE a name, and tools/list has always answered without a preceding
+// initialize. A client that asks for 2025-06-18 or 2025-11-25 is answered in
+// it: those define the same Streamable HTTP transport and the same tool
+// methods, and this server reads no JSON-RPC batch under any of them.
+
+// Unavailable is the _meta key under which tools/list names the subsystems it
+// could not ask.
+//
+// It exists because a short list and a stale file are the SAME defect: the
+// caller cannot tell a subsystem that serves nothing from one that did not
+// answer, so it reads a partial catalogue as a complete one. MCP puts extension
+// data on the result's _meta, so the outage travels with the answer it qualifies
+// and a client that only reads `tools` still gets every tool that exists —
+// blanking a working surface because one app is down would be a worse answer than
+// a shorter list, but an UNANNOUNCED shorter list is worse than both.
+const Unavailable = "hanzo.ai/unavailable"
+
+// Outage is one subsystem that could not be asked, and why.
+type Outage struct {
+	App   string `json:"app"`
+	Error string `json:"error"`
+}
+
+// MCP is the composed agent MCP server: the apps it fronts, and the tool→app
+// routing it learned from the last time it asked.
+//
+// HOW to reach one is deliberately NOT here. The same MCP server is published at
+// two addresses with two different populations behind them — the edge, and the
+// surface's own internal socket — and a subsystem's is likewise reached at two
+// (see [At]). Holding one reach on the server would make the routing table and the
+// hop one fact, so publishing the MCP server anywhere would publish the edge's
+// hop everywhere.
+type MCP struct {
+	host *zip.App
+	apps []string
+
+	// owner is tool name → the app that LISTED it, written by every gather and
+	// read by tools/call. It is not a catalogue and cannot go stale in a way that
+	// matters: the host only ever NAMES an app to forward to, the child's own
+	// registry decides whether the tool exists, and a name it no longer serves
+	// yields that child's own -32602 rather than a mis-dispatch. A name nobody
+	// listed is discovered by asking, not by guessing.
+	//
+	// alias is the same kind of fact and rides with it: the name the MCP server
+	// PUBLISHED for an operation → the id its owner knows it by. It holds only the
+	// operations whose published name differs, it is rewritten by the same gather,
+	// and it is read at exactly two places — [MCP.lookup] and [MCP.describe]. See
+	// client/verbs.go for why the name it undoes is not the name the gate judged.
+	mu    sync.RWMutex
+	owner map[string]string
+	alias map[string]string
+
+	// Catalog is what a subsystem PUBLISHED, and nil means the one this binary
+	// embeds. It exists because the server's answer is now entirely a function of
+	// published operations — nothing is asked — so a caller that composes an MCP
+	// server over subsystems this binary did not build (a test with real children,
+	// an alternate host) has to be able to say what they publish. Production leaves
+	// it nil: the embedded catalog is generated from each app's own openapi.json
+	// and regenerated by the same gate that holds those documents.
+	Catalog func(app string) []Op
+}
+
+// descriptorOf is what the server hands back for a published operation: the same
+// shape a child's own registry projects, carrying the two fields a catalog can
+// hold. The input schema is not among them — [MCP.describe] asks the owner for
+// that, which starts ONE subsystem rather than the surface.
+func descriptorOf(app string, op Op) json.RawMessage {
+	raw, err := json.Marshal(map[string]any{
+		"name":        op.ID,
+		"description": op.Doc,
+		"inputSchema": map[string]any{"type": "object"},
+	})
+	if err != nil {
+		return json.RawMessage(`{"name":"` + op.ID + `"}`)
+	}
+	return raw
+}
+
+// Mount serves the surface's agent MCP server at path, over apps, reaching one
+// with at.
+//
+// apps is the deployment's COMPOSED set (cmd/cloud's `composed`), never the whole
+// manifest: a deployment that does not run a subsystem must not offer its tools,
+// for the same reason it must not publish its routes.
+//
+// It also signposts the address the server LEFT, and that belongs here rather
+// than in the console's terminal handler, which is where it used to live. The
+// console answered an unclaimed [manifest.FrameworkMCPPath] with "the MCP server
+// moved" on the reasoning that a plugin serving its own MCP server there would
+// match a real route and never reach it. Untrue: zip mounts that route only when
+// the app has something to expose (installMCP), so a plugin whose typed ops live
+// on the internal plane — kms, whose four secret ops are on cloud.Plane()
+// precisely so no route runs from the edge to a secret — has NO route at its own
+// MCP path, fell through to the console, and was told its server was at an
+// address only a host serves. Measured: POST /mcp -> 308, then POST /v1/mcp ->
+// 404, and the surface reads that non-2xx as an outage for a child that is serving
+// fine.
+//
+// A signpost is only true where the server actually moved, and this is the one
+// place that knows it did — the same call that registers the target names it.
+func Use(host *zip.App, path string, apps []string, at At) *MCP {
+	d := &MCP{host: host, apps: apps, owner: map[string]string{}}
+	// The EDGE endpoint: the one address a client with no credential can reach, and
+	// therefore the one that has to say where a credential comes from (challenge).
+	edge := func(c *zip.Ctx) error { return d.serve(c, at, true) }
+	host.Raw(http.MethodPost, path, edge)
+	for _, p := range []string{path + "/oauth", path + "-oauth", path + "-oauth-dynamic"} {
+		host.Raw(http.MethodPost, p, edge)
+	}
+	// URL-token door (/v1/mcp/:key): for remote MCP connectors (Claude.ai, ChatGPT,
+	// NanoClaw) that cannot set custom HTTP headers.
+	host.Raw(http.MethodPost, path+"/:key", func(c *zip.Ctx) error {
+		if key := c.Param("key"); key != "" && key != "oauth" && !credentialed(c) {
+			c.Fiber().Request().Header.Set("Authorization", "Bearer "+key)
+		}
+		return d.serve(c, at, true)
+	})
+	if path != manifest.FrameworkMCPPath {
+		host.Raw(zip.MethodAll, manifest.FrameworkMCPPath, signpost(path))
+	}
+	return d
+}
+
+// Serve publishes THIS server at another address — the same gather, the same
+// routing table, the same [refuse] gate.
+//
+// It exists because the surface's own subsystems need the MCP server too, and the
+// address a subsystem can reach is not the edge's. An agent inside `agents` that
+// asked api.hanzo.ai for its tools would leave the surface, re-enter through the
+// edge and arrive back one process away carrying whatever credential it could
+// find; the host's internal socket is one hop with no edge on it (see
+// cmd/cloud/wake.go, which is the one caller).
+//
+// A SECOND server over the same children would be a second routing table and,
+// worse, a second place the curation rule could be applied — or forgotten. This
+// is the same object reached from another direction: one aggregation, one
+// policy, one owner map. Which is also why an internal caller cannot be offered
+// a wider surface than an external one: there is no wider surface to offer.
+//
+// at is how a caller who reached THIS address may reach a subsystem, and it is
+// per-address for the reason the two addresses exist at all — see [At]. The edge
+// forwards into a subsystem's edge endpoint, where the identity boundary judges
+// what arrived; the surface's own socket forwards into its plane endpoint, where
+// the caller is a sibling and its statement of who it acts for is what the socket
+// makes it worth. Same routing table, same curation, same hop — one value apart.
+func (d *MCP) Serve(on *zip.App, path string, at At) {
+	// The PLANE endpoint: a sibling on the surface's own socket carries its identity
+	// as headers the socket vouches for, never a bearer, so it is never challenged.
+	on.Raw(http.MethodPost, path, func(c *zip.Ctx) error { return d.serve(c, at, false) })
+}
+
+// signpost answers the framework default on a host that moved its MCP server.
+//
+// 308 preserves method AND body, so a POSTed initialize or tools/list arrives at
+// the real endpoint instead of being retried as a GET or answered with the
+// console shell. The body is JSON for the same reason the hop exists at all: a
+// caller who reads bytes rather than following it must never get HTML here. It
+// carries no tool list — a signpost is not a second MCP server.
+func signpost(path string) zip.Handler {
+	body := map[string]string{"error": "the MCP server moved", "door": path}
+	return func(c *zip.Ctx) error {
+		c.SetHeader("Location", path)
+		return c.JSON(http.StatusPermanentRedirect, body)
+	}
+}
+
+// message is one JSON-RPC 2.0 envelope, in the shape this server reads it.
+type message struct {
+	ID     json.RawMessage `json:"id"`
+	Method string          `json:"method"`
+	Params json.RawMessage `json:"params"`
+}
+
+func (d *MCP) serve(c *zip.Ctx, at At, edge bool) error {
+	var req message
+	if err := json.Unmarshal(c.Body(), &req); err != nil {
+		return c.JSON(200, rpcErr(nil, -32700, "parse error"))
+	}
+	// A bearer that has run out is not a credential the client should keep sending:
+	// the MCP authorization spec answers it 401 invalid_token, which is what makes
+	// a client refresh (or sign in again) instead of reading a tool error. It reads
+	// the token's own expiry and nothing else — the owning plugin still verifies
+	// the signature, and this can only refuse.
+	if edge && lapsed(c) {
+		return challenge(c, req.ID, "the access token has expired")
+	}
+	switch req.Method {
+	// initialize and server/discover answer the SAME thing, because under a
+	// stateless protocol they ask the same question.
+	//
+	// THE COMPOSED SERVER NEEDS ITS OWN CASE. zip answers server/discover for a
+	// subsystem, but /v1/mcp is this composed server and dispatches methods here,
+	// so teaching only the children left the surface's public address replying
+	// `method not found: server/discover` while already declaring 2026-07-28 — the
+	// exact mismatch the version constant is supposed to rule out. Caught by asking
+	// the live address rather than trusting the child fix.
+	case "initialize", "server/discover":
+		// A connection is made for somebody. At the edge, one that carries nothing to
+		// act as is told where to sign in, the way the MCP authorization spec has a
+		// protected server answer its first request: a client that is answered 200
+		// here believes the server is open and never offers the person a sign-in.
+		if edge && !credentialed(c) {
+			return challenge(c, req.ID, "")
+		}
+		var asked struct {
+			ProtocolVersion string `json:"protocolVersion"`
+		}
+		_ = json.Unmarshal(req.Params, &asked) // absent or unreadable asks for nothing
+		// serverInfo is the build that answers, as zip's door names its app's.
+		return c.JSON(200, rpcResult(req.ID, map[string]any{
+			"protocolVersion": mcp.Negotiate(asked.ProtocolVersion),
+			"capabilities":    map[string]any{"tools": map[string]any{"listChanged": false}},
+			"serverInfo":      map[string]any{"name": mcp.Name, "version": env.Version()},
+		}))
+	case "tools/list":
+		return d.list(c, req, at)
+	case "tools/call":
+		return d.call(c, req, at, edge)
+	case "ping":
+		return c.JSON(200, rpcResult(req.ID, map[string]any{}))
+	default:
+		// notifications/* carry no id and expect no result — ack with 202.
+		if len(req.ID) == 0 {
+			return c.Status(202).JSON(202, map[string]any{})
+		}
+		return c.JSON(200, rpcErr(req.ID, -32601, "method not found: "+req.Method))
+	}
+}
+
+// list answers tools/list from the subsystems themselves, and NAMES the ones it
+// could not reach.
+func (d *MCP) list(c *zip.Ctx, req message, at At) error {
+	tools, down, held := d.gather(c, at)
+	// ONE TOOL PER SUBSYSTEM, the operation carried in an argument. The flat
+	// projection was 1,189 tools in 977 KB, which no model holds and every client
+	// truncates. See client/grouped.go.
+	result := map[string]any{"tools": group(tools)}
+	meta := map[string]any{}
+	if held > 0 {
+		// The same obligation as Unavailable, for a different cause: a list
+		// shortened by POLICY must say so too. See client/surface.go.
+		meta[Refused] = map[string]any{"count": held, "rule": TheRule}
+	}
+	if len(down) > 0 {
+		meta[Unavailable] = down
+		d.host.Logger().Warn("surface mcp: tools/list is INCOMPLETE — subsystems did not answer",
+			"unavailable", len(down), "apps", len(d.apps), "tools", len(tools))
+	}
+	if len(meta) > 0 {
+		result["_meta"] = meta
+	}
+	return c.JSON(200, rpcResult(req.ID, result))
+}
+
+// call runs one tool: find the app that lists the name, hand it the caller's own
+// message, and return that app's own reply verbatim.
+//
+// A name nobody has listed in this process yet costs ONE discovery — the same
+// ask tools/list makes — rather than a guess or a fan-out per call. If it is
+// still nobody's, that is a -32602 and not an outage: every app answered, and
+// none of them serves it.
+func (d *MCP) call(c *zip.Ctx, req message, at At, edge bool) error {
+	var p struct {
+		Name      string          `json:"name"`
+		Arguments json.RawMessage `json:"arguments"`
+	}
+	_ = json.Unmarshal(req.Params, &p)
+
+	// [Describe] is the server's OWN tool — the fetch half of a surface whose enums
+	// carry names and no schemas — so it is answered here rather than routed.
+	if p.Name == Describe {
+		return d.describe(c, req, p.Arguments, at)
+	}
+
+	// A tools/call that reached the EDGE with nothing to forward as an identity is
+	// answered with where to get one, before any subsystem is asked. The server
+	// validates nothing — identity is the owning plugin's to derive, and a bad
+	// token is still refused there on its own terms — it only notices absence.
+	// tools/list and describe stay open: what is here is the public contract, which
+	// a registry or a scanner reads before it holds a credential. A client that
+	// connects goes through initialize, which does not.
+	if edge && !credentialed(c) {
+		return challenge(c, req.ID, "")
+	}
+
+	// Two DECODINGS stand between what a client sends and what a child is asked,
+	// and neither is a second route. A subsystem tool is an ENVELOPE over one
+	// operation; a published name is that operation's id spelled as a verb. Undo
+	// both and what is left is the name and message a direct tools/call carries,
+	// so everything below is ONE dispatch for every spelling: the same routing
+	// table, the same gate on the way into it, the same hop, the same reply.
+	//
+	// The caller's own body is forwarded BYTE FOR BYTE when neither decoding fired
+	// — which is every call that already names an operation as its owner does.
+	msg := c.Fiber().Request().Body()
+	if d.composed(p.Name) {
+		op, input, ok := unwrap(p.Arguments)
+		if !ok {
+			return c.JSON(200, rpcErr(req.ID, -32602, p.Name+` needs {"op":"<operation>","input":{}}`))
+		}
+		p.Name, p.Arguments, msg = op, input, nil
+	}
+
+	op, app := d.find(c, p.Name, at)
+	if app == "" {
+		// Either nobody serves it, or refuse() withheld it — and the caller gets
+		// the same answer for both. Telling a client which of the two it hit would
+		// turn the server into an oracle for the identity surface it just declined
+		// to expose.
+		return c.JSON(200, rpcErr(req.ID, -32602, "unknown tool: "+p.Name))
+	}
+	// A published name is not the name its owner answers to, so a call that
+	// carried one is spelled out again as the call it decodes to.
+	if msg == nil || op != p.Name {
+		msg = callBody(req.ID, op, p.Arguments)
+	}
+	// The caller's own REQUEST — its headers, so identity propagates — carrying
+	// msg, which for a direct call is the caller's own body byte for byte and for
+	// an envelope is that same call spelled out. The child's registry invokes it,
+	// so the host can only ever name a tool and never invoke one the child did
+	// not declare.
+	hop := fasthttp.AcquireRequest()
+	defer fasthttp.ReleaseRequest(hop)
+	c.Fiber().Request().CopyTo(hop)
+	hop.SetBody(msg)
+	ans := Ask(c.Context(), at, []string{app}, hop)[0]
+	if ans.Err != nil {
+		// A hop failure is MCP isError content, per the spec: the model reads "this
+		// tool is not available right now" and reacts, where a 503 body is a
+		// transport failure it cannot interpret.
+		return c.JSON(200, rpcResult(req.ID, map[string]any{
+			"content": []map[string]any{{"type": "text", "text": scrub.Text(ans.Err.Error())}},
+			"isError": true,
+		}))
+	}
+	c.SetHeader("Content-Type", "application/json")
+	return c.Bytes(200, ans.Body)
+}
+
+// credentialed reports whether the request carries anything the owning plugin
+// could derive an identity from: a bearer in either spelling the identity
+// boundary accepts, or a session cookie.
+func credentialed(c *zip.Ctx) bool {
+	return c.Header("Authorization") != "" || c.Header("X-Authorization") != "" || c.Header("Cookie") != ""
+}
+
+// lapsed reports whether the request carries a JWT bearer whose own `exp` has
+// passed. A bearer that is not a JWT (an API key), or has no expiry, is not.
+func lapsed(c *zip.Ctx) bool {
+	for _, h := range []string{"Authorization", "X-Authorization"} {
+		scheme, tok, ok := strings.Cut(c.Header(h), " ")
+		if !ok || !strings.EqualFold(scheme, "Bearer") {
+			continue
+		}
+		parts := strings.Split(strings.TrimSpace(tok), ".")
+		if len(parts) != 3 {
+			continue
+		}
+		raw, err := base64.RawURLEncoding.DecodeString(parts[1])
+		if err != nil {
+			continue
+		}
+		var claims struct {
+			Exp float64 `json:"exp"`
+		}
+		if json.Unmarshal(raw, &claims) != nil || claims.Exp == 0 {
+			continue
+		}
+		return time.Now().Unix() > int64(claims.Exp)
+	}
+	return false
+}
+
+// challenge is the answer to an initialize or tools/call at the edge that cannot
+// proceed as anybody: 401, and the one header an MCP client reads to find out
+// where to sign in (RFC 9728 §5.1) — the resource metadata this host serves for
+// the MCP server (mcp.MetadataMCP, whose resource is this server's URL), which
+// names the authorization server. With a reason it is an invalid_token (RFC 6750
+// §3.1): the client held a credential and it no longer works.
+//
+// The origin is the request's own (brand.Origin of its Host header, never a
+// forwarded one), so a white-label deployment challenges with its own address and
+// the client never learns a host it did not call.
+func challenge(c *zip.Ctx, id json.RawMessage, invalid string) error {
+	origin := brand.Origin(string(c.Fiber().Request().Header.Host()))
+	meta := `resource_metadata="` + origin + mcp.MetadataMCP + `"`
+	msg := "this MCP server needs a bearer credential; the resource metadata at " +
+		origin + mcp.MetadataMCP + " names the authorization server to sign in at"
+	if invalid != "" {
+		c.SetHeader("WWW-Authenticate", `Bearer error="invalid_token", error_description="`+invalid+`", `+meta)
+		msg = invalid + "; the resource metadata at " + origin + mcp.MetadataMCP + " names the authorization server to refresh or sign in at"
+	} else {
+		c.SetHeader("WWW-Authenticate", "Bearer "+meta)
+	}
+	return c.JSON(http.StatusUnauthorized, rpcErr(id, -32001, msg))
+}
+
+// named is one tool with its name, its OWNER and its one-line documentation
+// lifted out, so the composed list sorts, groups and reads without re-parsing —
+// and each descriptor is still carried VERBATIM, the bytes the child's own
+// registry projected, never a re-encoding.
+type named struct {
+	app  string
+	name string
+	// as is the name the server PUBLISHES for this operation: its id read back as
+	// a verb on an object (client/verbs.go), or the id itself when that reading
+	// would be ambiguous. Written by [offer], never by the child.
+	as   string
+	desc string
+	// read says the operation is a GET, as its subsystem published it.
+	read bool
+	raw  json.RawMessage
+}
+
+// gather asks every app what it serves, right now, and returns the PROJECTABLE
+// union, the outages, and how many tools policy withheld.
+//
+// The request it sends is the CALLER's, with the body replaced by a canonical
+// tools/list: the headers ride along, so a child whose tools depend on who is
+// asking answers for this caller, while the body cannot be a tools/call the
+// discovery path would otherwise execute on every child in the surface.
+//
+// This is also where the tool surface is GATED, and it is the only place, on
+// purpose. The routing table [MCP.owner] is written here and nowhere else, so a
+// name that refuse() rejects is never written, is never routable, and a
+// tools/call naming it gets the same -32602 as a tool that does not exist —
+// including from a client that cached the name before the rule existed. A filter
+// applied in list() instead would have been a suggestion.
+//
+// It returns the tools themselves rather than their bytes because every caller
+// needs the OWNER too: list() groups by it (client/grouped.go) and describe()
+// answers out of the same gated set.
+func (d *MCP) gather(c *zip.Ctx, at At) ([]named, []Outage, int) {
+	var all []named
+	var down []Outage
+	held := 0
+	owner := map[string]string{}
+
+	// EVERY app is read from what it PUBLISHED, and none is asked. A tools/list is
+	// a question about names, and the names are known before anything runs — each
+	// app's binary wrote them from its own router at build time (see
+	// plugin/gen-client-catalog and client/catalog.go).
+	//
+	// Asking a RUNNING subsystem used to be free enough to be worth the live
+	// answer, and that reasoning does not survive contact with the deployment. This
+	// server is the one caller that touches all of them, so its cost is the whole
+	// surface's: measured on the deployed host, one list took 92 seconds against
+	// Cloudflare's 100-second ceiling, and three in a row drove the pod past its
+	// own liveness probe until the kubelet killed it and the API served 503. A
+	// question about names must not be able to do that.
+	//
+	// It also makes the answer a pure function of the release. Nothing here depends
+	// on which children happen to be up, so two replicas answer identically and a
+	// restart changes nothing — the property a horizontally scaled public endpoint
+	// needs and an asking one cannot have.
+	type contribution struct {
+		app   string
+		tools []named
+		err   error
+	}
+	var in []contribution
+	for _, a := range d.apps {
+		c := contribution{app: a}
+		for _, op := range d.published(a) {
+			c.tools = append(c.tools, named{name: op.ID, desc: op.Doc, read: op.Read, raw: descriptorOf(a, op)})
+		}
+		in = append(in, c)
+	}
+
+	for _, a := range in {
+		if a.err != nil {
+			down = append(down, Outage{App: a.app, Error: scrub.Text(a.err.Error())})
+			continue
+		}
+		for _, t := range a.tools {
+			// The gate, before the routing table. See client/surface.go.
+			if refuse(t.name) {
+				held++
+				continue
+			}
+			// One name is one dispatch, so two owners would make it unroutable. The
+			// manifest's order is the router's order, so the first claimant wins here
+			// exactly as it wins a prefix — and the loser is logged rather than
+			// silently dropped, because a tool that vanished into a collision looks
+			// identical to one that was never declared.
+			if held, dup := owner[t.name]; dup {
+				d.host.Logger().Warn("surface mcp: two subsystems claim one tool name; the first in mount order serves it",
+					"tool", t.name, "serving", held, "shadowed", a.app)
+				continue
+			}
+			owner[t.name] = a.app
+			t.app = a.app
+			all = append(all, t)
+		}
+	}
+	// Product surface FIRST, then alphabetical — because clients truncate, and a
+	// list sorted only by name put 128 o11y console ops in front of every product
+	// tool the surface has. rank() states the mechanism; nothing is hidden by it.
+	sort.Slice(all, func(i, j int) bool {
+		ri, rj := rank(all[i].name), rank(all[j].name)
+		if ri != rj {
+			return ri < rj
+		}
+		return all[i].name < all[j].name
+	})
+
+	// AFTER the gate and after the sort, because both read the CHILD's own name:
+	// [refuse] must judge the route it was given, and [rank] matches route stems.
+	// Naming is the last thing that happens to a surviving operation. See
+	// client/verbs.go.
+	offer(all)
+	alias := make(map[string]string, len(all))
+	for _, t := range all {
+		if t.as != t.name {
+			alias[t.as] = t.name
+		}
+	}
+
+	d.mu.Lock()
+	d.owner, d.alias = owner, alias
+	d.mu.Unlock()
+
+	return all, down, held
+}
+
+// published is the server's ONE source of what an app serves: its own Catalog
+// when a caller supplied one, the binary's embedded catalog otherwise.
+func (d *MCP) published(app string) []Op {
+	if d.Catalog != nil {
+		return d.Catalog(app)
+	}
+	return Published(app)
+}
+
+// find reads whatever a tools/call named into the operation id its owner knows,
+// and the app that owns it — asking the surface ONCE if the tables are cold.
+//
+// Both halves have to be answered by one lookup, and that is the whole reason
+// this is a function. The tables are written together by [MCP.gather] and a
+// process remembers nothing between requests, so a server that has just started —
+// or has just answered a tools/call for a client that cached tools/list across a
+// reconnect — holds neither. Resolving the name first and discovering second
+// would resolve against an empty table, then look up an unresolved name in a
+// full one, and answer "unknown tool" for an operation it publishes.
+//
+// The resolution is a DECODING and not a second route, in exactly the sense the
+// envelope is: what comes out is the name a direct tools/call carries, and
+// everything after it — the owner map, the gate that wrote it, the hop — is what
+// it always was. A name nobody published is returned unchanged, so an
+// operation's own id still arrives at its own handler; it must, because describe
+// hands back the child's descriptor bytes verbatim and those carry the child's
+// own name.
+func (d *MCP) find(c *zip.Ctx, name string, at At) (op, app string) {
+	if op, app = d.lookup(name); app != "" {
+		return op, app
+	}
+	d.gather(c, at)
+	return d.lookup(name)
+}
+
+func (d *MCP) lookup(name string) (op, app string) {
+	d.mu.RLock()
+	defer d.mu.RUnlock()
+	if id, published := d.alias[name]; published {
+		name = id
+	}
+	return name, d.owner[name]
+}
+
+// toolsOf lifts the descriptors out of one child's tools/list reply.
+//
+// A JSON-RPC ERROR reply is an outage and is reported as one: the child is up,
+// but it did not answer the question, and folding that into "this app has no
+// tools" is the silent shortening this package exists to remove.
+func toolsOf(body []byte) ([]named, error) {
+	var env struct {
+		Result struct {
+			Tools []json.RawMessage `json:"tools"`
+		} `json:"result"`
+		Error *struct {
+			Message string `json:"message"`
+		} `json:"error"`
+	}
+	if err := json.Unmarshal(body, &env); err != nil {
+		return nil, err
+	}
+	if env.Error != nil {
+		return nil, jsonrpcError(env.Error.Message)
+	}
+	out := make([]named, 0, len(env.Result.Tools))
+	for _, raw := range env.Result.Tools {
+		var hdr struct {
+			Name string `json:"name"`
+			// The op's own doc comment, as zip's generator lifted it into the
+			// descriptor. The flat list carried it and the grouped list threw it
+			// away; [summary] keeps the first sentence so an enum reads.
+			Description string `json:"description"`
+		}
+		if err := json.Unmarshal(raw, &hdr); err != nil || hdr.Name == "" {
+			return nil, errNamelessTool
+		}
+		out = append(out, named{name: hdr.Name, desc: hdr.Description, raw: raw})
+	}
+	return out, nil
+}
+
+type jsonrpcError string
+
+func (e jsonrpcError) Error() string { return "tools/list refused: " + string(e) }
+
+const errNamelessTool = jsonrpcError("a tool descriptor has no name")
+
+func rpcResult(id json.RawMessage, result any) map[string]any {
+	return map[string]any{"jsonrpc": "2.0", "id": idOrNull(id), "result": result}
+}
+
+func rpcErr(id json.RawMessage, code int, msg string) map[string]any {
+	return map[string]any{"jsonrpc": "2.0", "id": idOrNull(id), "error": map[string]any{"code": code, "message": msg}}
+}
+
+func idOrNull(id json.RawMessage) any {
+	if len(id) == 0 {
+		return nil
+	}
+	return id
+}

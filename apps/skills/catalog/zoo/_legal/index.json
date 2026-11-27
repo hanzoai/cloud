@@ -1,0 +1,48 @@
+{
+  "$schema": "https://schemas.agentskills.io/discovery/0.2.0/schema.json",
+  "base_url": "https://api.zoo.ngo",
+  "brand": "zoo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://zoolabs.id",
+  "mcp": {
+    "description": "Model Context Protocol over JSON-RPC 2.0 — one POST per message, stateless, protocol revision 2026-07-28. tools/list answers without a credential with one tool per subsystem (its operations in the \"op\" enum) plus \"describe\", which returns one operation's input schema. tools/call names a subsystem tool and carries {\"op\": <operation>, \"input\": <its arguments>}; it takes the same bearer the REST API does, and a call that carries none is answered 401 with a WWW-Authenticate header naming the resource metadata at /.well-known/oauth-protected-resource, which names the authorization server to sign in at. The tool surface is the public contract: the operator's admin product is not offered, and a name that would disclose a secret or mutate an identity is withheld — the list says how many, under _meta.",
+    "method": "POST",
+    "url": "https://api.zoo.ngo/v1/mcp"
+  },
+  "skill_count": 4,
+  "skills": [
+    {
+      "description": "Read legal documents: Returns the org's generated documents, newest first, WITHOUT their rendered content — fetch one document to read its body., Returns one of the org's documents WITH its rendered body..",
+      "digest": "sha256:2fc059299c1b4dc8530d71649a898431031bdc17258026d10c0ff61ed11fe18a",
+      "name": "legal_documents",
+      "service": "legal",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/legal_documents/SKILL.md"
+    },
+    {
+      "description": "Read legal filings: Returns the org's filing records, newest first — which documents were filed where, through which provider, and what the filing's honest status is..",
+      "digest": "sha256:1606611b0ce091316819985f04f70d77a12d2ebbeb38e5a33a605f6096428f26",
+      "name": "legal_filings",
+      "service": "legal",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/legal_filings/SKILL.md"
+    },
+    {
+      "description": "Read legal health: Reports that the legal subsystem is serving and how many built-in templates its catalog carries..",
+      "digest": "sha256:25caea13f0d2f82eca82ab0909cc524f31e4d6b867e9d8daaf6cb1476e43cc9f",
+      "name": "legal_health",
+      "service": "legal",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/legal_health/SKILL.md"
+    },
+    {
+      "description": "Read legal templates: Returns the org's effective template catalog: every built-in template, with any the org has overridden replaced by its own latest version., Returns one template resolved for the caller's org — the org's own override if it has saved one, else the built-in — w",
+      "digest": "sha256:6ad94f3eb743975e90a41eb824789f8dd4a7c784c6f8c84d8d78580253f0c409",
+      "name": "legal_templates",
+      "service": "legal",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/legal_templates/SKILL.md"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

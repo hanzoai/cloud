@@ -1,0 +1,72 @@
+{
+  "$schema": "https://schemas.agentskills.io/discovery/0.2.0/schema.json",
+  "base_url": "https://api.hanzo.ai",
+  "brand": "hanzo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://hanzo.id",
+  "mcp": {
+    "description": "Model Context Protocol over JSON-RPC 2.0 — one POST per message, stateless, protocol revision 2026-07-28. tools/list answers without a credential with one tool per subsystem (its operations in the \"op\" enum) plus \"describe\", which returns one operation's input schema. tools/call names a subsystem tool and carries {\"op\": <operation>, \"input\": <its arguments>}; it takes the same bearer the REST API does, and a call that carries none is answered 401 with a WWW-Authenticate header naming the resource metadata at /.well-known/oauth-protected-resource, which names the authorization server to sign in at. The tool surface is the public contract: the operator's admin product is not offered, and a name that would disclose a secret or mutate an identity is withheld — the list says how many, under _meta.",
+    "method": "POST",
+    "url": "https://api.hanzo.ai/v1/mcp"
+  },
+  "skill_count": 7,
+  "skills": [
+    {
+      "description": "Read tool activation: Reports which tools are switched on for the caller's org and project..",
+      "digest": "sha256:08e10b44a2796584e905acfa63d2e27a6a7c91215b2e430f4923b498f744f68a",
+      "name": "tool_activation",
+      "service": "tool",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/tool_activation/SKILL.md"
+    },
+    {
+      "description": "Read tool catalog: Lists the MCP servers the public registries publish, as we hold them: our canonical copy of registry.modelcontextprotocol.io, plus what we decided about each entry., Returns one catalog entry in full: the publisher's description, its repository and site, every ",
+      "digest": "sha256:9afa6ca7ab0f831a8ea0d58d145bcb5d62d66d5f7fd3de1721d6058685ccd73f",
+      "name": "tool_catalog",
+      "service": "tool",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/tool_catalog/SKILL.md"
+    },
+    {
+      "description": "Read tool kit: Answers the caller's kit: what their coding runs carry of the org's tool plane..",
+      "digest": "sha256:a412d844a11916aea349cabb3dba49a60cb75dcf352d28780ac0b0cad60a555c",
+      "name": "tool_kit",
+      "service": "tool",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/tool_kit/SKILL.md"
+    },
+    {
+      "description": "Read tool mcp: Lists the external MCP servers the caller's org has registered..",
+      "digest": "sha256:26199a3e08b666650abe57610eb9ecb2d0804e10e73d58fb6140e7be3d4c2528",
+      "name": "tool_mcp",
+      "service": "tool",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/tool_mcp/SKILL.md"
+    },
+    {
+      "description": "Read tool plugins: Reports what this deployment actually mounted: every subsystem the composition root declared and whether it is switched on., Lists the plugins the caller's org BUILT, newest first, each with the TypeScript as authored..",
+      "digest": "sha256:7292e9d708cc7c06be9710b8d0cc7a4e17f9d1f0a8f4cff4e6123607451df8ee",
+      "name": "tool_plugins",
+      "service": "tool",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/tool_plugins/SKILL.md"
+    },
+    {
+      "description": "Read tool skills: Lists the skills the caller's org can reach — the brand's embedded catalogue plus the org's own authored ones — with each one's activation flag., Lists the caller org's OWN skills with their SKILL.md bodies..",
+      "digest": "sha256:8000f1ec45fe26143af79402fbc5193e9a22b177358b7efbf9e98bba89969d3c",
+      "name": "tool_skills",
+      "service": "tool",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/tool_skills/SKILL.md"
+    },
+    {
+      "description": "Read tool tool: Lists every tool the caller's org and project can reach, from every source, each flagged with whether it is activated..",
+      "digest": "sha256:86dba0f0732f9849e46a060cff5bf8919dd005e71e23c00ec22750e421050518",
+      "name": "tool_tool",
+      "service": "tool",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/tool_tool/SKILL.md"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

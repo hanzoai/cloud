@@ -1,0 +1,1020 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Hanzo Cloud API",
+    "description": "Package legal is the paperwork your company needs, drafted, signed and filed.",
+    "version": "v1"
+  },
+  "servers": [
+    {
+      "url": "https://api.hanzo.ai"
+    }
+  ],
+  "security": [
+    {
+      "bearer": []
+    }
+  ],
+  "tags": [
+    {
+      "name": "legal"
+    }
+  ],
+  "paths": {
+    "/v1/legal/documents": {
+      "get": {
+        "operationId": "get_legal_documents",
+        "summary": "Returns the org's generated documents, newest first, WITHOUT their rendered content — fetch one document to read its body.",
+        "description": "Returns the org's generated documents, newest first, WITHOUT\ntheir rendered content — fetch one document to read its body.\n\nThe response is marked no-store: these records name the counterparties an org is\ncontracting with, and must not sit in a shared cache.",
+        "tags": [
+          "legal"
+        ],
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Limit bounds the page. Absent or unparseable means the store's own default.",
+            "schema": {
+              "format": "int64",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/legal.documentPage"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      },
+      "post": {
+        "operationId": "post_legal_documents",
+        "summary": "Renders a document from a template and the caller's own merge data, seals it in the org's store, and returns it with its rendered body.",
+        "description": "Renders a document from a template and the caller's own\nmerge data, seals it in the org's store, and returns it with its rendered body.\n\nThe render is PURE and deterministic — no clock, no I/O — so the same template\nversion and the same data always produce identical bytes, which is what makes a\ngenerated contract reproducible. It fails CLOSED on a missing merge field: there\nis no blank-filled contract, only a 400 naming the fields that were absent. When\nthe template is counsel-review the rendered body opens with the counsel notice,\nwhich no caller can suppress.\n\nThe document is a DRAFT. Hanzo Legal manages documents; it does not give legal\nadvice and does not determine that a document is valid or sufficient.",
+        "tags": [
+          "legal"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "data": {
+                  "counterparty": "AgentCo, LLC",
+                  "date": "2026-07-30"
+                },
+                "templateId": "nda"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/legal.generateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/legal.documentReply"
+                }
+              }
+            },
+            "description": "created"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/legal/documents/{id}": {
+      "get": {
+        "operationId": "get_legal_documents_by_id",
+        "summary": "Returns one of the org's documents WITH its rendered body.",
+        "description": "Returns one of the org's documents WITH its rendered body. 404\nwhen the org has no document with that id — a document is never readable across\norgs.\n\nThe response is marked no-store: the body is contract text, sealed at rest and\nreturned only to the owning org, and must not sit in a shared cache.",
+        "tags": [
+          "legal"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the document's server-minted handle, \"doc_\"-prefixed.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/legal.documentReply"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/legal/documents/{id}/sign": {
+      "post": {
+        "operationId": "post_legal_documents_by_id_sign",
+        "summary": "Opens an e-signature request over one document and moves it to out_for_signature, returning the provider's reference for the request.",
+        "description": "Opens an e-signature request over one document and moves it\nto out_for_signature, returning the provider's reference for the request.\n\nThe provider is whatever this deployment has wired. The honest default is\n\"manual\": the request is recorded and the org fulfils it out of band — nothing\nhere fabricates a signature, and the stub never reports itself complete.",
+        "tags": [
+          "legal"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the document to send for signature, from the path.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "doc_1f…"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "id": "doc_1f…",
+                "signers": [
+                  {
+                    "email": "ada@acme.com",
+                    "name": "Ada"
+                  }
+                ]
+              },
+              "schema": {
+                "$ref": "#/components/schemas/legal.signRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/legal.signReply"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/legal/documents/{id}/sign/complete": {
+      "post": {
+        "operationId": "post_legal_documents_by_id_sign_complete",
+        "summary": "Record that a generated document's signature request completed",
+        "description": "Records completion of the signature request opened over a generated document and answers the document with a `signed` flag.\n\nThe e-sign provider's own status is consulted FIRST and is the default answer; an explicit `signed` field in the body overrides it. That override is the whole point: the default `manual` provider never self-completes, so a reviewer (or a real provider's webhook) is what moves the document. A completion flips the document to `signed`, stamps `signedAt`, and writes a `legal.document.signed` audit event; a provider still reporting incomplete answers 200 with the document unchanged, so the call is safe to repeat and never fabricates a signature.\n\nOrg-scoped and fails closed: a validated principal is required (401 without one), the document is read under the caller's OWN org so another tenant's id is a 404, a document with no open signature request is a 400, and a provider whose status call errors is a 502.",
+        "tags": [
+          "legal"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "x-public": true
+      }
+    },
+    "/v1/legal/filings": {
+      "get": {
+        "operationId": "get_legal_filings",
+        "summary": "Returns the org's filing records, newest first — which documents were filed where, through which provider, and what the filing's honest status is.",
+        "description": "Returns the org's filing records, newest first — which documents\nwere filed where, through which provider, and what the filing's honest status is.",
+        "tags": [
+          "legal"
+        ],
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Limit bounds the page. Absent or unparseable means the store's own default.",
+            "schema": {
+              "format": "int64",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/legal.filingPage"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      },
+      "post": {
+        "operationId": "post_legal_filings",
+        "summary": "Records a filing of one or more of the org's documents with a state or agency, and returns the tracking record.",
+        "description": "Records a filing of one or more of the org's documents with a\nstate or agency, and returns the tracking record.\n\nIt is a TRACKING record, not an autonomous filing. With no filing partner wired\nthe honest status is \"manual\" and the note says so: the documents were generated\nfor signature, and the org files them through its registered agent. Nothing here\ninvents a filing id it does not have.\n\nEvery document id must belong to the caller's org; one that does not is a 404\nnaming it, so a filing can never reach across tenants.",
+        "tags": [
+          "legal"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "documentIds": [
+                  "doc_1f…"
+                ],
+                "jurisdiction": "DE"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/legal.filingRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/legal.filingReply"
+                }
+              }
+            },
+            "description": "created"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/legal/health": {
+      "get": {
+        "operationId": "get_legal_health",
+        "summary": "Reports that the legal subsystem is serving and how many built-in templates its catalog carries.",
+        "description": "Reports that the legal subsystem is serving and how many built-in\ntemplates its catalog carries. It reads no tenant, so a liveness prober that\nsends no principal is answered rather than refused.",
+        "tags": [
+          "legal"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/legal.legalHealth"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/legal/templates": {
+      "get": {
+        "operationId": "get_legal_templates",
+        "summary": "Returns the org's effective template catalog: every built-in template, with any the org has overridden replaced by its own latest version.",
+        "description": "Returns the org's effective template catalog: every built-in\ntemplate, with any the org has overridden replaced by its own latest version.\n\nThe listing carries each template's metadata and its declared MERGE FIELDS — the\nkeys a document generation must supply — but never the template bodies; fetch one\ntemplate to get its body. Templates in the formation and equity categories are\nmarked counselReview: every document rendered from them carries a counsel notice,\nand that posture cannot be dropped by an override.",
+        "tags": [
+          "legal"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/legal.templateCatalog"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/legal/templates/{id}": {
+      "get": {
+        "operationId": "get_legal_templates_by_id",
+        "summary": "Returns one template resolved for the caller's org — the org's own override if it has saved one, else the built-in — with its full text/template body and its declared merge fields.",
+        "description": "Returns one template resolved for the caller's org — the org's\nown override if it has saved one, else the built-in — with its full text/template\nbody and its declared merge fields. 404 when neither exists.",
+        "tags": [
+          "legal"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the template's stable id, e.g. \"nda\" or \"safe\".",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/legal.templateReply"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      },
+      "put": {
+        "operationId": "put_legal_templates_by_id",
+        "summary": "Saves the org's own version of a template — a custom NDA, a house MSA — and returns it with its new version number.",
+        "description": "Saves the org's own version of a template — a custom\nNDA, a house MSA — and returns it with its new version number. It takes effect\nfor that org only; other orgs keep the built-in.\n\nTwo boundaries cannot be crossed here. Overriding a built-in INHERITS its\ncategory and its counsel-review posture, which can be raised but never dropped;\nand a formation or equity template is counsel-review whatever the caller sends,\nso no org can generate a securities-class document without the notice.\n\nThe body is validated on save, not at generation: a template that references an\nUNDECLARED merge field is refused with 400 rather than stored and rendered blank\ninto a contract months later.",
+        "tags": [
+          "legal"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the template to override, from the path. Overriding a built-in id\ninherits that built-in's category, title and counsel-review posture.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "nda"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "body": "…{{.counterparty}}…",
+                "fields": [
+                  {
+                    "key": "counterparty",
+                    "label": "Counterparty"
+                  }
+                ],
+                "id": "nda",
+                "title": "AgentCo Mutual NDA"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/legal.templateOverride"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/legal.templateReply"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "legal.Field": {
+        "properties": {
+          "key": {
+            "description": "Key is the identifier the body substitutes ({{.key}}) and the key a\ngeneration's data map must carry. snake_case by convention across the\nbuilt-ins — effective_date, company_name, governing_law. An override whose\nbody references a key no Field declares is refused on save.",
+            "type": "string"
+          },
+          "label": {
+            "description": "Label is the human prompt for whoever fills the value in — \"Governing law\n(state)\". It never reaches the rendered document; only Key does.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "legal.documentPage": {
+        "properties": {
+          "data": {
+            "description": "Data are the documents, WITHOUT their rendered content — fetch one to read it.",
+            "items": {
+              "$ref": "#/components/schemas/legal.documentSummary"
+            },
+            "type": "array"
+          },
+          "disclaimer": {
+            "description": "Disclaimer is the boundary made visible on the wire.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "legal.documentReply": {
+        "properties": {
+          "disclaimer": {
+            "description": "Disclaimer is the boundary made visible on the wire.",
+            "type": "string"
+          },
+          "document": {
+            "$ref": "#/components/schemas/legal.documentView",
+            "description": "Document is the document, rendered content included."
+          }
+        },
+        "type": "object"
+      },
+      "legal.documentSummary": {
+        "properties": {
+          "category": {
+            "description": "Category is the template's category: formation, equity, ops or sales.",
+            "type": "string"
+          },
+          "createdAt": {
+            "description": "CreatedAt is when the document was generated, in unix seconds.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "esignProvider": {
+            "description": "EsignProvider names the e-signature provider handling it, absent until a\nsignature has been requested.",
+            "type": "string"
+          },
+          "id": {
+            "description": "ID is the document's server-minted handle, \"doc_\"-prefixed.",
+            "type": "string"
+          },
+          "signedAt": {
+            "description": "SignedAt is when the provider reported completion, in unix seconds. Absent\nuntil then.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "status": {
+            "description": "Status is the lifecycle state: draft, out_for_signature, signed or voided.\nThere is deliberately no \"legally valid\" state — that is counsel's\ndetermination, not the platform's.",
+            "type": "string"
+          },
+          "templateId": {
+            "description": "TemplateID is the template it was rendered from.",
+            "type": "string"
+          },
+          "templateVersion": {
+            "description": "TemplateVersion is WHICH version of that template rendered it, so the\ndocument is reproducible and auditable.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "title": {
+            "description": "Title is the document's title, inherited from the template.",
+            "type": "string"
+          },
+          "updatedAt": {
+            "description": "UpdatedAt is when it last changed, in unix seconds.",
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "legal.documentView": {
+        "properties": {
+          "body": {
+            "description": "Body is the rendered document. It is sealed at rest and returned only to the\nowning org. When the template is counsel-review it opens with the counsel\nnotice, which the engine prepends and no caller can suppress.",
+            "type": "string"
+          },
+          "category": {
+            "description": "Category is the template's category: formation, equity, ops or sales.",
+            "type": "string"
+          },
+          "contentType": {
+            "description": "ContentType is the rendered body's media type — text/markdown.",
+            "type": "string"
+          },
+          "createdAt": {
+            "description": "CreatedAt is when the document was generated, in unix seconds.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "esignProvider": {
+            "description": "EsignProvider names the e-signature provider handling it, absent until a\nsignature has been requested.",
+            "type": "string"
+          },
+          "id": {
+            "description": "ID is the document's server-minted handle, \"doc_\"-prefixed.",
+            "type": "string"
+          },
+          "signedAt": {
+            "description": "SignedAt is when the provider reported completion, in unix seconds. Absent\nuntil then.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "status": {
+            "description": "Status is the lifecycle state: draft, out_for_signature, signed or voided.\nThere is deliberately no \"legally valid\" state — that is counsel's\ndetermination, not the platform's.",
+            "type": "string"
+          },
+          "templateId": {
+            "description": "TemplateID is the template it was rendered from.",
+            "type": "string"
+          },
+          "templateVersion": {
+            "description": "TemplateVersion is WHICH version of that template rendered it, so the\ndocument is reproducible and auditable.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "title": {
+            "description": "Title is the document's title, inherited from the template.",
+            "type": "string"
+          },
+          "updatedAt": {
+            "description": "UpdatedAt is when it last changed, in unix seconds.",
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "legal.filingPage": {
+        "properties": {
+          "data": {
+            "description": "Data are the filing records.",
+            "items": {
+              "$ref": "#/components/schemas/legal.legalFiling"
+            },
+            "type": "array"
+          },
+          "disclaimer": {
+            "description": "Disclaimer is the boundary made visible on the wire.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "legal.filingReply": {
+        "properties": {
+          "disclaimer": {
+            "description": "Disclaimer is the boundary made visible on the wire.",
+            "type": "string"
+          },
+          "filing": {
+            "$ref": "#/components/schemas/legal.legalFiling",
+            "description": "Filing is the tracking record."
+          }
+        },
+        "type": "object"
+      },
+      "legal.filingRequest": {
+        "properties": {
+          "documentIds": {
+            "description": "DocumentIDs are the documents to file. At least one is required, and every\none must belong to the caller's org — a filing can never reach across orgs.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "jurisdiction": {
+            "description": "Jurisdiction is the state or agency the filing is for, e.g. \"DE\".",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "legal.generateRequest": {
+        "properties": {
+          "data": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "description": "Data supplies every merge field the template declares, keyed by field key.\nEvery declared field is REQUIRED: a missing one is refused with 400 rather\nthan rendered as a blank into a contract.",
+            "type": "object"
+          },
+          "templateId": {
+            "description": "TemplateID is the template to render. Required; resolved for the caller's\norg, so an override wins over the built-in.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "legal.legalFiling": {
+        "properties": {
+          "createdAt": {
+            "description": "CreatedAt is when the filing was recorded, in unix seconds.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "documentIds": {
+            "description": "DocumentIDs are the generated documents this filing covers. At least one, and\neach must already belong to Org — a filing can never reach across tenants.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "id": {
+            "description": "ID is the filing's server-minted handle, \"filing_\"-prefixed. It is OURS, not\nthe state's — a state file number arrives only from a real filing partner.",
+            "type": "string"
+          },
+          "jurisdiction": {
+            "description": "Jurisdiction is the state or agency the filing is for, as the caller wrote it\n(\"DE\"). Free text, not validated against a list. Absent when the caller sent\nnone.",
+            "type": "string"
+          },
+          "note": {
+            "description": "Note is the provider's explanation of Status, in prose meant for a person. On\nthe manual default it says the documents were generated for signature and the\norg files them through its registered agent. Absent when the provider offered\nnothing.",
+            "type": "string"
+          },
+          "org": {
+            "description": "Org owns the filing. Every query is scoped to it, so another tenant's filing\nis indistinguishable from a missing one.",
+            "type": "string"
+          },
+          "provider": {
+            "description": "Provider is the filing partner that took the submission, or \"manual\" when no\npartner is wired on this deployment.",
+            "type": "string"
+          },
+          "status": {
+            "description": "Status is where the filing stands: manual (no partner wired — file through\nyour registered agent), submitted (a partner accepted it), filed (the state\naccepted it) or rejected.",
+            "type": "string"
+          },
+          "updatedAt": {
+            "description": "UpdatedAt is when it last changed, in unix seconds. Equal to CreatedAt until a\nprovider reports movement.",
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "legal.legalHealth": {
+        "properties": {
+          "status": {
+            "description": "Status is \"ok\" when the subsystem is serving.",
+            "type": "string"
+          },
+          "templates": {
+            "description": "Templates is how many built-in templates the catalog carries.",
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "legal.legalSigner": {
+        "properties": {
+          "email": {
+            "description": "Email is where the provider sends the request, and the only way the signer is\nreached — a signer is a COUNTERPARTY, not necessarily a member of the org, so\nthere is no account to fall back on.",
+            "type": "string"
+          },
+          "name": {
+            "description": "Name is the person as they should appear on the signature request. Passed to\nthe provider verbatim; nothing here matches it against a Hanzo user.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "legal.legalTemplate": {
+        "properties": {
+          "body": {
+            "description": "Body is the text/template source, markdown, referencing each declared field as\n{{.key}}. Rendering is pure — no clock, no I/O — so a template version and a\ndata map always produce identical bytes. Only the single-template read carries\nit; the catalog listing does not.",
+            "type": "string"
+          },
+          "category": {
+            "description": "Category is the corporate need the template serves: formation, equity, ops or\nsales. Formation and equity are the securities-class categories, which is what\nforces CounselReview.",
+            "type": "string"
+          },
+          "counselReview": {
+            "description": "CounselReview marks a template whose rendered documents open with\nCounselNotice. It can be raised but never lowered, and the engine also raises\nit for any formation or equity template whatever the flag says — so no org can\nrender a securities-class document without the notice.",
+            "type": "boolean"
+          },
+          "fields": {
+            "description": "Fields declares the merge fields Body consumes, each with its human label.\nEvery one is REQUIRED at generation: a missing or blank value is refused\nrather than rendered as a silent blank into a contract.",
+            "items": {
+              "$ref": "#/components/schemas/legal.Field"
+            },
+            "type": "array"
+          },
+          "id": {
+            "description": "ID is the template's stable id and the path segment that addresses it —\n\"nda\", \"msa\", \"safe\". An override keeps the built-in's id, so the id names\nthe DOCUMENT KIND rather than a particular version of it.",
+            "type": "string"
+          },
+          "origin": {
+            "description": "Origin is \"builtin\" for a template the platform ships or \"org\" for one this\norg saved. It separates the catalog every tenant sees from this tenant's own.",
+            "type": "string"
+          },
+          "title": {
+            "description": "Title is the display name, e.g. \"Mutual Non-Disclosure Agreement\". A generated\ndocument inherits it.",
+            "type": "string"
+          },
+          "version": {
+            "description": "Version is which version of this template the caller resolved to, and what a\ngenerated document records so it stays reproducible. A built-in is version 1;\nan org's first override is 2 and each save increments, so an override version\nnever collides with the built-in's.",
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "legal.signReply": {
+        "properties": {
+          "document": {
+            "$ref": "#/components/schemas/legal.documentSummary",
+            "description": "Document is the document, now out for signature. Its rendered body is not\nrepeated here."
+          },
+          "esignRef": {
+            "description": "EsignRef is the provider's own reference for the request — what a webhook or\na status poll quotes.",
+            "type": "string"
+          },
+          "provider": {
+            "description": "Provider names the e-signature provider that took the request. \"manual\" means\nno provider is wired on this deployment and the org fulfils it out of band.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "legal.signRequest": {
+        "properties": {
+          "id": {
+            "description": "ID is the document to send for signature, from the path.",
+            "type": "string"
+          },
+          "signers": {
+            "description": "Signers are the people who must sign, by name and email. At least one is\nrequired.",
+            "items": {
+              "$ref": "#/components/schemas/legal.legalSigner"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "legal.templateCatalog": {
+        "properties": {
+          "data": {
+            "description": "Data is the catalog, metadata and merge fields only — never the template\nbodies, which are fetched one at a time.",
+            "items": {
+              "$ref": "#/components/schemas/legal.templateView"
+            },
+            "type": "array"
+          },
+          "disclaimer": {
+            "description": "Disclaimer is the boundary made visible on the wire: Hanzo Legal is document\ntooling, not legal advice.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "legal.templateOverride": {
+        "properties": {
+          "body": {
+            "description": "Body is the text/template source. Required. Every {{.key}} it references must\nbe declared in Fields, or the save is refused rather than rendering a blank\ninto a contract later.",
+            "type": "string"
+          },
+          "category": {
+            "description": "Category groups the template: formation, equity, ops or sales. Optional when\noverriding a built-in, which supplies its own.",
+            "type": "string"
+          },
+          "counselReview": {
+            "description": "CounselReview marks a template whose documents must carry the counsel notice.\nIt can be raised but never lowered: a formation or equity template is always\ncounsel-review, and an override of a counsel-review built-in stays one.",
+            "type": "boolean"
+          },
+          "fields": {
+            "description": "Fields declares the merge fields the body consumes. Every declared field is\nREQUIRED at generation — the engine fails closed on a missing one.",
+            "items": {
+              "$ref": "#/components/schemas/legal.Field"
+            },
+            "type": "array"
+          },
+          "id": {
+            "description": "ID is the template to override, from the path. Overriding a built-in id\ninherits that built-in's category, title and counsel-review posture.",
+            "type": "string"
+          },
+          "title": {
+            "description": "Title is the template's display name. Required unless a built-in supplies it.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "legal.templateReply": {
+        "properties": {
+          "disclaimer": {
+            "description": "Disclaimer is the boundary made visible on the wire.",
+            "type": "string"
+          },
+          "template": {
+            "$ref": "#/components/schemas/legal.legalTemplate",
+            "description": "Template is the resolved template — the org's override if it has one, else\nthe built-in."
+          }
+        },
+        "type": "object"
+      },
+      "legal.templateView": {
+        "properties": {
+          "category": {
+            "description": "Category is the corporate need the template serves: formation, equity, ops or\nsales. Formation and equity are the securities-class categories, which is what\nforces counselReview.",
+            "type": "string"
+          },
+          "counselReview": {
+            "description": "CounselReview marks a template whose rendered documents open with the counsel\nnotice. True for every formation and equity template whatever an override\nsends: the engine prepends the notice and no caller can suppress it.",
+            "type": "boolean"
+          },
+          "fields": {
+            "description": "Fields declares the merge fields the body consumes — every key a generation\nmust supply, each with its human label. All are REQUIRED: a missing one is\nrefused rather than rendered as a blank into a contract.",
+            "items": {
+              "$ref": "#/components/schemas/legal.Field"
+            },
+            "type": "array"
+          },
+          "id": {
+            "description": "ID is the template's stable id and the path segment that fetches its body —\n\"nda\", \"msa\", \"safe\". An override keeps the built-in's id.",
+            "type": "string"
+          },
+          "origin": {
+            "description": "Origin is \"builtin\" for a template the platform ships or \"org\" for one this\norg saved. It separates the catalog every tenant sees from this tenant's own.",
+            "type": "string"
+          },
+          "title": {
+            "description": "Title is the display name, e.g. \"Mutual Non-Disclosure Agreement\". A generated\ndocument inherits it.",
+            "type": "string"
+          },
+          "version": {
+            "description": "Version is which version of this template the caller's org resolves to. A\nbuilt-in is version 1; the org's first override is 2 and each save increments,\nso an override version never collides with the built-in's.",
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "problem-details": {
+        "description": "An RFC 9457 problem document.",
+        "properties": {
+          "code": {
+            "description": "A stable token a client can branch on, when the refusal names one.",
+            "type": "string"
+          },
+          "detail": {
+            "description": "What was refused, for a person to read.",
+            "type": "string"
+          },
+          "status": {
+            "description": "The HTTP status.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "title": {
+            "description": "The status's reason phrase.",
+            "type": "string"
+          },
+          "type": {
+            "description": "about:blank",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "status",
+          "detail"
+        ],
+        "type": "object"
+      }
+    },
+    "securitySchemes": {
+      "bearer": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "The caller's credential, sent as `Authorization: Bearer \u003ctoken\u003e`. It is either an access token minted by Hanzo IAM or an API key (pk-/sk-). X-Authorization, and HTTP Basic carrying the token as the password, are accepted spellings of the same header for clients that cannot set Authorization; a browser presents the session cookie instead. Every operation requires it unless it says `security: []`."
+      }
+    }
+  }
+}

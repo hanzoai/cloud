@@ -1,0 +1,48 @@
+{
+  "$schema": "https://schemas.agentskills.io/discovery/0.2.0/schema.json",
+  "base_url": "https://api.hanzo.ai",
+  "brand": "hanzo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://hanzo.id",
+  "mcp": {
+    "description": "Model Context Protocol over JSON-RPC 2.0 — one POST per message, stateless, protocol revision 2026-07-28. tools/list answers without a credential with one tool per subsystem (its operations in the \"op\" enum) plus \"describe\", which returns one operation's input schema. tools/call names a subsystem tool and carries {\"op\": <operation>, \"input\": <its arguments>}; it takes the same bearer the REST API does, and a call that carries none is answered 401 with a WWW-Authenticate header naming the resource metadata at /.well-known/oauth-protected-resource, which names the authorization server to sign in at. The tool surface is the public contract: the operator's admin product is not offered, and a name that would disclose a secret or mutate an identity is withheld — the list says how many, under _meta.",
+    "method": "POST",
+    "url": "https://api.hanzo.ai/v1/mcp"
+  },
+  "skill_count": 4,
+  "skills": [
+    {
+      "description": "Read capabilities capabilities: Answers the org's capabilities by name, each with its state, its latest and installed versions, and what the installed one did live., Answers one capability: its versions with their evaluations, newest first, and what its installed version did live",
+      "digest": "sha256:0c6c1fd380d5396c814b5622292f5d19f92306870a17bcef7eae6de215c2d453",
+      "name": "capabilities_capabilities",
+      "service": "capabilities",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/capabilities_capabilities/SKILL.md"
+    },
+    {
+      "description": "Read capabilities capture: Answers whether the org's Kai decisions keep their states for its capabilities to learn from..",
+      "digest": "sha256:7dda6de1a2eb3fc09d51847ada9d38b7f90ce5c6255d094922e94cc5f851fe83",
+      "name": "capabilities_capture",
+      "service": "capabilities",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/capabilities_capture/SKILL.md"
+    },
+    {
+      "description": "Read capabilities corrections: Answers every correction of the org's decisions, newest first, each captured (it can teach) or missing (its decision was made with capture off), and the questions they ask, each counted: what a capability is made from..",
+      "digest": "sha256:839e4927d525fa64e87707a7c11bc05ed90c76b905ce354da430f8066bec7f02",
+      "name": "capabilities_corrections",
+      "service": "capabilities",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/capabilities_corrections/SKILL.md"
+    },
+    {
+      "description": "Read capabilities weights: Answers a capability's .tar weights (base64) and shared representation metadata for its installed or newest passing version, so the org can export or open-source its trained adapter..",
+      "digest": "sha256:7780c9cf2287b00bd6e17412af9dcf6fb821b2306093577b27df9fe3fa944ba5",
+      "name": "capabilities_weights",
+      "service": "capabilities",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/capabilities_weights/SKILL.md"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

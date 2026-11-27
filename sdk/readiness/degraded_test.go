@@ -6,6 +6,10 @@ import (
 	"testing"
 )
 
+// These pin the distinction the outage turned on: a plane that was never enabled
+// and a plane that was enabled and died both answer 503, and until now nothing
+// could tell them apart from outside.
+
 func TestDegraded_RecordsAndReports(t *testing.T) {
 	resetDegradedForTest()
 	t.Cleanup(resetDegradedForTest)

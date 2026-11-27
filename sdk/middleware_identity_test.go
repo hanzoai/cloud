@@ -18,8 +18,8 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
-	"github.com/hanzoai/authz"
 	"github.com/hanzoai/cloud/sdk/principal"
+	"github.com/hanzoai/authz"
 	"github.com/zap-proto/zip"
 )
 
@@ -160,6 +160,9 @@ func TestSanitizeIdentity(t *testing.T) {
 	//
 	// The discriminator is the MEMBERSHIP SET, which IAM's client_credentials grant
 	// leaves nil ("a machine token has no user and therefore no membership set").
+	// This fixture used to set Type "application" and KEEP a membership set — but the
+	// IAM line this runs against stamps that value nowhere, so the fixture described a
+	// token that cannot exist and the refusal it asserted never ran in production.
 	adminMachine := tokenClaims("some-admin-app", "admin", "z@hanzo.ai", true, future)
 	adminMachine.Subject = "admin/some-admin-app"
 	adminMachine.Orgs = nil
@@ -696,8 +699,10 @@ func TestSuperAdminGate_IsOwnerAdmin(t *testing.T) {
 //
 // IAM does not put a normal org's adminness in the top-level `isAdmin` claim —
 // that claim is for the platform's own super-users. It puts it in the signed
-// membership set, as orgs[].role. A token like orgs:[{org:acme,role:admin}] with
-// isAdmin absent must therefore mint X-User-IsOrgAdmin for that org's admin.
+// membership set, as orgs[].role. The boundary only read `isAdmin`, so a token
+// like the one production issues z@hanzo.ai — orgs:[{org:hanzo,role:admin}],
+// isAdmin absent — minted NO X-User-IsOrgAdmin, and GET /v1/paas/apps (now
+// /v1/platform/fleet) answered 403 "admin required" to the platform's own owner.
 //
 // The bit is keyed on the EFFECTIVE org, so it describes the org the request acts
 // in: admin of your home org does not follow you into an org you merely belong to.
@@ -740,6 +745,7 @@ func TestSanitizeIdentity_OrgAdminFromMembershipRole(t *testing.T) {
 		wantAdmin, wantOrgAdmin, wantOrg string
 	}{
 		{
+			// THE REGRESSION: role-only adminness must mint the bit.
 			name:         "membership role admin mints the org-admin bit",
 			mutate:       prod("", memberOf),
 			wantOrgAdmin: "true",
@@ -845,8 +851,10 @@ func TestMachineIsNeverMintedTheOrgAdminBit(t *testing.T) {
 			c.Orgs = nil
 			c.Audience = jwt.ClaimStrings{kmsMachineAudience("acme")}
 		}},
-		// The membership set does not outvote the signed kind. It passed on the
-		// audience match alone, so it pinned a heuristic rather than the rule.
+		// The membership set does not outvote the signed kind. This case used to
+		// carry one WITHOUT the kind, which is a token no issuer mints: IAM's
+		// client_credentials grant never writes `orgs`. It passed on the audience
+		// match alone, so it pinned a heuristic rather than the rule.
 		{"a machine that also carries a membership set", func(c *idClaims) {
 			c.Type = authz.Program
 			c.Audience = jwt.ClaimStrings{kmsMachineAudience("acme")}

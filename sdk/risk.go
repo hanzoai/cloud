@@ -32,8 +32,11 @@ package cloud
 // producer because none can be spelled — not because a boundary forbids one. Giving
 // it one means EXPORTING a scorer from apps/risk and then deciding what it answers
 // for: this global answers for its own process, while arming asks whether the risk
-// plane can answer for the FLEET. That is a cross-process ask, which is why the
-// observability plane's event endpoint is a plane op rather than a package global.
+// plane can answer for the FLEET. That is a cross-process ask. The observability
+// plane's event endpoint was the same shape and learned it the expensive way
+// (cloud.SetObsErrorIngest, in a file named obsevents.go, read nil in the process
+// that needed it and answered 503 to every Sentry SDK until apps/o11y/obs_rpc.go
+// replaced it with a plane op; obsevents.go is gone).
 //
 // So a caller in another binary — the abuse gate that serve.go installs fleet-wide,
 // the signup gate in hanzoai/iam — reaches /v1/risk over the wire or over the plane,
@@ -444,11 +447,13 @@ func riskUnavailable(q RiskQuery, why string) RiskVerdict {
 // RiskUnavailable is that same policy, for a scorer that has to state one fact
 // [Decide] cannot observe from here.
 //
-// A scorer reached over the plane learns something the client does not: whether
-// the app it asks is PART OF THIS DEPLOYMENT. Over a socket, "not deployed"
-// arrives as a failed call like any other — and read as an error it would take
-// the fail-CLOSED branch, so a fleet that simply does not run the risk app would
-// refuse every privileged grant in it.
+// A scorer reached over the plane learns something the client does not: whether the
+// app it asks is PART OF THIS DEPLOYMENT. Over a socket, "not deployed" arrives as
+// a failed call like any other — and read as an error it would take the
+// fail-CLOSED branch, so a fleet that simply does not run the risk app would
+// refuse every privileged grant in it. That is the outage the absent exemption
+// exists to prevent, and only the caller of the plane can tell it apart from a
+// peer that is here and silent.
 //
 // So the scorer states the refusal and this applies the ONE policy to it, rather
 // than a second copy of the rule appearing at the one client that needs it most.

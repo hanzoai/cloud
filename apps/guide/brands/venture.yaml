@@ -1,0 +1,226 @@
+# venture.yaml — Venture Studio Playbook on Hanzo.
+#
+# Submit as the body of PUT /v1/guide/curriculum in a fresh venture organization
+# to enroll it in the four-phase, ten-step venture studio launch checklist
+# (custom: true), or mount with CLOUD_BRAND=venture to serve it as the studio
+# default.
+version: 2026.11-venture.1
+brand: venture
+title: Venture Studio Playbook
+enabled: true
+
+sections:
+  - id: studio-access
+    title: "Phase 1 · Studio Access & Governance"
+    detail: "Provision the studio tenant, administrator entitlements, scoped seats, and organization budgets."
+    order: 1
+    enabled: true
+  - id: venture-creation
+    title: "Phase 2 · Venture Creation & Playbook Enrollment"
+    detail: "Create or import a venture, record its thesis, sponsor, owner, initial budget, and enroll its playbook."
+    order: 2
+    enabled: true
+  - id: team-execution
+    title: "Phase 3 · Team Design & Specialist Execution"
+    detail: "Turn the approved seven-function org chart into a venture lead and specialist agents, then execute a research brief."
+    order: 3
+    enabled: true
+  - id: review-portfolio
+    title: "Phase 4 · Evidence Review, Approvals & Portfolio Operations"
+    detail: "Verify source citations with a domain reviewer, gate external actions on human authorization, and decide the venture's next stage."
+    order: 4
+    enabled: true
+
+steps:
+  - id: studio-org
+    section: studio-access
+    title: "Provision studio and venture organization access"
+    detail: "Verify administrator sign-in, enterprise product entitlements, organization budgets, and venture-scoped member invitations."
+    deps: []
+    enabled: true
+    signal: acted
+    tool: post_v1_guide_ventures
+    draftInto: thesis
+    draft: >
+      Write a concise one-sentence venture studio charter and initial governance
+      note for a new Research venture workspace. Return plain text.
+    args:
+      slug: vet-clinic-scheduling
+      title: Autonomous Lab Scheduling Workflow
+
+  - id: venture-intake
+    section: venture-creation
+    title: "Capture venture thesis, sponsor, owner, initial budget, and seed evidence"
+    detail: "Record the venture's thesis, sponsor, owner, initial micro-USD budget, and baseline evidence in the portfolio index."
+    deps: [studio-org]
+    enabled: true
+    signal: acted
+    tool: post_v1_guide_ventures
+    draftInto: thesis
+    draft: >
+      Draft a falsifiable venture thesis evaluating whether an AI-assisted triage
+      and block-scheduling workflow reduces laboratory queue wait times and
+      clinician overtime. Return plain text.
+    args:
+      slug: vet-clinic-scheduling
+      title: Autonomous Lab Scheduling Workflow
+      sponsor: Studio Lead
+      owner: lead-vet-scheduling
+      initialBudgetMicroUSD: 500000000
+
+  - id: venture-playbook
+    section: venture-creation
+    title: "Enroll venture organization in the versioned Venture Studio curriculum"
+    detail: "Bind the venture organization to the versioned Venture Studio playbook so progress and shared templates stay synchronized."
+    deps: [venture-intake]
+    enabled: true
+    signal: acted
+    tool: get_v1_guide_ventures
+
+  - id: team-roster
+    section: team-execution
+    title: "Approve the seven-function venture roster and provision lead and specialist agents"
+    detail: "Turn the approved org chart into a venture lead and specialist role definitions across regulatory-clinical, market-competitive, finance-fundraising, marketing-brand, product-engineering, operations-legal, and knowledge-tools."
+    deps: [venture-playbook]
+    enabled: true
+    signal: acted
+    tool: post_v1_agent_roster
+    args:
+      venture: vet-clinic-scheduling
+      seedDefaultSeven: true
+
+  - id: research-brief
+    section: team-execution
+    title: "Assign nonconfidential research brief to the venture lead"
+    detail: "Submit the veterinary clinic scheduling research brief to the venture lead and dispatch durable child tasks to specialists."
+    deps: [team-roster]
+    enabled: true
+    signal: acted
+    tool: post_v1_agent_briefs
+    draftInto: question
+    draft: >
+      Formulate a nonconfidential research brief asking which published peer-reviewed
+      evidence supports a proposed time-saving change to an experimental laboratory's
+      appointment scheduling workflow, and which claims lack empirical support.
+      Return plain text.
+    args:
+      venture: vet-clinic-scheduling
+      title: Autonomous Lab Scheduling Evidence Brief
+      lead: venture-lead
+
+  - id: specialist-evidence
+    section: team-execution
+    title: "Run specialist agents to gather cited evidence and flag unsupported claims"
+    detail: "Execute regulatory-clinical and market-competitive specialists to produce attributable findings with source citations and unsupported-claim flags."
+    deps: [research-brief]
+    enabled: true
+    signal: acted
+    tool: post_v1_research_evidence
+
+  - id: lead-synthesis
+    section: team-execution
+    title: "Synthesize specialist work into a cited brief with open questions and attribution"
+    detail: "Join completed specialist tasks into a single lead synthesis recording citations, unsupported claims, open questions, and per-agent attribution."
+    deps: [specialist-evidence]
+    enabled: true
+    signal: acted
+    tool: post_v1_research_decisions
+
+  - id: domain-review
+    section: review-portfolio
+    title: "Record domain reviewer corrections, source permissions, and elapsed review time"
+    detail: "Have a domain reviewer inspect the cited summary, verify source permissions, log corrections, and record elapsed review time."
+    deps: [lead-synthesis]
+    enabled: true
+    signal: acted
+    tool: post_v1_research_evaluations
+
+  - id: action-approval
+    section: review-portfolio
+    title: "Authorize human-gated external actions and nightly role proposals"
+    detail: "Bind every external action approval to its exact destination, content hash, actor, and venture, and decide pending nightly role proposals."
+    deps: [domain-review]
+    enabled: true
+    signal: acted
+    tool: post_v1_research_actions
+
+  - id: portfolio-decision
+    section: review-portfolio
+    title: "Review portfolio stage, spend, and evidence to advance, pause, or form the venture"
+    detail: "Inspect portfolio stage, pending decisions, failed runs, and per-venture spend from the studio view, then advance to entity formation or pause."
+    deps: [action-approval]
+    enabled: true
+    signal: acted
+    tool: get_v1_guide_portfolio
+
+strategies:
+  - id: venture-thesis-kill-gate
+    category: validation
+    workload: low
+    action: "Test every venture thesis against published clinical and market evidence before filing or paying to form a legal entity."
+    tags: [stage:formed]
+    source: "Hanzo Venture Studio"
+    era: modern
+    enabled: true
+  - id: seven-function-specialist-cell
+    category: operations
+    workload: medium
+    action: "Staff each venture with a lead agent and versioned specialist roles across the seven studio functions, keeping data and secrets isolated per venture org."
+    tags: [stage:formed]
+    source: "Hanzo Venture Studio"
+    era: modern
+    enabled: true
+  - id: human-gated-external-actions
+    category: governance
+    workload: low
+    action: "Bind every outbound message, calendar invite, code push, or role creation to a human signature over the exact draft content hash."
+    tags: [stage:launched]
+    source: "Hanzo Venture Studio"
+    era: modern
+    enabled: true
+  - id: nightly-coverage-gap-review
+    category: optimization
+    workload: low
+    action: "Run a scheduled review of repeated specialist failures, unsupported claims, and reviewer corrections to propose scoped new role candidates."
+    tags: [stage:activated]
+    source: "Hanzo Venture Studio"
+    era: modern
+    enabled: true
+
+templates:
+  - id: vet-scheduling-brief
+    title: "Autonomous Lab Scheduling Research Brief"
+    body: |
+      Venture: {venture}
+      Sponsor: {sponsor}
+      Research Question: Which published evidence supports a proposed time-saving change to an experimental laboratory's scheduling workflow, and which vendor or operational claims remain unsupported?
+      Required Output:
+      1. Cited summary of peer-reviewed experimental and operational scheduling studies (with DOIs/PMIDs).
+      2. Explicit list of unsupported or anecdotal claims.
+      3. Open questions for clinical operations validation.
+    enabled: true
+  - id: specialist-role-prompt
+    title: "Studio Specialist Role Definition"
+    body: |
+      Role: {role_name} ({studio_function})
+      Manager: {manager}
+      Venture: {venture}
+      Duties: Produce source-cited evidence within your domain, flag any claim lacking primary evidence, and stay within your assigned tool list and task budget.
+    enabled: true
+  - id: domain-review-rubric
+    title: "Domain Reviewer Verification Rubric"
+    body: |
+      Verify for {venture}:
+      - Every citation resolves to an accessible, permitted source in the workspace.
+      - Unsupported claims are separated from empirical findings.
+      - Record reviewer corrections and elapsed review duration in seconds.
+    enabled: true
+  - id: nightly-role-proposal
+    title: "Nightly Coverage Gap Role Proposal"
+    body: |
+      Proposed Role: {role_name}
+      Function: {studio_function}
+      Reporting Line: {manager}
+      Evidence of Gap: {examples}
+      Estimated Monthly Cost (micro-USD): {estimated_micro_usd}
+    enabled: true

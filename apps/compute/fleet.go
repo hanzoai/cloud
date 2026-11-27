@@ -1,0 +1,1149 @@
+// fleet.go — BYO ("bring your own") compute: the operator's OWN machines that
+// dialed IN via `hanzo link`, as opposed to the DOKS/DigitalOcean machines
+// Visor provisions. A BYO worker is an outbound agent behind NAT: it can't be
+// listed by Visor (Visor never provisioned it), so its presence lives as a
+// heartbeating standalone activity in the org's `fleet` namespace of the durable
+// engine. This file reads that registry and folds it into the SAME machineView /
+// gpuView the console already renders, tagged provider="byo", so the existing
+// Machines and GPUs pages light up for free — no parallel UI. It also serves the
+// raw list at GET /v1/compute/fleet/workers.
+//
+// Registration is written by the CLI over the public engine surface
+// (POST /v1/workflow/namespaces/fleet/activities + heartbeat) — this subsystem only
+// READS, and only ever the caller's own tenant (principal.Org → org shard).
+//
+// That surface belongs to the WORKFLOW app, and the engine behind it is per-process
+// (durable.go), so the registry is not in visor's address space at all: the read
+// crosses to workflow over ZAP on its unix socket (allActivitiesForOrg). Opening a
+// local engine here is what made an online, heartbeating GPU read as no fleet.
+
+package compute
+
+import (
+	"bytes"
+	"cmp"
+	"context"
+	"crypto/rand"
+	"encoding/hex"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"net/http"
+	"regexp"
+	"sort"
+	"strconv"
+	"strings"
+	"time"
+
+	"github.com/hanzoai/cloud/client"
+	"github.com/hanzoai/cloud/client/workflow"
+	"github.com/hanzoai/cloud/samples"
+	"github.com/hanzoai/cloud/sdk"
+	tasks "github.com/hanzoai/tasks/pkg/tasks"
+	"github.com/zap-proto/zip"
+)
+
+// fleetNamespace is the tasks namespace a BYO worker registers its presence in.
+// gpu-jobs (the work queue it claims from) is a SEPARATE namespace — presence and
+// work never mix.
+const fleetNamespace = "fleet"
+
+// byoLiveWindow bounds heartbeat freshness: a worker whose last heartbeat is older
+// is reported offline. ~1.5× the CLI's default 60s heartbeat so one missed beat
+// does not flap it offline.
+const byoLiveWindow = 90 * time.Second
+
+// byoGPU is one accelerator reported by nvidia-smi on the connecting machine.
+type byoGPU struct {
+	// Name is the card's model exactly as its own tooling named it ("NVIDIA
+	// GB10"), never normalized — an operator matches what they see here against
+	// what nvidia-smi tells them on the box.
+	Name string `json:"name"`
+	// MemoryTotal is the card's VRAM in the units the host reported it in
+	// ("122880 MiB") — a display string, not a byte count. On a unified part it is
+	// the shared CPU/GPU pool, so it is not memory reserved for the GPU.
+	MemoryTotal string `json:"memoryTotal,omitempty"` // VRAM (or unified pool), e.g. "122880 MiB"
+	// Arch is the card's native compile target ("gfx1151"), which is what a kernel
+	// has to be built for. AMD reports one; NVIDIA cards leave it empty.
+	Arch string `json:"arch,omitempty"` // native target, e.g. "gfx1151"
+	// Unified reports that CPU and GPU share one memory pool (an APU or SoC), so
+	// MemoryTotal is not private to the GPU and the host competes for it.
+	Unified bool `json:"unified,omitempty"` // unified CPU/GPU memory pool (APU / SoC)
+}
+
+// engineAdvertisement is a hanzo-engine model server a BYO worker runs on its node
+// (advertised by `hanzo link --serve-engine`). hanzo-engine serves the OpenAI
+// AND Anthropic HTTP APIs from one port, so the gateway can route model calls to this
+// GPU on the standard chat-completions provider. Surfaced verbatim on GET /v1/compute/fleet/workers.
+type engineAdvertisement struct {
+	// URL is the base address the node advertised its engine on — where a model
+	// call to this GPU is sent. The node chose it, so reaching it is a question
+	// about the node's network, not about this surface.
+	URL string `json:"url"`
+	// APIs are the wire formats the engine serves on that one port: "openai",
+	// "anthropic", or both.
+	APIs []string `json:"apis,omitempty"` // ["openai","anthropic"]
+	// Models are the model ids the node's own GET /v1/models answered with — what
+	// this GPU can actually be asked for.
+	Models []string `json:"models,omitempty"` // ids from the node's GET /v1/models
+	// Status is "ready" when the node's engine answered, "unreachable" when it did
+	// not. Advertised is not the same as serving, and this is the difference.
+	Status string `json:"status,omitempty"` // "ready" | "unreachable"
+}
+
+// byoWorker is a connected BYO machine, normalized from its `fleet` presence
+// activity. It is the raw shape GET /v1/compute/fleet/workers returns and the source the
+// machine/gpu unions map from.
+type byoWorker struct {
+	// ID is the node's id in the fleet — the sanitized hostname it registered
+	// under, which is also the `unit` its samples and its gpu-jobs lane key on.
+	// This is the id to use everywhere else on the compute surface.
+	ID string `json:"id"`
+	// Hostname is what the host calls itself. It equals ID for any hostname already
+	// in the [a-z0-9-] alphabet, and differs when sanitizing had to change it.
+	Hostname string `json:"hostname"`
+	// Provider is always "byo": this machine is the operator's, not one Hanzo
+	// provisioned. It exists so a fold into the machines/GPUs pages says which
+	// rows are rented and which are the customer's own.
+	Provider string `json:"provider"` // always "byo"
+	// Location is always "on-prem" — a machine that dialed in has no cloud region,
+	// and inventing one would put it somewhere it is not.
+	Location string `json:"location"` // "on-prem" (BYO has no cloud region)
+	// Status is "online" when the last heartbeat landed within 90s, else
+	// "offline" — so it is a fact about heartbeat freshness, not about the box
+	// being powered on. A worker that has never beaten reads offline.
+	Status string `json:"status"` // online | offline
+	// Rocm is the host's ROCm version. AMD hosts report it; empty otherwise.
+	Rocm string `json:"rocm,omitempty"`
+	// Hip is the host's HIP runtime version, the AMD counterpart to Cuda.
+	Hip string `json:"hip,omitempty"`
+	// Cuda is the host's CUDA toolkit version. NVIDIA hosts report it.
+	Cuda string `json:"cuda,omitempty"`
+	// Driver is the host's NVIDIA kernel driver version — distinct from Cuda, and
+	// the one that bounds which CUDA versions can run on this box.
+	Driver string `json:"driver,omitempty"`
+	// GPUs are the accelerators the host found on itself. Empty is a real answer:
+	// a CPU-only machine can dial in and take non-GPU work.
+	GPUs []byoGPU `json:"gpus"`
+	// LastHeartbeat is the most recent beat this node sent, RFC 3339. It is what
+	// Status is computed from, so a reader can check the judgement.
+	LastHeartbeat string `json:"lastHeartbeat,omitempty"`
+	// FirstSeen is when this node first dialed in, RFC 3339 — the start of its
+	// presence record, which `hanzo unlink` ends.
+	FirstSeen string `json:"firstSeen,omitempty"`
+	// Os is the host's operating system: linux, darwin or windows.
+	Os string `json:"os,omitempty"`
+	// Arch/CPUs/Memory are the connecting host's static CPU spec, mirrored from the
+	// registration: Arch is runtime.GOARCH (amd64 | arm64), Memory is total RAM in
+	// BYTES — the same fields a code-linked run-target carries, so the /v1/compute/fleet
+	// board renders a linked node's arch + cores + RAM like any other unit.
+	Arch string `json:"arch,omitempty"`
+	// CPUs is the host's logical core count.
+	CPUs int `json:"cpus,omitempty"`
+	// CPUModel is the processor as the host names it ("Apple M3 Max"), for display.
+	CPUModel string `json:"cpuModel,omitempty"`
+	// Memory is the host's total RAM in BYTES.
+	Memory int64 `json:"memory,omitempty"`
+	// Version is the `hanzo` CLI version running on the node. It is what to check
+	// when a worker is missing a field a newer registration reports.
+	Version string `json:"version,omitempty"`
+	// JobQueue is the tasks NAMESPACE this worker claims render jobs out of —
+	// "gpu-jobs" unless `hanzo link` was pointed at another. Within it, a job aimed
+	// at this node alone rides the task-queue value "gpu:<id>".
+	JobQueue string `json:"jobQueue,omitempty"`
+	// Capabilities is what this worker offers the org: "studio.render" when the
+	// node can render, "engine.serve" when it serves a model endpoint. A node
+	// advertises one only once it can honour it, so an absent list means a node
+	// that has dialed in but is not ready to serve any of them yet.
+	Capabilities []string `json:"capabilities,omitempty"`
+	// Engine is the hanzo-engine model server this node runs, when it runs one
+	// (`hanzo link --serve-engine`). Absent means the node takes jobs but serves
+	// no model endpoint.
+	Engine *engineAdvertisement `json:"engine,omitempty"`
+	// Lanes are the Studio render lanes the node's engine can run now (image.zen,
+	// edit.qwen, video.wan, mesh, ...): advertised only when every weight file a
+	// lane loads is on the node, so a page offers a GPU card only where it renders.
+	Lanes []string `json:"lanes,omitempty"`
+	// Models are the weights behind those lanes, each with its SPDX licence.
+	Models []laneModel `json:"models,omitempty"`
+	// Busy reports whether this linked machine is currently occupied (for example
+	// holding a local research GPU lock or running above its GPU utilization
+	// ceiling) and will defer idle-only work until free.
+	Busy bool `json:"busy"`
+	// BusyReason names why Busy is true (e.g. "local_gpu_lock_held" or
+	// "gpu_utilization_high"); omitted when the node is idle.
+	BusyReason string `json:"busyReason,omitempty"`
+}
+
+// laneModel is one weight set a node holds: its id, the lane it serves first, and
+// its SPDX licence. Mirror of the CLI's (cloud/cli/gpu.go).
+type laneModel struct {
+	// ID is the weight set's id, as the node's engine loads it (triposr, wan2.2, ...).
+	ID string `json:"id"`
+	// Lane is the Studio render lane these weights serve first (mesh, video.wan, ...).
+	Lane string `json:"lane"`
+	// Licence is the weights' SPDX licence identifier (MIT, Apache-2.0, ...).
+	Licence string `json:"licence"`
+}
+
+// fleetRegistration is the JSON the CLI stores as the presence activity's Input.
+// Mirror of the CLI's `registration` (cloud/cli/gpu.go) — extend both in lockstep.
+type fleetRegistration struct {
+	Hostname     string               `json:"hostname"`
+	Os           string               `json:"os"`
+	Arch         string               `json:"arch,omitempty"`
+	CPUs         int                  `json:"cpus,omitempty"`
+	Memory       int64                `json:"memory,omitempty"`
+	CPUModel     string               `json:"cpuModel,omitempty"`
+	Version      string               `json:"version"`
+	JobQueue     string               `json:"jobQueue"`
+	Rocm         string               `json:"rocm,omitempty"`
+	Hip          string               `json:"hip,omitempty"`
+	Cuda         string               `json:"cuda,omitempty"`
+	Driver       string               `json:"driver,omitempty"`
+	GPUs         []byoGPU             `json:"gpus"`
+	Capabilities []string             `json:"capabilities,omitempty"`
+	Engine       *engineAdvertisement `json:"engine,omitempty"`
+	Lanes        []string             `json:"lanes,omitempty"`
+	Models       []laneModel          `json:"models,omitempty"`
+	Busy         bool                 `json:"busy,omitempty"`
+	BusyReason   string               `json:"busyReason,omitempty"`
+}
+
+// heartbeatBusyState decodes optional busy telemetry attached to a worker's
+// fleet presence heartbeat details (`{"busy":true,"busyReason":"..."}`).
+type heartbeatBusyState struct {
+	Busy       *bool  `json:"busy,omitempty"`
+	BusyReason string `json:"busyReason,omitempty"`
+}
+
+// fleetActivityRow extends tasks.StandaloneActivity with optional heartbeat
+// detail payloads so byoWorkers reflects live busy/idle flips reported via
+// LastHeartbeat details as well as presence registration Input.
+type fleetActivityRow struct {
+	tasks.StandaloneActivity
+	LastHeartbeatDetails json.RawMessage `json:"lastHeartbeatDetails,omitempty"`
+	HeartbeatDetails     json.RawMessage `json:"heartbeatDetails,omitempty"`
+	Details              json.RawMessage `json:"details,omitempty"`
+}
+
+func resolveWorkerBusy(reg fleetRegistration, row fleetActivityRow) (bool, string) {
+	busy := reg.Busy
+	reason := strings.TrimSpace(reg.BusyReason)
+	for _, raw := range []json.RawMessage{row.LastHeartbeatDetails, row.HeartbeatDetails, row.Details} {
+		if len(raw) == 0 {
+			continue
+		}
+		var hb heartbeatBusyState
+		if json.Unmarshal(raw, &hb) == nil && hb.Busy != nil {
+			busy = *hb.Busy
+			if busy {
+				reason = cmp.Or(strings.TrimSpace(hb.BusyReason), reason)
+			} else {
+				reason = ""
+			}
+			break
+		}
+	}
+	if !busy {
+		reason = ""
+	}
+	return busy, reason
+}
+
+// byoWorkers reads the org's BYO fleet from the in-process tasks engine and
+// normalizes each presence activity. Fail-soft: a nil engine (not yet wired) or a
+// read error yields an empty list, never an error — a BYO read must never break the
+// Visor-backed machine/gpu listing it augments. Terminal (disconnected) presence
+// records are excluded so a `hanzo unlink` removes the row.
+func byoWorkers(ctx context.Context, org string) []byoWorker {
+	// ALL pages, not the first 100: an online worker must never be truncated away
+	// (dropping it from Machines/GPUs/status) because terminal presence rows crowd
+	// the hash-ordered first page. allFleetActivitiesForOrg is fail-soft (nil on no engine).
+	acts := allFleetActivitiesForOrg(ctx, org)
+	now := time.Now().UTC()
+	out := make([]byoWorker, 0, len(acts))
+	for _, a := range acts {
+		switch a.Status {
+		case "ACTIVITY_TASK_STATE_COMPLETED", "ACTIVITY_TASK_STATE_FAILED", "ACTIVITY_TASK_STATE_CANCELED":
+			continue // disconnected — drop from the fleet
+		}
+		var reg fleetRegistration
+		if b, err := json.Marshal(a.Input); err == nil {
+			_ = json.Unmarshal(b, &reg)
+		}
+		busy, busyReason := resolveWorkerBusy(reg, a)
+		host := cmp.Or(strings.TrimSpace(reg.Hostname), a.Execution.WorkflowId)
+		out = append(out, byoWorker{
+			ID:            a.Execution.WorkflowId,
+			Hostname:      host,
+			Provider:      "byo",
+			Location:      "on-prem",
+			Status:        byoStatus(a.LastHeartbeatTime, now),
+			Rocm:          reg.Rocm,
+			Hip:           reg.Hip,
+			Cuda:          reg.Cuda,
+			Driver:        reg.Driver,
+			GPUs:          reg.GPUs,
+			LastHeartbeat: a.LastHeartbeatTime,
+			FirstSeen:     a.StartTime,
+			Os:            reg.Os,
+			Arch:          reg.Arch,
+			CPUs:          reg.CPUs,
+			CPUModel:      reg.CPUModel,
+			Memory:        reg.Memory,
+			Version:       reg.Version,
+			JobQueue:      reg.JobQueue,
+			Capabilities:  reg.Capabilities,
+			Engine:        reg.Engine,
+			Lanes:         reg.Lanes,
+			Models:        reg.Models,
+			Busy:          busy,
+			BusyReason:    busyReason,
+		})
+	}
+	return out
+}
+
+// byoStatus is "online" when the last heartbeat is within byoLiveWindow, else
+// "offline". A never-heartbeated worker (just registered) is offline until its
+// first beat lands.
+func byoStatus(lastHeartbeat string, now time.Time) string {
+	if lastHeartbeat == "" {
+		return "offline"
+	}
+	t, err := time.Parse(time.RFC3339, lastHeartbeat)
+	if err != nil {
+		return "offline"
+	}
+	if now.Sub(t.UTC()) <= byoLiveWindow {
+		return "online"
+	}
+	return "offline"
+}
+
+// workerList is the raw BYO inventory: the machines that dialed IN, as they
+// reported themselves.
+type workerList struct {
+	// Workers is one row per connected BYO machine, each carrying the host's own
+	// report (GPUs, driver versions, capabilities) rather than a normalized view.
+	Workers []byoWorker `json:"workers"`
+}
+
+// listFleetWorkers returns the caller org's BYO machines — the ones that dialed in
+// via `hanzo link` — with everything each host reported about itself. The Machines
+// and GPUs pages fold the same data into their normalized shapes; this is the
+// canonical raw list a fleet view (or the CLI's `status`) reads.
+//
+// Response: {"workers":[{"id":"spark","hostname":"spark","provider":"byo","location":"on-prem","status":"online","gpus":[{"name":"NVIDIA GB10","memoryTotal":"122880 MiB"}],"arch":"arm64","cpus":20}]}
+func (o ops) listFleetWorkers(ctx context.Context, _ *cloud.Unit) (*workerList, error) {
+	_, org, err := scope(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return &workerList{Workers: byoWorkers(ctx, org)}, nil
+}
+
+// ---- unions into the existing console shapes ----
+
+// byoMachineView maps a BYO worker to the machineView the console's Machines page
+// renders. provider="byo" and region="on-prem" distinguish it from a Visor machine;
+// the GPU summary lists the accelerators (e.g. "NVIDIA GB10" or "2× NVIDIA GB10").
+func byoMachineView(w byoWorker) machineView {
+	return machineView{
+		ID:          w.ID,
+		Name:        w.Hostname,
+		Region:      w.Location,
+		Type:        "byo-gpu",
+		Status:      w.Status,
+		Provider:    "byo",
+		CreatedTime: w.FirstSeen,
+		GPU:         byoGPUSummary(w.GPUs),
+		Os:          w.Os,
+	}
+}
+
+// byoGPUViews expands a BYO worker into one gpuView per accelerator for the GPUs
+// page, carrying the real model name + VRAM nvidia-smi reported.
+func byoGPUViews(w byoWorker) []gpuView {
+	out := make([]gpuView, 0, len(w.GPUs))
+	for i, g := range w.GPUs {
+		out = append(out, gpuView{
+			ID:       w.ID + "#" + strconv.Itoa(i),
+			Name:     w.Hostname,
+			Model:    g.Name,
+			Region:   w.Location,
+			Status:   w.Status,
+			Location: w.Location,
+			Machine:  w.ID,
+			Provider: "byo",
+			Memory:   g.MemoryTotal,
+		})
+	}
+	return out
+}
+
+// byoGPUSummary renders the accelerator set as one line for the machineView.GPU
+// field: "NVIDIA GB10" for a single card, "2× NVIDIA GB10" for a homogeneous pair,
+// else a comma-joined list. Empty when the worker reported no GPU (CPU-only).
+func byoGPUSummary(gpus []byoGPU) string {
+	if len(gpus) == 0 {
+		return ""
+	}
+	same := true
+	for _, g := range gpus {
+		if g.Name != gpus[0].Name {
+			same = false
+			break
+		}
+	}
+	if same {
+		if len(gpus) == 1 {
+			return gpus[0].Name
+		}
+		return strconv.Itoa(len(gpus)) + "× " + gpus[0].Name
+	}
+	names := make([]string, len(gpus))
+	for i, g := range gpus {
+		names[i] = g.Name
+	}
+	return strings.Join(names, ", ")
+}
+
+// ---- gpu-jobs queue: the org's per-GPU render queue, visible + manageable ----
+//
+// The render queue lives in the tasks namespace `gpu-jobs`. A job's TARGET is the
+// taskQueue VALUE: "gpu:<node>" is claimed only by that node (cli/gpu.go claims its
+// own lane first), the shared value "gpu-jobs" is the any-GPU broadcast. This reads
+// that queue org-scoped (the SAME ActivitiesForOrg primitive byoWorkers uses) and
+// serves it on GET /v1/compute/fleet/jobs, with POST /v1/compute/fleet/jobs/:id/cancel to manage it.
+
+// jobsNamespace is the tasks namespace the render queue lives in. gpuQueuePrefix
+// mirrors the CLI/dispatcher convention — ONE way to name a per-GPU lane.
+const (
+	jobsNamespace  = "gpu-jobs"
+	gpuQueuePrefix = "gpu:"
+)
+
+// gpuJob is one row of the gpu-jobs queue, normalized for the console + CLI. The
+// full ComfyUI graph (activity Input) is intentionally OMITTED — the list is a queue
+// view, not a render spec; `label` carries the cheap SaveImage prefix, and the tasks
+// describe endpoint serves the graph. `gpu` is the TARGET lane, `worker` the
+// claiming node — they differ (a shared-lane job has no target but has a claimant
+// once picked up), and the UI needs both.
+type gpuJob struct {
+	// ID is the job's id, and the id the cancel route takes. The dispatcher sets it
+	// equal to the render's prompt id, so it is the same value the studio knows the
+	// job by.
+	ID string `json:"id"`
+	// RunID identifies this execution of the job. It equals ID for a job the
+	// dispatcher submitted, which is why a cancel that omits it still works.
+	RunID string `json:"runId,omitempty"`
+	// Type is the work being done ("studio.render") — what the claiming worker has
+	// to be able to execute.
+	Type string `json:"type,omitempty"`
+	// Status is the job's lifecycle state: queued, running, completed, failed or
+	// canceled — plus "stalled", which is this surface's own reading of a job that
+	// is STARTED whose worker died: its lease has elapsed and no reaper has taken
+	// it back yet. Without it such a job reads "running" forever. An engine state
+	// this surface does not recognize passes through lower-cased rather than being
+	// coerced into one of these.
+	Status string `json:"status"`
+	// GPU is the node this job is aimed AT — the lane "gpu:<node>" it was submitted
+	// on. Empty means the shared any-GPU lane: it was not aimed anywhere and the
+	// first free worker takes it.
+	GPU string `json:"gpu,omitempty"`
+	// Worker is the node that actually CLAIMED the job, which is not always the one
+	// it was aimed at: a shared-lane job has no GPU but does have a Worker once
+	// picked up. Empty while the job is still waiting.
+	Worker string `json:"worker,omitempty"`
+	// Label is the cheap human name for the render — the output filename prefix
+	// lifted out of the submitted graph. Empty when the graph carried none. The
+	// graph itself is never in this list; the tasks describe endpoint serves it.
+	Label string `json:"label,omitempty"`
+	// Attempt is which try this is, counting from 1. Above 1 means the job was
+	// retried after a failed or abandoned run.
+	Attempt int `json:"attempt,omitempty"`
+	// StartTime is when a worker began executing the job, RFC 3339. Empty while it
+	// is still queued.
+	StartTime string `json:"startTime,omitempty"`
+	// CloseTime is when the job reached a terminal state, RFC 3339. Empty means it
+	// is still live — queued, running or stalled.
+	CloseTime string `json:"closeTime,omitempty"`
+	// LastHeartbeat is the claiming worker's most recent beat on this job, RFC 3339
+	// — the evidence a long render is still alive rather than wedged.
+	LastHeartbeat string `json:"lastHeartbeat,omitempty"`
+	// LeaseExpiry is when the worker's claim lapses, RFC 3339. Past it with the job
+	// still STARTED, the claimant is presumed dead and Status reads "stalled".
+	LeaseExpiry string `json:"leaseExpiry,omitempty"`
+	// FailureCause is the engine's reason the job failed. Empty unless it did.
+	FailureCause string `json:"failureCause,omitempty"`
+	// Result is the claiming worker's terminal JSON output once the job reaches
+	// "completed", populated on GET /v1/compute/fleet/jobs/:id and omitted on the
+	// queue summary list so polling one job returns its full benchmark or render payload.
+	Result json.RawMessage `json:"result,omitempty"`
+}
+
+// gpuTarget parses the GPU a job targets from its taskQueue: "gpu:<node>" → "<node>";
+// the shared lane (or any non-prefixed queue) → "".
+func gpuTarget(taskQueue string) string {
+	if id, ok := strings.CutPrefix(taskQueue, gpuQueuePrefix); ok {
+		return id
+	}
+	return ""
+}
+
+// normalizeStatus maps the engine's ACTIVITY_TASK_STATE_* enum to the console's
+// lifecycle vocabulary. An unknown state passes through lower-cased (honest — never
+// silently "queued").
+func normalizeStatus(s string) string {
+	switch s {
+	case "ACTIVITY_TASK_STATE_SCHEDULED":
+		return "queued"
+	case "ACTIVITY_TASK_STATE_STARTED":
+		return "running"
+	case "ACTIVITY_TASK_STATE_COMPLETED":
+		return "completed"
+	case "ACTIVITY_TASK_STATE_FAILED":
+		return "failed"
+	case "ACTIVITY_TASK_STATE_CANCELED":
+		return "canceled"
+	}
+	return strings.ToLower(strings.TrimPrefix(s, "ACTIVITY_TASK_STATE_"))
+}
+
+// renderLabel extracts the cheap human label for a studio.render job — the
+// SaveImage/SaveVideo/SaveWEBM filename_prefix from the ComfyUI graph in the activity
+// Input. Fully defensive: any shape it does not recognize yields "" (the list never
+// decodes or echoes the full graph).
+func renderLabel(input any) string {
+	m, ok := input.(map[string]any)
+	if !ok {
+		return ""
+	}
+	prompt, ok := m["prompt"].(map[string]any)
+	if !ok {
+		if n, ok := m["name"].(string); ok {
+			return strings.TrimSpace(n)
+		}
+		return ""
+	}
+	for _, n := range prompt {
+		node, ok := n.(map[string]any)
+		if !ok {
+			continue
+		}
+		switch node["class_type"] {
+		case "SaveImage", "SaveVideo", "SaveWEBM":
+			if inp, ok := node["inputs"].(map[string]any); ok {
+				if p, ok := inp["filename_prefix"].(string); ok && strings.TrimSpace(p) != "" {
+					return p
+				}
+			}
+		}
+	}
+	return ""
+}
+
+// Reading the queue at scale: the engine's single-page ActivitiesForOrg caps at 100
+// rows in hash order, so a busy org past ~100 lifetime activities sees a RANDOM subset
+// — live jobs hidden, busy GPUs read idle, online workers dropped. These bounds drive
+// a complete cursor-walk (ActivitiesPageForOrg) plus a recency-sort + terminal cap so
+// the surface is correct AND bounded regardless of lifetime volume.
+const (
+	activityPageSize = 10000 // one wide page normally covers the whole shard in a single scan
+	maxActivityPages = 50    // safety valve (→ up to 500k rows) so a runaway can't loop forever
+	maxTerminalJobs  = 50    // terminal history kept in the queue view; ALL live jobs are always kept
+)
+
+// allActivitiesForOrg cursor-walks the org's activities in ns to COMPLETION, defeating
+// the 100-row truncation. Fail-soft: an unreachable engine or a read error yields what
+// it has so far (possibly nil), never an error — a queue/fleet read must never 500 the
+// board.
+//
+// It ASKS the tasks app rather than reading an engine here, because the engine is
+// per-PROCESS (durable.go: its SQLite has one writer, so every app embeds its own over
+// its own data dir). Both namespaces this walks are written through the tasks surface —
+// a BYO worker registers its presence in `fleet` and claims out of `gpu-jobs` — so the
+// rows have never been in visor's engine. Reading the local one returned an empty page
+// with no error, and an online GPU that was heartbeating every 30s appeared on
+// /v1/compute/machines, /v1/compute/gpus, /v1/compute/fleet/workers, the board and studio's node badges as no
+// fleet at all. The org travels as the CALLER, never as an argument, so this cannot
+// page another tenant.
+func allActivitiesForOrg(ctx context.Context, org, ns string) []tasks.StandaloneActivity {
+	var out []tasks.StandaloneActivity
+	cursor := ""
+	for range maxActivityPages {
+		page, err := workflow.WorkflowActivities(cloud.For(ctx, org),
+			&client.ActivitiesIn{Namespace: ns, Cursor: cursor, Size: activityPageSize})
+		if err != nil || page == nil {
+			return out
+		}
+		var rows []tasks.StandaloneActivity
+		if err := json.Unmarshal(page.Rows, &rows); err != nil {
+			return out
+		}
+		out = append(out, rows...)
+		if page.Next == "" || len(rows) == 0 {
+			break
+		}
+		cursor = page.Next
+	}
+	return out
+}
+
+func allFleetActivitiesForOrg(ctx context.Context, org string) []fleetActivityRow {
+	var out []fleetActivityRow
+	cursor := ""
+	for range maxActivityPages {
+		page, err := workflow.WorkflowActivities(cloud.For(ctx, org),
+			&client.ActivitiesIn{Namespace: fleetNamespace, Cursor: cursor, Size: activityPageSize})
+		if err != nil || page == nil {
+			return out
+		}
+		var rows []fleetActivityRow
+		if err := json.Unmarshal(page.Rows, &rows); err != nil {
+			return out
+		}
+		out = append(out, rows...)
+		if page.Next == "" || len(rows) == 0 {
+			break
+		}
+		cursor = page.Next
+	}
+	return out
+}
+
+// leaseElapsed reports whether an RFC3339 lease expiry is already in the past.
+func leaseElapsed(leaseExpiry string, now time.Time) bool {
+	if leaseExpiry == "" {
+		return false
+	}
+	exp, err := time.Parse(time.RFC3339, leaseExpiry)
+	return err == nil && now.After(exp)
+}
+
+// toGPUJob projects one activity onto the console's gpuJob, normalizing status and
+// flagging a STALLED run: a job STARTED whose lease elapsed (its worker died) but which
+// the reaper has not yet reclaimed — otherwise it reads "running" forever. now is
+// shared across the page so every row is judged against one clock.
+func toGPUJob(a tasks.StandaloneActivity, now time.Time) gpuJob {
+	j := gpuJob{
+		ID:            a.Execution.WorkflowId,
+		RunID:         a.Execution.RunId,
+		Type:          a.Type.Name,
+		Status:        normalizeStatus(a.Status),
+		GPU:           gpuTarget(a.TaskQueue),
+		Worker:        a.Identity,
+		Label:         renderLabel(a.Input),
+		Attempt:       a.Attempt,
+		StartTime:     a.StartTime,
+		CloseTime:     a.CloseTime,
+		LastHeartbeat: a.LastHeartbeatTime,
+		LeaseExpiry:   a.LeaseExpiry,
+		FailureCause:  a.FailureCause,
+	}
+	if j.Status == "running" && leaseElapsed(a.LeaseExpiry, now) {
+		j.Status = "stalled"
+	}
+	return j
+}
+
+// jobRecency is a job's most-recent activity timestamp for recency sorting. RFC3339
+// sorts lexically = chronologically (the engine writes UTC Z), so the max string is
+// the latest moment the job did anything.
+func jobRecency(j gpuJob) string {
+	r := max(j.CloseTime, max(j.LastHeartbeat, j.StartTime))
+	return r
+}
+
+// isTerminalJob reports whether a normalized status is a finished lifecycle state.
+func isTerminalJob(status string) bool {
+	switch status {
+	case "completed", "failed", "canceled":
+		return true
+	}
+	return false
+}
+
+// gpuJobs reads the org's ENTIRE gpu-jobs queue (all pages), most-recent-first, keeping
+// every LIVE job (queued/running/stalled) and bounding terminal history to the most
+// recent maxTerminalJobs — so a busy org's live work is never hidden by truncation and
+// the view stays bounded. The SAME cursor-walk backs byoWorkers, so jobs and workers
+// can never disagree about the tenant. Fail-soft throughout.
+func gpuJobs(ctx context.Context, org string) []gpuJob {
+	acts := allActivitiesForOrg(ctx, org, jobsNamespace)
+	now := time.Now().UTC()
+	all := make([]gpuJob, 0, len(acts))
+	for _, a := range acts {
+		all = append(all, toGPUJob(a, now))
+	}
+	return orderAndBoundJobs(all)
+}
+
+// orderAndBoundJobs recency-sorts (newest first) and caps terminal history to
+// maxTerminalJobs while keeping EVERY live job (queued/running/stalled) — the
+// correctness-plus-bound the queue view needs past 100 lifetime rows. Pure, so it is
+// unit-tested directly with >100 rows.
+func orderAndBoundJobs(all []gpuJob) []gpuJob {
+	sort.SliceStable(all, func(i, j int) bool { return jobRecency(all[i]) > jobRecency(all[j]) })
+	out := make([]gpuJob, 0, len(all))
+	terminal := 0
+	for _, j := range all { // recency-desc: the first maxTerminalJobs terminal rows are the newest
+		if isTerminalJob(j.Status) {
+			if terminal >= maxTerminalJobs {
+				continue
+			}
+			terminal++
+		}
+		out = append(out, j)
+	}
+	return out
+}
+
+// filterGPUJobs narrows jobs to one GPU's queue and/or a lifecycle status. Empty
+// gpu/status match all. "spark's queue" is job.gpu==spark (targeted at it) OR
+// job.worker==spark (it is running the job), so a shared-lane job spark picked up
+// still shows under ?gpu=spark. gpu=="shared" (or the namespace name) selects the
+// any-GPU lane: no target and no claimant yet. status matches the normalized form.
+func filterGPUJobs(jobs []gpuJob, gpu, status string) []gpuJob {
+	// Node ids are lower-case (sanitized hostnames), so match the filter
+	// case-insensitively — ?gpu=Spark must find spark, like ?status= is normalized.
+	gpu = strings.ToLower(strings.TrimSpace(gpu))
+	status = strings.ToLower(strings.TrimSpace(status))
+	sharedOnly := gpu == "shared" || gpu == jobsNamespace
+	out := make([]gpuJob, 0, len(jobs))
+	for _, j := range jobs {
+		switch {
+		case sharedOnly:
+			if j.GPU != "" || j.Worker != "" {
+				continue
+			}
+		case gpu != "" && j.GPU != gpu && j.Worker != gpu:
+			continue
+		}
+		if status != "" && j.Status != status {
+			continue
+		}
+		out = append(out, j)
+	}
+	return out
+}
+
+// jobCount is a node's live queue depth: queued (waiting) + running (in flight).
+type jobCount struct{ queued, running int }
+
+// gpuJobCounts attributes each job to a GPU node: a QUEUED job to its target lane
+// (only a targeted job belongs to a specific GPU — a shared-lane queued job could go
+// to any), a RUNNING job to the node actually claiming it. Feeds the board's
+// per-unit Queued/Running.
+func gpuJobCounts(jobs []gpuJob) map[string]jobCount {
+	out := map[string]jobCount{}
+	for _, j := range jobs {
+		switch j.Status {
+		case "queued":
+			if j.GPU != "" {
+				c := out[j.GPU]
+				c.queued++
+				out[j.GPU] = c
+			}
+		case "running":
+			if j.Worker != "" {
+				c := out[j.Worker]
+				c.running++
+				out[j.Worker] = c
+			}
+		}
+	}
+	return out
+}
+
+// jobFilter narrows the queue WITHIN the caller's tenant. Both are optional; the
+// org is never one of them.
+type jobFilter struct {
+	// GPU selects one node's lane: jobs TARGETED at it (gpu:<node>) or CLAIMED by
+	// it. The literal "shared" selects the any-GPU lane — no target, no claimant.
+	// Matched case-insensitively.
+	GPU string `json:"gpu"`
+	// Status selects one lifecycle state: queued, running, stalled, completed,
+	// failed or canceled.
+	Status string `json:"status"`
+}
+
+// jobList is the org's render queue.
+type jobList struct {
+	// Jobs is the queue, most-recent-first. Every LIVE job is present; terminal
+	// history is capped, so a busy org's running work is never crowded out.
+	Jobs []gpuJob `json:"jobs"`
+}
+
+// listFleetJobs returns the caller org's gpu-jobs render queue, each row tagged with
+// the GPU it targets (empty = the shared any-GPU lane) and the node claiming it,
+// optionally narrowed to one GPU's queue and/or one status.
+//
+// A job whose worker died — STARTED with an elapsed lease and not yet reclaimed —
+// reads "stalled", not "running". Fail-soft: an unavailable tasks engine yields an
+// empty queue rather than an error.
+//
+// Response: {"jobs":[{"id":"job-1","runId":"job-1","type":"studio.render","status":"running","gpu":"spark","worker":"spark","label":"hero","attempt":1}]}
+func (o ops) listFleetJobs(ctx context.Context, in *jobFilter) (*jobList, error) {
+	_, org, err := scope(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return &jobList{Jobs: filterGPUJobs(gpuJobs(ctx, org), in.GPU, in.Status)}, nil
+}
+
+const (
+	defaultJobTimeoutSecs = 3600
+	maxJobTimeoutSecs     = 14400
+	defaultJobHeartbeat   = 2 * time.Minute
+	defaultJobWaitWindow  = 7 * 24 * time.Hour
+	maxJobAttempts        = 10
+)
+
+var (
+	fleetNodeRE = regexp.MustCompile(`[^a-z0-9-]+`)
+	fleetJobRE  = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$`)
+)
+
+// sanitizeFleetNode normalizes a target GPU node name to the [a-z0-9-] alphabet
+// `hanzo link` registers under. Empty, "shared", or "gpu-jobs" selects the shared lane.
+func sanitizeFleetNode(s string) string {
+	s = strings.ToLower(strings.TrimSpace(s))
+	s = strings.TrimPrefix(s, gpuQueuePrefix)
+	s = fleetNodeRE.ReplaceAllString(s, "-")
+	s = strings.Trim(s, "-")
+	if s == "" || s == "shared" || s == jobsNamespace {
+		return ""
+	}
+	return s
+}
+
+func mintFleetJobID() string {
+	var b [8]byte
+	_, _ = rand.Read(b[:])
+	return "job-" + hex.EncodeToString(b[:])
+}
+
+// jobSubmit enqueues one job onto the caller org's BYO GPU fleet (`gpu-jobs`).
+type jobSubmit struct {
+	// ID is an optional caller-chosen job id for idempotent submission; re-submitting
+	// an existing id returns the existing job unchanged. Generated when omitted.
+	ID string `json:"id,omitempty"`
+	// Type is the worker handler to invoke: "research.bench", "studio.render",
+	// "fn.run", or "echo". Defaults to "research.bench" when omitted.
+	Type string `json:"type,omitempty"`
+	// GPU targets one linked BYO node by its sanitized hostname (routing to "gpu:<node>").
+	// Omit or pass "shared" to broadcast on the shared "gpu-jobs" lane.
+	GPU string `json:"gpu,omitempty"`
+	// Input is the handler-specific JSON payload handed verbatim to the claiming worker
+	// (at most 1 MiB; defaults to {} when empty).
+	Input json.RawMessage `json:"input,omitempty"`
+	// TimeoutSeconds bounds one execution attempt in seconds (default 3600, max 14400).
+	TimeoutSeconds int `json:"timeoutSeconds,omitempty"`
+	// Attempts is the maximum number of claim attempts before permanent failure (default 1, max 10).
+	Attempts int `json:"attempts,omitempty"`
+}
+
+// jobSubmitted is the acknowledgement returned when a fleet job is enqueued.
+type jobSubmitted struct {
+	// ID is the job's activity id on the gpu-jobs namespace, used to poll or cancel it.
+	ID string `json:"id"`
+	// RunID identifies this execution of the job in the durable engine.
+	RunID string `json:"runId"`
+	// Type is the worker handler the job dispatches to (e.g. "research.bench").
+	Type string `json:"type"`
+	// Status is the job's current normalized lifecycle state ("queued" on fresh submission).
+	Status string `json:"status"`
+	// GPU is the targeted node id when pinned to "gpu:<node>", or omitted for the shared lane.
+	GPU string `json:"gpu,omitempty"`
+}
+
+// submitFleetJob enqueues a job onto the caller org's `gpu-jobs` fleet queue —
+// targeting a specific linked node (`gpu: "dgx"` → queue `gpu:dgx`) or broadcasting
+// on `gpu-jobs` when `gpu` is omitted. `type` defaults to `research.bench` when
+// omitted. Idempotent on `id`: re-submitting an existing job id returns that job
+// without duplicating or resetting an active claim.
+//
+// Example: {"gpu":"dgx","type":"research.bench","input":{"name":"gb10-probe","command":["nvidia-smi"]}}
+// Response: {"id":"job-1","runId":"job-1","type":"research.bench","status":"queued","gpu":"dgx"}
+func (o ops) submitFleetJob(ctx context.Context, in *jobSubmit) (*jobSubmitted, error) {
+	_, org, err := scope(ctx)
+	if err != nil {
+		return nil, err
+	}
+	id := strings.TrimSpace(in.ID)
+	if id == "" {
+		id = mintFleetJobID()
+	} else if !fleetJobRE.MatchString(id) {
+		return nil, zip.ErrBadRequest("invalid job id")
+	}
+	jobType := cmp.Or(strings.TrimSpace(in.Type), "research.bench")
+	target := sanitizeFleetNode(in.GPU)
+	queue := jobsNamespace
+	if target != "" {
+		queue = gpuQueuePrefix + target
+	}
+	rawInput := bytes.TrimSpace(in.Input)
+	if len(rawInput) == 0 {
+		rawInput = []byte("{}")
+	}
+	if !json.Valid(rawInput) {
+		return nil, zip.ErrBadRequest("input must be valid JSON")
+	}
+	timeoutSecs := in.TimeoutSeconds
+	if timeoutSecs <= 0 {
+		timeoutSecs = defaultJobTimeoutSecs
+	}
+	if timeoutSecs > maxJobTimeoutSecs {
+		timeoutSecs = maxJobTimeoutSecs
+	}
+	attempts := in.Attempts
+	if attempts <= 0 {
+		attempts = 1
+	}
+	if attempts > maxJobAttempts {
+		attempts = maxJobAttempts
+	}
+	act, err := workflow.WorkflowEnqueue(cloud.For(ctx, org), &client.EnqueueIn{
+		Namespace: jobsNamespace,
+		ID:        id,
+		Type:      jobType,
+		Queue:     queue,
+		Input:     rawInput,
+		Attempts:  attempts,
+		Heartbeat: defaultJobHeartbeat.String(),
+		Start:     defaultJobWaitWindow.String(),
+		Close:     (time.Duration(timeoutSecs) * time.Second).String(),
+	})
+	if err != nil {
+		if errors.Is(err, cloud.ErrNoPeer) {
+			return nil, zip.Errorf(http.StatusServiceUnavailable, "tasks engine not ready")
+		}
+		if he, ok := errors.AsType[*zip.HTTPError](err); ok {
+			return nil, he
+		}
+		return nil, zip.Errorf(http.StatusBadGateway, "enqueue: %v", err)
+	}
+	runID := id
+	status := "queued"
+	if act != nil && len(act.Row) > 0 {
+		var row tasks.StandaloneActivity
+		if json.Unmarshal(act.Row, &row) == nil {
+			if row.Execution.RunId != "" {
+				runID = row.Execution.RunId
+			}
+			if row.Status != "" {
+				status = normalizeStatus(row.Status)
+			}
+		}
+	}
+	return &jobSubmitted{
+		ID:     id,
+		RunID:  runID,
+		Type:   jobType,
+		Status: status,
+		GPU:    target,
+	}, nil
+}
+
+// jobRef addresses one fleet job on the caller org's `gpu-jobs` queue by path `:id`.
+type jobRef struct {
+	// ID is the job (activity) id on the gpu-jobs namespace, bound from the URL path.
+	ID string `json:"id"`
+}
+
+// getFleetJob returns one job from the caller org's `gpu-jobs` queue by id,
+// including its normalized status, claiming worker, `failureCause` when failed,
+// and `result` JSON once completed — the poll companion to `submitFleetJob`.
+//
+// Response: {"id":"job-1","runId":"job-1","type":"research.bench","status":"completed","gpu":"dgx","worker":"dgx","attempt":1,"result":{"exitCode":0}}
+func (o ops) getFleetJob(ctx context.Context, in *jobRef) (*gpuJob, error) {
+	_, org, err := scope(ctx)
+	if err != nil {
+		return nil, err
+	}
+	id := strings.TrimSpace(in.ID)
+	if id == "" {
+		return nil, zip.ErrBadRequest("job id required")
+	}
+	act, err := workflow.WorkflowActivity(cloud.For(ctx, org), &client.ActivityIn{
+		Namespace: jobsNamespace,
+		ID:        id,
+	})
+	if err != nil {
+		if errors.Is(err, cloud.ErrNoPeer) {
+			return nil, zip.Errorf(http.StatusServiceUnavailable, "tasks engine not ready")
+		}
+		if he, ok := errors.AsType[*zip.HTTPError](err); ok {
+			return nil, he
+		}
+		return nil, zip.Errorf(http.StatusBadGateway, "describe job: %v", err)
+	}
+	if act == nil || len(act.Row) == 0 {
+		return nil, zip.ErrNotFound("job not found")
+	}
+	var row tasks.StandaloneActivity
+	if err := json.Unmarshal(act.Row, &row); err != nil {
+		return nil, zip.Errorf(http.StatusBadGateway, "decode job: %v", err)
+	}
+	j := toGPUJob(row, time.Now().UTC())
+	if row.Result != nil {
+		if b, err := json.Marshal(row.Result); err == nil && string(b) != "null" {
+			j.Result = b
+		}
+	}
+	return &j, nil
+}
+
+// jobCancel identifies the render to cancel and why.
+type jobCancel struct {
+	// ID is the job (activity) id, from the URL path.
+	ID string `json:"id"`
+	// Run is the run id; empty defaults to the job id, which is what the dispatcher
+	// sets (runId == activityId == prompt_id), so the common case sends no body.
+	Run string `json:"run"`
+	// Reason is recorded on the cancellation; empty records "canceled from console".
+	Reason string `json:"reason"`
+}
+
+// jobCanceled names the render a cancel stopped.
+type jobCanceled struct {
+	// Canceled is the job id that was canceled.
+	Canceled string `json:"canceled"`
+	// Run is the run id the cancel was applied to.
+	Run string `json:"run"`
+}
+
+// cancelFleetJob cancels a queued or running render in the caller's org. The engine
+// cancel is org-scoped, so a tenant can only ever cancel its OWN job: a job in
+// another tenant's shard is 404, exactly like one that never existed. An
+// already-finished job is 409.
+//
+// Example: {"reason":"superseded"}
+// Response: {"canceled":"job-1","run":"job-1"}
+func (o ops) cancelFleetJob(ctx context.Context, in *jobCancel) (*jobCanceled, error) {
+	c, org, err := scope(ctx)
+	if err != nil {
+		return nil, err
+	}
+	id := strings.TrimSpace(in.ID)
+	if id == "" {
+		return nil, zip.ErrBadRequest("job id required")
+	}
+	run := cmp.Or(strings.TrimSpace(in.Run), id)
+	eng := cloud.EmbeddedTasks()
+	if eng == nil {
+		return nil, zip.Errorf(http.StatusServiceUnavailable, "tasks engine not ready")
+	}
+	who := cmp.Or(strings.TrimSpace(c.Header("X-User-Id")), org)
+	if err := eng.CancelActivityForOrg(org, jobsNamespace, id, run, cmp.Or(strings.TrimSpace(in.Reason), "canceled from console"), who); err != nil {
+		switch cancelErrStatus(err) {
+		case http.StatusNotFound:
+			return nil, zip.ErrNotFound("job not found")
+		case http.StatusConflict:
+			return nil, zip.Errorf(http.StatusConflict, "job already finished")
+		default:
+			return nil, zip.Errorf(http.StatusBadGateway, "cancel: %v", err)
+		}
+	}
+	return &jobCanceled{Canceled: id, Run: run}, nil
+}
+
+// cancelErrStatus maps a CancelActivityForOrg result to the client HTTP status: a
+// missing job (incl. one in another tenant's shard) is 404, an already-finished one
+// 409, a live cancel 200, anything else a 502. The tasks engine's own test proves it
+// returns these error shapes; this maps them, so the two together cover the full path.
+func cancelErrStatus(err error) int {
+	switch {
+	case err == nil:
+		return http.StatusOK
+	case strings.Contains(err.Error(), "not found"):
+		return http.StatusNotFound
+	case strings.Contains(err.Error(), "terminal"):
+		return http.StatusConflict
+	default:
+		return http.StatusBadGateway
+	}
+}
+
+// ---- fleet utilization ingest ----
+
+const sampleIngestTimeout = 10 * time.Second
+
+// sampleIngest is a BYO worker's self-reported utilization (POST /v1/compute/fleet/samples).
+// Only the metrics a worker can measure locally; Org/Source/Kind are
+// server-authoritative — a worker cannot claim to be another tenant or source.
+type sampleIngest struct {
+	// Unit is the reporting node's own id — the same id it registered under, and
+	// the key the board joins this series onto. Required.
+	Unit string `json:"unit"`
+	// Host is the node's hostname, for display.
+	Host string `json:"host"`
+	// GPUUtil is accelerator utilization as a fraction 0..1; the warehouse clamps
+	// anything outside that.
+	GPUUtil float64 `json:"gpuUtil"`
+	// GPUs is how many accelerators this reading covers.
+	GPUs int `json:"gpus"`
+	// GPUModel names the representative accelerator ("GB10"); GPUs carries how
+	// many. A heterogeneous host names its first card rather than inventing a
+	// summary.
+	GPUModel string `json:"gpuModel"`
+	// MemUsed is host memory in use, in BYTES.
+	MemUsed int64 `json:"memUsed"`
+	// MemFree is host memory still available, in BYTES.
+	MemFree int64 `json:"memFree"`
+}
+
+// sampleAccepted acknowledges an ingested reading.
+type sampleAccepted struct {
+	// Recorded is always true: the response is an acknowledgement, and the
+	// warehouse write is detached, so it reports acceptance, not durability.
+	Recorded bool `json:"recorded"`
+}
+
+// sample builds the warehouse Sample for org from the worker's report. Source/Kind
+// are fixed (byo/worker); the warehouse sanitizes (clamps util to 0..1) and validates
+// (requires unit) on Record.
+func (r sampleIngest) sample(org string) (samples.Sample, error) {
+	unit := strings.TrimSpace(r.Unit)
+	if unit == "" {
+		return samples.Sample{}, fmt.Errorf("'unit' is required")
+	}
+	return samples.Sample{
+		Org: org, Source: samples.SourceBYO, Kind: samples.KindWorker,
+		Unit: unit, Host: strings.TrimSpace(r.Host), At: time.Now().UTC(),
+		GPUUtil: r.GPUUtil, GPUs: r.GPUs, GPUModel: r.GPUModel,
+		MemUsed: r.MemUsed, MemFree: r.MemFree,
+	}, nil
+}
+
+// ingestSample records a BYO worker's live GPU utilization into the SAME series the
+// fleet board overlays. The org is the validated principal and source/kind are fixed
+// server-side, so a worker names only its own metrics — never another tenant or
+// another source. Answers 202: the warehouse write is DETACHED (its own bounded
+// context, never in the response path), so a slow or absent warehouse cannot stall a
+// heartbeat.
+//
+// Example: {"unit":"spark","host":"spark","gpuUtil":0.42,"gpus":1,"gpuModel":"GB10","memUsed":100,"memFree":200}
+// Response: {"recorded":true}
+func (o ops) ingestSample(ctx context.Context, in *sampleIngest) (*sampleAccepted, error) {
+	_, org, err := scope(ctx)
+	if err != nil {
+		return nil, err
+	}
+	smp, err := in.sample(org)
+	if err != nil {
+		return nil, zip.ErrBadRequest(err.Error())
+	}
+	go func() {
+		wctx, cancel := context.WithTimeout(context.Background(), sampleIngestTimeout)
+		defer cancel()
+		if err := samples.Record(wctx, smp); err != nil {
+			o.Log.Warn("byo fleet sample ingest failed", "org", org, "unit", smp.Unit, "err", err)
+		}
+	}()
+	cloud.Accepted(ctx)
+	return &sampleAccepted{Recorded: true}, nil
+}

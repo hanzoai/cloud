@@ -1,0 +1,182 @@
+{
+ "tag": "v1",
+ "commit": "2bce2e8f3e18a58708941d5429396b993d3e9817",
+ "when": "2026-09-10T20:21:18.152Z",
+ "dataset": {
+  "file": "data/mab/Conflict_Resolution-00000-of-00001.parquet",
+  "sha256": "24d5c3f09ce0ce15625cb9f8a98f44f0d864ca6c94d7b4ad04eb697ca3a5ff45",
+  "source": "hf download ai-hyz/MemoryAgentBench --repo-type dataset"
+ },
+ "code": {
+  "parse.mjs": "c16d828955ff45804320c6d67c4f7e183717df13ec88b4abf8a09e31cf7db827",
+  "index.mjs": "2778f551df50d0e7a5b8ccbef334bf91c77c9650f5c093cf7ab2aa02c4fd91a7",
+  "compile.mjs": "ad2e5e7f27f3a04c4170db8e5e0695ea053a7fdc17b07b08cdb5ea1ce8387508",
+  "beam.mjs": "f62ecc87da103d2c8634e5333d93d3b9f7104e628e716cc220e4d96367bf40e0",
+  "lane.mjs": "00cbc86a6c27b15cfae39f490b747782b3502d468aa70371bbba8909b35869c6",
+  "nbest.mjs": "c7068f4a291d41d873ca3b380017cc51f81f382857ea559cf885efb5bec94fb7"
+ },
+ "prompts": {
+  "compile-mab-family.txt": "6d15cdecc8cc38b7f22719bc9bd16bdc18543cad542ba49a488dc4934699ddc9",
+  "compile-mab.txt": "d7579d7d6f8bc62a6f07730e003eeab0b870b05b368ff0b24653b96d7c4cd1b0",
+  "reader-mab.txt": "b0f7ec0396cb2e58935570a3258076073ff9c65dd3d8cb8d9bcf0d295e51fe87"
+ },
+ "plans": [
+  {
+   "file": "plans-family-qwen38-t07.json",
+   "sha256": "8876060fdb825ecb4fa0659d23b1b63de6327b614fdc6aeaf7d1754620df3c42",
+   "plans": 760,
+   "models": {
+    "rules": 304,
+    "mlx-community/Qwen3.8-27B-4bit": 455,
+    "lexicon": 1
+   }
+  },
+  {
+   "file": "plans-family-qwen38.json",
+   "sha256": "4e3f0c7a44fcbef910bb5c041550eab03899db2f32c404ac2b866e082607c0c1",
+   "plans": 760,
+   "models": {
+    "rules": 304,
+    "mlx-community/Qwen3.8-27B-4bit": 455,
+    "lexicon": 1
+   }
+  },
+  {
+   "file": "plans-lexicon.json",
+   "sha256": "bb34338318261b3eafee7610aeb087d118db74a7270a6cb9bae4d77cf8669381",
+   "plans": 746,
+   "models": {
+    "lexicon": 442,
+    "rules": 304
+   }
+  },
+  {
+   "file": "plans-qwen-t07.json",
+   "sha256": "e21af58939cf8734e6e5428af68de403b603e1ecf9784c130b2cc8c4aa7c2292",
+   "plans": 746,
+   "models": {
+    "rules": 304,
+    "lexicon": 442
+   }
+  },
+  {
+   "file": "plans-qwen38.json",
+   "sha256": "80ee7a0ac41e29211fe0d07f2f190e54d90cb522865f49bc5217cf41757cfa2a",
+   "plans": 760,
+   "models": {
+    "rules": 304,
+    "mlx-community/Qwen3.8-27B-4bit": 455,
+    "lexicon": 1
+   }
+  },
+  {
+   "file": "plans.json",
+   "sha256": "1d31f40e26825871f36def7249ef57c82d6f92a727a82a6b570550f09e79cf46",
+   "plans": 746,
+   "models": {
+    "rules": 304,
+    "lexicon": 442
+   }
+  }
+ ],
+ "commands": [
+  "node mab/parse.mjs",
+  "node mab/index.mjs",
+  "node mab/compile.mjs --model=<model> [--api=<base>] [--temperature=<t>] [--prompt=<file>] --out=<plans-<tag>.json> --force",
+  "LEXICAL=1 node mab/lane.mjs --split=dev --rows=beamx",
+  "LEXICAL=1 node mab/lane.mjs --split=test --rows=beamx",
+  "node mab/nbest.mjs --run=mab-test-beamx-none",
+  "node mab/contested.mjs --run=mab-test-beamx-none",
+  "node tables.mjs"
+ ],
+ "metric": "substring_exact_match, every question of every haystack counted, an unanswered question scored 0",
+ "reader": "none",
+ "splits": {
+  "dev": [
+   "sh_6k",
+   "mh_6k"
+  ],
+  "test": [
+   "sh_32k",
+   "mh_32k",
+   "sh_64k",
+   "mh_64k",
+   "sh_262k",
+   "mh_262k"
+  ]
+ },
+ "metrics": {
+  "dev": {
+   "mh_6k": {
+    "n": 100,
+    "substring_em": 0.93,
+    "ci95": [
+     0.87,
+     0.97
+    ]
+   },
+   "sh_6k": {
+    "n": 100,
+    "substring_em": 1,
+    "ci95": [
+     1,
+     1
+    ]
+   }
+  },
+  "test": {
+   "mh_32k": {
+    "n": 100,
+    "substring_em": 0.89,
+    "ci95": [
+     0.82,
+     0.95
+    ]
+   },
+   "mh_64k": {
+    "n": 100,
+    "substring_em": 0.89,
+    "ci95": [
+     0.82,
+     0.95
+    ]
+   },
+   "mh_262k": {
+    "n": 100,
+    "substring_em": 0.67,
+    "ci95": [
+     0.59,
+     0.77
+    ]
+   },
+   "sh_32k": {
+    "n": 100,
+    "substring_em": 0.98,
+    "ci95": [
+     0.95,
+     1
+    ]
+   },
+   "sh_64k": {
+    "n": 100,
+    "substring_em": 0.98,
+    "ci95": [
+     0.95,
+     1
+    ]
+   },
+   "sh_262k": {
+    "n": 100,
+    "substring_em": 0.97,
+    "ci95": [
+     0.93,
+     1
+    ]
+   }
+  }
+ },
+ "row": "beamx",
+ "env": {
+  "LEXICAL": "1"
+ }
+}

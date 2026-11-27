@@ -1,0 +1,360 @@
+// scope.go — the TENANT SCOPE of a /v1/deploy request, and the IAM-owned project
+// reflection.
+//
+// This plane was SuperAdmin-only: it listed App CRs across ALL platform
+// namespaces, hard-coded spec.project = "default", and read no org/project
+// labels. It is now TENANT-AWARE and IAM-MAPPED. Every operator App CR already
+// carries the tenant + project labels (clients/platform serviceCR + the fleet
+// crs/*.yaml stamp them); this plane READS them and scopes each list/detail read
+// to the caller's org, while a SuperAdmin keeps the whole-fleet view.
+//
+// The tenant boundary is the SAME one the rest of cloud trusts (clients/platform
+// .tenant / clients/s3.tenant): the gateway-minted, IAM-validated identity headers
+// (c.IsAdmin/c.Org), the injective namespace.Sanitize normalizer, and the
+// principal.Validated gate. There is NO third slug rule — resolveScope keys the
+// SAME (org → tenant-<org>) boundary the PaaS writes into.
+//
+// Projects are owned by Hanzo IAM (hanzo.id), the ONE source of truth for the
+// org-scoped (Owner,Name) Project resource. This plane REFLECTS them read-only via
+// the clean iam's in-process project store (github.com/hanzoai/iam/pkg/store over
+// the embedded IAM's orm.DB, no HTTP hop) — mirroring apps/platform/projects.go —
+// and never persists a CD-side project row. The retired iam-v1 object store
+// is GONE.
+
+package deploy
+
+import (
+	"cmp"
+	"context"
+	"errors"
+	"net/http"
+	"net/url"
+	"slices"
+	"strings"
+
+	"github.com/hanzoai/orm"
+	"github.com/zap-proto/zip"
+
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+
+	iamclient "github.com/hanzoai/cloud/apps/iam"
+	"github.com/hanzoai/cloud/sdk"
+	"github.com/hanzoai/cloud/sdk/principal"
+	model "github.com/hanzoai/iam/pkg/model"
+	iamstore "github.com/hanzoai/iam/pkg/store"
+	"github.com/hanzoai/namespace"
+)
+
+// Operator App CRs carry two labels this plane READS (never writes): clients/platform
+// serviceCR and the fleet crs/*.yaml stamp them.
+//
+//	hanzo.ai/org               — the TENANT: the injective namespace.Sanitize slug.
+//	app.kubernetes.io/part-of  — the IAM Project NAME (tenant-provisioned apps carry it).
+const (
+	orgLabel     = "hanzo.ai/org"
+	projectLabel = "app.kubernetes.io/part-of"
+)
+
+// scope is the resolved tenant view of a /v1/deploy request. A SuperAdmin sees the
+// WHOLE fleet (org == "", superAdmin == true); a normal org sees ONLY its own rows
+// (org == its injective slug, superAdmin == false).
+type scope struct {
+	org        string // sanitized org slug; "" == whole-fleet (SuperAdmin)
+	superAdmin bool
+	// acting is the org a SuperAdmin is acting in (X-Org-Id, sanitized), "" when it
+	// names none. It widens nothing: a SuperAdmin already reads the whole fleet. It
+	// only lets a bare name resolve to that org's `<org>-<name>` application.
+	acting string
+}
+
+// home is the org a bare application name is qualified by: the caller's own org,
+// or the one a SuperAdmin acts in.
+func (sc scope) home() string {
+	if sc.org != "" {
+		return sc.org
+	}
+	return sc.acting
+}
+
+// resolveScope derives the scope from the VALIDATED identity, reusing clients/platform
+// .tenant's EXACT boundary primitives so this plane keys the SAME tenant boundary as the
+// rest of cloud — with no third slug rule.
+//
+// SuperAdmin FIRST and by principal.Super ALONE: SanitizeIdentity mints X-User-IsAdmin only
+// for a JWT-verified SuperAdmin and NEVER restores it from the client (unlike X-Org-Id),
+// so it already implies a validated principal. This is the SAME predicate the original
+// guard() gates on, which is why the SuperAdmin whole-fleet view (and the e2e 108/109
+// contract) is preserved byte-for-byte.
+//
+// A normal org additionally REQUIRES principal.Validated (X-User-Id present): an org is
+// authority only beside a validated principal. An empty or unvalidated org fails closed.
+func resolveScope(c *zip.Ctx) (scope, bool) {
+	if principal.Super(c) {
+		return scope{superAdmin: true, acting: namespace.Sanitize(c.Org())}, true
+	}
+	if !principal.Validated(c) {
+		return scope{}, false
+	}
+	if org := namespace.Sanitize(c.Org()); org != "" {
+		return scope{org: org}, true
+	}
+	return scope{}, false
+}
+
+// THE REFUSAL IS TWO FACTS, AND THEY LIVE IN TWO PLACES ON PURPOSE.
+//
+// The DECISION — this caller may not have this — belongs to whatever resolved the
+// scope, and it is always the same value: forbidden(). The PRESENTATION — a
+// browser NAVIGATION is bounced to sign-in, because a 403 page with no way to
+// sign in is a dead end, while every API/XHR call keeps its 403 — belongs to the
+// one middleware every /v1/deploy route passes through: bounce.
+//
+// They were braided together in a single refuse(c) that only a handler holding
+// the request could call. A typed op holds no request, so keeping them braided
+// meant either giving up the bounce (a wire change for every browser) or gating
+// in middleware (invisible to the MCP, CLI and call projections, which never run
+// it). Separated, the decision is stated once wherever it is made and the shape
+// is applied once wherever the response is written — and the wire is exactly what
+// it was.
+
+// forbidden is the ONE refusal this console answers with. The message is
+// deliberately generic so the 403 discloses no policy (whether admin, or an org,
+// would have passed).
+func forbidden() error { return zip.ErrForbidden("not authorized for this deploy console") }
+
+// errBadName is the refusal for a {name} segment that is not a DNS-1123 label —
+// the injection guard on every application-addressed route (appName, typed.go).
+var errBadName = zip.ErrBadRequest("name must be a DNS-1123 label")
+
+// navigating reports that this request is a browser NAVIGATION rather than an API
+// call, so a refusal should send it somewhere it can act on.
+func navigating(c *zip.Ctx) bool {
+	return wantsDocument(c.Method(), c.Header("Sec-Fetch-Dest"), c.Header("Sec-Fetch-Mode"),
+		c.Header("Accept"), c.Header("X-Requested-With"))
+}
+
+// bounce turns a REFUSED browser navigation into the sign-in redirect, and leaves
+// every other answer alone. Installed once, on the root and confined by path to
+// the /v1/deploy prefixes this subsystem declares (routes, deploy.go), so it
+// covers the typed ops and the raw handlers with one rule.
+//
+// It reads the ANSWER, not the caller: a 403 is the only thing it reshapes, and
+// only for a request that positively identifies as a document GET — so the API
+// contract, and every client that depends on the 403, is untouched.
+func bounce(c *zip.Ctx) error {
+	err := c.Continue()
+	var he *zip.HTTPError
+	if errors.As(err, &he) && he.Status == http.StatusForbidden && navigating(c) {
+		return c.Redirect(http.StatusFound, loginPath+"?returnTo="+url.QueryEscape(currentPath(c)))
+	}
+	return err
+}
+
+// orgOf / projectOf read the tenant + IAM-project labels off an App CR ("" when absent).
+func orgOf(cr *unstructured.Unstructured) string     { return cr.GetLabels()[orgLabel] }
+func projectOf(cr *unstructured.Unstructured) string { return cr.GetLabels()[projectLabel] }
+
+// projectName is the App CR's IAM project — the app.kubernetes.io/part-of label, falling
+// back to "default" when the CR carries none (the fleet CRs predate per-app projects).
+func projectName(cr *unstructured.Unstructured) string {
+	if p := projectOf(cr); p != "" {
+		return p
+	}
+	return principal.DefaultProject
+}
+
+// allows reports whether an App CR is visible to this scope. A SuperAdmin sees every CR; a
+// normal org sees ONLY a CR whose hanzo.ai/org label equals its slug — the injective
+// namespace.Sanitize slug, so two orgs can never collide. This is the cross-tenant boundary,
+// applied to EVERY projected/accessed CR (list, detail, clusters, stream).
+func (sc scope) allows(cr *unstructured.Unstructured) bool {
+	if sc.superAdmin {
+		return true
+	}
+	return sc.org != "" && orgOf(cr) == sc.org
+}
+
+// allowsCD reports whether a Hanzo CD Application CR is visible to this scope.
+// A SuperAdmin sees every CD Application; a validated org caller sees only CD
+// Applications belonging to its org (by label, project, destination namespace,
+// or `<org>-` prefix), never another tenant's.
+func (sc scope) allowsCD(g GitOpsApp, raw *unstructured.Unstructured) bool {
+	if sc.superAdmin {
+		return true
+	}
+	if sc.org == "" {
+		return false
+	}
+	if raw != nil && orgOf(raw) == sc.org {
+		return true
+	}
+	tNS := tenantNS(sc.org)
+	if raw != nil {
+		destNS, _, _ := unstructured.NestedString(raw.Object, "spec", "destination", "namespace")
+		if destNS == tNS || destNS == sc.org || strings.HasPrefix(destNS, sc.org+"-") {
+			return true
+		}
+	}
+	if g.Project == tNS || g.Project == sc.org || strings.HasPrefix(g.Project, sc.org+"-") {
+		return true
+	}
+	if strings.HasPrefix(g.Name, sc.org+"-") {
+		return true
+	}
+	return false
+}
+
+// namespaces is the ordered set of namespaces this scope reads App CRs from. A SuperAdmin
+// scans the whole platform tier (scanOrder, unchanged — preserving the pre-tenant fleet
+// view); a normal org scans ONLY its own tenant namespace, tenant-<org>.
+func (sc scope) namespaces() []string {
+	if sc.superAdmin {
+		return scanOrder()
+	}
+	return []string{tenantNS(sc.org)}
+}
+
+// tenantNS is the tenant namespace for an ALREADY-sanitized org slug: "tenant-"+slug — the
+// read twin of clients/platform.tenantNamespace (which is "tenant-"+namespace.Sanitize(org)).
+// sc.org is never empty here (resolveScope gates it to a non-empty injective slug), so no
+// "unknown" fallback is needed. The "tenant-" prefix is a frozen infra convention (renaming
+// it is a gated namespace migration — see apps/platform/k8s.go); sc.org is the SAME
+// namespace.Sanitize slug platform stamps, so the two derive the same namespace.
+func tenantNS(org string) string { return "tenant-" + org }
+
+// appCRs collects every App CR VISIBLE to this scope across its namespaces, filtered by the
+// org label (a SuperAdmin's filter admits all). Used where per-namespace running-tag
+// batching is unneeded (clusters + the projects fallback).
+func (sc scope) appCRs(s *cloud.Service[state], ctx context.Context) ([]unstructured.Unstructured, error) {
+	var out []unstructured.Unstructured
+	for _, ns := range sc.namespaces() {
+		crs, err := listAppCRs(s, ctx, ns)
+		if err != nil {
+			return nil, k8sErr(s, "list", err)
+		}
+		for i := range crs {
+			if sc.allows(&crs[i]) {
+				out = append(out, crs[i])
+			}
+		}
+	}
+	return out, nil
+}
+
+// findNamespace resolves the namespace an App CR named `name` lives in, scanning this
+// scope's namespaces in order and REQUIRING the CR be visible to the scope. A cross-tenant
+// name (org A's app requested by org B) is reported as a clean 404 — never confirmed to
+// exist, so the detail routes leak no cross-tenant existence oracle.
+func (sc scope) findNamespace(s *cloud.Service[state], ctx context.Context, name string) (string, error) {
+	for _, ns := range sc.namespaces() {
+		cr, _, err := getAppCR(s, ctx, ns, name)
+		if err != nil {
+			if apierrors.IsNotFound(err) {
+				continue
+			}
+			return "", k8sErr(s, "get", err)
+		}
+		if !sc.allows(cr) {
+			continue // exists but not this tenant's — treat as absent
+		}
+		return ns, nil
+	}
+	return "", zip.ErrNotFound("application " + name + " not found")
+}
+
+// watches reports whether a watched App-CR object belongs to this scope's stream: its
+// namespace is one the scope watches AND (for a normal org) its org label matches. Replaces
+// the platform-namespace nsEnv gate forwardWatch used, generalizing it to the scope.
+func (sc scope) watches(obj *unstructured.Unstructured) bool {
+	return sc.watchesNamespace(obj.GetNamespace()) && sc.allows(obj)
+}
+
+func (sc scope) watchesNamespace(ns string) bool {
+	return slices.Contains(sc.namespaces(), ns)
+}
+
+// runningByNamespace collects running image tags per namespace this scope watches
+// (best-effort — a list error yields an empty inner map). Scoped twin of the stream's
+// per-namespace running-tag map.
+func (sc scope) runningByNamespace(s *cloud.Service[state], ctx context.Context) map[string]map[string]string {
+	out := make(map[string]map[string]string, len(sc.namespaces()))
+	for _, ns := range sc.namespaces() {
+		out[ns] = runningVersions(s, ctx, ns)
+	}
+	return out
+}
+
+// ── IAM-owned project reflection ─────────────────────────────────────────────
+
+// iamStore runs an in-process clean-iam project-store call against db (the embedded
+// IAM's orm.DB, sourced from clients/iam.DB()): it short-circuits an absent store (IAM
+// not mounted → db nil) into a clean 503, and recovers any unexpected nil-deref as the
+// same 503 rather than a crash. The embedded IAM's DB is nil until the co-resident IAM
+// subsystem mounts it. Mirrors clients/platform.iamStore — a deployment enabling
+// "deploy" is meant to co-mount "iam" (single-binary co-residents). Never masks a real
+// error.
+func iamStore[T any](db orm.DB, fn func(db orm.DB) (T, error)) (out T, err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			err = zip.Errorf(http.StatusServiceUnavailable,
+				"deploy requires the co-resident IAM store, which is not initialized")
+		}
+	}()
+	if db == nil {
+		return out, zip.Errorf(http.StatusServiceUnavailable,
+			"deploy requires the co-resident IAM store, which is not initialized")
+	}
+	return fn(db)
+}
+
+// iamProjects reflects the IAM-owned projects VISIBLE to this scope into projected argo
+// AppProjects. A normal org gets its own organization's projects
+// (GetOrganizationProjects); a SuperAdmin gets every org's (GetProjects with an empty owner
+// → all owners, the same all-orgs listing IAM's own get-projects endpoint serves). IAM is
+// the ONE source; this NEVER persists a CD-side project. A nil/absent embedded IAM store
+// yields nil (the caller's synthesized-default fallback keeps the projection populated).
+func (sc scope) iamProjects() []argoProject {
+	list, err := iamStore(iamclient.DB(), func(db orm.DB) ([]*model.Project, error) {
+		if sc.superAdmin {
+			return iamstore.GetProjects(db, "") // empty owner → every org's projects
+		}
+		return iamstore.GetOrganizationProjects(db, sc.org)
+	})
+	if err != nil || len(list) == 0 {
+		return nil
+	}
+	out := make([]argoProject, 0, len(list))
+	for _, p := range list {
+		out = append(out, projectFromIAM(p))
+	}
+	return out
+}
+
+// projectFromIAM reflects ONE IAM Project into a projected argo AppProject: name = the
+// project Name (the app-scope key AND the CR part-of label), description = DisplayName or
+// Description, and an hanzo.ai/org label carrying the tenant. Project scoping on this
+// platform is IAM/Org, not argocd RBAC, so the projected spec is permissive — and ONLY
+// these fields are surfaced (never Tags/Metadata), so nothing unintended leaks.
+func projectFromIAM(p *model.Project) argoProject {
+	proj := synthProject(p.Name)
+	proj.Spec.Description = cmp.Or(p.DisplayName, p.Description)
+	if org := namespace.Sanitize(cmp.Or(p.Organization, p.Owner)); org != "" {
+		proj.Metadata.Labels = map[string]string{orgLabel: org}
+	}
+	return proj
+}
+
+// ensureDefault guarantees a project named "default" is present (prepended if absent by
+// name), so every projected app's spec.project — which falls back to "default" when a CR
+// carries no part-of label — always resolves to a listed project, and the CD SPA's project
+// filter can render the default bucket. Preserves the e2e invariant (projects contains
+// 'default') regardless of IAM state. Pure.
+func ensureDefault(items []argoProject) []argoProject {
+	for i := range items {
+		if items[i].Metadata.Name == principal.DefaultProject {
+			return items
+		}
+	}
+	return append([]argoProject{synthProject(principal.DefaultProject)}, items...)
+}

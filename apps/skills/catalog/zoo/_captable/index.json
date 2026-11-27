@@ -1,0 +1,107 @@
+{
+  "$schema": "https://schemas.agentskills.io/discovery/0.2.0/schema.json",
+  "base_url": "https://api.zoo.ngo",
+  "brand": "zoo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://zoolabs.id",
+  "mcp": {
+    "description": "Model Context Protocol over JSON-RPC 2.0 — one POST per message, stateless, protocol revision 2026-07-28. tools/list answers without a credential with one tool per subsystem (its operations in the \"op\" enum) plus \"describe\", which returns one operation's input schema. tools/call names a subsystem tool and carries {\"op\": <operation>, \"input\": <its arguments>}; it takes the same bearer the REST API does, and a call that carries none is answered 401 with a WWW-Authenticate header naming the resource metadata at /.well-known/oauth-protected-resource, which names the authorization server to sign in at. The tool surface is the public contract: the operator's admin product is not offered, and a name that would disclose a secret or mutate an identity is withheld — the list says how many, under _meta.",
+    "method": "POST",
+    "url": "https://api.zoo.ngo/v1/mcp"
+  },
+  "skill_count": 11,
+  "skills": [
+    {
+      "description": "Read captable classes: Returns the caller org's share classes, in creation order..",
+      "digest": "sha256:5704b8776b14b1c877d61680328754f77db5f669cd1cc95912dfe9ca15e9723b",
+      "name": "captable_classes",
+      "service": "captable",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/captable_classes/SKILL.md"
+    },
+    {
+      "description": "Read captable company: Returns the caller org's cap-table company record..",
+      "digest": "sha256:47c1aabeccced7b506934ce9d5cc2f3556915d4d835294899cbf6c1a68bfe09d",
+      "name": "captable_company",
+      "service": "captable",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/captable_company/SKILL.md"
+    },
+    {
+      "description": "Read captable convertibles: Returns the caller org's convertible notes, newest first..",
+      "digest": "sha256:27ee6b922170292561754a55e87fb437dfb9198179cb035076b1a2fdc9cb1865",
+      "name": "captable_convertibles",
+      "service": "captable",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/captable_convertibles/SKILL.md"
+    },
+    {
+      "description": "Read captable investments: Returns the caller org's investments, newest first..",
+      "digest": "sha256:e887ec3407c6b7ea418718a41eb1ed4a9fa5ffb9b733403f2b66645289e78b1b",
+      "name": "captable_investments",
+      "service": "captable",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/captable_investments/SKILL.md"
+    },
+    {
+      "description": "Read captable options: Returns the caller org's option grants, newest first..",
+      "digest": "sha256:908b85c53e7628f9eb19a835cd9ea58d7e4c4551eadfd92821490069d83eee42",
+      "name": "captable_options",
+      "service": "captable",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/captable_options/SKILL.md"
+    },
+    {
+      "description": "Read captable plans: Returns the caller org's equity plans, newest first..",
+      "digest": "sha256:24b0ff23546244633dc001d3ac7108cf1d2ccf65de1de1ba2e9a405974c260c1",
+      "name": "captable_plans",
+      "service": "captable",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/captable_plans/SKILL.md"
+    },
+    {
+      "description": "Read captable rounds: Returns the caller org's fundraising rounds, newest first., Returns one of the caller org's fundraising rounds together with every investment written into it, oldest first..",
+      "digest": "sha256:01d3cd08f0dff84881998dc7f6f8cca86b435ce095578b77356f3b3337d21a71",
+      "name": "captable_rounds",
+      "service": "captable",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/captable_rounds/SKILL.md"
+    },
+    {
+      "description": "Read captable safes: Returns the caller org's SAFEs, newest first..",
+      "digest": "sha256:2b05b9006dd4e6a526aefd30dc9b306a37d675ae7ff69447ebe9a0b8b5be78fd",
+      "name": "captable_safes",
+      "service": "captable",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/captable_safes/SKILL.md"
+    },
+    {
+      "description": "Read captable shares: Returns the caller org's share certificates, newest first..",
+      "digest": "sha256:0ae5fb1a832ab60df1782c00bde17791f1ed3668b620c6fa22b8459f1e715e10",
+      "name": "captable_shares",
+      "service": "captable",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/captable_shares/SKILL.md"
+    },
+    {
+      "description": "Read captable stakeholders: Returns the caller org's stakeholders, newest first..",
+      "digest": "sha256:8afe12d540a9c8b09bc16b1d273ec62d8d0498fee5df9fe8b8c3bfca5d770fd9",
+      "name": "captable_stakeholders",
+      "service": "captable",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/captable_stakeholders/SKILL.md"
+    },
+    {
+      "description": "Read captable summary: Computes the caller org's cap table..",
+      "digest": "sha256:6ff2fd4dff71bf9ea5fe9b1fb46fd2ce58fabbd56feca011b1ac7b5ea0c71658",
+      "name": "captable_summary",
+      "service": "captable",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/captable_summary/SKILL.md",
+      "works": [
+        "director"
+      ]
+    }
+  ],
+  "spec_version": "8.0.0"
+}

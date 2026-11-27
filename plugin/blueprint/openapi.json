@@ -1,0 +1,219 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Hanzo Cloud API",
+    "description": "Package blueprint is what a template costs to run, worked out before you deploy.",
+    "version": "v1"
+  },
+  "servers": [
+    {
+      "url": "https://api.hanzo.ai"
+    }
+  ],
+  "security": [
+    {
+      "bearer": []
+    }
+  ],
+  "tags": [
+    {
+      "name": "blueprint"
+    }
+  ],
+  "paths": {
+    "/v1/blueprint": {
+      "get": {
+        "operationId": "get_blueprint",
+        "summary": "Returns every deployable blueprint with its service count and estimated monthly compute cost.",
+        "description": "Returns every deployable blueprint with its service count and estimated\nmonthly compute cost.\n\nIt is the lightweight index the console renders as a template gallery before\ndrilling into one stack's bill of images — GET /v1/blueprint/sbom?template=\u003cid\u003e\nis the detail view. The cost is the same figure the deploy path meters the\ndeploying org on and the 20% author royalty is taken from, priced from the\nactive rate card (GET /v1/blueprint/health echoes that card).",
+        "tags": [
+          "blueprint"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/blueprint.blueprintIndex"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/blueprint/health": {
+      "get": {
+        "operationId": "get_blueprint_health",
+        "summary": "Reports blueprint liveness and echoes the compute rate card in force.",
+        "description": "Reports blueprint liveness and echoes the compute rate card in force.\n\nThe rate card is the one the estimator actually applies after the operator env\noverlay, so an operator can confirm a tuned knob took effect rather than\ninferring it from a price. Not JWT-gated — a liveness probe must be reachable —\nand it always answers 200 while the subsystem is mounted.",
+        "tags": [
+          "blueprint"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/blueprint.blueprintHealth"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/blueprint/sbom": {
+      "get": {
+        "operationId": "get_blueprint_sbom",
+        "summary": "A blueprint's bill of images and what running it costs",
+        "description": "Answers a blueprint's SBOM — the container images its compose stack runs, each with the CPU/memory footprint that was applied to it — together with the compute cost that footprint prices out to on the active rate card.\n\nONE address, TWO shapes at 200: `?template=\u003cid\u003e` returns that blueprint's Estimate alone (404 on an id no embedded blueprint carries), and no `template` returns `{data:[Estimate]}` for every blueprint — the batch the console's template gallery reads in one round-trip.\n\nThe blueprints are reference content embedded in the binary and validated at mount, so this read is the same for every caller and is scoped to no tenant. The per-hour figure it returns is the one the deploy path meters the deploying org on and the 20% author royalty is taken from; GET /v1/blueprint/health echoes the rate card it was priced from.",
+        "tags": [
+          "blueprint"
+        ],
+        "x-public": true
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "blueprint.RateCard": {
+        "properties": {
+          "basis": {
+            "description": "Basis names where the rates come from, so a published price can be\nexplained rather than merely asserted.",
+            "type": "string"
+          },
+          "microUsdPerGbHour": {
+            "description": "MicroUSDPerGBHour is the price of one GiB of memory for one hour, in\nmillionths of a US dollar.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "microUsdPerVcpuHour": {
+            "description": "MicroUSDPerVCPUHour is the price of one vCPU for one hour, in millionths of\na US dollar.",
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "blueprint.blueprintHealth": {
+        "properties": {
+          "blueprints": {
+            "description": "Blueprints is how many blueprints this build has embedded and priced.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "rateCard": {
+            "$ref": "#/components/schemas/blueprint.RateCard",
+            "description": "RateCard is the rate card actually in force after the operator env overlay\n(CLOUD_BLUEPRINT_UCPU_HR / CLOUD_BLUEPRINT_UGB_HR), not the shipped default."
+          },
+          "service": {
+            "description": "Service names the subsystem answering — always \"blueprint\".",
+            "type": "string"
+          },
+          "status": {
+            "description": "Status is \"ok\"; the route answers 200 whenever the subsystem is mounted.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "blueprint.blueprintIndex": {
+        "properties": {
+          "data": {
+            "description": "Data is one row per embedded blueprint, sorted by template id.",
+            "items": {
+              "$ref": "#/components/schemas/blueprint.blueprintRow"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "blueprint.blueprintRow": {
+        "properties": {
+          "estCentsPerMonth": {
+            "description": "CentsPerMonth is the estimated compute cost of running the whole stack for\none month, in USD cents, from the rate card GET /v1/blueprint/health echoes.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "services": {
+            "description": "Services is how many compose services the stack runs.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "templateId": {
+            "description": "TemplateID is the blueprint slug — the id GET /v1/blueprint/sbom takes as\n?template= and the path under templates.hanzo.ai/blueprints/\u003cid\u003e/.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "problem-details": {
+        "description": "An RFC 9457 problem document.",
+        "properties": {
+          "code": {
+            "description": "A stable token a client can branch on, when the refusal names one.",
+            "type": "string"
+          },
+          "detail": {
+            "description": "What was refused, for a person to read.",
+            "type": "string"
+          },
+          "status": {
+            "description": "The HTTP status.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "title": {
+            "description": "The status's reason phrase.",
+            "type": "string"
+          },
+          "type": {
+            "description": "about:blank",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "status",
+          "detail"
+        ],
+        "type": "object"
+      }
+    },
+    "securitySchemes": {
+      "bearer": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "The caller's credential, sent as `Authorization: Bearer \u003ctoken\u003e`. It is either an access token minted by Hanzo IAM or an API key (pk-/sk-). X-Authorization, and HTTP Basic carrying the token as the password, are accepted spellings of the same header for clients that cannot set Authorization; a browser presents the session cookie instead. Every operation requires it unless it says `security: []`."
+      }
+    }
+  }
+}

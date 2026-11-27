@@ -1,0 +1,114 @@
+package team
+
+// typed.go is what a TYPED team op can learn about its caller, and nothing else.
+//
+// A zip.Get[In, Out] handler receives a context.Context and its decoded In. Team
+// authenticates two different ways, and neither is an In field:
+//
+//   - the GATEWAY principal (X-User-Id / X-Org-Id, validated by the identity
+//     boundary), which cloud.Bridge parks on the context — the bots surface;
+//   - a TEAM CALLER (identity.who, account.go): an IAM access token, else team's
+//     own HS256 session token, riding a header or a cookie — the billing, files
+//     and collaborator surfaces.
+//
+// The second one is why cloud.Request is here: both of those credentials ride in
+// a header or a cookie, and principal.OrgFrom cannot carry either. Resolving it is
+// an identity gate, exactly the class the pin admits. The cookie WRITER is here
+// for the same reason and no other: the account-token cookie is the other end of
+// that same identity, set on the response.
+//
+// EVERY resolver below fails closed off the HTTP path: the CLI projection's
+// LocalInvoke runs an op with no request at all, so `callerOf`, `sessionOf`,
+// `admin` and `cookie` find nothing and the op refuses rather than inventing an
+// identity or claiming to have signed out a browser that was never there.
+
+import (
+	"context"
+	"net/http"
+
+	"github.com/zap-proto/zip"
+
+	"github.com/hanzoai/cloud/sdk"
+	"github.com/hanzoai/cloud/sdk/principal"
+)
+
+// zipdoc lifts the doc comment off each typed op and its In/Out fields into
+// zipdoc_gen.go, which is the ONLY way that prose reaches the published document
+// and the MCP tool list — Go drops comments at compile time. Run by `make describe`.
+//
+//go:generate go run github.com/zap-proto/zip/cmd/zipdoc
+
+// unavailable is THE refusal a DEGRADED team subsystem makes — one status, one
+// message, whichever handler shape asks for it. Mount's `guard` wrapper returns
+// it for the untyped routes; a typed op returns it from its own first line,
+// because a TypedHandler is not a zip.Handler and cannot be wrapped by one
+// (and a router wrapped with zip's With() is a prefix cmd/zipdoc cannot
+// resolve, which would file every doc comment under the wrong path).
+func unavailable() error {
+	return zip.Errorf(http.StatusServiceUnavailable, "team: signing secret not configured")
+}
+
+// application reports that the request's validated principal is an
+// APPLICATION acting as itself — an org's own client_credentials identity,
+// stamped by the identity boundary (principal.IsApp). It is the one caller the
+// channel surface's ORG LANE admits: a machine reading its org's public channels. A
+// person is never that lane — a person without a team session is refused, so a
+// gateway credential cannot stand in for membership. False off the HTTP path.
+func application(ctx context.Context) bool {
+	c, ok := cloud.Request(ctx)
+	return ok && principal.IsApp(c)
+}
+
+// callerOf resolves the request's VERIFIED caller — the SAME identity.who the
+// untyped handlers resolve, reached from a typed op. Off the HTTP path there is no
+// request and therefore no credential, which fails closed with the same error an
+// absent one gives.
+//
+// It is the caller, not the (account, org) pair, because the collaborator plane
+// gates on the SPACE too: an HS256 space token names its space, and a
+// documentId for a different one is refused.
+func callerOf(ctx context.Context, id *identity) (caller, error) {
+	c, ok := cloud.Request(ctx)
+	if !ok {
+		return caller{}, errNoOrg
+	}
+	return id.who(c)
+}
+
+// sessionOf resolves (account, org) from that same verified caller, refusing one
+// that carries no tenant — the orgPrincipal rule the untyped billing and files
+// handlers apply, stated once here for the typed ops.
+func sessionOf(ctx context.Context, id *identity) (account, org string, err error) {
+	cl, err := callerOf(ctx, id)
+	if err != nil {
+		return "", "", err
+	}
+	if cl.org == "" {
+		return "", "", errNoOrg
+	}
+	return cl.account, cl.org, nil
+}
+
+// cookie writes one of team's own browser cookies from a TYPED op, and reports
+// whether it could. A cookie is a fact about the HTTP RESPONSE, so it needs the
+// request; off the HTTP path there is no response to set one on, and false is
+// the honest answer — a caller that claims to have signed a browser out when
+// there was no browser is lying, so the op refuses instead.
+func (g *api) cookie(ctx context.Context, name, value string, maxAge int) bool {
+	c, ok := cloud.Request(ctx)
+	if !ok {
+		return false
+	}
+	g.setSessionCookie(c, name, value, maxAge)
+	return true
+}
+
+// noStore marks a response uncacheable by any intermediary — per-tenant data
+// must never be served to the next caller. A response header is a fact about
+// the HTTP response, so it needs the request; off the HTTP path there is no
+// response to mark and this is a no-op.
+func noStore(ctx context.Context) {
+	if c, ok := cloud.Request(ctx); ok {
+		c.SetHeader("Cache-Control", "no-store")
+	}
+}

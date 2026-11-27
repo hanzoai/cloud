@@ -1,0 +1,10 @@
+# plugins.lock: every plugin released on its own, pinned to a semver tag and to
+# the sha256 of each binary. A plugin repo's release workflow (hanzoai/ci
+# plugin.yml) rewrites a stanza with `pin bump` when it tags; a human reviews it
+# as any other commit.
+#
+#   name  owner/repo  vX.Y.Z
+#     os/arch  https://...  sha256:<64 hex>
+#
+# A line without a digest does not parse, and a digest is the only thing that
+# authorizes a fetched binary to run. Rollback is reverting the stanza.

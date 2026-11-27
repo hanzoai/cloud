@@ -1,0 +1,67 @@
+{
+  "$schema": "https://schemas.agentskills.io/discovery/0.2.0/schema.json",
+  "base_url": "https://api.lux.network",
+  "brand": "lux",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://lux.id",
+  "mcp": {
+    "description": "Model Context Protocol over JSON-RPC 2.0 — one POST per message, stateless, protocol revision 2026-07-28. tools/list answers without a credential with one tool per subsystem (its operations in the \"op\" enum) plus \"describe\", which returns one operation's input schema. tools/call names a subsystem tool and carries {\"op\": <operation>, \"input\": <its arguments>}; it takes the same bearer the REST API does, and a call that carries none is answered 401 with a WWW-Authenticate header naming the resource metadata at /.well-known/oauth-protected-resource, which names the authorization server to sign in at. The tool surface is the public contract: the operator's admin product is not offered, and a name that would disclose a secret or mutate an identity is withheld — the list says how many, under _meta.",
+    "method": "POST",
+    "url": "https://api.lux.network/v1/mcp"
+  },
+  "skill_count": 6,
+  "skills": [
+    {
+      "description": "Read tax filings: Lists the caller org's IRS return exports and where each stands, without their files., Reads one IRS return export WITH its files, rebuilt from the sealed forms and proven identical to what was exported..",
+      "digest": "sha256:8cd510c5d43d39a6d49f12a86aec82335097f6d6434dc0cb4246d49871f2e58c",
+      "name": "tax_filings",
+      "service": "tax",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/tax_filings/SKILL.md",
+      "works": [
+        "operations"
+      ]
+    },
+    {
+      "description": "Read tax forms: Lists the 1099s the caller org prepared as payer, oldest first, voided and superseded ones included — a return that was furnished stays on the record., Reads one 1099 the caller org prepared as payer, every box and both parties, TINs masked., Download a 1099 the o",
+      "digest": "sha256:32c8e50cfcc91cffe2e713cccbdcdf5dc7b730f2f0cab45b7797b281f0d68209",
+      "name": "tax_forms",
+      "service": "tax",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/tax_forms/SKILL.md"
+    },
+    {
+      "description": "Read tax inbox: Lists the Copy B statements furnished to the caller org — every 1099 a payer on Lux delivered to it electronically, corrected ones beside the ones they supersede., Reads one Copy B furnished to the caller org., Download a Copy B furnished to the org, as a PDF.",
+      "digest": "sha256:2d0e69fdfeba12d5d2522756c4912ec15efe44560efe967022ea4e83c9a6271b",
+      "name": "tax_inbox",
+      "service": "tax",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/tax_inbox/SKILL.md"
+    },
+    {
+      "description": "Read tax payments: Returns the caller org's tax year as a PAYER: every payment it made to another org in that calendar year, on any rail, as the event plane records it, each classified — reportable or not, in which 1099 box, and the rule that decided it, with its source — and eac",
+      "digest": "sha256:95b98ae993b3f93830bfaa0c785c071693399b350d34a5d70c49fe5c93b32052",
+      "name": "tax_payments",
+      "service": "tax",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/tax_payments/SKILL.md"
+    },
+    {
+      "description": "Read tax profile: Returns the caller org's own tax profile — every line of its Form W-9, W-8BEN or W-8BEN-E, every number masked to its last four characters, where the certification stands, whether a W-8 is valid and when it expires, and whether the org consents to receive its 10",
+      "digest": "sha256:ecc9ae533d7db9e6702ae1ccc72ec41a5e820f508213020abfa0e28555a46ce9",
+      "name": "tax_profile",
+      "service": "tax",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/tax_profile/SKILL.md"
+    },
+    {
+      "description": "Read tax w9: Lists the caller org's W-9 relationships on both sides: the W-9s it asked its payees for, with where each stands, and the requests other orgs made for its own W-9., Reads one W-9 relationship from the caller's side., Reads a payee's TIN in full — and, for a payee on ",
+      "digest": "sha256:9e2ac30cb12910a1031906190b83028095e77d1ec6edb385edc88b6873385512",
+      "name": "tax_w9",
+      "service": "tax",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/tax_w9/SKILL.md"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

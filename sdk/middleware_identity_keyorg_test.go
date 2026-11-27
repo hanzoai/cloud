@@ -2,9 +2,11 @@ package cloud
 
 // A KEY ACTS IN THE ORG ITS CALLER SELECTED, OR THE REQUEST IS REFUSED.
 //
-// Now the selection is IAM's to admit (keys/principal ?org=): the holder's home
-// or an org they are a member of acts, and pays; any other is 403. These drive
-// real keys through SanitizeIdentity against a stub IAM.
+// A key is filed in one org, and X-Org-Id used to be discarded for a key: the
+// request ran, and billed, in the key's org whatever the caller selected
+// (hanzo-inc/cloud#429). Now the selection is IAM's to admit (keys/principal
+// ?org=): the holder's home or an org they are a member of acts, and pays; any
+// other is 403. These drive real keys through SanitizeIdentity against a stub IAM.
 
 import (
 	"crypto/rand"

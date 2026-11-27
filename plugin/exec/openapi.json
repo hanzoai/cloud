@@ -1,0 +1,292 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Hanzo Cloud API",
+    "description": "Package exec is the code interpreter: run a snippet in a sandbox, and move files in and out of the session that sandbox IS.",
+    "version": "v1"
+  },
+  "servers": [
+    {
+      "url": "https://api.hanzo.ai"
+    }
+  ],
+  "security": [
+    {
+      "bearer": []
+    }
+  ],
+  "tags": [
+    {
+      "name": "exec"
+    }
+  ],
+  "paths": {
+    "/v1/exec": {
+      "post": {
+        "operationId": "post_exec",
+        "summary": "Run a code snippet in a sandboxed interpreter",
+        "description": "Executes a program in a throwaway sandbox and answers with what it printed\nand what it left behind.\n\n`lang` names one of the thirteen the sandbox image carries — py, js, ts, bash, r,\nphp, go, rs, c, cpp, java, d, f90 — and `code` is the whole program, not a\nfragment: a compiled language is compiled and then run, an interpreted one is\ninterpreted, and `args` becomes the program's own argv either way. Nothing is\ninstalled for you; the image is the environment.\n\nA PROGRAM THAT FAILS IS A SUCCESSFUL CALL. A non-zero exit answers 200 with the\ndiagnostics on `stderr`, because \"the code threw\" and \"the interpreter is down\"\nare different facts a caller renders differently. Only the second is an error\nstatus.\n\nRuns are stateful through `session_id`. Omit it and the run gets a fresh sandbox\nwhose id comes back on the answer; pass that id again and the next run sees the\nsame filesystem, so a program can write a file one call and read it the next.\n`files` names bytes already uploaded to a session (POST /v1/exec/upload), copied in\nbefore the program starts. `files` on the ANSWER is what the program created or\nchanged, by comparison against a marker taken at start — so it is the run's real\noutput, not a listing of the directory — and each is fetched from\nGET /v1/exec/download/{session}/{name}.\n\nThe tenant is the caller's, never the body's, at every entry point. A typed op is\nalso an MCP tool and an op-plane op; MCP's tools/call invokes it directly, with no\nroute and therefore no middleware, so nothing there could have checked a\ncredential. tenantOf refuses a context carrying no validated principal, so those\nentry points fail closed without a second gate to keep in step.",
+        "tags": [
+          "exec"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/exec.CodeRun"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/exec.CodeResult"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/exec/download/{wildcard1}": {
+      "get": {
+        "operationId": "get_exec_download_by_wildcard1",
+        "summary": "Download a file from a session",
+        "description": "Fetches one file's BYTES from a session, addressed as {session_id}/{fileId} — a plot, a generated CSV, whatever a run wrote. The content type is derived from the name and defaults to application/octet-stream.\n\nThis is the one address whose success body is not JSON, which is why it is not a typed operation: a typed operation always marshals a Go value.",
+        "tags": [
+          "exec"
+        ],
+        "parameters": [
+          {
+            "name": "wildcard1",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/exec/files/{sid}": {
+      "get": {
+        "operationId": "get_exec_files_by_sid",
+        "summary": "Lists the files in an execution session.",
+        "description": "Lists the files in an execution session.\n\nEverything the session's sandbox holds — the uploads a run can read and the\nartifacts it produced — each then fetched from GET /v1/exec/download.\n\nThe answer is a BARE JSON ARRAY of {name, lastModified}, where `name` is the\nsame {session_id}/{fileId} identifier download takes, because that is what the\nclient matches on. The obvious typed shape, `{files: […]}`, would have been a\nsilent wire change: the request still succeeds and `response.data.find(...)`\nfinds nothing, which reads as a session holding no files.\n\nIt lists with one recursive `find`, the same traversal the artifact sweep\nmakes, so a nested artifact a run reports in its reply is listed here too: one\ntraversal of the directory, one answer about what a session holds.",
+        "tags": [
+          "exec"
+        ],
+        "parameters": [
+          {
+            "name": "sid",
+            "in": "path",
+            "required": true,
+            "description": "SID is the session identifier — the sandbox this listing is of. The URL is\nthe addressing authority: a path segment binds after the body and after the\nquery, so the address decides which session is read whatever else is sent.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/exec.listing"
+                  },
+                  "type": "array"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/exec/upload": {
+      "post": {
+        "operationId": "post_exec_upload",
+        "summary": "Upload a file into an execution session",
+        "description": "Takes a multipart upload and writes the file into the session's sandbox, so a later run can read it. Answers the session id and the identifier the file is addressed by; `session_id` in the form joins an existing session instead of opening one.\n\nThe body is multipart/form-data, which is why this is not a typed operation: every non-empty typed body is decoded as JSON.",
+        "tags": [
+          "exec"
+        ],
+        "x-public": true
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "exec.CodeFile": {
+        "properties": {
+          "id": {
+            "description": "ID is the file's path RELATIVE to its session's artifact directory, which is\nalso how it is fetched: GET /v1/exec/download/{session}/{id}.",
+            "type": "string"
+          },
+          "name": {
+            "description": "Name is the display name. On an ANSWER it carries the `{session}/{id}`\nidentifier whole, because the client matches on that prefix.",
+            "type": "string"
+          },
+          "session_id": {
+            "description": "SessionID is the other accepted spelling of the same fact on the way IN. Both\nare read; whichever is set wins.",
+            "type": "string"
+          },
+          "storage_session_id": {
+            "description": "StorageSessionID names the session holding the bytes, and is the spelling the\nanswer always uses.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "exec.CodeResult": {
+        "properties": {
+          "files": {
+            "description": "Files are what this run CREATED OR CHANGED, decided by mtime against a marker\ntaken before the program started — so it is the run's output, not a listing of\nthe directory. Fetch each from GET /v1/exec/download/{session}/{id}.",
+            "items": {
+              "$ref": "#/components/schemas/exec.CodeFile"
+            },
+            "type": "array"
+          },
+          "session_id": {
+            "description": "SessionID is the sandbox this run used — the one that was passed in, or the\nfresh one that was leased. Pass it to the next run to keep the filesystem.",
+            "type": "string"
+          },
+          "stderr": {
+            "description": "Stderr is what the program wrote to standard error, INCLUDING a compiler's\ndiagnostics and the trace of a program that exited non-zero. Its presence is\nnot a failed call.",
+            "type": "string"
+          },
+          "stdout": {
+            "description": "Stdout is what the program wrote to standard output.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "exec.CodeRun": {
+        "properties": {
+          "args": {
+            "description": "Args become the PROGRAM's argv, never the compiler's. For the compiled\nlanguages the toolchain builds first and these are passed to the binary it\nproduced.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "code": {
+            "description": "Code is the WHOLE program, not a fragment: it is written to a single file and\nthat file is what runs, so a compiled language needs its entry point and an\ninterpreted one runs top to bottom.",
+            "type": "string"
+          },
+          "files": {
+            "description": "Files are inputs the host already put in some session. Each names the session\nits bytes live in, which is usually — and ideally — the session this run wants.",
+            "items": {
+              "$ref": "#/components/schemas/exec.CodeFile"
+            },
+            "type": "array"
+          },
+          "lang": {
+            "description": "Lang selects the toolchain, and with it the filename the code is written to\nand the line that runs it: py, js, ts, bash, r, php, go, rs, c, cpp, java, d,\nf90. Anything else is refused rather than guessed at — a run in the wrong\nlanguage fails somewhere deep in a compiler, which reads as an outage.",
+            "type": "string"
+          },
+          "runtime_session_hint": {
+            "description": "RuntimeSessionHint is the stateful-session hint. It is carried so a client\nthat sends it is not silently misread, and it selects nothing here: every\nsession in this implementation is already a warm sandbox, so there is no\nsecond kind of runtime for a hint to choose between.",
+            "type": "string"
+          },
+          "session_id": {
+            "description": "SessionID continues an EXISTING sandbox, which is what makes runs stateful:\nthe same filesystem, so one run's output file is the next run's input. Empty\nleases a fresh sandbox and the id it got comes back on the result.",
+            "type": "string"
+          },
+          "user_id": {
+            "description": "UserID attributes the run inside the caller's org. It is a label, never a\ntenant: the org is resolved from the validated principal and a value here\ncannot widen what the run may reach.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "lang",
+          "code"
+        ],
+        "type": "object"
+      },
+      "exec.listing": {
+        "properties": {
+          "lastModified": {
+            "description": "LastModified is when the BYTES last changed, as RFC 3339 in UTC to the\nsecond — `2026-01-02T03:04:05Z`, the sandbox's own `date -u -r` on the file.\nIt is an mtime and not a creation time, so a file a later run overwrote\ncarries that run's clock. Never empty: a row exists only because `find`\nstat-ed the file.",
+            "type": "string"
+          },
+          "name": {
+            "description": "Name is the file's IDENTIFIER, `{session_id}/{fileId}` whole — never the bare\nfilename, and never URL-escaped. It is exactly what GET /v1/exec/download\ntakes after its prefix, and hanzo.chat matches it as a PREFIX\n(`name.startsWith(session + \"/\")`) to decide which rows belong to a session\nit is holding. `fileId` is the path RELATIVE to the session's artifact\ndirectory, so it carries `/` for anything the run wrote in a sub-directory.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "problem-details": {
+        "description": "An RFC 9457 problem document.",
+        "properties": {
+          "code": {
+            "description": "A stable token a client can branch on, when the refusal names one.",
+            "type": "string"
+          },
+          "detail": {
+            "description": "What was refused, for a person to read.",
+            "type": "string"
+          },
+          "status": {
+            "description": "The HTTP status.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "title": {
+            "description": "The status's reason phrase.",
+            "type": "string"
+          },
+          "type": {
+            "description": "about:blank",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "status",
+          "detail"
+        ],
+        "type": "object"
+      }
+    },
+    "securitySchemes": {
+      "bearer": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "The caller's credential, sent as `Authorization: Bearer \u003ctoken\u003e`. It is either an access token minted by Hanzo IAM or an API key (pk-/sk-). X-Authorization, and HTTP Basic carrying the token as the password, are accepted spellings of the same header for clients that cannot set Authorization; a browser presents the session cookie instead. Every operation requires it unless it says `security: []`."
+      }
+    }
+  }
+}

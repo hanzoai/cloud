@@ -1,0 +1,1354 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Hanzo Cloud API",
+    "description": "Package principals serves an org as an economic principal: who it is, what it may pay, and which agents answer to it.",
+    "version": "v1"
+  },
+  "servers": [
+    {
+      "url": "https://api.hanzo.ai"
+    }
+  ],
+  "security": [
+    {
+      "bearer": []
+    }
+  ],
+  "tags": [
+    {
+      "name": "principal"
+    }
+  ],
+  "paths": {
+    "/v1/principal": {
+      "get": {
+        "operationId": "get_principal",
+        "summary": "Returns the caller's org as an economic principal, composed from the apps that own each fact: its legal entity and founders' identity verification (company), the W-9 or W-8 it certified (tax), its wallets (wallet), the agents that answer to it — spawned ones with the agent that spawned them — (agents), its screening against the OFAC, UN, EU and UK sanctions lists and the embargoed jurisdictions, run now, and what it still lacks to pay and be paid.",
+        "description": "Returns the caller's org as an economic principal, composed from the apps that\nown each fact: its legal entity and founders' identity verification (company),\nthe W-9 or W-8 it certified (tax), its wallets (wallet), the agents that answer\nto it — spawned ones with the agent that spawned them — (agents), its screening\nagainst the OFAC, UN, EU and UK sanctions lists and the embargoed jurisdictions,\nrun now, and what it still lacks to pay and be paid. The read changes nothing:\na possible match it finds is recorded for a platform reviewer when a payment to\nor from the org is cleared.\n\nAny member reads it. The detail behind a verdict — founders' names and\nstatuses, masked tax numbers, treaty claims, sanctions matches — is answered to\nthe org's admins only. An owning app this deployment does not run is named in\nsources as absent rather than read as empty.",
+        "tags": [
+          "principal"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/principal.View"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/principal/agents/{ref}": {
+      "get": {
+        "operationId": "get_principal_agents_by_ref",
+        "summary": "Attests which principal one of the caller's agents answers to: the org, the chain of agents that spawned it, and the same signed with the platform's key as a JWS (EdDSA) a verifier checks offline against GET /v1/principal/keys.",
+        "description": "Attests which principal one of the caller's agents answers to: the org, the\nchain of agents that spawned it, and the same signed with the platform's key as\na JWS (EdDSA) a verifier checks offline against GET /v1/principal/keys. Any\nmember of the agent's org.\n\nAn agent of another org is not found. A spawned agent answers to its parent's\norg, which is its own: a parent is resolved only in the org the agent is created\nin. The statement is valid for 24 hours.",
+        "tags": [
+          "principal"
+        ],
+        "parameters": [
+          {
+            "name": "ref",
+            "in": "path",
+            "required": true,
+            "description": "Ref is the agent's id or its name in the caller's org.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/principal.Attestation"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/principal/clearance": {
+      "get": {
+        "operationId": "get_principal_clearance",
+        "summary": "Lists the caller org's clearances, newest first, 200 at most; a payee narrows them.",
+        "description": "Lists the caller org's clearances, newest first, 200 at most; a payee narrows\nthem. Any member of the paying org.",
+        "tags": [
+          "principal"
+        ],
+        "parameters": [
+          {
+            "name": "payee",
+            "in": "query",
+            "required": false,
+            "description": "Payee narrows to one payee.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/principal.clearanceList"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      },
+      "post": {
+        "operationId": "post_principal_clearance",
+        "summary": "Decides whether the caller's org may pay another org, BEFORE the payment: what must happen first, what must be withheld and why, what must be reported, by whom and when, and how the payment may settle net of withholding.",
+        "description": "Decides whether the caller's org may pay another org, BEFORE the payment: what\nmust happen first, what must be withheld and why, what must be reported, by\nwhom and when, and how the payment may settle net of withholding. Any member of\nthe paying org; the decision is recorded and on the audit trail in one\ntransaction.\n\nThe rules, each cited on the answer: payer's and payee's founders identity-verified\n(Hanzo policy); payer and payee screened clear of the OFAC, UN, EU and UK lists\nand the embargoed jurisdictions — a confirmed match blocks, a possible one waits\non a Hanzo platform reviewer, and lists that are not loaded and fresh clear\nnobody; the payee's status is what the form the payee granted the payer says,\nand until it grants one the payee furnishes it; a U.S. payee with no TIN on\nfile owes its W-9, and paid without one 24% backup withholding applies (IRC\n§3406); a foreign payee on a valid W-8BEN or W-8BEN-E is withheld on at 30% on\nU.S.-source income (IRC §1441, §1442), reduced by a treaty rate the form\nclaims; a service performed outside the United States is foreign-source and\nnot withheld on; Form 1099 by the payer for a reportable U.S. payee at the\nyear's threshold, Forms 1042-S and 1042 for U.S.-source income to a foreign\nperson, and platform-operator reports (EU DAC7, UK, Canada, Australia) where\nthe payer is the payee's platform. Every filer named is an org, never Hanzo.\n\nNothing of the payee is answered but what the payer must know to act: that the\npayment clears, what the payee must furnish, or that it cannot clear and the\npayer should contact support — never why, and never the payee's status before\nthe payee grants its form. A payer asks about at most 50 new payees a day and\n120 payments an hour.",
+        "tags": [
+          "principal"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "amount": "5000.00",
+                "category": "services",
+                "payee": "globex",
+                "performed": "DE"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/principal.clearIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/principal.Clearance"
+                }
+              }
+            },
+            "description": "created"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/principal/clearance/{id}": {
+      "get": {
+        "operationId": "get_principal_clearance_by_id",
+        "summary": "Reads one of the caller org's clearances, as it was decided.",
+        "description": "Reads one of the caller org's clearances, as it was decided. Any member of the\npaying org; another org's clearance is not found.",
+        "tags": [
+          "principal"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the clearance, \"clr_\"-prefixed.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/principal.Clearance"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/principal/keys": {
+      "get": {
+        "operationId": "get_principal_keys",
+        "summary": "Publishes the keys attestations are signed with, as a JSON Web Key Set (RFC 7517; Ed25519 keys as RFC 8037 writes them).",
+        "description": "Publishes the keys attestations are signed with, as a JSON Web Key Set (RFC\n7517; Ed25519 keys as RFC 8037 writes them). Open to anyone: a verifier\nverifying an agent's statement fetches this once and verifies offline.\n\nA key a rotation retired stays here and signs nothing, so a statement signed\nbefore the rotation verifies until it expires.",
+        "tags": [
+          "principal"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/principal.JWKS"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "security": [],
+        "x-public": true,
+        "x-tool": true
+      },
+      "post": {
+        "operationId": "post_principal_keys",
+        "summary": "Rotates the attestation signing key: a new Ed25519 key is generated, sealed in KMS beside the others, and signs every statement from now on; every earlier key is retired — still published, its private half destroyed.",
+        "description": "Rotates the attestation signing key: a new Ed25519 key is generated, sealed in\nKMS beside the others, and signs every statement from now on; every earlier key\nis retired — still published, its private half destroyed. SuperAdmin only, on\nthe audit trail before the new set is written, and followed on the trail by a\ncorrection if the write does not take. One rotation runs at a time, and one\nthat finds the set rotated under it since it read it is refused (409). The\nfirst call provisions the deployment's first key.",
+        "tags": [
+          "principal"
+        ],
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/principal.JWKS"
+                }
+              }
+            },
+            "description": "created"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/principal/matches": {
+      "get": {
+        "operationId": "get_principal_matches",
+        "summary": "Lists sanctions matches across every org, oldest first — the platform's review queue.",
+        "description": "Lists sanctions matches across every org, oldest first — the platform's review\nqueue. SuperAdmin only: a match names an org the platform screened, and the\norg it names is not the one to decide it.\n\nA match is one org against one designation or embargoed jurisdiction, with\nevery name, address or country of the org that brought them close. Open\nmatches are the ones no payment to or from their org clears past until a\nreviewer decides them; a match is recorded when a payment to or from its org is\ncleared.",
+        "tags": [
+          "principal"
+        ],
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "description": "Status is open, cleared or confirmed; open when omitted. \"all\" lists every\nmatch.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/principal.matchList"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/principal/matches/{id}": {
+      "post": {
+        "operationId": "post_principal_matches_by_id",
+        "summary": "Decides one sanctions match, as a Hanzo platform reviewer.",
+        "description": "Decides one sanctions match, as a Hanzo platform reviewer. SuperAdmin only —\nan admin of the org the match names is refused, because that would be the org\ndeciding its own case — and the decision is written and put on the audit trail\nin one transaction: a decision the trail does not take is not made.\n\ncleared records a namesake: the org's names resemble a designated person's and\nthe other identifiers show a different one. It covers the hits the reviewer\nread, and a later name close to the same person reopens it. confirmed records\nthe designated person itself, and blocks every payment to or from the org\nwhatever it is later called. A decision may be changed only by another\ndecision, with its own note.",
+        "tags": [
+          "principal"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the match, from the path.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "decision": "cleared",
+                "note": "date of birth 1984-02-11 conflicts with the entry's 1961"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/principal.decideIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/principal.Match"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/principal/statements/{id}": {
+      "get": {
+        "operationId": "get_principal_statements_by_id",
+        "summary": "Reads whether one statement the platform signed about an agent still stands: live, expired, or revoked and when.",
+        "description": "Reads whether one statement the platform signed about an agent still stands:\nlive, expired, or revoked and when. Open to anyone — a verifier holding a\nTaxPrincipalCredential checks it here after checking its signature offline\nagainst GET /v1/principal/keys. The answer names nothing the statement itself\ndoes not.",
+        "tags": [
+          "principal"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the statement's jti, as its JWS carries it.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/principal.Statement"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "security": [],
+        "x-public": true,
+        "x-tool": true
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "principal.AgentBrief": {
+        "properties": {
+          "id": {
+            "description": "ID is the agent id — the ref a run names and the value a member id derives\nfrom, so it must be stable across a reconcile.",
+            "type": "string"
+          },
+          "name": {
+            "description": "Name is the display name a person reads in a member list.",
+            "type": "string"
+          },
+          "parent": {
+            "description": "Parent is the agent that spawned this one; empty for an agent a person\ndefined.",
+            "type": "string"
+          },
+          "status": {
+            "description": "Status is the registry status VERBATIM, never a boolean. The caller decides\nwhat counts as live: apps/team reads empty/active/ready as a live member and\nanything else as one that keeps its authorship and drops out of the roster,\nand folding that judgement into a bool here would move the policy to the\nwrong side of the wire.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "principal.Attestation": {
+        "properties": {
+          "agent": {
+            "$ref": "#/components/schemas/principal.AgentBrief",
+            "description": "Agent is the agent."
+          },
+          "expires": {
+            "description": "Expires is when the statement stops being valid, unix seconds.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "kid": {
+            "description": "Kid is the key that signed it.",
+            "type": "string"
+          },
+          "org": {
+            "description": "Org is the principal it answers to — the org it was defined in.",
+            "type": "string"
+          },
+          "parents": {
+            "description": "Parents are the agents that spawned it, nearest first.",
+            "items": {
+              "$ref": "#/components/schemas/principal.AgentBrief"
+            },
+            "type": "array"
+          },
+          "statement": {
+            "description": "Statement is the same, signed: a JWS a verifier checks offline against GET\n/v1/principal/keys.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "principal.Clearance": {
+        "properties": {
+          "allowed": {
+            "description": "Allowed is true when nothing is required first and no fact blocks.",
+            "type": "boolean"
+          },
+          "amount": {
+            "description": "Amount is the gross amount, U.S. dollars.",
+            "type": "string"
+          },
+          "category": {
+            "description": "Category is what is bought: services, attorney, rents, royalties, other or\nmerchandise.",
+            "type": "string"
+          },
+          "decidedAt": {
+            "description": "DecidedAt is when, unix seconds.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "facts_required": {
+            "description": "Facts are what a rule turns on that the platform does not know.",
+            "items": {
+              "$ref": "#/components/schemas/principal.Fact"
+            },
+            "type": "array"
+          },
+          "id": {
+            "description": "ID is the clearance, \"clr_\"-prefixed.",
+            "type": "string"
+          },
+          "notice": {
+            "description": "Notice is what a clearance is and is not.",
+            "type": "string"
+          },
+          "payee": {
+            "description": "Payee is the org to be paid.",
+            "type": "string"
+          },
+          "payer": {
+            "description": "Payer is the caller's org.",
+            "type": "string"
+          },
+          "performed": {
+            "description": "Performed is where the service is performed, as stated.",
+            "type": "string"
+          },
+          "platform": {
+            "description": "Platform is whether the caller operates the payee's platform, as stated.",
+            "type": "boolean"
+          },
+          "rail": {
+            "description": "Rail is how it moves.",
+            "type": "string"
+          },
+          "reporting_obligations": {
+            "description": "Reporting are the returns this payment makes someone owe.",
+            "items": {
+              "$ref": "#/components/schemas/principal.Obligation"
+            },
+            "type": "array"
+          },
+          "required_before_payment": {
+            "description": "Required are the steps before the payment.",
+            "items": {
+              "$ref": "#/components/schemas/principal.Step"
+            },
+            "type": "array"
+          },
+          "rules": {
+            "description": "Rules names the rule behind each field above.",
+            "items": {
+              "$ref": "#/components/schemas/principal.Decided"
+            },
+            "type": "array"
+          },
+          "settlement_methods": {
+            "description": "Settlement are the ways it may settle, net of what is withheld.",
+            "items": {
+              "$ref": "#/components/schemas/principal.Method"
+            },
+            "type": "array"
+          },
+          "status": {
+            "description": "Status is what the payer may treat the payee as: us, foreign or unknown —\nread off the form the payee granted the payer, and unknown without one.",
+            "type": "string"
+          },
+          "withholding": {
+            "$ref": "#/components/schemas/principal.Withholding",
+            "description": "Withholding is what must be withheld."
+          }
+        },
+        "type": "object"
+      },
+      "principal.Decided": {
+        "properties": {
+          "field": {
+            "type": "string"
+          },
+          "rule": {
+            "$ref": "#/components/schemas/principal.Rule"
+          }
+        },
+        "type": "object"
+      },
+      "principal.Entity": {
+        "properties": {
+          "ein": {
+            "description": "EIN is on_file when the org's W-9 carries an EIN, and absent otherwise.",
+            "type": "string"
+          },
+          "founders": {
+            "description": "Founders are its beneficial owners with their verification status —\nanswered to the org's admins.",
+            "items": {
+              "$ref": "#/components/schemas/principal.Founder"
+            },
+            "type": "array"
+          },
+          "imported": {
+            "description": "Imported is an entity that existed before and was imported.",
+            "type": "boolean"
+          },
+          "jurisdiction": {
+            "description": "Jurisdiction is the U.S. state of formation.",
+            "type": "string"
+          },
+          "name": {
+            "description": "Name is the company name.",
+            "type": "string"
+          },
+          "stage": {
+            "description": "Stage is the formation's stage; \"company\" is formed.",
+            "type": "string"
+          },
+          "structure": {
+            "description": "Structure is c-corp, llc or dao-llc.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "principal.Fact": {
+        "properties": {
+          "blocks": {
+            "description": "Blocks is whether the payment waits on it.",
+            "type": "boolean"
+          },
+          "code": {
+            "description": "Code is the fact's stable name.",
+            "type": "string"
+          },
+          "question": {
+            "description": "Question is what must be answered.",
+            "type": "string"
+          },
+          "rule": {
+            "$ref": "#/components/schemas/principal.Rule",
+            "description": "Rule is the rule that turns on it."
+          }
+        },
+        "type": "object"
+      },
+      "principal.Form": {
+        "properties": {
+          "certified": {
+            "description": "Certified is whether the signature covers the current facts.",
+            "type": "boolean"
+          },
+          "chapter3": {
+            "description": "Chapter3 and Chapter4 are a W-8BEN-E's statuses — to the org's admins.",
+            "type": "string"
+          },
+          "chapter4": {
+            "type": "string"
+          },
+          "country": {
+            "description": "Country is US for a W-9, or the country of citizenship or incorporation.",
+            "type": "string"
+          },
+          "expires": {
+            "description": "Expires is when a W-8 stops being valid, unix seconds.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "foreignTin": {
+            "type": "string"
+          },
+          "form": {
+            "description": "Form is w9, w8ben or w8bene.",
+            "type": "string"
+          },
+          "residence": {
+            "description": "Residence is the country of the permanent residence address.",
+            "type": "string"
+          },
+          "tin": {
+            "description": "TIN and ForeignTIN are masked — answered to the org's admins.",
+            "type": "string"
+          },
+          "treaty": {
+            "$ref": "#/components/schemas/principal.Treaty",
+            "description": "Treaty is a W-8's treaty claim — to the org's admins."
+          },
+          "usPerson": {
+            "description": "USPerson is true for a W-9.",
+            "type": "boolean"
+          },
+          "valid": {
+            "description": "Valid is whether it establishes what it certifies today.",
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
+      "principal.Founder": {
+        "properties": {
+          "equityBps": {
+            "description": "EquityBps is ownership in basis points, 0–10000.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "kyc": {
+            "description": "KYC is pending, verified, reviewer_confirmed or failed, verbatim.",
+            "type": "string"
+          },
+          "name": {
+            "description": "Name is the full legal name.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "principal.Hit": {
+        "properties": {
+          "kind": {
+            "description": "Kind is name (matched fuzzily), address (matched exactly) or jurisdiction.",
+            "type": "string"
+          },
+          "role": {
+            "description": "Role is where it came from: entity, founder, form, wallet, or — for a\ncountry — citizenship, organization or residence.",
+            "type": "string"
+          },
+          "subject": {
+            "description": "Subject is the name, address or country as the org stated it.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "principal.Identity": {
+        "properties": {
+          "reason": {
+            "description": "Reason says which founders, and what is outstanding.",
+            "type": "string"
+          },
+          "status": {
+            "description": "Status is verified (every founder of its formation passed identity\nverification through the licensed provider, or a platform reviewer\nconfirmed them), pending, failed, or none (no formation, or one naming no\nfounder).",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "principal.JWK": {
+        "properties": {
+          "alg": {
+            "description": "Alg is EdDSA.",
+            "type": "string"
+          },
+          "crv": {
+            "description": "Crv is Ed25519.",
+            "type": "string"
+          },
+          "kid": {
+            "description": "Kid names the key; a statement's header carries it.",
+            "type": "string"
+          },
+          "kty": {
+            "description": "Kty is OKP, an octet key pair.",
+            "type": "string"
+          },
+          "use": {
+            "description": "Use is sig.",
+            "type": "string"
+          },
+          "x": {
+            "description": "X is the public key, base64url without padding.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "principal.JWKS": {
+        "properties": {
+          "keys": {
+            "items": {
+              "$ref": "#/components/schemas/principal.JWK"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "principal.List": {
+        "properties": {
+          "attempted_at": {
+            "description": "AttemptedAt is when the last attempt happened, successful or not.",
+            "format": "date-time",
+            "type": "string"
+          },
+          "designations": {
+            "description": "Designations is how many entries the last successful load carried.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "digest": {
+            "description": "Digest is the digest of the payload that produced Designations.",
+            "type": "string"
+          },
+          "error": {
+            "description": "Err is why the last attempt failed, empty if it succeeded.",
+            "type": "string"
+          },
+          "loaded_at": {
+            "description": "LoadedAt is when that load happened. Zero means this list has never loaded,\nwhich is not the same as a publisher who designates nobody.",
+            "format": "date-time",
+            "type": "string"
+          },
+          "source": {
+            "description": "Source is the publisher.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "principal.Match": {
+        "properties": {
+          "decidedAt": {
+            "description": "DecidedAt is when, unix seconds.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "decidedBy": {
+            "description": "DecidedBy is the reviewer, or \"exact designated address\".",
+            "type": "string"
+          },
+          "entry": {
+            "description": "Entry is the designated subject's primary name, or the jurisdiction's.",
+            "type": "string"
+          },
+          "foundAt": {
+            "description": "FoundAt is when a screening first found it, unix seconds.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "hits": {
+            "description": "Hits are the org's names, addresses and countries that matched, in the order\nthey were first seen. A decision covers the hits it was made on.",
+            "items": {
+              "$ref": "#/components/schemas/principal.Hit"
+            },
+            "type": "array"
+          },
+          "id": {
+            "description": "ID addresses the match for a reviewer's decision. It is the org and the\ndesignation together, so a decision is about the org whatever it is called.",
+            "type": "string"
+          },
+          "list": {
+            "description": "List is the publisher — ofac, un, eu or ofsi — or jurisdiction for an\nembargoed place.",
+            "type": "string"
+          },
+          "note": {
+            "description": "Note is the reviewer's reason.",
+            "type": "string"
+          },
+          "org": {
+            "description": "Org is the org the match names.",
+            "type": "string"
+          },
+          "reason": {
+            "description": "Reason is what first matched, and which identifiers agreed or conflicted.",
+            "type": "string"
+          },
+          "ref": {
+            "description": "Ref is the entry's reference on that list, or the country code.",
+            "type": "string"
+          },
+          "score": {
+            "description": "Score is the highest similarity seen, 0 to 1; an address or a jurisdiction\nis 1.",
+            "format": "double",
+            "type": "number"
+          },
+          "status": {
+            "description": "Status is open (a reviewer decides), cleared (a namesake, decided) or\nconfirmed (the designated person, decided — or a designated address).",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "principal.Method": {
+        "properties": {
+          "net": {
+            "description": "Net is what the payee receives, U.S. dollars.",
+            "type": "string"
+          },
+          "rail": {
+            "description": "Rail is the rail: ledger or chain.",
+            "type": "string"
+          },
+          "rule": {
+            "$ref": "#/components/schemas/principal.Rule",
+            "description": "Rule is why."
+          },
+          "withheld": {
+            "description": "Withheld is what the payer keeps back and deposits itself, U.S. dollars.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "principal.Obligation": {
+        "properties": {
+          "authority": {
+            "description": "Authority is who it is filed with.",
+            "type": "string"
+          },
+          "code": {
+            "description": "Code is the obligation's stable name.",
+            "type": "string"
+          },
+          "due": {
+            "description": "Due is when.",
+            "type": "string"
+          },
+          "filer": {
+            "description": "Filer is the org that files it. It is never Hanzo: Hanzo prepares what an org\nfiles, and files nothing itself.",
+            "type": "string"
+          },
+          "form": {
+            "description": "Form is what is filed.",
+            "type": "string"
+          },
+          "jurisdiction": {
+            "description": "Jurisdiction is where, ISO 3166-1 alpha-2 or \"EU\".",
+            "type": "string"
+          },
+          "rule": {
+            "$ref": "#/components/schemas/principal.Rule",
+            "description": "Rule is why."
+          },
+          "when": {
+            "description": "When is the condition it is owed on, when it is owed on one.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "principal.Rule": {
+        "properties": {
+          "code": {
+            "description": "Code is the rule's stable name, for a caller that branches on it.",
+            "type": "string"
+          },
+          "reason": {
+            "description": "Reason is the rule, stated.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "principal.Screening": {
+        "properties": {
+          "at": {
+            "description": "At is when it ran, unix seconds.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "lists": {
+            "description": "Lists is each publisher's readiness at the moment of screening.",
+            "items": {
+              "$ref": "#/components/schemas/principal.List"
+            },
+            "type": "array"
+          },
+          "matches": {
+            "description": "Matches are what matched — answered to the org's own admins and to a\nreviewer, never to another org.",
+            "items": {
+              "$ref": "#/components/schemas/principal.Match"
+            },
+            "type": "array"
+          },
+          "reason": {
+            "description": "Reason says why, in words.",
+            "type": "string"
+          },
+          "status": {
+            "description": "Status is clear, review (a possible match awaits a platform reviewer),\nblocked (a confirmed match), unscreened (the org states nothing to screen),\nor unavailable (the lists are not fit to screen against).",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "principal.Source": {
+        "properties": {
+          "app": {
+            "description": "App names it: company, tax, wallet or agent.",
+            "type": "string"
+          },
+          "status": {
+            "description": "Status is read, or absent when this deployment does not run it.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "principal.Statement": {
+        "properties": {
+          "agent": {
+            "description": "Agent is the agent it is about.",
+            "type": "string"
+          },
+          "expires": {
+            "description": "Expires is when it stops standing, unix seconds; zero for a W-9, which\nstands until the form changes.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "form": {
+            "description": "Form is the class of tax form it rests on: w9, w8ben or w8bene.",
+            "type": "string"
+          },
+          "id": {
+            "description": "ID is the statement's jti.",
+            "type": "string"
+          },
+          "issued": {
+            "description": "Issued is when it was signed, unix seconds.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "jws": {
+            "description": "JWS is the signed statement itself — the credential an agent presents —\nanswered only to the org it is about.",
+            "type": "string"
+          },
+          "kind": {
+            "description": "Kind is what it states: tax.",
+            "type": "string"
+          },
+          "org": {
+            "description": "Org is the principal the agent answers to.",
+            "type": "string"
+          },
+          "revoked": {
+            "description": "Revoked is when it was withdrawn, unix seconds; zero while it stands.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "status": {
+            "description": "Status is live, expired or revoked.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "principal.Step": {
+        "properties": {
+          "code": {
+            "description": "Code is the step's stable name, for a caller that branches on it.",
+            "type": "string"
+          },
+          "rule": {
+            "$ref": "#/components/schemas/principal.Rule",
+            "description": "Rule is why."
+          },
+          "what": {
+            "description": "What must happen, in words.",
+            "type": "string"
+          },
+          "where": {
+            "description": "Where it is done, when it is done on this platform.",
+            "type": "string"
+          },
+          "who": {
+            "description": "Who does it: payer, payee, or \"Hanzo platform reviewer\".",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "principal.Summary": {
+        "properties": {
+          "missing": {
+            "description": "Missing are the steps it owes, each with the rule that asks for it.",
+            "items": {
+              "$ref": "#/components/schemas/principal.Step"
+            },
+            "type": "array"
+          },
+          "ready": {
+            "description": "Ready is true when it lacks nothing its own facts decide.",
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
+      "principal.Treaty": {
+        "properties": {
+          "article": {
+            "description": "Article is the treaty article and paragraph claimed, e.g. \"12(2)\".",
+            "type": "string"
+          },
+          "conditions": {
+            "description": "Conditions is the explanation the form asks for: the conditions of the\narticle the beneficial owner meets.",
+            "type": "string"
+          },
+          "country": {
+            "description": "Country is the treaty country the beneficial owner is resident in.",
+            "type": "string"
+          },
+          "income": {
+            "description": "Income is the type of income the claim covers: services, rents, royalties\nor other.",
+            "type": "string"
+          },
+          "lob": {
+            "description": "LOB is W-8BEN-E line 14b: the treaty's limitation on benefits provision the\nentity meets. Required on a W-8BEN-E treaty claim; a W-8BEN has no line 14b.",
+            "type": "string"
+          },
+          "rateBps": {
+            "description": "RateBps is the claimed withholding rate in basis points: 0 is exempt,\n1000 is 10%.",
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "principal.View": {
+        "properties": {
+          "agents": {
+            "description": "Agents are the agents that answer to it, spawned ones with their parent.",
+            "items": {
+              "$ref": "#/components/schemas/principal.AgentBrief"
+            },
+            "type": "array"
+          },
+          "compliance": {
+            "$ref": "#/components/schemas/principal.Summary",
+            "description": "Compliance is what it lacks to pay and be paid on the platform's rails."
+          },
+          "entity": {
+            "$ref": "#/components/schemas/principal.Entity",
+            "description": "Entity is its legal entity, when it formed or imported one here."
+          },
+          "identity": {
+            "$ref": "#/components/schemas/principal.Identity",
+            "description": "Identity is whether its founders are verified."
+          },
+          "org": {
+            "description": "Org is the org — the principal itself.",
+            "type": "string"
+          },
+          "sanctions": {
+            "$ref": "#/components/schemas/principal.Screening",
+            "description": "Sanctions is its screening against the OFAC, UN, EU and UK lists and the\nembargoed jurisdictions, run on this read and recorded by none: a match is\nrecorded for a reviewer when a payment to or from the org is cleared.\nMatches are answered to the org's admins."
+          },
+          "sources": {
+            "description": "Sources says which owning apps answered.",
+            "items": {
+              "$ref": "#/components/schemas/principal.Source"
+            },
+            "type": "array"
+          },
+          "tax": {
+            "$ref": "#/components/schemas/principal.Form",
+            "description": "Tax is the form it certified about itself."
+          },
+          "wallets": {
+            "description": "Wallets are its addresses.",
+            "items": {
+              "$ref": "#/components/schemas/principal.WalletBrief"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "principal.WalletBrief": {
+        "properties": {
+          "address": {
+            "type": "string"
+          },
+          "agent": {
+            "description": "Agent is the agent the wallet is scoped to, when it is one agent's.",
+            "type": "string"
+          },
+          "chain": {
+            "type": "string"
+          },
+          "custody": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "principal.Withholding": {
+        "properties": {
+          "amount": {
+            "description": "Amount is the amount to withhold, U.S. dollars; empty when the rate is.",
+            "type": "string"
+          },
+          "chapter": {
+            "description": "Chapter is \"3\" (IRC chapter 3, a payment to a foreign person) or \"backup\"\n(IRC §3406), and empty when nothing is withheld or it cannot yet be decided.",
+            "type": "string"
+          },
+          "rate": {
+            "description": "Rate is the rate in percent: \"30\", \"24\", \"10\", \"0\". Empty when it cannot be\ndecided on the facts held — see facts_required.",
+            "type": "string"
+          },
+          "reason": {
+            "description": "Reason says why, in words.",
+            "type": "string"
+          },
+          "rule": {
+            "$ref": "#/components/schemas/principal.Rule",
+            "description": "Rule is the rule that decided it."
+          }
+        },
+        "type": "object"
+      },
+      "principal.clearIn": {
+        "properties": {
+          "amount": {
+            "description": "Amount is the gross amount in U.S. dollars, e.g. \"1250.00\".",
+            "type": "string"
+          },
+          "category": {
+            "description": "Category is what is bought: services, attorney, rents, royalties, other or\nmerchandise. Services when omitted.",
+            "type": "string"
+          },
+          "payee": {
+            "description": "Payee is the org id of the org to be paid.",
+            "type": "string"
+          },
+          "performed": {
+            "description": "Performed is where the service is performed — for rents, where the property\nis; for royalties, where it is used — as an ISO 3166-1 alpha-2 code. It\ndecides the source of a foreign payee's income, and so its withholding.",
+            "type": "string"
+          },
+          "platform": {
+            "description": "Platform is whether the caller operates the platform through which the payee\nprovides this to the platform's users, which decides platform-operator\nreporting. Omitted, it is asked back as a fact when it matters.",
+            "type": "boolean"
+          },
+          "rail": {
+            "description": "Rail is how it will move: x402, ledger, chain, ach, wire, card, network or\nother — the rails an economic event names. Ledger when omitted.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "principal.clearanceList": {
+        "properties": {
+          "clearances": {
+            "items": {
+              "$ref": "#/components/schemas/principal.Clearance"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "principal.decideIn": {
+        "properties": {
+          "decision": {
+            "description": "Decision is cleared (a namesake: the identifiers show a different person) or\nconfirmed (the designated person).",
+            "type": "string"
+          },
+          "id": {
+            "description": "ID is the match, from the path.",
+            "type": "string"
+          },
+          "note": {
+            "description": "Note is the reviewer's reason — which identifiers decided it. Required.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "principal.matchList": {
+        "properties": {
+          "matches": {
+            "items": {
+              "$ref": "#/components/schemas/principal.Match"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "problem-details": {
+        "description": "An RFC 9457 problem document.",
+        "properties": {
+          "code": {
+            "description": "A stable token a client can branch on, when the refusal names one.",
+            "type": "string"
+          },
+          "detail": {
+            "description": "What was refused, for a person to read.",
+            "type": "string"
+          },
+          "status": {
+            "description": "The HTTP status.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "title": {
+            "description": "The status's reason phrase.",
+            "type": "string"
+          },
+          "type": {
+            "description": "about:blank",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "status",
+          "detail"
+        ],
+        "type": "object"
+      }
+    },
+    "securitySchemes": {
+      "bearer": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "The caller's credential, sent as `Authorization: Bearer \u003ctoken\u003e`. It is either an access token minted by Hanzo IAM or an API key (pk-/sk-). X-Authorization, and HTTP Basic carrying the token as the password, are accepted spellings of the same header for clients that cannot set Authorization; a browser presents the session cookie instead. Every operation requires it unless it says `security: []`."
+      }
+    }
+  }
+}

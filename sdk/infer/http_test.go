@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -170,7 +171,7 @@ func TestAIHTTP_ConsecutiveUserTurnsMerged(t *testing.T) {
 	}
 }
 
-// Regression test for #937: a leading system prompt must remain
+// Regression test for hanzo-inc/cloud#937: a leading system prompt must remain
 // role="system" and never be merged into consecutive user turns from a Slack thread.
 func TestAIHTTP_SystemPromptNotMergedWithUserTurns(t *testing.T) {
 	req := &ChatRequest{
@@ -834,5 +835,50 @@ func TestAIHTTP_StreamingStripsChannelReasoning(t *testing.T) {
 	}
 	if resp.Reasoning != "thinking..." {
 		t.Errorf("stream Reasoning: got %q want thinking...", resp.Reasoning)
+	}
+}
+
+// A streamed completion offers the caller's tools and returns the calls the model
+// made, assembled from the pieces the deltas carry, as ChatCompletion would.
+func TestAStreamCarriesToolsAndAssemblesTheirCalls(t *testing.T) {
+	var offered []byte
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		offered, _ = io.ReadAll(r.Body)
+		w.Header().Set("Content-Type", "text/event-stream")
+		chunk := func(delta string, finish string) string {
+			fr := "null"
+			if finish != "" {
+				fr = `"` + finish + `"`
+			}
+			return `data: {"id":"c","object":"chat.completion.chunk","model":"enso","choices":[{"index":0,"delta":` + delta + `,"finish_reason":` + fr + "}]}\n\n"
+		}
+		_, _ = w.Write([]byte(
+			chunk(`{"content":"Running it."}`, "") +
+				chunk(`{"tool_calls":[{"index":0,"id":"call_1","type":"function","function":{"name":"exec","arguments":""}}]}`, "") +
+				chunk(`{"tool_calls":[{"index":0,"function":{"arguments":"{\"argv\":"}}]}`, "") +
+				chunk(`{"tool_calls":[{"index":0,"function":{"arguments":"[\"ls\"]}"}}]}`, "") +
+				chunk(`{"tool_calls":[{"index":1,"id":"call_2","type":"function","function":{"name":"read","arguments":"{\"path\":\"a\"}"}}]}`, "") +
+				chunk(`{}`, "tool_calls") + "data: [DONE]\n\n"))
+	}))
+	defer srv.Close()
+
+	var said []string
+	got, err := HTTPAt(srv.URL, "sk-test", FixedModel("enso")).(StreamCompleter).ChatStream(
+		context.Background(),
+		&ChatRequest{Prompt: "list", Tools: []ToolDef{{Name: "exec", Schema: json.RawMessage(`{"type":"object"}`)}}},
+		func(d string) error { said = append(said, d); return nil },
+	)
+	if err != nil {
+		t.Fatalf("a stream of tool calls was refused: %v", err)
+	}
+	if !strings.Contains(string(offered), `"tools"`) || !strings.Contains(string(offered), `"exec"`) {
+		t.Errorf("the stream offered no tools: %s", offered)
+	}
+	want := []ToolCall{{ID: "call_1", Name: "exec", Arguments: `{"argv":["ls"]}`}, {ID: "call_2", Name: "read", Arguments: `{"path":"a"}`}}
+	if !reflect.DeepEqual(got.ToolCalls, want) {
+		t.Errorf("tool calls %+v, want %+v", got.ToolCalls, want)
+	}
+	if got.Content != "Running it." || strings.Join(said, "") != "Running it." || got.FinishReason != "tool_calls" {
+		t.Errorf("content %q, said %v, finish %q", got.Content, said, got.FinishReason)
 	}
 }

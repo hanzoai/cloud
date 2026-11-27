@@ -20,8 +20,10 @@ var iamAuthPrefixes = []string{"/v1/iam", "/login/oauth", "/.well-known"}
 // than in production (the M2M token mint would 402).
 //
 // Under surface pricing the exemption is a DECLARATION, so the test asserts the
-// declaration reaches the gate: iam declares Free and every auth path resolves
-// to 0, while a sibling surface declared at 1c resolves to 1.
+// declaration reaches the gate: iam declares Free and every auth path resolves to 0,
+// while a sibling surface declared at 1c resolves to 1. That second half is what makes
+// the first half mean something — without it, a nil index would return 0 for every
+// path in the binary and this test would pass having measured nothing.
 func TestDefaultPriceExemptsIAM(t *testing.T) {
 	index(t, &Config{Enable: []string{"iam", "probe"}},
 		Plugin{Name: "iam", Price: Free, Prefixes: iamAuthPrefixes},

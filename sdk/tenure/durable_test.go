@@ -5,8 +5,12 @@
 
 package tenure
 
-// It exercises the SAME hazards as handoff_test.go, but through the reusable
-// Durable a per-org store actually wires, over a plaintext local file (nil
+// durable_test.go is the outage proof for the packaged gate (Durable): two replicas
+// that contend for one org's store — the exact "a second replica breaks the store"
+// failure — resolve to ONE writer with the other DEFERRING, both openable (never
+// "store unavailable"), no split-brain, and no acknowledged write lost across a
+// rolling handoff. It exercises the SAME hazards as handoff_test.go, but through the
+// reusable Durable a per-org store actually wires, over a plaintext local file (nil
 // cipher).
 
 import (
@@ -257,9 +261,11 @@ func TestDurableTakeoverHydratesNoLostWriteFencesDeposed(t *testing.T) {
 }
 
 // TestDurableShipsTheDatabaseAlone covers what a successor needs to read an
-// encrypted store: the database bytes, and nothing else. A database's key is
-// DERIVED from the deployment's master and the namespace that owns it, so there
-// is no key material to travel with the file — the payload is the file.
+// encrypted store: the database bytes, and nothing else. A database's key is DERIVED
+// from the deployment's master and the namespace that owns it, so there is no key
+// material to travel with the file — the payload is the file. This used to frame a
+// wrapped-key sidecar ahead of the bytes, and a successor that received the database
+// without it had an unreadable store.
 func TestDurableShipsTheDatabaseAlone(t *testing.T) {
 	ctx := context.Background()
 	cs := newFakeCondStore()

@@ -1,0 +1,59 @@
+{
+  "$schema": "https://schemas.agentskills.io/discovery/0.2.0/schema.json",
+  "base_url": "https://api.lux.network",
+  "brand": "lux",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://lux.id",
+  "mcp": {
+    "description": "Model Context Protocol over JSON-RPC 2.0 — one POST per message, stateless, protocol revision 2026-07-28. tools/list answers without a credential with one tool per subsystem (its operations in the \"op\" enum) plus \"describe\", which returns one operation's input schema. tools/call names a subsystem tool and carries {\"op\": <operation>, \"input\": <its arguments>}; it takes the same bearer the REST API does, and a call that carries none is answered 401 with a WWW-Authenticate header naming the resource metadata at /.well-known/oauth-protected-resource, which names the authorization server to sign in at. The tool surface is the public contract: the operator's admin product is not offered, and a name that would disclose a secret or mutate an identity is withheld — the list says how many, under _meta.",
+    "method": "POST",
+    "url": "https://api.lux.network/v1/mcp"
+  },
+  "skill_count": 5,
+  "skills": [
+    {
+      "description": "Read flag activity: Returns the caller's flag change log newest-first: every create, update and delete, with the actor and the time..",
+      "digest": "sha256:942b6034eb05de46d231e25a7dfb939179e213952bf802c03286dfe9edd615f1",
+      "name": "flag_activity",
+      "service": "flag",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/flag_activity/SKILL.md"
+    },
+    {
+      "description": "Read flag defs: Returns every flag definition in the caller's (org, project) store, by key, with its version and who last changed it., Returns one flag definition by key, or 404 when the caller's store has none under that key..",
+      "digest": "sha256:903dc69eeb16dce06cf87eb17ef83008589fd87e3f191f60f96a5088a7948110",
+      "name": "flag_defs",
+      "service": "flag",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/flag_defs/SKILL.md",
+      "works": [
+        "product"
+      ]
+    },
+    {
+      "description": "Read flag health: Reports that the flag engine is serving..",
+      "digest": "sha256:72a77ba3b64ab8ba96efa1235f3ce770c4b2f4059e8597711c00ba277af411c8",
+      "name": "flag_health",
+      "service": "flag",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/flag_health/SKILL.md"
+    },
+    {
+      "description": "Read flag optin: Answers the signed-in caller's opt-in to public betas: whether they opted in, whether the org they act in blocked it, and which betas are public..",
+      "digest": "sha256:1a25999652982b85ae58c64fe69dc00dfbbc9042da105d7e01a5188d4d90b6ee",
+      "name": "flag_optin",
+      "service": "flag",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/flag_optin/SKILL.md"
+    },
+    {
+      "description": "Read flag platform: Answers the platform switches that are decided per caller — `beta`, whether the caller sees what is not yet generally available — as they apply to the signed-in caller: its validated org and user, never anything the request states..",
+      "digest": "sha256:4ce47b7d85adaf3e6837b1c7a79e646505f5d27066d16fe7c4611685a0015473",
+      "name": "flag_platform",
+      "service": "flag",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/flag_platform/SKILL.md"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

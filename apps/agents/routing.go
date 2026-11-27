@@ -1,0 +1,265 @@
+package agents
+
+import (
+	"context"
+	"crypto/rand"
+	"crypto/sha256"
+	"crypto/subtle"
+	"database/sql"
+	"encoding/hex"
+	"errors"
+	"fmt"
+	"net/http"
+	"strings"
+	"time"
+
+	"github.com/hanzoai/cloud/sdk/principal"
+	"github.com/zap-proto/zip"
+)
+
+// routing.go is the machine-identity + liveness plane for routed runs (#48 half
+// B). A run dispatched to a target is executed by an EXTERNAL machine (`hanzo
+// code --serve`) that claims it over HTTP. Two properties make that safe:
+//
+//   - MACHINE IDENTITY. A target carries a claim key — a high-entropy capability
+//     minted server-side, returned to the daemon ONCE, and stored only as a
+//     SHA-256 hash (never plaintext, like every other secret). A claim/report
+//     must present the key; cloud verifies it in constant time, scoped to
+//     (org, target). Possession of the key IS being that machine, so one machine
+//     can never claim another's runs even within the same org.
+//
+//   - LIVENESS. Dispatch routes ONLY to a target with a live runner. A serve
+//     daemon proves liveness by polling Claim, which stamps serving_at; the gate
+//     rejects a target whose last poll is older than servingTTL. A run to a dead
+//     or absent runner fails closed at dispatch (never silently runs elsewhere),
+//     and one that dies mid-flight is re-queued/timed-out by the durable owner.
+//
+// The claim key lives in its own table so the live (A) target CRUD is untouched.
+
+const (
+	// servingTTL bounds how stale a target's last claim poll may be and still be
+	// considered "a runner is listening". The serve daemon re-polls right after a
+	// 25s long-poll returns empty, so a healthy runner stamps well inside this.
+	servingTTL = 90 * time.Second
+
+	claimKeyPrefix = "tgtk_"
+	claimKeyBytes  = 32 // 256-bit capability
+	maxClaimKey    = 128
+)
+
+var (
+	errNoClaimKey     = errors.New("agents: target has no claim key")
+	errClaimKeyBad    = errors.New("agents: claim key mismatch")
+	errTargetNotLive  = errors.New("agents: target has no live runner")
+	errTargetNotReady = errors.New("agents: target is not online")
+)
+
+// migrateClaimKeys creates the per-target claim-key + serving-liveness table in
+// the org's own agents file, beside the targets it authenticates. Idempotent.
+func (s *Store) migrateClaimKeys(ctx context.Context, tx *sql.Tx) error {
+	const ddl = `
+CREATE TABLE IF NOT EXISTS agent_target_claim_keys (
+  org        TEXT NOT NULL,
+  target_id  TEXT NOT NULL,
+  key_hash   TEXT NOT NULL,
+  serving_at BIGINT NOT NULL DEFAULT 0,
+  updated_at BIGINT NOT NULL,
+  PRIMARY KEY (org, target_id)
+);`
+	if _, err := tx.ExecContext(ctx, ddl); err != nil {
+		return fmt.Errorf("migrate claim keys: %w", err)
+	}
+	return nil
+}
+
+// UpsertClaimKeyHash stores (or rotates) a target's claim-key hash. serving_at is
+// reset to 0 on a fresh mint — the daemon proves liveness by its first poll.
+func (s *Store) UpsertClaimKeyHash(ctx context.Context, org, targetID, hash string, now int64) error {
+	_, err := s.db.ExecContext(ctx,
+		`INSERT INTO agent_target_claim_keys (org,target_id,key_hash,serving_at,updated_at)
+		 VALUES ($1,$2,$3,0,$4)
+		 ON CONFLICT(org,target_id) DO UPDATE SET key_hash=excluded.key_hash, serving_at=0, updated_at=excluded.updated_at`,
+		org, targetID, hash, now)
+	if err != nil {
+		return fmt.Errorf("upsert claim key: %w", err)
+	}
+	return nil
+}
+
+// ClaimKeyHash returns a target's stored hash + last serving stamp, or
+// errNoClaimKey when none was ever minted.
+func (s *Store) ClaimKeyHash(ctx context.Context, org, targetID string) (hash string, servingAt int64, err error) {
+	row := s.db.QueryRowContext(ctx,
+		`SELECT key_hash, serving_at FROM agent_target_claim_keys WHERE org=$1 AND target_id=$2`, org, targetID)
+	err = row.Scan(&hash, &servingAt)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", 0, errNoClaimKey
+	}
+	if err != nil {
+		return "", 0, fmt.Errorf("get claim key: %w", err)
+	}
+	return hash, servingAt, nil
+}
+
+// StampServing records that a target's runner polled at now (its liveness
+// heartbeat). Best-effort by the caller; a missing row is a no-op.
+func (s *Store) StampServing(ctx context.Context, org, targetID string, now int64) error {
+	_, err := s.db.ExecContext(ctx,
+		`UPDATE agent_target_claim_keys SET serving_at=$1 WHERE org=$2 AND target_id=$3`, now, org, targetID)
+	return err
+}
+
+// hashClaimKey is the at-rest form: SHA-256 hex of a high-entropy token. A random
+// 256-bit key needs no password KDF; SHA-256 gives a fixed-size, constant-time-
+// comparable digest and the plaintext is never stored.
+func hashClaimKey(key string) string {
+	sum := sha256.Sum256([]byte(key))
+	return hex.EncodeToString(sum[:])
+}
+
+// newClaimKey mints a fresh capability token.
+func newClaimKey() (string, error) {
+	b := make([]byte, claimKeyBytes)
+	if _, err := rand.Read(b); err != nil {
+		return "", err
+	}
+	return claimKeyPrefix + hex.EncodeToString(b), nil
+}
+
+// verifyClaimKey checks a presented key against the target's stored hash in
+// constant time. Fail-closed: no key on file, or an empty presented key, is a
+// mismatch — never an accidental pass.
+func (s *Store) verifyClaimKey(ctx context.Context, org, targetID, presented string) error {
+	presented = strings.TrimSpace(presented)
+	if presented == "" || len(presented) > maxClaimKey {
+		return errClaimKeyBad
+	}
+	stored, _, err := s.ClaimKeyHash(ctx, org, targetID)
+	if err != nil {
+		return err // errNoClaimKey or a real DB error
+	}
+	if subtle.ConstantTimeCompare([]byte(stored), []byte(hashClaimKey(presented))) != 1 {
+		return errClaimKeyBad
+	}
+	return nil
+}
+
+// TargetDispatchable is the DRY liveness gate, used at dispatch (fail closed
+// before enqueue) AND re-checked at claim. A run is dispatchable only to a target
+// that (a) exists in this org and is the caller's to reach (reaches), (b) is
+// online, and (c) has a live runner — a claim
+// poll within servingTTL. Any failure is an explicit error the dispatcher renders
+// honestly; it NEVER falls back to running elsewhere.
+func (s *Store) TargetDispatchable(ctx context.Context, org, targetID string) error {
+	t, err := s.reachable(ctx, org, targetID)
+	if err != nil {
+		return err // errTargetNotFound or a real DB error
+	}
+	return s.serves(ctx, t, time.Now())
+}
+
+// reachable is GetTarget for the caller on ctx: a machine they do not reach —
+// another member's, in a personal org — is errTargetNotFound, the answer an
+// unknown id gets, so no reader of it can tell the two apart.
+func (s *Store) reachable(ctx context.Context, org, id string) (Target, error) {
+	t, err := s.GetTarget(ctx, org, id)
+	if err == nil && !reaches(ctx, t) {
+		return Target{}, errTargetNotFound
+	}
+	return t, err
+}
+
+// serves is (b) and (c) for a target already read. Dispatch and every view of a
+// machine read it, so the list a picker draws and the gate a run meets agree on
+// where a run can go.
+func (s *Store) serves(ctx context.Context, t Target, now time.Time) error {
+	if t.EffectiveStatus(now) != TargetOnline {
+		return errTargetNotReady
+	}
+	_, servingAt, err := s.ClaimKeyHash(ctx, t.Org, t.ID)
+	if err != nil {
+		return errTargetNotLive // no claim key => no runner ever attached
+	}
+	if servingAt <= 0 || now.Unix()-servingAt > int64(servingTTL/time.Second) {
+		return errTargetNotLive
+	}
+	return nil
+}
+
+// TargetDispatchable is the exported gate the coding dispatcher injects (it never
+// imports the store directly). Returns nil when a run may be routed to (org,
+// targetID) and, when it names one, work in folder dir there (Admit), else a
+// descriptive error.
+func TargetDispatchable(ctx context.Context, org, targetID, dir string) error {
+	sto, org, err := mountedStore(org)
+	if err != nil {
+		return err
+	}
+	targetID = strings.TrimSpace(targetID)
+	if targetID == "" {
+		return fmt.Errorf("agents: target required")
+	}
+	if err := sto.TargetDispatchable(ctx, org, targetID); err != nil {
+		return err
+	}
+	if dir == "" {
+		return nil
+	}
+	return sto.admit(ctx, org, targetID, dir, "")
+}
+
+// ReadOnlyUnsupported is the error code for a read-only route to a machine whose
+// harness has not advertised readOnlyRuns. 422 because the machine exists and the
+// request cannot be honoured there — the caller may choose a different one; no
+// session is opened and no run is enqueued when it is returned.
+const ReadOnlyUnsupported = "read_only_unsupported"
+
+func readOnlyUnsupported(targetID string) error {
+	return &zip.HTTPError{
+		Status: http.StatusUnprocessableEntity,
+		Code:   ReadOnlyUnsupported,
+		Msg:    "the machine " + targetID + " does not advertise readOnlyRuns; a read-only run was not enqueued",
+	}
+}
+
+// TargetReadOnly is the capability half of the dispatch gate, asked only for a
+// read-only run. Absent/false means unsupported — never an inference from os, arch
+// or GPUs, and never a fallback to running the run locally.
+func TargetReadOnly(ctx context.Context, org, targetID string) error {
+	sto, org, err := mountedStore(org)
+	if err != nil {
+		return err
+	}
+	t, err := sto.reachable(ctx, org, strings.TrimSpace(targetID))
+	if err != nil {
+		return err // errTargetNotFound or a real DB error
+	}
+	if !t.Spec.ReadOnlyRuns {
+		return readOnlyUnsupported(targetID)
+	}
+	return nil
+}
+
+// Reaches is the exported reachability check, for the agents process's own
+// queue: nil when the caller on ctx may put work on the org's machine targetID,
+// errTargetNotFound when the machine is not there or not theirs to reach.
+func Reaches(ctx context.Context, org, targetID string) error {
+	sto, org, err := mountedStore(org)
+	if err != nil {
+		return err
+	}
+	_, err = sto.reachable(ctx, org, strings.TrimSpace(targetID))
+	return err
+}
+
+// reaches reports whether the person a call acts for may route work to t, see
+// it in a list, or read its load: any member of its org, except in a personal
+// org, where only the machine's owner (or a SuperAdmin) may. Fail-closed: a call
+// that states nobody reaches nothing there.
+func reaches(ctx context.Context, t Target) bool {
+	if !personal(t.Org) || principal.SuperFrom(ctx) {
+		return true
+	}
+	me, err := self(ctx, t.Org)
+	return err == nil && owner(t, me)
+}

@@ -1,0 +1,17 @@
+{
+  "spec_version": "1.0.0",
+  "component": "research/cloud",
+  "version": "1.0.0",
+  "implemented_hips": [
+    { "hip": "0512", "version": "1.0.0", "status": "conformant" },
+    { "hip": "1103", "version": "1.0.0", "status": "conformant" },
+    { "hip": "1145", "version": "1.0.0", "status": "conformant" },
+    { "hip": "1334", "version": "1.0.0", "status": "conformant" },
+    { "hip": "1400", "version": "1.0.0", "status": "conformant" },
+    { "hip": "1401", "version": "1.0.0", "status": "conformant" },
+    { "hip": "1402", "version": "1.0.0", "status": "conformant" },
+    { "hip": "1403", "version": "1.0.0", "status": "conformant" },
+    { "hip": "1404", "version": "1.0.0", "status": "conformant" }
+  ],
+  "capabilities": ["research", "evidence", "evolution", "xp"]
+}

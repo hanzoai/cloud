@@ -1,0 +1,48 @@
+{
+  "$schema": "https://schemas.agentskills.io/discovery/0.2.0/schema.json",
+  "base_url": "https://api.zoo.ngo",
+  "brand": "zoo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://zoolabs.id",
+  "mcp": {
+    "description": "Model Context Protocol over JSON-RPC 2.0 — one POST per message, stateless, protocol revision 2026-07-28. tools/list answers without a credential with one tool per subsystem (its operations in the \"op\" enum) plus \"describe\", which returns one operation's input schema. tools/call names a subsystem tool and carries {\"op\": <operation>, \"input\": <its arguments>}; it takes the same bearer the REST API does, and a call that carries none is answered 401 with a WWW-Authenticate header naming the resource metadata at /.well-known/oauth-protected-resource, which names the authorization server to sign in at. The tool surface is the public contract: the operator's admin product is not offered, and a name that would disclose a secret or mutate an identity is withheld — the list says how many, under _meta.",
+    "method": "POST",
+    "url": "https://api.zoo.ngo/v1/mcp"
+  },
+  "skill_count": 4,
+  "skills": [
+    {
+      "description": "Read link devices: Shows one machine: its accounts, usage and live sessions..",
+      "digest": "sha256:5c2ac57bd73b747a75839f107080b87c84c45cd4c02bfa36fcc7033fec97f5e7",
+      "name": "link_devices",
+      "service": "link",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/link_devices/SKILL.md"
+    },
+    {
+      "description": "Read link link: Lists your linked accounts and the devices they sit on., Reads one linked account..",
+      "digest": "sha256:4b7048bf5ebd75f16f96438ec247d3fefcebe42041cf5e0254d6d1ca448452b8",
+      "name": "link_link",
+      "service": "link",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/link_link/SKILL.md"
+    },
+    {
+      "description": "Read link route: Gets the failover order across your linked accounts..",
+      "digest": "sha256:256d9e64befda21c8d748b166b3a5b75bf47b2de09dd3521e738a09c5e27a1ee",
+      "name": "link_route",
+      "service": "link",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/link_route/SKILL.md"
+    },
+    {
+      "description": "Read link usage: Shows one provider account's own usage dashboard., Breaks down what the gateway routed through each of your accounts., Shows plan consumption and Zoo spend side by side..",
+      "digest": "sha256:9403cbe426bf9bb522c6a5c178b1afbc9372b79360e94da8a8dd6437f881ce6c",
+      "name": "link_usage",
+      "service": "link",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/link_usage/SKILL.md"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

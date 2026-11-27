@@ -1,0 +1,104 @@
+{
+  "$schema": "https://schemas.agentskills.io/discovery/0.2.0/schema.json",
+  "base_url": "https://api.hanzo.ai",
+  "brand": "hanzo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://hanzo.id",
+  "mcp": {
+    "description": "Model Context Protocol over JSON-RPC 2.0 — one POST per message, stateless, protocol revision 2026-07-28. tools/list answers without a credential with one tool per subsystem (its operations in the \"op\" enum) plus \"describe\", which returns one operation's input schema. tools/call names a subsystem tool and carries {\"op\": <operation>, \"input\": <its arguments>}; it takes the same bearer the REST API does, and a call that carries none is answered 401 with a WWW-Authenticate header naming the resource metadata at /.well-known/oauth-protected-resource, which names the authorization server to sign in at. The tool surface is the public contract: the operator's admin product is not offered, and a name that would disclose a secret or mutate an identity is withheld — the list says how many, under _meta.",
+    "method": "POST",
+    "url": "https://api.hanzo.ai/v1/mcp"
+  },
+  "skill_count": 11,
+  "skills": [
+    {
+      "description": "Read cyber approvals: Returns Kai risk-scored action approvals for the caller's org..",
+      "digest": "sha256:d18c528024d9b0d148185e8c4fcfb0cbb2c9cacd4f7eac8e19b1cd9d00e1b339",
+      "name": "cyber_approvals",
+      "service": "cyber",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/cyber_approvals/SKILL.md"
+    },
+    {
+      "description": "Read cyber attack: Projects the org's findings onto MITRE ATT&CK tactics and techniques..",
+      "digest": "sha256:db1d57939e49428c4cd3fa5d17dd9b1d3659dc33ff7a0ade87067e42f8a95452",
+      "name": "cyber_attack",
+      "service": "cyber",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/cyber_attack/SKILL.md"
+    },
+    {
+      "description": "Read cyber coa: Computes prioritized remediation Courses of Action from active findings..",
+      "digest": "sha256:59ca805893787d5864b864fdaad084f382a01d880890402185e7d8a9c54cbeb0",
+      "name": "cyber_coa",
+      "service": "cyber",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/cyber_coa/SKILL.md"
+    },
+    {
+      "description": "Read cyber dashboard: Aggregates engagements, findings, verbatim proof coverage, Kai approvals, and traffic counts for the authenticated org..",
+      "digest": "sha256:cd2e39300471f9d221c0e3968b8588b6fe755d3d4ae406a5df8f39e26bb9cc59",
+      "name": "cyber_dashboard",
+      "service": "cyber",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/cyber_dashboard/SKILL.md"
+    },
+    {
+      "description": "Read cyber engagements: Returns every authorized cyber engagement belonging to the caller's org..",
+      "digest": "sha256:290d618e471ee44a9cbc60f150baa6a9ed559bb0cee6b5edcdb064d972710388",
+      "name": "cyber_engagements",
+      "service": "cyber",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/cyber_engagements/SKILL.md"
+    },
+    {
+      "description": "Read cyber findings: Returns org-scoped findings optionally filtered by engagementId, severity, and status..",
+      "digest": "sha256:d99f4ca1644497ce5280061ee36b4c2ed7bada41c1b042235729cfc6d595293b",
+      "name": "cyber_findings",
+      "service": "cyber",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/cyber_findings/SKILL.md"
+    },
+    {
+      "description": "Read cyber hardening: Evaluates enclave scope enforcement, verbatim proof coverage, and unresolved critical risk..",
+      "digest": "sha256:ebed68458accbd97618bb8b7218d049336860125a9c005d644358a1c6f6a92bf",
+      "name": "cyber_hardening",
+      "service": "cyber",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/cyber_hardening/SKILL.md"
+    },
+    {
+      "description": "Read cyber health: Returns liveness status for the native Hanzo Cyber cloud subsystem..",
+      "digest": "sha256:53e3f3fd56c66599b129bbd4b25fe93087e4e425089f248680e359b28de3ded0",
+      "name": "cyber_health",
+      "service": "cyber",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/cyber_health/SKILL.md"
+    },
+    {
+      "description": "Read cyber intercept: Returns scope and intercept governance rules for the caller's org..",
+      "digest": "sha256:7c2c01e103a9cd03fe006602362d2fd52b54187e9c48ca9fc5060903b9aaec68",
+      "name": "cyber_intercept",
+      "service": "cyber",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/cyber_intercept/SKILL.md"
+    },
+    {
+      "description": "Read cyber tasks: Returns cyber tasks belonging to the caller's org, optionally filtered by engagementId., Returns a task together with its ordered GOAL -> INTENT -> FINDING -> HINT reasoning graph..",
+      "digest": "sha256:e29d048d25050f760e7f8b7e5f548f6568b599cef04db2b1eb840f64d54e463e",
+      "name": "cyber_tasks",
+      "service": "cyber",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/cyber_tasks/SKILL.md"
+    },
+    {
+      "description": "Read cyber traffic: Returns captured HTTP exchanges belonging to the caller's org..",
+      "digest": "sha256:9fc6a7e7d20cc6063e93f8ccf9af5d8af3341ee10f159739388a3a234ef277bb",
+      "name": "cyber_traffic",
+      "service": "cyber",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/cyber_traffic/SKILL.md"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

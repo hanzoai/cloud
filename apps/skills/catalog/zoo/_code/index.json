@@ -1,0 +1,54 @@
+{
+  "$schema": "https://schemas.agentskills.io/discovery/0.2.0/schema.json",
+  "base_url": "https://api.zoo.ngo",
+  "brand": "zoo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://zoolabs.id",
+  "mcp": {
+    "description": "Model Context Protocol over JSON-RPC 2.0 — one POST per message, stateless, protocol revision 2026-07-28. tools/list answers without a credential with one tool per subsystem (its operations in the \"op\" enum) plus \"describe\", which returns one operation's input schema. tools/call names a subsystem tool and carries {\"op\": <operation>, \"input\": <its arguments>}; it takes the same bearer the REST API does, and a call that carries none is answered 401 with a WWW-Authenticate header naming the resource metadata at /.well-known/oauth-protected-resource, which names the authorization server to sign in at. The tool surface is the public contract: the operator's admin product is not offered, and a name that would disclose a secret or mutate an identity is withheld — the list says how many, under _meta.",
+    "method": "POST",
+    "url": "https://api.zoo.ngo/v1/mcp"
+  },
+  "skill_count": 4,
+  "skills": [
+    {
+      "description": "Read code ask: Answers a question about the caller org's code with a CITED answer: retrieval packs grounding context, then the synthesizer writes the answer over exactly those spans, which come back alongside it..",
+      "digest": "sha256:c61d0465f43b005b48131dad3796575f2a092e2fd680498e1145d403ee450fc6",
+      "name": "code_ask",
+      "service": "code",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/code_ask/SKILL.md",
+      "works": [
+        "engineering"
+      ]
+    },
+    {
+      "description": "Read code file: Returns the INDEXED content of one file — read_file over the chunks the search tiers hold, for pulling up code an agent just found..",
+      "digest": "sha256:541b9c7b8121047e6a7eb2dfbd292cbc6b1da0a32b954866d89dc3e4abc44abc",
+      "name": "code_file",
+      "service": "code",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/code_file/SKILL.md"
+    },
+    {
+      "description": "Read code search: Finds code in the caller org's index across three orthogonal retrieval tiers fused by reciprocal-rank fusion: lexical (FTS5 trigram over code-tokenized text), symbolic (real definition and reference edges), and semantic (embedding cosine over AST-boundary chunks",
+      "digest": "sha256:412f25264594eed0cb3f6e12846125ce5abc88f33ba374c61be27478ddb48d51",
+      "name": "code_search",
+      "service": "code",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/code_search/SKILL.md",
+      "works": [
+        "engineering"
+      ]
+    },
+    {
+      "description": "Read code tree: Returns one repository's file structure with a per-file symbol count — get_repo_structure over the org's own index, with no git checkout involved..",
+      "digest": "sha256:50a931bae21fb103f4aed87040f17693330631bc31463d38abcbd06b8f9005b0",
+      "name": "code_tree",
+      "service": "code",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/code_tree/SKILL.md"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

@@ -1,0 +1,72 @@
+{
+  "$schema": "https://schemas.agentskills.io/discovery/0.2.0/schema.json",
+  "base_url": "https://api.lux.network",
+  "brand": "lux",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://lux.id",
+  "mcp": {
+    "description": "Model Context Protocol over JSON-RPC 2.0 — one POST per message, stateless, protocol revision 2026-07-28. tools/list answers without a credential with one tool per subsystem (its operations in the \"op\" enum) plus \"describe\", which returns one operation's input schema. tools/call names a subsystem tool and carries {\"op\": <operation>, \"input\": <its arguments>}; it takes the same bearer the REST API does, and a call that carries none is answered 401 with a WWW-Authenticate header naming the resource metadata at /.well-known/oauth-protected-resource, which names the authorization server to sign in at. The tool surface is the public contract: the operator's admin product is not offered, and a name that would disclose a secret or mutate an identity is withheld — the list says how many, under _meta.",
+    "method": "POST",
+    "url": "https://api.lux.network/v1/mcp"
+  },
+  "skill_count": 7,
+  "skills": [
+    {
+      "description": "Read compute clusters: Returns the caller org's clusters from both sources: the managed clusters projected from Visor's node pools, and the BYO clusters attached to the caller's project..",
+      "digest": "sha256:cb8bc80b5e981d1b4a54bc155408ac78a474fe2037f2f2bd2246c786d6851e83",
+      "name": "compute_clusters",
+      "service": "compute",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/compute_clusters/SKILL.md"
+    },
+    {
+      "description": "Read compute fleet: Returns every compute unit the caller's org has, from every source, each carrying its latest utilization: agent run-targets, the BYO machines that dialed in, attached BYO clusters and Visor-provisioned machines., Returns the caller org's gpu-jobs render queue,",
+      "digest": "sha256:e7761de6be216ec9cb9414dde09fb44ba9a3d46f80a41afabb3faacb6170b42c",
+      "name": "compute_fleet",
+      "service": "compute",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/compute_fleet/SKILL.md"
+    },
+    {
+      "description": "Read compute gpus: Returns one row per physical accelerator the caller's org has, derived from its real GPU machines (the size slug says how many cards a node holds) and from the accelerators BYO workers report through nvidia-smi., Is an HONEST empty surface: Visor exposes no GPU",
+      "digest": "sha256:fd7bc73a76d8b477dca578aecf8dcd253ba6449435161683c0db6f9b95493a43",
+      "name": "compute_gpus",
+      "service": "compute",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/compute_gpus/SKILL.md"
+    },
+    {
+      "description": "Read compute k8s: Lists the org's DOKS clusters (Visor, house account) folded with the org's BYO clusters — ONE fleet cluster view under the unified k8s noun., Returns one cluster's detail: node pools + worker nodes., Returns every DOKS worker node in the org's clusters as a mach",
+      "digest": "sha256:eb494272549b2441e8fbeaed4712060637736d86b0fab54f8f95a4d01c68bd6a",
+      "name": "compute_k8s",
+      "service": "compute",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/compute_k8s/SKILL.md"
+    },
+    {
+      "description": "Read compute machines: Returns every machine the caller's org has — Visor's registry, the live DigitalOcean droplets and the DOKS worker nodes (deduped into one union), plus the BYO machines that dialed in via `hanzo link` (provider \"byo\")., Returns every agent↔machine binding in",
+      "digest": "sha256:2d4b9a6d2f1bfaf21fd7ee3b835674c27dbb9c4d6cfbff48f3af7180290b7310",
+      "name": "compute_machines",
+      "service": "compute",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/compute_machines/SKILL.md"
+    },
+    {
+      "description": "Read compute regions: Lists the regions a machine can be launched in..",
+      "digest": "sha256:7d7a3eed9bb96a7c61c9fa64ba83ebdbd7338f13122b8a1917d9a69e303d319a",
+      "name": "compute_regions",
+      "service": "compute",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/compute_regions/SKILL.md"
+    },
+    {
+      "description": "Read compute sizes: Lists the machine sizes available to launch, with their specifications..",
+      "digest": "sha256:e9991a3e53a689d1425c58c3426f68cb82ce3f67abb300b3ff245387be6c4370",
+      "name": "compute_sizes",
+      "service": "compute",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/compute_sizes/SKILL.md"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

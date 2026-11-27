@@ -4,9 +4,9 @@ package cloud
 //
 // Dictation opens POST /v1/audio/transcript, then pushes pcm16 to
 // /v1/audio/transcript/:id every 256 ms — about four requests a second. The audio
-// floor is sixty a minute, and counting every push would refuse a long dictation
-// partway, which a client reads as the service being gone. The open is counted; the
-// pushes and the close are bounded by the session
+// floor is sixty a minute, and it counted every push: on api.hanzo.ai pushes 56–73
+// of a 90-push probe answered 429, and the client read that as the service being
+// gone. The open is counted; the pushes and the close are bounded by the session
 // itself, and only a session the caller's own credential opened earns that.
 //
 // The session table here stands in for hanzoai/ai's (controllers.TranscriptAdmitted,

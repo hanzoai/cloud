@@ -1,0 +1,296 @@
+package domain
+
+import (
+	"context"
+	"fmt"
+	"strings"
+	"time"
+)
+
+// Offer is a priced availability result: the wholesale cost and the customer sell
+// price (marked up), both in cents. It is what search/availability return and what a
+// register bills against.
+type Offer struct {
+	Domain            string `json:"domain"`            // the name this quote prices
+	Available         bool   `json:"available"`         // whether it can be bought right now
+	Premium           bool   `json:"premium,omitempty"` // whether the registry prices it above the standard rate
+	CostCents         int64  `json:"-"`                 // wholesale (internal — not exposed to customers)
+	PriceCents        int64  `json:"priceCents"`        // sell (first-term registration)
+	RenewalPriceCents int64  `json:"renewalPriceCents"` // sell (renewal)
+	Currency          string `json:"currency"`          // the currency both prices are in
+	TLD               string `json:"tld,omitempty"`     // the top-level domain the name sits under
+}
+
+// quoteFrom prices a registrar search result through the markup.
+func (s *Service) quoteFrom(r SearchResult) Offer {
+	cost := centsOf(r.Price)
+	renewCost := centsOf(r.Renewal)
+	return Offer{
+		Domain:            strings.ToLower(r.Domain),
+		Available:         r.Available,
+		Premium:           r.Premium,
+		CostCents:         cost,
+		PriceCents:        s.cfg.Markup.Sell(cost),
+		RenewalPriceCents: s.cfg.Markup.Sell(renewCost),
+		Currency:          "usd",
+		TLD:               r.TLD,
+	}
+}
+
+// Availability checks exact names and returns priced quotes (availability + pricing).
+func (s *Service) Availability(ctx context.Context, names ...string) ([]Offer, error) {
+	if !s.reg.Configured() {
+		return nil, ErrNotConfigured
+	}
+	found, err := s.reg.Available(ctx, names...)
+	if err != nil {
+		return nil, err
+	}
+	return s.quotes(found), nil
+}
+
+// Search runs a keyword search (with alternate-TLD suggestions) and returns priced
+// quotes. tldFilter (optional) narrows the TLDs.
+func (s *Service) Search(ctx context.Context, keyword string, tldFilter ...string) ([]Offer, error) {
+	if !s.reg.Configured() {
+		return nil, ErrNotConfigured
+	}
+	found, err := s.reg.Search(ctx, keyword, tldFilter...)
+	if err != nil {
+		return nil, err
+	}
+	return s.quotes(found), nil
+}
+
+func (s *Service) quotes(found []SearchResult) []Offer {
+	out := make([]Offer, 0, len(found))
+	for _, r := range found {
+		out = append(out, s.quoteFrom(r))
+	}
+	return out
+}
+
+// RegisterResult is a successful purchase.
+type RegisterResult struct {
+	Holding Holding `json:"record"` // the ownership row this purchase issued
+	Offer   Offer   `json:"quote"`  // the price it was bought at
+}
+
+// Register buys a domain for org: quote → guard → authorize (deposit) → provision the
+// DNS zone → register at the registrar pointing at Hanzo nameservers → capture
+// (charge) → record ownership. The customer is charged ONLY after the registrar
+// confirms — a registrar failure leaves the balance untouched.
+//
+// contacts is optional; when nil the registrar uses the reseller account's default
+// WHOIS contacts. years defaults to 1.
+func (s *Service) Register(ctx context.Context, org, domainName string, years int, contacts *Contacts) (*RegisterResult, error) {
+	if !s.reg.Configured() {
+		return nil, ErrNotConfigured
+	}
+	domainName = strings.ToLower(strings.TrimSpace(domainName))
+	if domainName == "" {
+		return nil, fmt.Errorf("domain: name is required")
+	}
+	if years <= 0 {
+		years = 1
+	}
+
+	// Idempotency guard: never double-buy a name this org already holds.
+	if _, owned, err := s.store.Get(org, domainName); err != nil {
+		return nil, err
+	} else if owned {
+		return nil, ErrAlreadyOwned
+	}
+
+	// 1. Offer — must be purchasable + priced.
+	quotes, err := s.Availability(ctx, domainName)
+	if err != nil {
+		return nil, err
+	}
+	if len(quotes) == 0 {
+		return nil, ErrUnavailable
+	}
+	q := quotes[0]
+	if !q.Available || q.PriceCents <= 0 {
+		return nil, ErrUnavailable
+	}
+
+	// 2. Authorize the customer charge BEFORE spending at the registrar — refuse if the
+	//    prepaid balance can't cover it, so we never buy a domain we can't bill for.
+	if err := s.bill.Authorize(ctx, org, q.PriceCents); err != nil {
+		return nil, err
+	}
+
+	// 3. Provision the authoritative zone in hanzoai/dns and learn which nameservers to
+	//    point the domain at. Best-effort: if the zone service is down we still register
+	//    against the fixed Hanzo nameservers (the zone reconciles later) rather than
+	//    block the purchase.
+	ns, zoneErr := s.zones.EnsureZone(ctx, org, domainName)
+	if zoneErr != nil || len(ns) == 0 {
+		ns = s.cfg.Nameservers
+	}
+
+	// 4. Register at the registrar, born pointing at Hanzo's nameservers. purchasePrice
+	//    caps the wholesale charge at the quoted cost (a price change above it is
+	//    rejected by the registrar). This is the step that debits Hanzo's reseller
+	//    account; the customer is not charged yet.
+	created, err := s.reg.Create(ctx, CreateRequest{
+		Domain:      domainName,
+		Years:       years,
+		Nameservers: ns,
+		Contacts:    contacts,
+		Price:       float64(q.CostCents) / 100,
+	})
+	if err != nil {
+		// The registrar rejected/failed — the customer was NOT charged (no Capture).
+		return nil, fmt.Errorf("domain: registrar create failed: %w", err)
+	}
+
+	// 5. Capture — charge the customer's prepaid wallet now that the domain is theirs.
+	s.bill.Capture(org, q.PriceCents)
+
+	// 6. Holding ownership.
+	rec := Holding{
+		Org:          org,
+		Domain:       domainName,
+		RegisteredAt: time.Now().Unix(),
+		PriceCents:   q.PriceCents,
+		CostCents:    q.CostCents,
+		Nameservers:  ns,
+	}
+	rec.ExpiresAt = created.ExpiresAt
+	if len(created.Nameservers) > 0 {
+		rec.Nameservers = created.Nameservers
+	}
+	rec.Order = created.Order
+	if err := s.store.Put(rec); err != nil {
+		return nil, err
+	}
+	return &RegisterResult{Holding: rec, Offer: q}, nil
+}
+
+// RenewResult is a successful renewal.
+type RenewResult struct {
+	Holding   Holding `json:"record"`    // the ownership row with its new expiry
+	PaidCents int64   `json:"paidCents"` // what this renewal cost, in cents
+}
+
+// Renew extends a domain this org owns: guard ownership → quote renewal → authorize →
+// renew at the registrar → capture → update the record's expiry.
+func (s *Service) Renew(ctx context.Context, org, domainName string, years int) (*RenewResult, error) {
+	if !s.reg.Configured() {
+		return nil, ErrNotConfigured
+	}
+	domainName = strings.ToLower(strings.TrimSpace(domainName))
+	if years <= 0 {
+		years = 1
+	}
+	rec, owned, err := s.store.Get(org, domainName)
+	if err != nil {
+		return nil, err
+	}
+	if !owned {
+		return nil, ErrNotOwned
+	}
+
+	// Offer the renewal (re-check gives the current renewal price).
+	quotes, err := s.Availability(ctx, domainName)
+	var priceCents, costCents int64
+	if err == nil && len(quotes) > 0 {
+		priceCents = quotes[0].RenewalPriceCents
+		costCents = renewalCostFrom(quotes[0])
+	}
+	if priceCents <= 0 {
+		// Fall back to what the customer originally paid so a renewal is never free.
+		priceCents = rec.PriceCents
+		costCents = rec.CostCents
+	}
+
+	if err := s.bill.Authorize(ctx, org, priceCents); err != nil {
+		return nil, err
+	}
+	renewed, err := s.reg.Renew(ctx, RenewRequest{
+		Domain: domainName,
+		Years:  years,
+		Price:  float64(costCents) / 100,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("domain: registrar renew failed: %w", err)
+	}
+	s.bill.Capture(org, priceCents)
+
+	if renewed.ExpiresAt != "" {
+		rec.ExpiresAt = renewed.ExpiresAt
+	}
+	if err := s.store.Put(rec); err != nil {
+		return nil, err
+	}
+	return &RenewResult{Holding: rec, PaidCents: priceCents}, nil
+}
+
+// renewalCostFrom derives the wholesale renewal cost (cents) for a quote. The renewal
+// SELL price already passed through markup; recover a cost floor from it so the
+// registrar price cap is set sanely (never below the known wholesale).
+func renewalCostFrom(q Offer) int64 {
+	if q.CostCents > 0 {
+		return q.CostCents
+	}
+	return q.RenewalPriceCents
+}
+
+// Transfer starts an inbound transfer of a domain the customer owns elsewhere: quote
+// (the transfer price is the registration price) → authorize → create the transfer →
+// capture → record. authCode is the EPP auth code from the losing registrar.
+func (s *Service) Transfer(ctx context.Context, org, domainName, authCode string, years int) (*RegisterResult, error) {
+	if !s.reg.Configured() {
+		return nil, ErrNotConfigured
+	}
+	domainName = strings.ToLower(strings.TrimSpace(domainName))
+	if strings.TrimSpace(authCode) == "" {
+		return nil, fmt.Errorf("domain: transfer requires an auth code")
+	}
+	if years <= 0 {
+		years = 1
+	}
+	quotes, err := s.Availability(ctx, domainName)
+	if err != nil {
+		return nil, err
+	}
+	q := Offer{Currency: "usd", Domain: domainName}
+	if len(quotes) > 0 {
+		q = quotes[0]
+	}
+	if q.PriceCents <= 0 {
+		return nil, ErrUnavailable
+	}
+	if err := s.bill.Authorize(ctx, org, q.PriceCents); err != nil {
+		return nil, err
+	}
+	res, err := s.reg.Transfer(ctx, TransferRequest{
+		Domain: domainName,
+		Auth:   authCode,
+		Years:  years,
+		Price:  float64(q.CostCents) / 100,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("domain: registrar transfer failed: %w", err)
+	}
+	s.bill.Capture(org, q.PriceCents)
+
+	rec := Holding{
+		Org:          org,
+		Domain:       domainName,
+		RegisteredAt: time.Now().Unix(),
+		PriceCents:   q.PriceCents,
+		CostCents:    q.CostCents,
+		Nameservers:  s.cfg.Nameservers,
+		Order:        res.Order,
+	}
+	if err := s.store.Put(rec); err != nil {
+		return nil, err
+	}
+	return &RegisterResult{Holding: rec, Offer: q}, nil
+}
+
+// ListByOrg returns the domains an org holds.
+func (s *Service) ListByOrg(org string) ([]Holding, error) { return s.store.ListByOrg(org) }

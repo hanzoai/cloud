@@ -1,0 +1,26 @@
+{
+  "name": "wallet",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "hanzo.team usage & wallet page \u2014 a small @hanzo/ui@8 React static export, go:embed'd by apps/team and served at /v1/team/billing/ui/.",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build"
+  },
+  "dependencies": {
+    "@hanzo/ui": "^8.27.7",
+    "@hanzogui/config": "8.3.1",
+    "@hanzogui/lucide-icons-2": "8.3.1",
+    "@hanzogui/next-theme": "8.3.1",
+    "@hanzogui/react-native-svg": "8.3.1",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
+    "react-native-web": "^0.21.2"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^6.0.2",
+    "vite": "^8.2.2"
+  },
+  "license": "BSD-3-Clause"
+}

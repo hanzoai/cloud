@@ -1,0 +1,1265 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Hanzo Cloud API",
+    "description": "Package source is the registry of a person's linked Hanzo Dev sources (HIP-1350, slice 1): link, list, read, revoke and heartbeat, served at /v1/sources and as the ZAP service source.v1 from the same typed ops.",
+    "version": "v1"
+  },
+  "servers": [
+    {
+      "url": "https://api.hanzo.ai"
+    }
+  ],
+  "security": [
+    {
+      "bearer": []
+    }
+  ],
+  "tags": [
+    {
+      "name": "machines"
+    }
+  ],
+  "paths": {
+    "/v1/machines": {
+      "get": {
+        "operationId": "get_machines",
+        "summary": "Returns EVERY machine available to the caller in one unified view: the signed-in person's linked desktops/devices (HIP-1350) PLUS the org's cloud compute instances, GPU nodes, and BYO fleet workers.",
+        "description": "Returns EVERY machine available to the caller in one unified view:\nthe signed-in person's linked desktops/devices (HIP-1350) PLUS the org's cloud\ncompute instances, GPU nodes, and BYO fleet workers.",
+        "tags": [
+          "machines"
+        ],
+        "parameters": [
+          {
+            "name": "kind",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/machines.MachineList"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      },
+      "post": {
+        "operationId": "post_machines",
+        "summary": "Links this install to the signed-in person, or refreshes the install that already holds the same device key and answers with its existing id.",
+        "description": "Links this install to the signed-in person, or refreshes the install that\nalready holds the same device key and answers with its existing id. The person\nand org come from the validated token and never from the body; a machine token\nis refused. A person holds at most 25 active sources and may link 10 new ones\nan hour.",
+        "tags": [
+          "machines"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "arch": "arm64",
+                "key": "dGhpcyBpcyBhIDMyIGJ5dGUgZGV2aWNlIGtleSEhISE",
+                "kind": "desktop",
+                "name": "Zach's MacBook",
+                "os": "darwin",
+                "version": "1.8.4",
+                "zap": "https://source.example/zap"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/machines.SourceLink"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/machines.SourceLinked"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/machines/accounts": {
+      "get": {
+        "operationId": "get_machines_accounts",
+        "summary": "Returns the signed-in person's own provider accounts with the route class each may run under: the keys they sealed into KMS, and the logins their linked sources report.",
+        "description": "Returns the signed-in person's own provider accounts with the route\nclass each may run under: the keys they sealed into KMS, and the logins their\nlinked sources report. A key shows a label and fingerprint, never its value. A\nlogin is read-only here and disappears when its source stops reporting it.",
+        "tags": [
+          "machines"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/machines.AccountList"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      },
+      "post": {
+        "operationId": "post_machines_accounts",
+        "summary": "Seals a provider API key into KMS and records a reference to it.",
+        "description": "Seals a provider API key into KMS and records a reference to it.\nKMS keeps the value at kms://orgs/\u003corg\u003e/users/\u003cperson\u003e/providers/\u003cprovider\u003e/\u003cid\u003e;\nthe row keeps that path, the label and a fingerprint, and nothing else. The value\nis in no response, log, trace or audit field, and not even the owner can read it\nback: the gateway resolves it at call time. Only `kind: \"key\"` is accepted, for a\nprovider that takes a key.",
+        "tags": [
+          "machines"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "kind": "key",
+                "label": "work",
+                "provider": "anthropic",
+                "value": "sk-ant-…"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/machines.AccountNew"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/machines.Account"
+                }
+              }
+            },
+            "description": "created"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/machines/accounts/{id}": {
+      "delete": {
+        "operationId": "delete_machines_accounts_by_id",
+        "summary": "Removes one of the signed-in person's own provider keys.",
+        "description": "Removes one of the signed-in person's own provider keys. KMS is\nasked to delete the secret first and the row goes only after it has; if KMS\ncannot, the answer is 502 and the account stays. Another person's id is 404. A\nlogin cannot be deleted here: it goes when the person logs out on its source.",
+        "tags": [
+          "machines"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the account, from the path.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "acct_0123456789abcdef0123456789abcdef"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/machines.AccountDeleted"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/machines/usage": {
+      "get": {
+        "operationId": "get_machines_usage",
+        "summary": "Totals the signed-in person's own reported usage by source, provider, model, day or user between two days, with their latest snapshot per source and provider.",
+        "description": "Totals the signed-in person's own reported usage by source,\nprovider, model, day or user between two days, with their latest snapshot per\nsource and provider. An org admin asking by=user gets every person's totals in\nthe org (key is the person's subject) and nothing else of theirs: no source,\nsnapshot, plan or label of another person is readable, and a SuperAdmin has no\nextra read. For anyone else by=user is their own single row.",
+        "tags": [
+          "machines"
+        ],
+        "parameters": [
+          {
+            "name": "by",
+            "in": "query",
+            "required": false,
+            "description": "By groups the rows: `source`, `provider`, `model`, `day` or `user`.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "provider"
+          },
+          {
+            "name": "from",
+            "in": "query",
+            "required": false,
+            "description": "From is the first day included, YYYY-MM-DD. Optional.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "2026-11-01"
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "required": false,
+            "description": "To is the last day included, YYYY-MM-DD. Optional.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "2026-11-30"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/machines.UsageView"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/machines/{id}": {
+      "delete": {
+        "operationId": "delete_machines_by_id",
+        "summary": "Unlinks one of the signed-in person's own sources and drops its provider state, so nothing routes through it.",
+        "description": "Unlinks one of the signed-in person's own sources and drops its\nprovider state, so nothing routes through it. The act is audited. The source's\nnext heartbeat answers 410 and it forgets the link. Revoking twice is the same\nanswer as once.",
+        "tags": [
+          "machines"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the source, from the path.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "src_0123456789abcdef0123456789abcdef"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/machines.SourceRevoked"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      },
+      "get": {
+        "operationId": "get_machines_by_id",
+        "summary": "Returns one machine by id: checks the caller's linked machines first, then falls back to the org's cloud compute \u0026 BYO fleet machines.",
+        "description": "Returns one machine by id: checks the caller's linked machines first,\nthen falls back to the org's cloud compute \u0026 BYO fleet machines.",
+        "tags": [
+          "machines"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the source, from the path.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/machines.Machine"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/machines/{id}/dispatch": {
+      "post": {
+        "operationId": "post_machines_by_id_dispatch",
+        "summary": "Looks up where a session may run on one of the caller's own linked desktops and takes the lease for it; it is the lookup the /v1/dev execution field calls, and frames then flow from the browser to the desktop, not through cloud.",
+        "description": "Looks up where a session may run on one of the caller's own linked\ndesktops and takes the lease for it; it is the lookup the /v1/dev execution field\ncalls, and frames then flow from the browser to the desktop, not through cloud. It\ngrants only when the caller owns the source (another person's is 404, with no\nadmin or SuperAdmin path), the source is not revoked, is a desktop with a ZAP\nendpoint and a heartbeat in the last 90 seconds, the login instance is `ready`\nand shared, the provider's classes include `desktop`, and no live lease holds the\ninstance (one run per login at a time, 15 minutes). Every grant and refusal is\naudited. A refusal carries `code`: revoked (410), class (403), no_endpoint,\noffline, not_ready, not_shared, busy (409).",
+        "tags": [
+          "machines"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the source, from the path.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "src_0123456789abcdef0123456789abcdef"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "id": "src_0123456789abcdef0123456789abcdef",
+                "instance": "claude-1",
+                "provider": "claude"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/machines.SourceDispatch"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/machines.SourceRoute"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/machines/{id}/dispatch/{lease}": {
+      "delete": {
+        "operationId": "delete_machines_by_id_dispatch_by_lease",
+        "summary": "Ends a run's hold on a login instance, so the next run can start before the lease lapses.",
+        "description": "Ends a run's hold on a login instance, so the next run can start\nbefore the lease lapses. Only the person who holds the lease can release it; any\nother lease or source is 404.",
+        "tags": [
+          "machines"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the source, from the path.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "src_0123456789abcdef0123456789abcdef"
+          },
+          {
+            "name": "lease",
+            "in": "path",
+            "required": true,
+            "description": "Lease is the lease to release, from the path.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "lse_0123456789abcdef0123456789abcdef"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/machines.SourceReleased"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/machines/{id}/heartbeat": {
+      "post": {
+        "operationId": "post_machines_by_id_heartbeat",
+        "summary": "Records that a source is alive and what its providers can do, and answers the interval and usage level.",
+        "description": "Records that a source is alive and what its providers can do, and\nanswers the interval and usage level. The beat is signed by the source's device\nkey, so a stolen token alone cannot impersonate it: a bad or missing signature is\n401. A revoked source is answered 410 and should forget the link. A source is\nonline for 90 seconds after a beat; beats closer than 10 seconds are refused 429.\nProviders are state only and carry no token, email or key material.",
+        "tags": [
+          "machines"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the source, from the path.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "src_0123456789abcdef0123456789abcdef"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "at": "2026-11-20T10:00:00Z",
+                "busy": 0,
+                "id": "src_0123456789abcdef0123456789abcdef",
+                "providers": [
+                  {
+                    "instance": "claude-1",
+                    "kind": "login",
+                    "plan": "max",
+                    "provider": "claude",
+                    "state": "ready"
+                  }
+                ],
+                "sig": "c2lnbmF0dXJl",
+                "version": "1.8.4",
+                "zap": ""
+              },
+              "schema": {
+                "$ref": "#/components/schemas/machines.SourceBeat"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/machines.SourceBeatReply"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "machines.Account": {
+        "properties": {
+          "classes": {
+            "description": "Classes are where it may run: `key`, `desktop` and `local`, from the provider\npolicy. A browser source's logins are `local` only.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "created": {
+            "description": "Created is when the key was sealed, or the login's source was linked, RFC 3339 UTC.",
+            "type": "string"
+          },
+          "fingerprint": {
+            "description": "Fingerprint is the first 8 hex digits of sha256 of a key's value. Keys only.",
+            "type": "string"
+          },
+          "id": {
+            "description": "ID is the account id. A login's is `\u003csource id\u003e:\u003cinstance\u003e`.",
+            "type": "string"
+          },
+          "instance": {
+            "description": "Instance is the login's instance id on that source. Logins only.",
+            "type": "string"
+          },
+          "kind": {
+            "description": "Kind is `key` or `login`.",
+            "type": "string"
+          },
+          "label": {
+            "description": "Label is the name the person gave a key, or the instance of a login.",
+            "type": "string"
+          },
+          "plan": {
+            "description": "Plan is a login's plan label. Logins only.",
+            "type": "string"
+          },
+          "provider": {
+            "description": "Provider is the provider's catalog name, for example `anthropic`.",
+            "type": "string"
+          },
+          "shared": {
+            "description": "Shared is whether the person offered this login to their other surfaces. Logins only.",
+            "type": "boolean"
+          },
+          "sourceId": {
+            "description": "SourceID is the source that reported a login. Logins only.",
+            "type": "string"
+          },
+          "state": {
+            "description": "State is a login's `ready`, `needs_login` or `limited`. Logins only.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "machines.AccountDeleted": {
+        "properties": {
+          "deleted": {
+            "description": "Deleted is true.",
+            "type": "boolean"
+          },
+          "id": {
+            "description": "ID is the account that was removed.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "machines.AccountList": {
+        "properties": {
+          "accounts": {
+            "description": "Accounts are the caller's keys, then the logins their sources report.",
+            "items": {
+              "$ref": "#/components/schemas/machines.Account"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "machines.AccountNew": {
+        "properties": {
+          "kind": {
+            "description": "Kind is `key`. A login cannot be created here: it appears when a source reports it.",
+            "type": "string"
+          },
+          "label": {
+            "description": "Label names the key, up to 64 characters. Required.",
+            "type": "string"
+          },
+          "provider": {
+            "description": "Provider is the provider the key is for, for example `anthropic`. It must be one\nthat takes a key.",
+            "type": "string"
+          },
+          "value": {
+            "description": "Value is the key. It is sealed into KMS and appears in no response, log or audit.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "machines.Incident": {
+        "properties": {
+          "impact": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "machines.Machine": {
+        "properties": {
+          "agent": {
+            "description": "Agent names the cloud Agent bound to this machine, if any.",
+            "type": "string"
+          },
+          "arch": {
+            "description": "Arch is the CPU architecture (`arm64`, `amd64`, etc.).",
+            "type": "string"
+          },
+          "gpu": {
+            "description": "GPU names the accelerator(s) attached to this machine (`H100`, `NVIDIA GB10`).",
+            "type": "string"
+          },
+          "id": {
+            "description": "ID is the machine's identifier (`src_...` for linked machines, org-scoped name/id for cloud compute).",
+            "type": "string"
+          },
+          "kind": {
+            "description": "Kind classifies the machine: `desktop`, `browser`, `cloud_compute`, `gpu`, `byo`, or `bot`.",
+            "type": "string"
+          },
+          "last_seen": {
+            "description": "LastSeen is the last accepted heartbeat, RFC 3339 UTC.",
+            "type": "string"
+          },
+          "linked_at": {
+            "description": "LinkedAt is when the machine was linked or created, RFC 3339 UTC.",
+            "type": "string"
+          },
+          "mem": {
+            "description": "Mem is system RAM rendered for display (`8 GB`, `128 GB`).",
+            "type": "string"
+          },
+          "name": {
+            "description": "Name is the human-readable label for this machine.",
+            "type": "string"
+          },
+          "origin": {
+            "description": "Origin distinguishes where the machine lives: `linked` (personal device), `cloud` (managed cloud compute), or `byo` (fleet worker).",
+            "type": "string"
+          },
+          "os": {
+            "description": "OS is the operating system (`darwin`, `linux`, `windows`, etc.).",
+            "type": "string"
+          },
+          "private_ip": {
+            "description": "PrivateIP is the private VPC IPv4 address for cloud compute machines.",
+            "type": "string"
+          },
+          "provider": {
+            "description": "Provider is the cloud or fleet provider (`digitalocean`, `aws`, `byo`, `local`, etc.).",
+            "type": "string"
+          },
+          "providers": {
+            "description": "Providers is the reported provider state from linked machines.",
+            "items": {
+              "$ref": "#/components/schemas/machines.SourceProvider"
+            },
+            "type": "array"
+          },
+          "public_ip": {
+            "description": "PublicIP is the internet-facing IPv4 address for cloud compute machines.",
+            "type": "string"
+          },
+          "region": {
+            "description": "Region is the cloud region slug (`sfo3`) or `on-prem` / `local`.",
+            "type": "string"
+          },
+          "size": {
+            "description": "Size is the cloud instance size slug (`s-2vcpu-4gb`, `gpu-h100x8-640gb`, `byo-gpu`).",
+            "type": "string"
+          },
+          "state": {
+            "description": "State is normalized availability: `online`, `offline`, or `revoked`.",
+            "type": "string"
+          },
+          "status": {
+            "description": "Status is the raw provider lifecycle status for cloud compute machines (e.g. `running`, `active`, `off`).",
+            "type": "string"
+          },
+          "vcpu": {
+            "description": "Vcpu is logical CPU cores when known.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "version": {
+            "description": "Version is the reported agent/app version for linked machines.",
+            "type": "string"
+          },
+          "zap": {
+            "description": "Zap is the machine's reachable ZAP endpoint (when routable over Hanzo ZAP).",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "machines.MachineList": {
+        "properties": {
+          "machines": {
+            "items": {
+              "$ref": "#/components/schemas/machines.Machine"
+            },
+            "type": "array"
+          },
+          "sources": {
+            "items": {
+              "$ref": "#/components/schemas/machines.Source"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "machines.ProviderStatus": {
+        "properties": {
+          "checkedAt": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "incidents": {
+            "items": {
+              "$ref": "#/components/schemas/machines.Incident"
+            },
+            "type": "array"
+          },
+          "indicator": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "machines.ProviderUsage": {
+        "properties": {
+          "account": {
+            "type": "string"
+          },
+          "credits": {
+            "$ref": "#/components/schemas/machines.UsageCredits"
+          },
+          "error": {
+            "type": "string"
+          },
+          "fetchedAt": {
+            "type": "string"
+          },
+          "plan": {
+            "type": "string"
+          },
+          "provider": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string"
+          },
+          "sourceId": {
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/machines.ProviderStatus"
+          },
+          "windows": {
+            "items": {
+              "$ref": "#/components/schemas/machines.UsageWindow"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "machines.Source": {
+        "properties": {
+          "arch": {
+            "description": "Arch is the CPU architecture the install reported.",
+            "type": "string"
+          },
+          "id": {
+            "description": "ID is the source's id, `src_` and 32 hex digits.",
+            "type": "string"
+          },
+          "kind": {
+            "description": "Kind is `desktop` (an installed Dev app) or `browser` (the Hanzo extension).",
+            "type": "string"
+          },
+          "last_seen": {
+            "description": "LastSeen is the last accepted heartbeat, RFC 3339 UTC. Absent before the first.",
+            "type": "string"
+          },
+          "linked_at": {
+            "description": "LinkedAt is when the source was linked, RFC 3339 UTC.",
+            "type": "string"
+          },
+          "name": {
+            "description": "Name is the label the person gave this install.",
+            "type": "string"
+          },
+          "os": {
+            "description": "OS is the operating system the install reported.",
+            "type": "string"
+          },
+          "providers": {
+            "description": "Providers is the provider state from the last heartbeat.",
+            "items": {
+              "$ref": "#/components/schemas/machines.SourceProvider"
+            },
+            "type": "array"
+          },
+          "state": {
+            "description": "State is `online` (a heartbeat within 90 seconds), `offline`, or `revoked`.",
+            "type": "string"
+          },
+          "version": {
+            "description": "Version is the Dev app version, as of the last link or heartbeat.",
+            "type": "string"
+          },
+          "zap": {
+            "description": "Zap is the source's reachable ZAP endpoint. Absent when it has none, in\nwhich case it is registered and not routable.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "machines.SourceBeat": {
+        "properties": {
+          "at": {
+            "description": "At is when the source made the beat, RFC 3339. It must be within five\nminutes of the server clock and newer than the last accepted beat.",
+            "type": "string"
+          },
+          "busy": {
+            "description": "Busy is how many runs the source is executing.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "id": {
+            "description": "ID is the source, from the path.",
+            "type": "string"
+          },
+          "providers": {
+            "description": "Providers is the state of each provider instance on the source, replacing\nthe last set. State only; at most 32.",
+            "items": {
+              "$ref": "#/components/schemas/machines.SourceProvider"
+            },
+            "type": "array"
+          },
+          "sig": {
+            "description": "Sig is the ed25519 signature by the device key over the beat, unpadded base64url.\nThe signed message is `hanzo-source-heartbeat/1`, then one line each (LF\nterminated) for id, at, version, zap, busy, and per provider in order\n`provider,instance,kind,state,plan,shared` (shared as `true` or `false`).",
+            "type": "string"
+          },
+          "version": {
+            "description": "Version is the Dev app version now.",
+            "type": "string"
+          },
+          "zap": {
+            "description": "Zap is the source's reachable ZAP endpoint now. Empty clears it.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "machines.SourceBeatReply": {
+        "properties": {
+          "interval": {
+            "description": "Interval is the heartbeat period in seconds.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "level": {
+            "description": "Level is the usage level the person chose.",
+            "type": "string"
+          },
+          "revoked": {
+            "description": "Revoked is false: a revoked source is answered 410 instead.",
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
+      "machines.SourceDispatch": {
+        "properties": {
+          "id": {
+            "description": "ID is the source, from the path.",
+            "type": "string"
+          },
+          "instance": {
+            "description": "Instance is the login's instance id on the source, for example `claude-1`.",
+            "type": "string"
+          },
+          "provider": {
+            "description": "Provider is the provider the login is for, for example `claude`.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "machines.SourceLink": {
+        "properties": {
+          "arch": {
+            "description": "Arch is the CPU architecture, for example `arm64`. Required, up to 64 characters.",
+            "type": "string"
+          },
+          "key": {
+            "description": "Key is the install's own ed25519 public device key, 32 bytes as unpadded\nbase64url. Heartbeats are signed with its private half. Required.",
+            "type": "string"
+          },
+          "kind": {
+            "description": "Kind is `desktop` or `browser`. Required, and fixed once linked: relinking the\nsame key with another kind is a 409.",
+            "type": "string"
+          },
+          "name": {
+            "description": "Name is the label to show for this install, up to 128 characters. Required.",
+            "type": "string"
+          },
+          "os": {
+            "description": "OS is the operating system, for example `darwin`. Required, up to 64 characters.",
+            "type": "string"
+          },
+          "version": {
+            "description": "Version is the Dev app version. Required, up to 64 characters.",
+            "type": "string"
+          },
+          "zap": {
+            "description": "Zap is the install's reachable ZAP endpoint, an https or wss URL up to 512\ncharacters. Optional: without it the source is registered and not routable.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "machines.SourceLinked": {
+        "properties": {
+          "id": {
+            "description": "ID is the source's id. Relinking the same device key returns the same id.",
+            "type": "string"
+          },
+          "interval": {
+            "description": "Interval is the heartbeat period in seconds.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "level": {
+            "description": "Level is the usage level the person chose: `metadata`.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "machines.SourceProvider": {
+        "properties": {
+          "instance": {
+            "description": "Instance names this login or key on the source, for example `claude-1`.",
+            "type": "string"
+          },
+          "kind": {
+            "description": "Kind is `login` (a subscription session that stays on the source) or `key`.",
+            "type": "string"
+          },
+          "plan": {
+            "description": "Plan is the plan label the provider reports, for example `max`. May be empty.",
+            "type": "string"
+          },
+          "provider": {
+            "description": "Provider is the provider's catalog name, for example `claude`.",
+            "type": "string"
+          },
+          "shared": {
+            "description": "Shared is the person's local choice to offer this login to their other surfaces\n(default off). It is reported, never decided here.",
+            "type": "boolean"
+          },
+          "state": {
+            "description": "State is `ready`, `needs_login` or `limited`.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "machines.SourceReleased": {
+        "properties": {
+          "lease": {
+            "description": "Lease is the lease that was released.",
+            "type": "string"
+          },
+          "released": {
+            "description": "Released is true.",
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
+      "machines.SourceRevoked": {
+        "properties": {
+          "id": {
+            "description": "ID is the source that was revoked.",
+            "type": "string"
+          },
+          "revoked": {
+            "description": "Revoked is true.",
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
+      "machines.SourceRoute": {
+        "properties": {
+          "expires": {
+            "description": "Expires is when the lease lapses by itself, RFC 3339 UTC. 15 minutes from the grant.",
+            "type": "string"
+          },
+          "instance": {
+            "description": "Instance is the login instance granted.",
+            "type": "string"
+          },
+          "lease": {
+            "description": "Lease is the hold on the instance for one run; release it when the run ends.",
+            "type": "string"
+          },
+          "provider": {
+            "description": "Provider is the provider granted.",
+            "type": "string"
+          },
+          "zap": {
+            "description": "Zap is the source's ZAP endpoint, used exactly as given by the machine runtime.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "machines.UsageCredits": {
+        "properties": {
+          "balance": {
+            "format": "double",
+            "type": "number"
+          },
+          "currency": {
+            "type": "string"
+          },
+          "limit": {
+            "format": "double",
+            "type": "number"
+          },
+          "spent": {
+            "format": "double",
+            "type": "number"
+          }
+        },
+        "type": "object"
+      },
+      "machines.UsageRow": {
+        "properties": {
+          "cacheTokens": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "costUsd": {
+            "format": "double",
+            "type": "number"
+          },
+          "inputTokens": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "key": {
+            "description": "Key is the source id, provider, model, day (YYYY-MM-DD) or user subject the row groups by.",
+            "type": "string"
+          },
+          "outputTokens": {
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "machines.UsageView": {
+        "properties": {
+          "rows": {
+            "description": "Rows are the totals per key.",
+            "items": {
+              "$ref": "#/components/schemas/machines.UsageRow"
+            },
+            "type": "array"
+          },
+          "snapshots": {
+            "description": "Snapshots are the caller's own latest snapshot per source and provider.",
+            "items": {
+              "$ref": "#/components/schemas/machines.ProviderUsage"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "machines.UsageWindow": {
+        "properties": {
+          "kind": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "resetsAt": {
+            "type": "string"
+          },
+          "usedPercent": {
+            "format": "double",
+            "type": "number"
+          },
+          "windowMinutes": {
+            "format": "double",
+            "type": "number"
+          }
+        },
+        "type": "object"
+      },
+      "problem-details": {
+        "description": "An RFC 9457 problem document.",
+        "properties": {
+          "code": {
+            "description": "A stable token a client can branch on, when the refusal names one.",
+            "type": "string"
+          },
+          "detail": {
+            "description": "What was refused, for a person to read.",
+            "type": "string"
+          },
+          "status": {
+            "description": "The HTTP status.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "title": {
+            "description": "The status's reason phrase.",
+            "type": "string"
+          },
+          "type": {
+            "description": "about:blank",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "status",
+          "detail"
+        ],
+        "type": "object"
+      }
+    },
+    "securitySchemes": {
+      "bearer": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "The caller's credential, sent as `Authorization: Bearer \u003ctoken\u003e`. It is either an access token minted by Hanzo IAM or an API key (pk-/sk-). X-Authorization, and HTTP Basic carrying the token as the password, are accepted spellings of the same header for clients that cannot set Authorization; a browser presents the session cookie instead. Every operation requires it unless it says `security: []`."
+      }
+    }
+  }
+}

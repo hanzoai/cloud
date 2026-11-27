@@ -1,0 +1,635 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Hanzo Cloud API",
+    "description": "Package kms is secret custody: your org's secrets sealed at rest, plus threshold signing.",
+    "version": "v1"
+  },
+  "servers": [
+    {
+      "url": "https://api.hanzo.ai"
+    }
+  ],
+  "security": [
+    {
+      "bearer": []
+    }
+  ],
+  "tags": [
+    {
+      "name": "kms"
+    }
+  ],
+  "paths": {
+    "/v1/kms/auth/login": {
+      "post": {
+        "operationId": "post_kms_auth_login",
+        "summary": "Exchanges a machine credential for an IAM bearer token.",
+        "description": "Exchanges a machine credential for an IAM bearer token.\n\nTakes a tenant's machine credential — a client id and client secret — and\nreturns an owner-scoped IAM access token with its lifetime, which is the\nbearer the caller then carries on the org-scoped secret operations.\n\nIt is deliberately public and unauthenticated, because it IS the credential\nexchange and runs before any principal exists. That makes it the one route in\nthis subsystem rate-limited PER SOURCE IP, keyed on the real TCP peer rather\nthan on any caller-supplied header, and body-capped in the same place.\n\nThe submitted secret is never logged and never echoed, and failures collapse\nto one clean status with no upstream detail: 401 when the credential does not\nauthenticate, 502 when the identity provider is unreachable, 503 when no\nissuer is configured. That is on purpose — a richer error would be a validity\noracle for guessed credentials.",
+        "tags": [
+          "kms"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "clientId": "kms-operator",
+                "clientSecret": "…"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/kms.kmsLogin"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/kms.kmsToken"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "security": [],
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/kms/config": {
+      "get": {
+        "operationId": "get_kms_config",
+        "summary": "Returns the runtime configuration for the KMS console.",
+        "description": "Returns the runtime configuration for the KMS console.\n\nWhat the console needs before anyone has signed in: the brand, the OIDC issuer\nit authenticates against, the API base for this subsystem and the path of the\nlogin exchange.\n\nPublic on purpose, and it holds nothing sensitive — it is deliberately kept\nunder this subsystem's own namespace rather than under an admin prefix, so a\ngateway that admin-gates the admin routes cannot break the console's\nlegitimate pre-login fetch.",
+        "tags": [
+          "kms"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/kms.kmsConfig"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "security": [],
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/kms/health": {
+      "get": {
+        "operationId": "get_kms_health",
+        "summary": "Reports whether this broker can actually serve secrets.",
+        "description": "Reports whether this broker can actually serve secrets.\n\nA real readiness probe, not a liveness stub: 200 only when the store is open\nAND a master key is configured, with `signing` reporting whether signing keys\nare set up too. Anything less answers 503 with `ready:false` and the reason —\nno in-process store, or no master key — which are exactly the two states in\nwhich the secret operations refuse.\n\nNot token-gated, because the platform must be able to probe it without a\ncredential. It reports the broker's configuration state only; no secret, no\nkey material and no tenant name appears in it.",
+        "tags": [
+          "kms"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/kms.kmsHealth"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/kms.kmsHealth"
+                }
+              }
+            },
+            "description": "service unavailable"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "security": [],
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/kms/secrets": {
+      "get": {
+        "operationId": "get_kms_secrets",
+        "summary": "Lists the secrets your org holds, without their values.",
+        "description": "Lists the secrets your org holds, without their values.\n\nReturns the METADATA of the caller's own secrets: each one's name, path,\nenvironment and sealing scheme. No value and no ciphertext is included — this\noperation exists to enumerate what is held, and reading a value is a separate,\nper-secret call.\n\nScoped to the caller's own org and nothing else, structurally: there is no org\nin the path, the store root is derived from the validated org claim, and a\ncaller therefore has no way to name another tenant's namespace. `path` narrows\nto a subpath and `env` selects the environment; both are also accepted under\nthe operator's spellings, `secretPath` and `environment`. An omitted `env`\nmeans every environment and an omitted `path` means the whole org, because a\ndefault here reported a populated store as empty.\n\nWho sees what: a SuperAdmin holding an access token (audited) sees every name,\nand so does an admin of the org holding their own access token, outside the\nbrand and platform orgs, whose stores are the platform's. Any other caller sees\nonly the names a declared grant lets it read or write, and is refused with a 403\nwhen none of its grants lies inside the subtree asked about. Membership alone\nshows nothing.\n\nAdmission is fail-closed and in order: a validated member, an org that is a\nDNS-1123 label, a store holding a master key, well-formed input, then who may\nlist — 403, 400, 503, 400 and 403 respectively, all decided before any record\nis touched.",
+        "tags": [
+          "kms"
+        ],
+        "parameters": [
+          {
+            "name": "env",
+            "in": "query",
+            "required": false,
+            "description": "Env selects the environment, which is part of a secret's storage key.\nOMITTED means EVERY environment — this is the enumeration surface, so it\nmust be able to answer \"what is in here\" without being told where to look.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "environment",
+            "in": "query",
+            "required": false,
+            "description": "Environment is the KMS operator's spelling of Env, accepted so one caller\nneed not learn the other's vocabulary. Env wins when both are sent.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "path",
+            "in": "query",
+            "required": false,
+            "description": "Path narrows the listing to one subtree beneath the caller's org root, as\na `/`-separated path such as `/ci`. OMITTED means the whole org.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "secretPath",
+            "in": "query",
+            "required": false,
+            "description": "SecretPath is the KMS operator's spelling of Path. Path wins when both are\nsent.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/kms.kmsSecrets"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      },
+      "post": {
+        "operationId": "post_kms_secrets",
+        "summary": "Stores or replaces one secret in your org.",
+        "description": "Stores or replaces one secret in your org.\n\nUpserts one secret under the caller's own org. The value is sealed before it\nis written — a fresh per-secret data key, itself wrapped by the master key —\nso plaintext never reaches disk. The receipt confirms the name and environment\nthat were written and does not echo the value.\n\n`env` is REQUIRED on a write and has no default, which is the rule most easily\ngot wrong here: reads and deletes still fall back to the default environment\nfor older callers, but a write must not, because the environment is part of\nthe storage key. A silently defaulted write lands in a bucket the readers that\nresolve project, environment and path never look in, and the stale value keeps\nbeing served — so the write fails loudly instead.\n\n`name` is required, `path` is an optional subpath beneath the org root, and\nthe org is taken from the validated claim rather than the body. A `path` that\nstarts with `/orgs/` is refused with a 400 that names where it would have\nlanded: the root is already `/orgs/\u003corg\u003e`, so `/orgs/hanzo` written in org\nadmin is stored at `/orgs/admin/orgs/hanzo`, which no reader of org hanzo\nlooks in. The org is chosen with the credential (the CLI's `--as`).\n\nOpens only for SuperAdmin holding an access token, audited, or for a holder\na declared WRITE grant covers at this exact path, key and environment. Org\nadmin confers nothing here. Fail-closed admission, in order: a validated\nmember, well-formed org, master key present, well-formed input, then the\ngrant — 401/403, 400, 503, 400 and 403, all decided before any record is\ntouched.\n\nA value this deployment seals on the org's behalf — an MCP server's\ncredential, a wallet's signing key, a delivery provider's token — is written\nby the app that holds it, through that app's own operation, and is never\nreplaced here for membership or org admin, whatever the grant declaration\nsays about enforcement.",
+        "tags": [
+          "kms"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "env": "prod",
+                "name": "deploy-token",
+                "path": "/ci",
+                "value": "s3cr3t"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/kms.kmsPut"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/kms.kmsStored"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/kms/secrets/{wildcard1}": {
+      "delete": {
+        "operationId": "delete_kms_secrets_by_wildcard1",
+        "summary": "Removes one secret from your org.",
+        "description": "Removes one secret from your org.\n\nForgets one secret belonging to the caller's own org and confirms the name and\nenvironment that were removed. Deleting a secret that is not there is a 404,\nnot a silent success, so a caller can tell a real deletion from a typo.\n\n`secret` is the coordinate beneath the caller's org root, subpath and name\ntogether, and over HTTP it is the trailing path itself. `env` selects the\nenvironment and falls back to the default when omitted. The org comes from the\nvalidated claim, never from the request.\n\nA delete is a WRITE to the grant rule, like the put: destroying a secret is as\nconsequential as replacing it, and a credential distributed to READ one must\nnot be able to remove it. It opens only for SuperAdmin holding an access\ntoken, audited, or for a holder a declared WRITE grant covers. Fail-closed\nadmission, in order: a validated member, well-formed org, master key present,\nwell-formed address, then the grant — 401/403, 400, 503, 400 and 403, all\ndecided before any record is touched.\n\nA value this deployment seals on the org's behalf is removed by the app that\nholds it, and never here for membership or org admin, whatever the grant\ndeclaration says about enforcement: deleting a wallet's signing key or an MCP\nserver's credential destroys what the app acts with.",
+        "tags": [
+          "kms"
+        ],
+        "parameters": [
+          {
+            "name": "wildcard1",
+            "in": "path",
+            "required": true,
+            "description": "Secret is the coordinate beneath the caller's own org root: an optional\n`/`-separated subpath and then the name, such as `ci/deploy/token`. Over\nHTTP it is the trailing path itself, and the trailing path WINS over any\nother spelling sent with it. There is no org in it — the tenant comes from\nthe validated claim — so another tenant's secret is not merely refused, it\nis unnameable. OMITTED is refused with a 400: there is no secret named\n\"everything\", and a blank address must not read as one.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "env",
+            "in": "query",
+            "required": false,
+            "description": "Env selects the environment to resolve the secret in. It is part of the\nstorage key, so one name in two environments is two secrets. OMITTED means\nthe `default` environment — where a WRITE refuses to default, because a\nmisplaced write strands a value no reader looks for, a read or a delete\naimed at the wrong environment simply answers 404 and the caller learns.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "prod"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/kms.kmsRemoved"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      },
+      "get": {
+        "operationId": "get_kms_secrets_by_wildcard1",
+        "summary": "Reads one secret's value from your org.",
+        "description": "Reads one secret's value from your org.\n\nOpens one sealed secret belonging to the caller's own org and returns its\nvalue, with the name and environment it was resolved under. This is the\nbroker's purpose, and the response body is the ONLY place the value appears —\nit is not logged, and it is never carried in an error.\n\n`secret` is the coordinate beneath the caller's org root, subpath and name\ntogether, and over HTTP it is the trailing path itself. `env` selects the\nenvironment and falls back to the default when omitted. A secret that is not\nthere is a plain 404 that names nothing about the store.\n\nScoped to the caller's own org and nothing else: there is no org in the\naddress, so another tenant's secret is not merely refused, it is unnameable.\nWithin that org the value opens only for SuperAdmin holding an access token,\naudited, or for a holder a declared READ grant covers at this exact path, key\nand environment; membership and org admin alone open nothing. Admission is\nfail-closed and in order — a validated member, an org that is a DNS-1123\nlabel, a store holding a master key, a well-formed address, then the grant —\n401/403, 400, 503, 400 and 403, all decided before any record is touched, so\na refused caller learns nothing about whether the secret exists.\n\nA value this deployment seals on the org's behalf — an MCP server's\ncredential, a repository's environment secret, a connected account's token —\nis read by the app that sealed it, and never opens here for membership or org\nadmin, whatever the grant declaration says about enforcement. A deployed\napp's or a validator's own folder also opens for the org's KMS-sync identity,\nwhich projects it into the org's namespace.",
+        "tags": [
+          "kms"
+        ],
+        "parameters": [
+          {
+            "name": "wildcard1",
+            "in": "path",
+            "required": true,
+            "description": "Secret is the coordinate beneath the caller's own org root: an optional\n`/`-separated subpath and then the name, such as `ci/deploy/token`. Over\nHTTP it is the trailing path itself, and the trailing path WINS over any\nother spelling sent with it. There is no org in it — the tenant comes from\nthe validated claim — so another tenant's secret is not merely refused, it\nis unnameable. OMITTED is refused with a 400: there is no secret named\n\"everything\", and a blank address must not read as one.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "env",
+            "in": "query",
+            "required": false,
+            "description": "Env selects the environment to resolve the secret in. It is part of the\nstorage key, so one name in two environments is two secrets. OMITTED means\nthe `default` environment — where a WRITE refuses to default, because a\nmisplaced write strands a value no reader looks for, a read or a delete\naimed at the wrong environment simply answers 404 and the caller learns.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "prod"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/kms.kmsSecret"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "kms.SecretMeta": {
+        "properties": {
+          "env": {
+            "description": "Env is the environment the secret belongs to. It is part of the storage\nkey, so the same name in two environments is two secrets.",
+            "type": "string"
+          },
+          "name": {
+            "description": "Name is the secret's name within its path and environment.",
+            "type": "string"
+          },
+          "path": {
+            "description": "Path is the subpath the secret is stored under, beneath the org root.",
+            "type": "string"
+          },
+          "scheme": {
+            "description": "Scheme names how the value is sealed at rest, so a caller can tell a\nmigrated record from a current one without opening it.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "kms.kmsConfig": {
+        "properties": {
+          "apiBase": {
+            "description": "APIBase is this subsystem's own prefix, `/v1/kms`.",
+            "type": "string"
+          },
+          "brand": {
+            "description": "Brand is the deployment's brand, so the console renders as the right\nproduct.",
+            "type": "string"
+          },
+          "issuer": {
+            "description": "Issuer is the OIDC issuer the console authenticates against.",
+            "type": "string"
+          },
+          "loginPath": {
+            "description": "LoginPath is the credential exchange's address.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "kms.kmsHealth": {
+        "properties": {
+          "audit": {
+            "description": "Audit is the state of the audit trail every access is recorded to: `ok`,\n`failing` when it did not take the last record, or `absent` when this\nprocess has none. Every access is refused in the last two. Absent from the\nanswer when there is no in-process client to audit.",
+            "type": "string"
+          },
+          "enforcing": {
+            "description": "Enforcing is whether a secret value the declaration in force does not\ngrant is refused. False while it says `enforce: false` and while none has\nloaded; every such value is then logged and audited as would-deny.",
+            "type": "boolean"
+          },
+          "error": {
+            "description": "Error is the honest reason readiness is false: no in-process KMS client,\nor no master key. Absent when ready.",
+            "type": "string"
+          },
+          "policy": {
+            "description": "Policy is the sha256 of the grant declaration in force, so a probe can\nprove which one is live. Absent when none has ever loaded, which measures:\nthe rule each caller had before still decides.",
+            "type": "string"
+          },
+          "ready": {
+            "description": "Ready is whether a secret operation would actually succeed right now.\nThese are exactly the states in which the secret operations refuse.",
+            "type": "boolean"
+          },
+          "refused": {
+            "description": "Refused is what the MOUNTED declaration reads as — its sha256, or \"absent\"\nor \"unreadable\" — when it is not the one in force: a document cloud refused\nto parse, or a mount that went away. The declaration in force stays, so a\nbad edit changes nothing, and this is where it shows.",
+            "type": "string"
+          },
+          "service": {
+            "description": "Service names the subsystem answering, `kms`.",
+            "type": "string"
+          },
+          "signing": {
+            "description": "Signing reports whether signing keys are configured. Absent when there is\nno in-process client to ask.",
+            "type": "boolean"
+          },
+          "status": {
+            "description": "Status is `ok` or `degraded`, the one-word form of Ready.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "kms.kmsLogin": {
+        "properties": {
+          "clientId": {
+            "description": "ClientID is the machine identity's id, as IAM issued it.",
+            "type": "string"
+          },
+          "clientSecret": {
+            "description": "ClientSecret is that identity's secret. It is never logged, never echoed,\nand never carried in an error.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "kms.kmsPut": {
+        "properties": {
+          "env": {
+            "description": "Env is the environment to write under. REQUIRED, with no default: it is\npart of the storage key, so a silently defaulted write lands in a bucket\nthe readers that resolve project, environment and path never look in, and\nthe stale value keeps being served.",
+            "type": "string"
+          },
+          "name": {
+            "description": "Name is the secret's name. Required.",
+            "type": "string"
+          },
+          "path": {
+            "description": "Path is an optional subpath beneath the org root, e.g. \"/ci\". It never\nnames an org: the root is already `/orgs/\u003corg\u003e`, taken from the\ncredential, so a path that starts with `/orgs/` is refused rather than\nstored at `/orgs/\u003corg\u003e/orgs/…`.",
+            "type": "string"
+          },
+          "value": {
+            "description": "Value is the secret itself. It is sealed under a fresh per-secret data key\nbefore storage, so plaintext never reaches disk, and it is never echoed\nback, logged, or carried in an error.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "kms.kmsRemoved": {
+        "properties": {
+          "deleted": {
+            "description": "Deleted is true; a delete confirms by not failing.",
+            "type": "boolean"
+          },
+          "env": {
+            "description": "Env is the environment the secret was removed from.",
+            "type": "string"
+          },
+          "name": {
+            "description": "Name is the secret's name.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "kms.kmsSecret": {
+        "properties": {
+          "env": {
+            "description": "Env is the environment the value was resolved under.",
+            "type": "string"
+          },
+          "name": {
+            "description": "Name is the secret's name.",
+            "type": "string"
+          },
+          "value": {
+            "description": "Value is the opened plaintext. This body is the ONLY place it appears.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "kms.kmsSecrets": {
+        "properties": {
+          "names": {
+            "description": "Names is the same listing reduced to bare names, which is the shape the\nKMS operator reads. Both are emitted so either consumer keeps working.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "secrets": {
+            "description": "Secrets are the descriptors: name, path, environment and sealing scheme.\nNo value and no ciphertext appears here.",
+            "items": {
+              "$ref": "#/components/schemas/kms.SecretMeta"
+            },
+            "type": "array"
+          },
+          "total": {
+            "description": "Total is how many descriptors this listing carries.",
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "kms.kmsStored": {
+        "properties": {
+          "env": {
+            "description": "Env is the environment the secret was written under.",
+            "type": "string"
+          },
+          "name": {
+            "description": "Name is the secret's name.",
+            "type": "string"
+          },
+          "stored": {
+            "description": "Stored is true; a write confirms by not failing.",
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
+      "kms.kmsToken": {
+        "properties": {
+          "accessToken": {
+            "description": "AccessToken is IAM's own JWT, verbatim. Its `owner` claim scopes it to\nexactly one org, which is what every secret operation then reads.",
+            "type": "string"
+          },
+          "expiresIn": {
+            "description": "ExpiresIn is the token's lifetime in seconds, as IAM reported it.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "tokenType": {
+            "description": "TokenType is `Bearer`.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "problem-details": {
+        "description": "An RFC 9457 problem document.",
+        "properties": {
+          "code": {
+            "description": "A stable token a client can branch on, when the refusal names one.",
+            "type": "string"
+          },
+          "detail": {
+            "description": "What was refused, for a person to read.",
+            "type": "string"
+          },
+          "status": {
+            "description": "The HTTP status.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "title": {
+            "description": "The status's reason phrase.",
+            "type": "string"
+          },
+          "type": {
+            "description": "about:blank",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "status",
+          "detail"
+        ],
+        "type": "object"
+      }
+    },
+    "securitySchemes": {
+      "bearer": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "The caller's credential, sent as `Authorization: Bearer \u003ctoken\u003e`. It is either an access token minted by Hanzo IAM or an API key (pk-/sk-). X-Authorization, and HTTP Basic carrying the token as the password, are accepted spellings of the same header for clients that cannot set Authorization; a browser presents the session cookie instead. Every operation requires it unless it says `security: []`."
+      }
+    }
+  }
+}

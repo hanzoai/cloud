@@ -21,8 +21,8 @@ import (
 // 403s a server-side loopback POST with edge error 1006 — so an in-cluster
 // exchange against the public issuer fails and whatever depended on it (the KMS
 // login broker, AI M2M minting, per-tenant identity provisioning) silently stays
-// down: an in-cluster POST to the public issuer host can be refused where the
-// in-cluster service address answers.
+// down. Measured: an in-cluster POST to https://hanzo.id/... answers 403,
+// http://iam.hanzo.svc/... 200.
 //
 // Precedence: the in-cluster IAM service base (IAM_URL — already wired for
 // JWKS), then the public issuer as a last resort (single-process / no
@@ -44,13 +44,13 @@ func BaseURL(publicIssuer string) string {
 // file's IAMIssuer() and LoadConfig (config.go) — go through it, so the process
 // cannot hold two answers to "which IAM signs my tokens".
 //
-// LoadConfig applied the brand fallback and this file did not, so on any
-// deployment that let the brand supply the issuer — the documented white-label
-// path, and how lux/zoo/pars are meant to run — Config.IAMIssuer was
-// "https://lux.id" while IAMIssuer() was "". Empty is not a harmless
-// disagreement here: it flows to IAMBase(), which is what the sk- API key
-// resolver dials, and auth_apikey.go treats an empty base as "unresolved key"
-// and returns nil — which middleware_identity.go reads as ANONYMOUS. Every
+// It used to be two answers. LoadConfig applied the brand fallback and this file
+// did not, so on any deployment that let the brand supply the issuer — the
+// documented white-label path, and how lux/zoo/pars are meant to run —
+// Config.IAMIssuer was "https://lux.id" while IAMIssuer() was "". Empty is not a
+// harmless disagreement here: it flows to IAMBase(), which is what the sk- API
+// key resolver dials, and auth_apikey.go treats an empty base as "unresolved
+// key" and returns nil — which middleware_identity.go reads as ANONYMOUS. Every
 // API-key request on the fleet would authenticate as nobody, with no error and
 // no log line, while the JWT boundary kept working perfectly.
 //

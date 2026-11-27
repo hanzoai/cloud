@@ -1,0 +1,2374 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Hanzo Cloud API",
+    "description": "Package tax is how companies formed on Hanzo exchange W-9s, W-8s and 1099s with each other, from the payments that moved between them on Hanzo's rails.",
+    "version": "v1"
+  },
+  "servers": [
+    {
+      "url": "https://api.hanzo.ai"
+    }
+  ],
+  "security": [
+    {
+      "bearer": []
+    }
+  ],
+  "tags": [
+    {
+      "name": "tax"
+    }
+  ],
+  "paths": {
+    "/v1/tax/filings": {
+      "get": {
+        "operationId": "get_tax_filings",
+        "summary": "Lists the caller org's IRS return exports and where each stands, without their files.",
+        "description": "Lists the caller org's IRS return exports and where each stands, without their\nfiles. Org admins only.",
+        "tags": [
+          "tax"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/tax.filingList"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      },
+      "post": {
+        "operationId": "post_tax_filings",
+        "summary": "Exports the caller org's return for a tax year and form, as the files the IRIS Taxpayer Portal takes, and records the export.",
+        "description": "Exports the caller org's return for a tax year and form, as the files the IRIS\nTaxpayer Portal takes, and records the export. Org admins of the payer only: the\nfiles carry TINs in full, so a SuperAdmin acting inside the org is refused here\nexactly as at the TIN read.\n\nIt carries every furnished (or owed) form of that year and kind not already in\nan earlier export that IRIS did not reject — a rejected submission filed\nnothing, so its forms go out again as originals. Originals are in one set of\nfiles and corrections of forms already exported in another, at most 250 records\na file, each written to every rule Pub 5717 §3.5 sets and checked against them\nbefore it is answered. The files carry full TINs: the export is on the audit\ntrail and the files are not stored, only rebuilt from the sealed forms when read\nagain.\n\nIt DOES NOT FILE WITH THE IRS. Submitting through IRIS needs the payer's own\nTransmitter Control Code and a person at the portal; the answer lists those\nsteps, and POST /v1/tax/filings/{id}/receipt records what IRIS answered.",
+        "tags": [
+          "tax"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "kind": "1099-NEC",
+                "year": 2026
+              },
+              "schema": {
+                "$ref": "#/components/schemas/tax.exportIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/tax.Filing"
+                }
+              }
+            },
+            "description": "created"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/tax/filings/{id}": {
+      "get": {
+        "operationId": "get_tax_filings_by_id",
+        "summary": "Reads one IRS return export WITH its files, rebuilt from the sealed forms and proven identical to what was exported.",
+        "description": "Reads one IRS return export WITH its files, rebuilt from the sealed forms and\nproven identical to what was exported. The files carry full TINs: org admins of\nthe payer only — a SuperAdmin is refused — and every read is on the audit trail.",
+        "tags": [
+          "tax"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the filing id, \"iris_\"-prefixed.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/tax.Filing"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/tax/filings/{id}/receipt": {
+      "post": {
+        "operationId": "post_tax_filings_by_id_receipt",
+        "summary": "Records what IRIS answered for an exported return — the Receipt ID on submission, then the acknowledgment.",
+        "description": "Records what IRIS answered for an exported return — the Receipt ID on\nsubmission, then the acknowledgment. Org admins only.\n\nThis is the payer's report of its own act at the IRIS portal, made under its\nown Transmitter Control Code; nothing here reaches IRIS, and a status is only\never what the payer recorded. Moves: exported → submitted (with the Receipt ID\nand TCC) → accepted, accepted_with_errors or rejected.",
+        "tags": [
+          "tax"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the filing, from the path.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "receiptId": "2026-12345678901-abc123def",
+                "status": "submitted",
+                "tcc": "D1234"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/tax.receiptIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/tax.Filing"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/tax/forms": {
+      "get": {
+        "operationId": "get_tax_forms",
+        "summary": "Lists the 1099s the caller org prepared as payer, oldest first, voided and superseded ones included — a return that was furnished stays on the record.",
+        "description": "Lists the 1099s the caller org prepared as payer, oldest first, voided and\nsuperseded ones included — a return that was furnished stays on the record.\nOrg admins only.",
+        "tags": [
+          "tax"
+        ],
+        "parameters": [
+          {
+            "name": "year",
+            "in": "query",
+            "required": false,
+            "description": "Year narrows the list to one tax year; absent lists every year.",
+            "schema": {
+              "format": "int64",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/tax.formList"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      },
+      "post": {
+        "operationId": "post_tax_forms",
+        "summary": "Prepares the caller org's 1099 drafts for a tax year, as the PAYER: one 1099-NEC and/or 1099-MISC per payee whose reportable payments on Hanzo's rails reach the year's threshold, from the same derivation GET /v1/tax/payments answers.",
+        "description": "Prepares the caller org's 1099 drafts for a tax year, as the PAYER: one\n1099-NEC and/or 1099-MISC per payee whose reportable payments on Hanzo's rails\nreach the year's threshold, from the same derivation GET /v1/tax/payments\nanswers. Org admins only.\n\nEach draft carries the payee as its W-9 names it — under a live grant, and\notherwise only its org id — its boxes, box 4, the due dates, the payments it\nsums, and backup withholding at 24% when the payer holds no TIN for the payee\n(IRC §3406(a)(1)(A)) — an uncertified W-9 is stated as a warning, not a\nwithholding, because these payments do not require the certification. Preparing\nagain refreshes a draft or reviewed form in place (a reviewed one goes back to\ndraft, to be reviewed again); one payee has at most one live form per kind and\nyear, so a second preparation racing the first is refused, never doubled. A form\nalready furnished is left alone and named in skipped — change it by correcting\nit. Nothing is furnished to anyone and nothing is filed with the IRS.",
+        "tags": [
+          "tax"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "year": 2026
+              },
+              "schema": {
+                "$ref": "#/components/schemas/tax.prepareIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/tax.Prepared"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/tax/forms/{id}": {
+      "get": {
+        "operationId": "get_tax_forms_by_id",
+        "summary": "Reads one 1099 the caller org prepared as payer, every box and both parties, TINs masked.",
+        "description": "Reads one 1099 the caller org prepared as payer, every box and both parties,\nTINs masked. Org admins only; another org's form is not found.",
+        "tags": [
+          "tax"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the form id, \"f1099_\"-prefixed.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/tax.Form"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/tax/forms/{id}/correct": {
+      "post": {
+        "operationId": "post_tax_forms_by_id_correct",
+        "summary": "Corrects a furnished (or owed) 1099 with a NEW form that supersedes it.",
+        "description": "Corrects a furnished (or owed) 1099 with a NEW form that supersedes it. Org\nadmins only.\n\nThe furnished form is never changed: the correction is a second form, marked\nCORRECTED, carrying the original's account number and naming the form it\nsupersedes, and it goes through review and furnishing like any other. State the\ncorrected boxes, or omit them to derive the year again from the payments and the\npayee's current W-9. A form already superseded is corrected by correcting its\nsuccessor. It files nothing with the IRS.",
+        "tags": [
+          "tax"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the furnished form to correct, from the path.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "boxes": [
+                  {
+                    "box": "1a",
+                    "cents": 250000
+                  }
+                ],
+                "reason": "a December settlement was refunded"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/tax.correctIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/tax.Form"
+                }
+              }
+            },
+            "description": "created"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/tax/forms/{id}/furnish": {
+      "post": {
+        "operationId": "post_tax_forms_by_id_furnish",
+        "summary": "Furnishes Copy B of a reviewed 1099 to its payee.",
+        "description": "Furnishes Copy B of a reviewed 1099 to its payee. Org admins only.\n\nWhen the payee's tax profile consents to electronic delivery, Copy B is\ndelivered into the payee's /v1/tax/inbox and the form is furnished. Otherwise it\nis OWED on paper at the payee's address: mailing it is the payer's, and\nPOST /v1/tax/forms/{id}/mailed records it. Either way the statement is final\nfrom this call — the form can no longer change, only be corrected. Calling it\nagain on a form furnished electronically re-delivers Copy B if the inbox lacks\nit, and changes nothing else.\n\nIt does not file anything with the IRS, and it does not send the notice of\nposting Pub 1099 Part M asks a furnisher to give an electronic recipient; the\nstatement is in the recipient's inbox, and telling them so is the payer's.",
+        "tags": [
+          "tax"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the form id, \"f1099_\"-prefixed.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/tax.Form"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/tax/forms/{id}/mailed": {
+      "post": {
+        "operationId": "post_tax_forms_by_id_mailed",
+        "summary": "Records that the payer mailed a paper Copy B it owed.",
+        "description": "Records that the payer mailed a paper Copy B it owed. Org admins only.\n\nMailing is the payer's act, done outside Hanzo; this is the record of it, made\nby the person who did it and kept on the audit trail. Nothing here mails\nanything.",
+        "tags": [
+          "tax"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the form id, \"f1099_\"-prefixed.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/tax.Form"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/tax/forms/{id}/pdf": {
+      "get": {
+        "operationId": "get_tax_forms_by_id_pdf",
+        "summary": "Download a 1099 the org prepared, as a PDF",
+        "description": "Answers one 1099 the caller org prepared as payer as a one-page PDF — `application/pdf` under a Content-Disposition naming the form — rendered from the form's own content: the payer's copy by default, or Copy B (For Recipient) with `?copy=B` for a statement owed on paper. The recipient's TIN is truncated; the payer's prints in full, as the law requires on every form.\n\nThe render is a pure function of the form, so the same form renders the same bytes every time. Org admins only; another org's form is not found. It files nothing and mails nothing.",
+        "tags": [
+          "tax"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "x-public": true
+      }
+    },
+    "/v1/tax/forms/{id}/review": {
+      "post": {
+        "operationId": "post_tax_forms_by_id_review",
+        "summary": "Marks a draft 1099 reviewed — a person has checked it.",
+        "description": "Marks a draft 1099 reviewed — a person has checked it. Only a reviewed form can\nbe furnished. Org admins only.",
+        "tags": [
+          "tax"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the form id, \"f1099_\"-prefixed.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/tax.Form"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/tax/forms/{id}/void": {
+      "post": {
+        "operationId": "post_tax_forms_by_id_void",
+        "summary": "Voids a draft or reviewed 1099, which is then never furnished or filed.",
+        "description": "Voids a draft or reviewed 1099, which is then never furnished or filed. A form\nalready furnished cannot be voided: it is corrected, and a correction to zero\nis how a furnished return is withdrawn (Pub 1099 Part H). Org admins only.",
+        "tags": [
+          "tax"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the form id, \"f1099_\"-prefixed.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/tax.Form"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/tax/inbox": {
+      "get": {
+        "operationId": "get_tax_inbox",
+        "summary": "Lists the Copy B statements furnished to the caller org — every 1099 a payer on Hanzo delivered to it electronically, corrected ones beside the ones they supersede.",
+        "description": "Lists the Copy B statements furnished to the caller org — every 1099 a payer on\nHanzo delivered to it electronically, corrected ones beside the ones they\nsupersede. Any member may read it; nothing here can be changed or removed.",
+        "tags": [
+          "tax"
+        ],
+        "parameters": [
+          {
+            "name": "year",
+            "in": "query",
+            "required": false,
+            "description": "Year narrows the list to one tax year; absent lists every year.",
+            "schema": {
+              "format": "int64",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/tax.statementList"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/tax/inbox/{id}": {
+      "get": {
+        "operationId": "get_tax_inbox_by_id",
+        "summary": "Reads one Copy B furnished to the caller org.",
+        "description": "Reads one Copy B furnished to the caller org. Any member may read it; another\norg's statement is not found.",
+        "tags": [
+          "tax"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the form id, \"f1099_\"-prefixed.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/tax.Statement"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/tax/inbox/{id}/pdf": {
+      "get": {
+        "operationId": "get_tax_inbox_by_id_pdf",
+        "summary": "Download a Copy B furnished to the org, as a PDF",
+        "description": "Answers one Copy B furnished to the caller org as a one-page PDF — `application/pdf` under a Content-Disposition naming the form — rendered from the statement exactly as it was furnished, which can never change. The recipient's own TIN is truncated; the payer's prints in full.\n\nAny member of the recipient org may download it; another org's statement is not found.",
+        "tags": [
+          "tax"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "x-public": true
+      }
+    },
+    "/v1/tax/payments": {
+      "get": {
+        "operationId": "get_tax_payments",
+        "summary": "Returns the caller org's tax year as a PAYER: every payment it made to another org in that calendar year, on any rail, as the event plane records it, each classified — reportable or not, in which 1099 box, and the rule that decided it, with its source — and each payee's totals tested against the year's threshold.",
+        "description": "Returns the caller org's tax year as a PAYER: every payment it made to another\norg in that calendar year, on any rail, as the event plane records it, each\nclassified — reportable or not, in which 1099 box, and the rule that decided it,\nwith its source — and each payee's totals tested against the year's threshold.\n\nThe rules applied: a payment settled by a card or a third-party settlement\nnetwork is reported on Form 1099-K by the settlement entity, not here; a payment\nfor merchandise is not reported; a payment to a corporation is generally not\nreported, except for legal services; a payment in a digital asset is reported at\nits fair market value on the date paid; a box is reported only at or above the\nyear's threshold — $600 through 2025, $2,000 for 2026 under P.L. 119-21, and not\nguessed for a year the IRS has not yet published. A payee's classification comes\nonly from a W-9 it granted the caller; without one, nothing establishes an\nexemption.\n\nOrg admins only. It reads; it prepares nothing and files nothing.",
+        "tags": [
+          "tax"
+        ],
+        "parameters": [
+          {
+            "name": "year",
+            "in": "query",
+            "required": false,
+            "description": "Year is the calendar year the payments were made in, e.g. 2026.",
+            "schema": {
+              "format": "int64",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/tax.Ledger"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/tax/profile": {
+      "get": {
+        "operationId": "get_tax_profile",
+        "summary": "Returns the caller org's own tax profile — every line of its Form W-9, W-8BEN or W-8BEN-E, every number masked to its last four characters, where the certification stands, whether a W-8 is valid and when it expires, and whether the org consents to receive its 1099s electronically.",
+        "description": "Returns the caller org's own tax profile — every line of its Form W-9, W-8BEN or\nW-8BEN-E, every number masked to its last four characters, where the\ncertification stands, whether a W-8 is valid and when it expires, and whether\nthe org consents to receive its 1099s electronically.\n\nAny member may read it. 404 until an admin writes one. No full number is ever in\nthis answer.",
+        "tags": [
+          "tax"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/tax.Profile"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      },
+      "put": {
+        "operationId": "put_tax_profile",
+        "summary": "Writes the caller org's tax profile — its Form W-9, or its Form W-8BEN or W-8BEN-E when it is a foreign person — and answers it, every number masked.",
+        "description": "Writes the caller org's tax profile — its Form W-9, or its Form W-8BEN or\nW-8BEN-E when it is a foreign person — and answers it, every number masked. Org\nadmins only.\n\nA U.S. TIN is validated before it is kept — nine digits; an EIN's prefix must be\none the IRS assigns; an SSN never begins 000, 666 or 9xx and has no zero group\nor serial; an ITIN's middle digits are in the IRS ranges. A foreign TIN is the\nissuing jurisdiction's and is checked only for its characters. Every number is\nsealed under this org's own data key before it is written. Validating the\nFORMAT is all this does: whether the IRS has the number on file under this name\nis IRS TIN Matching, which a payer runs through IRS e-Services.\n\nA W-8 is refused where the form itself says it is the wrong one: a U.S. citizen,\na U.S. permanent residence or an entity organized in the United States is a U.S.\nperson and files a W-9. A treaty claim needs a U.S. or foreign TIN on the form\n(Instructions for Form W-8BEN, line 5; for Form W-8BEN-E, line 8), and names the\ncountry of the permanent residence address.\n\nChanging any fact on the form makes a new version, and the certification no\nlonger covers it: certify again. For a W-8 that is the \"change in circumstances\"\nthe instructions end its validity on. Changing only the consent does not.",
+        "tags": [
+          "tax"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "address": {
+                  "city": "San Francisco",
+                  "line1": "1 Market St",
+                  "state": "CA",
+                  "zip": "94105"
+                },
+                "classification": "c_corp",
+                "electronicConsent": true,
+                "name": "Acme Robotics, Inc.",
+                "tin": "12-3456789",
+                "tinType": "ein"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/tax.profileIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/tax.Profile"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/tax/profile/certify": {
+      "post": {
+        "operationId": "post_tax_profile_certify",
+        "summary": "Signs the caller org's certification — Form W-9 Part II, Form W-8BEN Part III or Form W-8BEN-E Part XXX — through /v1/legal's e-signature.",
+        "description": "Signs the caller org's certification — Form W-9 Part II, Form W-8BEN Part III or\nForm W-8BEN-E Part XXX — through /v1/legal's e-signature. The org's own admins\nonly, and the admin is the signer: a SuperAdmin acting inside the org is not a\nperson who can certify for it.\n\nThe first call renders the certification — the IRS's own certification text over\nthis profile's facts, every number truncated — as a /v1/legal document and opens\nits signature request with the calling admin as signer; the answer is `pending` with\nthe document id. The signer completes it where every /v1/legal signature is\ncompleted (POST /v1/legal/documents/{id}/sign/complete). Calling this again then\nasks legal whether the document is signed and by whom: signed by the signer, the\nprofile is recorded certified; not yet signed, it answers `pending` again; signed\nby anyone else — another member, a key — or voided, it is not the signer's\ncertification, and a fresh request is opened in its place.\n\nA certification covers one profile version: writing any fact on the form\nafterwards voids it. A certified W-8 is valid through the last day of the third\ncalendar year after the year it was signed (Instructions for Form W-8BEN and\nW-8BEN-E, Rev. 10-2021); certifying it again after that renews it. It is not a\nstatement that a TIN matches IRS records — that is IRS TIN Matching, which only\na payer enrolled in IRS e-Services can run.",
+        "tags": [
+          "tax"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/tax.Profile"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/tax/w9": {
+      "get": {
+        "operationId": "get_tax_w9",
+        "summary": "Lists the caller org's W-9 relationships on both sides: the W-9s it asked its payees for, with where each stands, and the requests other orgs made for its own W-9.",
+        "description": "Lists the caller org's W-9 relationships on both sides: the W-9s it asked its\npayees for, with where each stands, and the requests other orgs made for its\nown W-9. Org admins only. No W-9 content is in the list; read one to see it.",
+        "tags": [
+          "tax"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/tax.w9List"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      },
+      "post": {
+        "operationId": "post_tax_w9",
+        "summary": "Asks another org for its W-9, as the org that pays it.",
+        "description": "Asks another org for its W-9, as the org that pays it. Org admins only.\n\nA request is refused unless the caller has paid that org on Hanzo's rails, or\nhas asked /v1/principal whether it may — a W-9 is asked for by a payer, of a payee,\nand the payments, or a payment the caller is about to make, are what say which\ncompanies those are. The form is needed BEFORE the first payment: withholding\nis decided when a payment is made, not when it is reported. The request lands with the payee, whose admin grants or\ndeclines it; until it is granted the caller sees its status and nothing of the\npayee's W-9. Asking again updates the category, and re-opens a request the\npayee declined or revoked.\n\nCategory is the caller's statement of what it pays this payee for, and decides\nthe 1099 box: services and attorney go to 1099-NEC box 1a, rents, royalties\nand other to 1099-MISC boxes 1, 2 and 3; merchandise is not reported.",
+        "tags": [
+          "tax"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "category": "services",
+                "payee": "acme"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/tax.w9Request"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/tax.W9"
+                }
+              }
+            },
+            "description": "created"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/tax/w9/{id}": {
+      "get": {
+        "operationId": "get_tax_w9_by_id",
+        "summary": "Reads one W-9 relationship from the caller's side.",
+        "description": "Reads one W-9 relationship from the caller's side. Org admins only.\n\nAs the PAYER, the answer carries the payee's W-9 — every line, the TIN masked\nto its last four digits, and whether it is certified — but only while the\npayee's grant is live; before it is granted, and after it is declined or\nrevoked, there is no W-9 in the answer. As the PAYEE, it is the request and\nwhere it stands.",
+        "tags": [
+          "tax"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the relationship's id, \"w9_\"-prefixed.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/tax.W9"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/tax/w9/{id}/decline": {
+      "post": {
+        "operationId": "post_tax_w9_by_id_decline",
+        "summary": "Declines a request for this org's W-9.",
+        "description": "Declines a request for this org's W-9. The payer keeps seeing only the status.\nOrg admins of the payee only.",
+        "tags": [
+          "tax"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the relationship's id, \"w9_\"-prefixed.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/tax.W9"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/tax/w9/{id}/grant": {
+      "post": {
+        "operationId": "post_tax_w9_by_id_grant",
+        "summary": "Grants the payer that asked a live read of this org's W-9 — every line, the TIN masked, and the full TIN to that payer's org admins alone, each read audited.",
+        "description": "Grants the payer that asked a live read of this org's W-9 — every line, the TIN\nmasked, and the full TIN to that payer's org admins alone, each read audited.\nOrg admins of the payee only. Needs a tax profile to grant.",
+        "tags": [
+          "tax"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the relationship's id, \"w9_\"-prefixed.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/tax.W9"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/tax/w9/{id}/match": {
+      "post": {
+        "operationId": "post_tax_w9_by_id_match",
+        "summary": "Records the result of IRS TIN Matching for a payee, as the payer.",
+        "description": "Records the result of IRS TIN Matching for a payee, as the payer. Org admins of\nthe payer only, on a live grant.\n\nIt does not run TIN Matching. That is an IRS e-Services program a payer enrolls\nin and runs itself, on the name and TIN it holds; this records what the IRS\nanswered so it sits beside the W-9 and on the audit trail. Nothing here ever\nrecords a match the payer did not report.",
+        "tags": [
+          "tax"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the relationship, from the path.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "result": "matched"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/tax.matchIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/tax.W9"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/tax/w9/{id}/revoke": {
+      "post": {
+        "operationId": "post_tax_w9_by_id_revoke",
+        "summary": "Revokes a W-9 this org granted.",
+        "description": "Revokes a W-9 this org granted. From the moment it is revoked the payer reads\nnothing of the W-9 and no full TIN. A 1099 the payer already prepared keeps the\nTIN it was prepared with — the payer must keep it to file — and that TIN is\nnever answered in full outside the payer's IRS filing export. Org admins of the\npayee only.",
+        "tags": [
+          "tax"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the relationship's id, \"w9_\"-prefixed.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/tax.W9"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/tax/w9/{id}/tin": {
+      "get": {
+        "operationId": "get_tax_w9_by_id_tin",
+        "summary": "Reads a payee's TIN in full — and, for a payee on a W-8, its foreign TIN, which the payer's Form 1042-S carries.",
+        "description": "Reads a payee's TIN in full — and, for a payee on a W-8, its foreign TIN, which\nthe payer's Form 1042-S carries. Only an org admin of the PAYER, only while the\npayee's grant is live, and every read is on the audit trail before a number is\nanswered — a read the trail cannot record is refused.\n\nThis is the one place a TIN leaves the platform in full, apart from the IRS\nfiling export. SuperAdmin is not admitted: platform authority is not a reason\nto read a company's TIN.",
+        "tags": [
+          "tax"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the relationship's id, \"w9_\"-prefixed.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/tax.tinOut"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "problem-details": {
+        "description": "An RFC 9457 problem document.",
+        "properties": {
+          "code": {
+            "description": "A stable token a client can branch on, when the refusal names one.",
+            "type": "string"
+          },
+          "detail": {
+            "description": "What was refused, for a person to read.",
+            "type": "string"
+          },
+          "status": {
+            "description": "The HTTP status.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "title": {
+            "description": "The status's reason phrase.",
+            "type": "string"
+          },
+          "type": {
+            "description": "about:blank",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "status",
+          "detail"
+        ],
+        "type": "object"
+      },
+      "tax.Address": {
+        "properties": {
+          "city": {
+            "description": "City is the city or town.",
+            "type": "string"
+          },
+          "country": {
+            "description": "Country is ISO 3166-1 alpha-2; \"US\" when absent.",
+            "type": "string"
+          },
+          "line1": {
+            "description": "Line1 is the number, street, and apartment or suite. No periods or \"#\":\nIRIS rejects them in an address line.",
+            "type": "string"
+          },
+          "line2": {
+            "description": "Line2 continues the street address, when there is more of it.",
+            "type": "string"
+          },
+          "state": {
+            "description": "State is the two-letter state or territory code.",
+            "type": "string"
+          },
+          "zip": {
+            "description": "ZIP is five or nine digits.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "tax.Amount": {
+        "properties": {
+          "box": {
+            "description": "Box is the box number, e.g. \"1a\".",
+            "type": "string"
+          },
+          "cents": {
+            "description": "Cents is the amount in cents.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "label": {
+            "description": "Label is the box's caption on the form.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "tax.Box": {
+        "properties": {
+          "box": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "tax.Certification": {
+        "properties": {
+          "by": {
+            "description": "By is who signed it: the IAM user legal recorded completing the signature.",
+            "type": "string"
+          },
+          "document": {
+            "description": "Document is the /v1/legal document that carries the signature.",
+            "type": "string"
+          },
+          "signed": {
+            "description": "Signed is when legal reported the document signed, unix seconds.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "signer": {
+            "description": "Signer is the IAM user the signature was opened for — the admin who asked.\nOnly that user's completion certifies: a completion anyone else recorded is\nnot their signature, and a fresh request is opened in its place.",
+            "type": "string"
+          },
+          "status": {
+            "description": "Status is none, pending (a signature is open) or certified.",
+            "type": "string"
+          },
+          "version": {
+            "description": "Version is the profile version the signature covers. Changing any W-9 fact\nmakes a new version, and the certification no longer covers it.",
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "tax.Consent": {
+        "properties": {
+          "at": {
+            "description": "At is when the consent was given or withdrawn, unix seconds.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "by": {
+            "description": "By is the IAM user who gave or withdrew it.",
+            "type": "string"
+          },
+          "electronic": {
+            "description": "Electronic is true while the consent stands. Withdrawing it sends every\nstatement furnished afterwards on paper.",
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
+      "tax.Deadline": {
+        "properties": {
+          "file": {
+            "description": "File is the date the return is due to the IRS, electronically (IRIS).",
+            "type": "string"
+          },
+          "furnish": {
+            "description": "Furnish is the date Copy B is due to the recipient.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "tax.Filing": {
+        "properties": {
+          "createdAt": {
+            "description": "CreatedAt is when it was exported, unix seconds.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "due": {
+            "description": "Due is when the return is due to the IRS.",
+            "type": "string"
+          },
+          "forms": {
+            "description": "Forms are the form ids the filing carries.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "id": {
+            "description": "ID is the filing's id, \"iris_\"-prefixed.",
+            "type": "string"
+          },
+          "kind": {
+            "description": "Kind is 1099-NEC or 1099-MISC — one per filing, as IRIS takes them.",
+            "type": "string"
+          },
+          "layout": {
+            "description": "Layout says what the files are.",
+            "type": "string"
+          },
+          "missingTin": {
+            "description": "MissingTIN are forms filed with no recipient TIN.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "parts": {
+            "description": "Parts are its files.",
+            "items": {
+              "$ref": "#/components/schemas/tax.Part"
+            },
+            "type": "array"
+          },
+          "receiptId": {
+            "description": "ReceiptID is the Receipt ID IRIS returned, once the payer recorded one.",
+            "type": "string"
+          },
+          "status": {
+            "description": "Status is exported, submitted, accepted, accepted_with_errors or rejected.\nOnly the payer's own record moves it past exported: nothing here submits.",
+            "type": "string"
+          },
+          "steps": {
+            "description": "Steps are what remains for the payer to do, in order.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "tcc": {
+            "description": "TCC is the payer's IRIS Transmitter Control Code, once it recorded a submission.",
+            "type": "string"
+          },
+          "updatedAt": {
+            "description": "UpdatedAt is when its status last moved, unix seconds.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "year": {
+            "description": "Year is the tax year.",
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "tax.Form": {
+        "properties": {
+          "account": {
+            "description": "Account is the account number the form prints — the original form's id,\nwhich a correction keeps, so the IRS can tie the two.",
+            "type": "string"
+          },
+          "backup": {
+            "$ref": "#/components/schemas/tax.Withholding",
+            "description": "Backup is the backup withholding the form carries."
+          },
+          "boxes": {
+            "description": "Boxes are the figures, box 4 (federal income tax withheld) included.",
+            "items": {
+              "$ref": "#/components/schemas/tax.Amount"
+            },
+            "type": "array"
+          },
+          "certified": {
+            "description": "Certified is whether the payee's W-9 was certified when the form was prepared.",
+            "type": "boolean"
+          },
+          "corrected": {
+            "description": "Corrected is true for a form that corrects one already furnished.",
+            "type": "boolean"
+          },
+          "createdAt": {
+            "description": "CreatedAt is when the form was prepared, unix seconds.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "delivery": {
+            "description": "Delivery is electronic (Copy B in the payee's inbox) or paper, once furnished.",
+            "type": "string"
+          },
+          "due": {
+            "$ref": "#/components/schemas/tax.Deadline",
+            "description": "Due is when Copy B is due to the payee and the return to the IRS."
+          },
+          "furnishedAt": {
+            "description": "FurnishedAt is when Copy B was delivered in the inbox, or marked owed on paper.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "id": {
+            "description": "ID is the form's id, \"f1099_\"-prefixed.",
+            "type": "string"
+          },
+          "kind": {
+            "description": "Kind is 1099-NEC or 1099-MISC.",
+            "type": "string"
+          },
+          "mailedAt": {
+            "description": "MailedAt is when the payer recorded mailing a paper Copy B.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "notes": {
+            "description": "Notes are what still needs a person, in words.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "payer": {
+            "$ref": "#/components/schemas/tax.Party",
+            "description": "Payer is the filer."
+          },
+          "payments": {
+            "description": "Payments are the rail payment ids summed into the boxes.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "reason": {
+            "description": "Reason is why a corrected form was made.",
+            "type": "string"
+          },
+          "recipient": {
+            "$ref": "#/components/schemas/tax.Party",
+            "description": "Recipient is the payee."
+          },
+          "status": {
+            "description": "Status is draft, reviewed, furnished, owed or void.",
+            "type": "string"
+          },
+          "supersededBy": {
+            "description": "SupersededBy is the form that corrects this one, once there is one.",
+            "type": "string"
+          },
+          "supersedes": {
+            "description": "Supersedes is the form this one corrects.",
+            "type": "string"
+          },
+          "updatedAt": {
+            "description": "UpdatedAt is when its status last moved, unix seconds.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "w9": {
+            "description": "W9 is where the payer's W-9 request stood when the form was prepared.",
+            "type": "string"
+          },
+          "year": {
+            "description": "Year is the calendar year the payments were made.",
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "tax.Ledger": {
+        "properties": {
+          "payees": {
+            "description": "Payees is every org the caller paid, by org id.",
+            "items": {
+              "$ref": "#/components/schemas/tax.PayeeYear"
+            },
+            "type": "array"
+          },
+          "source": {
+            "description": "Source names where the year's numbers were read.",
+            "type": "string"
+          },
+          "thresholdCents": {
+            "description": "ThresholdCents is the §6041(a) threshold for the year.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "year": {
+            "description": "Year is the tax year.",
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "tax.Line": {
+        "properties": {
+          "amountCents": {
+            "description": "AmountCents is its fair market value in U.S. dollars on the date paid, in\ncents — for a U.S. dollar payment, what was paid.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "id": {
+            "description": "ID is the economic event's id.",
+            "type": "string"
+          },
+          "memo": {
+            "description": "Memo is what was bought, in the rail's words.",
+            "type": "string"
+          },
+          "paid": {
+            "description": "Paid is when, unix seconds.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "proof": {
+            "description": "Proof is the rail's own reference for the payment.",
+            "type": "string"
+          },
+          "rail": {
+            "description": "Rail is how it moved: x402, ledger, chain, ach, wire, card, network or other.",
+            "type": "string"
+          },
+          "verdict": {
+            "$ref": "#/components/schemas/tax.Verdict",
+            "description": "Verdict is whether it is reportable, where, and the rules that decided it."
+          }
+        },
+        "type": "object"
+      },
+      "tax.Match": {
+        "properties": {
+          "at": {
+            "description": "At is when the payer recorded it, unix seconds.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "by": {
+            "description": "By is the admin who recorded it.",
+            "type": "string"
+          },
+          "result": {
+            "description": "Result is what IRS TIN Matching answered: matched or mismatched.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "tax.Part": {
+        "properties": {
+          "csv": {
+            "description": "CSV is the file itself. It carries full TINs, and is answered only to an org\nadmin of the payer, on the audit trail.",
+            "type": "string"
+          },
+          "digest": {
+            "description": "Digest is the SHA-256 of its bytes, hex, so a re-read proves it is the same file.",
+            "type": "string"
+          },
+          "name": {
+            "description": "Name is the file name, e.g. \"1099-NEC-2026-original-1.csv\".",
+            "type": "string"
+          },
+          "records": {
+            "description": "Records is how many forms it holds, at most 250.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "type": {
+            "description": "Type is original or correction: the portal takes them apart.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "tax.Party": {
+        "properties": {
+          "address": {
+            "$ref": "#/components/schemas/tax.Address",
+            "description": "Address is where the form says they are."
+          },
+          "businessName": {
+            "description": "BusinessName is W-9 line 2, when there is one.",
+            "type": "string"
+          },
+          "name": {
+            "description": "Name is W-9 line 1.",
+            "type": "string"
+          },
+          "org": {
+            "description": "Org is the Hanzo org.",
+            "type": "string"
+          },
+          "phone": {
+            "description": "Phone is the payer's telephone number; a recipient has none on the form.",
+            "type": "string"
+          },
+          "tin": {
+            "description": "TIN is masked here always. The recipient's is truncated on Copy B as Pub 1099\nallows; the payer's prints in full on the form itself, where the law requires it.",
+            "type": "string"
+          },
+          "tinType": {
+            "description": "TINType is ssn or ein; empty when no TIN is held.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "tax.PayeeYear": {
+        "properties": {
+          "category": {
+            "description": "Category is what the payer states it bought from this payee; services when\nit has stated nothing.",
+            "type": "string"
+          },
+          "lines": {
+            "description": "Lines are the payments, oldest first.",
+            "items": {
+              "$ref": "#/components/schemas/tax.Line"
+            },
+            "type": "array"
+          },
+          "payee": {
+            "description": "Payee is the org paid.",
+            "type": "string"
+          },
+          "totals": {
+            "description": "Totals are the reportable sums by box.",
+            "items": {
+              "$ref": "#/components/schemas/tax.Total"
+            },
+            "type": "array"
+          },
+          "w9": {
+            "description": "W9 is where the payer's W-9 request to this payee stands: none, requested,\ngranted, declined or revoked.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "tax.Prepared": {
+        "properties": {
+          "forms": {
+            "description": "Forms are the drafts made or refreshed.",
+            "items": {
+              "$ref": "#/components/schemas/tax.Form"
+            },
+            "type": "array"
+          },
+          "skipped": {
+            "description": "Skipped says, per payee and form, why nothing was prepared — a form already\nfurnished is never re-prepared, only corrected.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "year": {
+            "description": "Year is the tax year.",
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "tax.Profile": {
+        "properties": {
+          "address": {
+            "$ref": "#/components/schemas/tax.Address",
+            "description": "Address is lines 5 and 6."
+          },
+          "businessName": {
+            "description": "BusinessName is line 2: the business or disregarded entity name.",
+            "type": "string"
+          },
+          "certification": {
+            "$ref": "#/components/schemas/tax.Certification",
+            "description": "Certification is where the Part II signature stands."
+          },
+          "classification": {
+            "description": "Classification is line 3a.",
+            "type": "string"
+          },
+          "consent": {
+            "$ref": "#/components/schemas/tax.Consent",
+            "description": "Consent is the electronic-delivery consent. Only the org itself reads it: how\na payee takes delivery is not a payer's to know."
+          },
+          "disclosure": {
+            "description": "Disclosure is the electronic-delivery disclosure the consent is given against.",
+            "type": "string"
+          },
+          "exemptPayee": {
+            "description": "ExemptPayee is line 4's exempt payee code, 1–13.",
+            "type": "string"
+          },
+          "expires": {
+            "description": "Expires is when a certified W-8 stops being valid, unix seconds: the last\nday of the third calendar year after the year it was signed. A W-9 does not\nexpire.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "fatca": {
+            "description": "FATCA is line 4's FATCA exemption code, A–M.",
+            "type": "string"
+          },
+          "foreignOwners": {
+            "description": "ForeignOwners is line 3b: a flow-through entity with foreign partners,\nowners or beneficiaries.",
+            "type": "boolean"
+          },
+          "foreignTin": {
+            "description": "ForeignTIN is a W-8's foreign tax identifying number, masked. The full\nnumber is answered only with the full TIN read.",
+            "type": "string"
+          },
+          "form": {
+            "description": "Form is w9, w8ben or w8bene.",
+            "type": "string"
+          },
+          "name": {
+            "description": "Name is line 1: the name on the income tax return, or of the foreign\nindividual or organization that is the beneficial owner.",
+            "type": "string"
+          },
+          "phone": {
+            "description": "Phone is the number a 1099 this org files as PAYER prints for it.",
+            "type": "string"
+          },
+          "tin": {
+            "description": "TIN is Part I, masked to its last four digits. The full number is answered\nonly by GET /v1/tax/w9/{id}/tin, to a payer this org granted it to.",
+            "type": "string"
+          },
+          "tinType": {
+            "description": "TINType is which Part I box: ssn (an SSN or ITIN) or ein.",
+            "type": "string"
+          },
+          "updatedAt": {
+            "description": "UpdatedAt is when the profile last changed, unix seconds.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "valid": {
+            "description": "Valid is whether the form establishes what it certifies today — for a W-8,\ncertified for its current version and not expired; for a W-9, a TIN on file.",
+            "type": "boolean"
+          },
+          "version": {
+            "description": "Version counts the W-9's revisions; a certification covers exactly one.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "w8": {
+            "$ref": "#/components/schemas/tax.W8",
+            "description": "W8 is what a W-8BEN or W-8BEN-E certifies beyond name and address."
+          }
+        },
+        "type": "object"
+      },
+      "tax.Rule": {
+        "properties": {
+          "code": {
+            "description": "Code is the rule's stable name, for a caller that branches on it.",
+            "type": "string"
+          },
+          "reason": {
+            "description": "Reason is the rule, stated.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "tax.Statement": {
+        "properties": {
+          "account": {
+            "description": "Account is the account number the form prints.",
+            "type": "string"
+          },
+          "backup": {
+            "$ref": "#/components/schemas/tax.Withholding",
+            "description": "Backup is the backup withholding the payer applied."
+          },
+          "boxes": {
+            "description": "Boxes are the figures.",
+            "items": {
+              "$ref": "#/components/schemas/tax.Amount"
+            },
+            "type": "array"
+          },
+          "corrected": {
+            "description": "Corrected is true for a statement that corrects an earlier one.",
+            "type": "boolean"
+          },
+          "furnishedAt": {
+            "description": "FurnishedAt is when it was delivered, unix seconds.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "id": {
+            "description": "ID is the form id the payer issued it under.",
+            "type": "string"
+          },
+          "kind": {
+            "description": "Kind is 1099-NEC or 1099-MISC.",
+            "type": "string"
+          },
+          "payer": {
+            "$ref": "#/components/schemas/tax.Party",
+            "description": "Payer is the org that furnished it."
+          },
+          "recipient": {
+            "$ref": "#/components/schemas/tax.Party",
+            "description": "Recipient is this org, as the form names it, TIN truncated."
+          },
+          "supersededBy": {
+            "description": "SupersededBy is the later statement that corrects this one.",
+            "type": "string"
+          },
+          "supersedes": {
+            "description": "Supersedes is the earlier statement this corrects.",
+            "type": "string"
+          },
+          "year": {
+            "description": "Year is the calendar year of the payments.",
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "tax.Total": {
+        "properties": {
+          "amountCents": {
+            "description": "AmountCents is the reportable payments in this box, summed exactly and then\nrounded to cents.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "box": {
+            "$ref": "#/components/schemas/tax.Box",
+            "description": "Box is the form and box."
+          },
+          "payments": {
+            "description": "Payments are the ids that sum into it.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "reportable": {
+            "description": "Reportable is true when the total is at or above the threshold.",
+            "type": "boolean"
+          },
+          "rule": {
+            "$ref": "#/components/schemas/tax.Rule",
+            "description": "Rule states the comparison and its source."
+          },
+          "thresholdCents": {
+            "description": "ThresholdCents is the year's threshold for this box.",
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "tax.Treaty": {
+        "properties": {
+          "article": {
+            "description": "Article is the treaty article and paragraph claimed, e.g. \"12(2)\".",
+            "type": "string"
+          },
+          "conditions": {
+            "description": "Conditions is the explanation the form asks for: the conditions of the\narticle the beneficial owner meets.",
+            "type": "string"
+          },
+          "country": {
+            "description": "Country is the treaty country the beneficial owner is resident in.",
+            "type": "string"
+          },
+          "income": {
+            "description": "Income is the type of income the claim covers: services, rents, royalties\nor other.",
+            "type": "string"
+          },
+          "lob": {
+            "description": "LOB is W-8BEN-E line 14b: the treaty's limitation on benefits provision the\nentity meets. Required on a W-8BEN-E treaty claim; a W-8BEN has no line 14b.",
+            "type": "string"
+          },
+          "rateBps": {
+            "description": "RateBps is the claimed withholding rate in basis points: 0 is exempt,\n1000 is 10%.",
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "tax.Verdict": {
+        "properties": {
+          "box": {
+            "$ref": "#/components/schemas/tax.Box",
+            "description": "Box is where it is reported, when it is."
+          },
+          "reportable": {
+            "type": "boolean"
+          },
+          "rules": {
+            "description": "Rules are every rule that applied, in the order applied — the last one is\nthe verdict's reason.",
+            "items": {
+              "$ref": "#/components/schemas/tax.Rule"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "tax.W8": {
+        "properties": {
+          "birth": {
+            "description": "Birth is W-8BEN line 8, the individual's date of birth, YYYY-MM-DD.",
+            "type": "string"
+          },
+          "capacity": {
+            "description": "Capacity is the capacity in which the signer signs for the beneficial owner\n— \"Director\", \"Authorized officer\". Required on a W-8BEN-E; on a W-8BEN, empty\nwhen the beneficial owner signs.",
+            "type": "string"
+          },
+          "chapter3": {
+            "description": "Chapter3 is W-8BEN-E line 4. A W-8BEN's beneficial owner is an individual\nand states none.",
+            "type": "string"
+          },
+          "chapter4": {
+            "description": "Chapter4 is W-8BEN-E line 5, the FATCA status.",
+            "type": "string"
+          },
+          "country": {
+            "description": "Country is line 2: the country of citizenship (W-8BEN) or of incorporation\nor organization (W-8BEN-E), ISO 3166-1 alpha-2.",
+            "type": "string"
+          },
+          "giin": {
+            "description": "GIIN is W-8BEN-E line 9a, when the chapter 4 status carries one.",
+            "type": "string"
+          },
+          "noForeignTin": {
+            "description": "NoForeignTIN is W-8BEN line 6b / W-8BEN-E line 9b's alternative: the\njurisdiction of residence does not require or issue a foreign TIN.",
+            "type": "boolean"
+          },
+          "treaty": {
+            "$ref": "#/components/schemas/tax.Treaty",
+            "description": "Treaty is the claim of treaty benefits (W-8BEN Part II lines 9-10, W-8BEN-E\nPart III lines 14-15), when one is made."
+          }
+        },
+        "type": "object"
+      },
+      "tax.W9": {
+        "properties": {
+          "category": {
+            "description": "Category is what the payer states it pays this payee for. Only the payer\nsees it.",
+            "type": "string"
+          },
+          "decidedAt": {
+            "description": "DecidedAt is when the payee last granted, declined or revoked.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "id": {
+            "description": "ID addresses the relationship on both sides.",
+            "type": "string"
+          },
+          "match": {
+            "$ref": "#/components/schemas/tax.Match",
+            "description": "Match is the IRS TIN Matching result the payer recorded, when it recorded one."
+          },
+          "payee": {
+            "description": "Payee is the org whose W-9 it is.",
+            "type": "string"
+          },
+          "payer": {
+            "description": "Payer is the org that asked.",
+            "type": "string"
+          },
+          "profile": {
+            "$ref": "#/components/schemas/tax.Profile",
+            "description": "Profile is the payee's W-9, TIN masked — present only for the payer, only\nwhile the grant is live."
+          },
+          "requestedAt": {
+            "description": "RequestedAt is when the payer asked, unix seconds.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "role": {
+            "description": "Role is the caller's side of it: payer or payee.",
+            "type": "string"
+          },
+          "status": {
+            "description": "Status is requested, granted, declined or revoked.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "tax.Withholding": {
+        "properties": {
+          "dueCents": {
+            "description": "DueCents is what 24% of the reported boxes comes to — what should have been\nwithheld. Nothing on Hanzo's rails withholds, so box 4 reports zero, and the\npayer is liable for the amount it did not withhold (IRC §3403).",
+            "format": "int64",
+            "type": "integer"
+          },
+          "rate": {
+            "description": "Rate is the backup withholding rate, in percent: 24.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "reason": {
+            "description": "Reason says why, and which rule — or, when nothing is required, what the payer\nshould still know.",
+            "type": "string"
+          },
+          "required": {
+            "description": "Required is true when the payer holds no TIN for the payee — the IRC\n§3406(a)(1)(A) trigger these forms can know. An uncertified W-9 is not one for\nthese payments, and says so in Reason without requiring anything.",
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
+      "tax.correctIn": {
+        "properties": {
+          "boxes": {
+            "description": "Boxes are the corrected amounts, by box. Omitted, the boxes are derived\nagain from the payments and the payee's W-9 is read again — which is also how a\nwrong name or TIN is corrected. Zero in every box withdraws the return.",
+            "items": {
+              "$ref": "#/components/schemas/tax.Amount"
+            },
+            "type": "array"
+          },
+          "id": {
+            "description": "ID is the furnished form to correct, from the path.",
+            "type": "string"
+          },
+          "reason": {
+            "description": "Reason says what was wrong. Required; it goes on the record.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "tax.exportIn": {
+        "properties": {
+          "kind": {
+            "description": "Kind is 1099-NEC or 1099-MISC.",
+            "type": "string"
+          },
+          "year": {
+            "description": "Year is the tax year.",
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "tax.filingList": {
+        "properties": {
+          "data": {
+            "description": "Data are the filings, oldest first, without their files.",
+            "items": {
+              "$ref": "#/components/schemas/tax.Filing"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "tax.formList": {
+        "properties": {
+          "data": {
+            "description": "Data are the forms, oldest first.",
+            "items": {
+              "$ref": "#/components/schemas/tax.Form"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "tax.matchIn": {
+        "properties": {
+          "id": {
+            "description": "ID is the relationship, from the path.",
+            "type": "string"
+          },
+          "result": {
+            "description": "Result is what IRS TIN Matching answered for this payee's name and TIN:\nmatched or mismatched.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "tax.prepareIn": {
+        "properties": {
+          "year": {
+            "description": "Year is the calendar year the payments were made in.",
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "tax.profileIn": {
+        "properties": {
+          "address": {
+            "$ref": "#/components/schemas/tax.Address",
+            "description": "Address is W-9 lines 5 and 6, or a W-8's line 3 permanent residence address\noutside the United States (state and zip where the country uses them).\nRequired: a statement owed on paper is mailed there."
+          },
+          "businessName": {
+            "description": "BusinessName is line 2, when it differs from line 1.",
+            "type": "string"
+          },
+          "classification": {
+            "description": "Classification is W-9 line 3a: individual, c_corp, s_corp, partnership,\ntrust_estate, llc_c, llc_s or llc_p. Required on a W-9; absent on a W-8.",
+            "type": "string"
+          },
+          "electronicConsent": {
+            "description": "ElectronicConsent gives (true) or withdraws (false) consent to receive 1099s\nin the Hanzo inbox, against the disclosure every profile answers with.\nOmitted, the stored consent stands.",
+            "type": "boolean"
+          },
+          "exemptPayee": {
+            "description": "ExemptPayee is the exempt payee code, 1–13. Entities only.",
+            "type": "string"
+          },
+          "fatca": {
+            "description": "FATCA is the FATCA exemption code, A–M. Entities only.",
+            "type": "string"
+          },
+          "foreignOwners": {
+            "description": "ForeignOwners is line 3b; only a partnership, trust/estate or llc_p may set it.",
+            "type": "boolean"
+          },
+          "foreignTin": {
+            "description": "ForeignTIN is a W-8's foreign tax identifying number (W-8BEN line 6a,\nW-8BEN-E line 9b), as the jurisdiction of residence issues it. Omitted\nafterwards, the stored number is kept; the empty string with\nw8.noForeignTin clears it.",
+            "type": "string"
+          },
+          "form": {
+            "description": "Form is w9 (a U.S. person), w8ben (a foreign individual) or w8bene (a\nforeign entity). w9 when omitted.",
+            "type": "string"
+          },
+          "name": {
+            "description": "Name is line 1: the name on the income tax return, or the foreign\nindividual's or organization's name. Required.",
+            "type": "string"
+          },
+          "phone": {
+            "description": "Phone is printed on the 1099s this org files as payer.",
+            "type": "string"
+          },
+          "tin": {
+            "description": "TIN is W-9 Part I, or a W-8's U.S. TIN (W-8BEN line 5, W-8BEN-E line 8),\ndigits with or without hyphens. Required on a W-9's first write; on a W-8,\nonly for a treaty claim with no foreign TIN. Omitted afterwards, the stored\nnumber is kept, so an address change never re-sends it.",
+            "type": "string"
+          },
+          "tinType": {
+            "description": "TINType is ssn (an SSN or ITIN) or ein. An entity other than an individual\nstates an EIN.",
+            "type": "string"
+          },
+          "w8": {
+            "$ref": "#/components/schemas/tax.W8",
+            "description": "W8 is the rest of a W-8: the country of citizenship or incorporation, the\nchapter 3 and chapter 4 statuses of an entity, a date of birth, the treaty\nclaim, and the signer's capacity. Required on a W-8; absent on a W-9."
+          }
+        },
+        "type": "object"
+      },
+      "tax.receiptIn": {
+        "properties": {
+          "id": {
+            "description": "ID is the filing, from the path.",
+            "type": "string"
+          },
+          "receiptId": {
+            "description": "ReceiptID is the Receipt ID IRIS returned for the submission.",
+            "type": "string"
+          },
+          "status": {
+            "description": "Status is submitted (IRIS returned a Receipt ID), accepted,\naccepted_with_errors or rejected (IRIS's acknowledgment).",
+            "type": "string"
+          },
+          "tcc": {
+            "description": "TCC is the IRIS Transmitter Control Code the payer submitted under: five\nuppercase letters and digits.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "tax.statementList": {
+        "properties": {
+          "data": {
+            "description": "Data are the statements, oldest first.",
+            "items": {
+              "$ref": "#/components/schemas/tax.Statement"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "tax.tinOut": {
+        "properties": {
+          "foreignTin": {
+            "description": "ForeignTIN is a W-8 payee's foreign tax identifying number as issued, which\nForm 1042-S carries for a foreign recipient.",
+            "type": "string"
+          },
+          "tin": {
+            "description": "TIN is the payee's full U.S. taxpayer identification number, hyphenated as\nthe IRS writes it; empty when a W-8 carries none.",
+            "type": "string"
+          },
+          "tinType": {
+            "description": "TINType is ssn or ein.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "tax.w9List": {
+        "properties": {
+          "asPayee": {
+            "description": "AsPayee are the requests for the caller's own W-9.",
+            "items": {
+              "$ref": "#/components/schemas/tax.W9"
+            },
+            "type": "array"
+          },
+          "asPayer": {
+            "description": "AsPayer are the W-9s the caller asked for.",
+            "items": {
+              "$ref": "#/components/schemas/tax.W9"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "tax.w9Request": {
+        "properties": {
+          "category": {
+            "description": "Category is what the caller pays it for: services, attorney, rents,\nroyalties, other or merchandise. Services when omitted.",
+            "type": "string"
+          },
+          "payee": {
+            "description": "Payee is the org id of the company asked. The caller must have paid it on\nHanzo's rails.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      }
+    },
+    "securitySchemes": {
+      "bearer": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "The caller's credential, sent as `Authorization: Bearer \u003ctoken\u003e`. It is either an access token minted by Hanzo IAM or an API key (pk-/sk-). X-Authorization, and HTTP Basic carrying the token as the password, are accepted spellings of the same header for clients that cannot set Authorization; a browser presents the session cookie instead. Every operation requires it unless it says `security: []`."
+      }
+    }
+  }
+}

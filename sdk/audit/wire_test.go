@@ -2,7 +2,7 @@ package audit
 
 import (
 	"context"
-	"github.com/hanzoai/cloud/sdk/sqltest"
+	"github.com/hanzoai/cloud/internal/sqltest"
 	"testing"
 	"time"
 )

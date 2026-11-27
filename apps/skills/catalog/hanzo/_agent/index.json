@@ -1,0 +1,128 @@
+{
+  "$schema": "https://schemas.agentskills.io/discovery/0.2.0/schema.json",
+  "base_url": "https://api.hanzo.ai",
+  "brand": "hanzo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://hanzo.id",
+  "mcp": {
+    "description": "Model Context Protocol over JSON-RPC 2.0 — one POST per message, stateless, protocol revision 2026-07-28. tools/list answers without a credential with one tool per subsystem (its operations in the \"op\" enum) plus \"describe\", which returns one operation's input schema. tools/call names a subsystem tool and carries {\"op\": <operation>, \"input\": <its arguments>}; it takes the same bearer the REST API does, and a call that carries none is answered 401 with a WWW-Authenticate header naming the resource metadata at /.well-known/oauth-protected-resource, which names the authorization server to sign in at. The tool surface is the public contract: the operator's admin product is not offered, and a name that would disclose a secret or mutate an identity is withheld — the list says how many, under _meta.",
+    "method": "POST",
+    "url": "https://api.hanzo.ai/v1/mcp"
+  },
+  "skill_count": 14,
+  "skills": [
+    {
+      "description": "Read agent activity: Serves the recent-activity feed..",
+      "digest": "sha256:fe1c3ee8937c92b7cdd32edd497a5e143b33fc84eb6f09a53d8674019ab8efe3",
+      "name": "agent_activity",
+      "service": "agent",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/agent_activity/SKILL.md"
+    },
+    {
+      "description": "Read agent agent: Returns every agent defined in the caller's org, each with the number of runs recorded against it., Returns one agent with its system prompt and the caller's own 20 most recent runs of it: a run's input and output are its person's..",
+      "digest": "sha256:1511dd8397b5b9460569315f61a56ae0a0d0691ed6f6a24327f254fb769d293e",
+      "name": "agent_agent",
+      "service": "agent",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/agent_agent/SKILL.md"
+    },
+    {
+      "description": "Read agent briefs: Returns every durable research brief recorded in the caller's organization, newest first., Returns one durable research brief and all of its specialist child tasks, citations, unsupported claims, open questions, and attribution records..",
+      "digest": "sha256:be0ca139748857366f377b45f719457227c0a874c459327a855244ac6d71af5e",
+      "name": "agent_briefs",
+      "service": "agent",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/agent_briefs/SKILL.md"
+    },
+    {
+      "description": "Read agent builds: Returns the public index of every published build, most recently updated first, so a gallery can link straight to the story behind each product., Returns the readable build of one product: the agent session that produced it, turn by turn — the prompts, the reas",
+      "digest": "sha256:b6a8af641a7a162a9b5d8cf718b842532f1f00ef28a90f93dc219b8ad1d42054",
+      "name": "agent_builds",
+      "service": "agent",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/agent_builds/SKILL.md"
+    },
+    {
+      "description": "Read agent chat: List your own conversations, Read one agent thread in full, List the live links to one of your conversations.",
+      "digest": "sha256:3d601c1c838013c25409d8b87f30595f489c0e79544cb968192426a9cfe5766c",
+      "name": "agent_chat",
+      "service": "agent",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/agent_chat/SKILL.md"
+    },
+    {
+      "description": "Read agent coding: Lists what a coding run left, kept after its sandbox is gone: every file it added or changed and its whole change as `changes.patch`, stored beside the run; the ports it served, each a preview while its sandbox is kept; its pull request and where its work was p",
+      "digest": "sha256:6e36ac89089fbb2a3616f6bdc4c876de065d98e73d2f28c53239e242c96fb3eb",
+      "name": "agent_coding",
+      "service": "agent",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/agent_coding/SKILL.md"
+    },
+    {
+      "description": "Read agent groups: Returns every Bot Group defined in the caller's org, ordered from Layer 1 downward., Returns one Bot Group by its public grp_....",
+      "digest": "sha256:df51e34a172d16631ca006f649a554de733edaa2ad56592284e71b2ce6a13d6e",
+      "name": "agent_groups",
+      "service": "agent",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/agent_groups/SKILL.md"
+    },
+    {
+      "description": "Read agent metrics: Serves the invocations-over-time histogram for the Agents dashboard, over the caller's own runs..",
+      "digest": "sha256:34271af5d769f1a617731113bd65b92f3579cabcd829e52203ceede79949a79f",
+      "name": "agent_metrics",
+      "service": "agent",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/agent_metrics/SKILL.md"
+    },
+    {
+      "description": "Read agent proposals: Returns the organization's nightly role candidate proposals, optionally filtered by venture slug or decision status..",
+      "digest": "sha256:4a8997ff2be9eb8cbe8df275a5da7e87f724f20dd4b6f7dc17d485fcb7a81c6c",
+      "name": "agent_proposals",
+      "service": "agent",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/agent_proposals/SKILL.md"
+    },
+    {
+      "description": "Read agent roster: Returns the seven canonical studio functions and the shared, versioned role templates that ventures reuse..",
+      "digest": "sha256:62c9385a1f42028a2b802462cd8d1f4c98ba2dad7b6bfa862cf377a432b7ee06",
+      "name": "agent_roster",
+      "service": "agent",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/agent_roster/SKILL.md"
+    },
+    {
+      "description": "Read agent runs: Returns the caller's own agent runs across EVERY agent of the org, newest first — what ran, on which model, how long it took, and why it failed., Returns the caller's own runs of one agent, newest first — each run's input, its output or its error, and how long it",
+      "digest": "sha256:1c14a18607c29d2fa90f1ad08256e5055fba637ba7f430f429704b7208126348",
+      "name": "agent_runs",
+      "service": "agent",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/agent_runs/SKILL.md"
+    },
+    {
+      "description": "Read agent sessions: Returns the caller org's live sessions, newest first — each with its event count, its direct-child count and a one-line preview of its latest event., Live session and event updates for the caller's org, as Server-Sent Events., Returns one session with its dir",
+      "digest": "sha256:564378b4a9e0b57a3f287d22553115ab81068eee90a28a91590919a0cb26be45",
+      "name": "agent_sessions",
+      "service": "agent",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/agent_sessions/SKILL.md"
+    },
+    {
+      "description": "Read agent spend: Answers what one of your org's agents has spent, in integer micro-USD..",
+      "digest": "sha256:f651e16fa854f8054c0e65c8eb384b6eb67b1b0a0212e5db33b9ca9640c036a6",
+      "name": "agent_spend",
+      "service": "agent",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/agent_spend/SKILL.md"
+    },
+    {
+      "description": "Read agent targets: Returns every machine registered to the caller's org, newest first, each with its live session load., Returns one registered machine, with its live session load., Returns the folders of this machine the web may start runs in: the picker's choices..",
+      "digest": "sha256:49642600b33ef8a4e23841ffac9e68cd9631028487fbe6aaef2e4d0c5dce4eb3",
+      "name": "agent_targets",
+      "service": "agent",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/agent_targets/SKILL.md"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

@@ -1,0 +1,2 @@
+# full vectors stay on the machine that ran; sample.json and top10_*.json are committed
+*.f32

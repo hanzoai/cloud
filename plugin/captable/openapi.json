@@ -1,0 +1,2694 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Hanzo Cloud API",
+    "description": "Package captable is your cap table: stakeholders, share classes, grants, SAFEs, rounds, and who owns what.",
+    "version": "v1"
+  },
+  "servers": [
+    {
+      "url": "https://api.hanzo.ai"
+    }
+  ],
+  "security": [
+    {
+      "bearer": []
+    }
+  ],
+  "tags": [
+    {
+      "name": "captable"
+    }
+  ],
+  "paths": {
+    "/v1/captable/classes": {
+      "get": {
+        "operationId": "get_captable_classes",
+        "summary": "Returns the caller org's share classes, in creation order.",
+        "description": "Returns the caller org's share classes, in creation order. A\nshare class is what a certificate is issued in, and every class the company\nhas authorized appears. The response is a bare JSON array, not an envelope.\n\nOnly a SuperAdmin or an admin of the org may call it; a member who is neither is\nrefused 403.",
+        "tags": [
+          "captable"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/captable.captableShareClass"
+                  },
+                  "type": "array"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      },
+      "post": {
+        "operationId": "post_captable_classes",
+        "summary": "Defines a new class of shares.",
+        "description": "Defines a new class of shares.\n\nEvery field but convertsToShareClassId is required — a class is the instrument\nevery later issuance prices against, so a partially-specified one would silently\nmis-value every share issued into it. `seniority` orders liquidation preference\nwith LOWER first.\n\nOnly a SuperAdmin or an admin of the org may call it; a member who is neither is\nrefused 403.",
+        "tags": [
+          "captable"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/captable.captableShareClassIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/captable.captableCreated"
+                }
+              }
+            },
+            "description": "created"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/captable/classes/{id}": {
+      "patch": {
+        "operationId": "patch_captable_classes_by_id",
+        "summary": "Replaces one share class's terms.",
+        "description": "Replaces one share class's terms.\n\nIt is a full REPLACE and not a merge, despite the PATCH: every field is written\nas sent, so a field omitted is written empty rather than left alone. Send the\nwhole class. The method is PATCH because the resource is addressed by id, not\nbecause the body is partial — and getting that backwards silently blanks terms\nevery later issuance prices against.\n\nOnly a SuperAdmin or an admin of the org may call it; a member who is neither is\nrefused 403.",
+        "tags": [
+          "captable"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID addresses the resource. The URL is the addressing authority — a path\nsegment binds after the body and after the query — so the address decides\nwhich row is written whatever a body claims.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/captable.captableShareClassAmend"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/captable.captableUpdated"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/captable/company": {
+      "get": {
+        "operationId": "get_captable_company",
+        "summary": "Returns the caller org's cap-table company record.",
+        "description": "Returns the caller org's cap-table company record. The row is\nseeded when the tenant's store first opens, so it always exists; its name and\nincorporation details are set with PUT /v1/captable/company.\n\nOnly a SuperAdmin or an admin of the org may call it; a member who is neither is\nrefused 403.",
+        "tags": [
+          "captable"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/captable.captableCompany"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      },
+      "put": {
+        "operationId": "put_captable_company",
+        "summary": "Sets the caller org's company name and incorporation details.",
+        "description": "Sets the caller org's company name and incorporation details.\nThe name is required; the three incorporation fields are optional and each is\nstored as empty when omitted, so a call that sends only a name CLEARS them.\nThe company row itself is seeded when the tenant's store first opens, so this\nnever creates one.\n\nOnly a SuperAdmin or an admin of the org may call it; a member who is neither is\nrefused 403.",
+        "tags": [
+          "captable"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/captable.captableCompanyUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/captable.captableUpdated"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/captable/convertibles": {
+      "get": {
+        "operationId": "get_captable_convertibles",
+        "summary": "Returns the caller org's convertible notes, newest first.",
+        "description": "Returns the caller org's convertible notes, newest first. A\nnote's principal sits OUTSIDE issued equity until it converts, so it is not\npart of the share counts.\n\nOnly a SuperAdmin or an admin of the org may call it; a member who is neither is\nrefused 403.",
+        "tags": [
+          "captable"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/captable.captableNotes"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      },
+      "post": {
+        "operationId": "post_captable_convertibles",
+        "summary": "Records a convertible note.",
+        "description": "Records a convertible note.\n\nOnly a SuperAdmin or an admin of the org may call it; a member who is neither is\nrefused 403.",
+        "tags": [
+          "captable"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/captable.captableConvertibleIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/captable.captableCreated"
+                }
+              }
+            },
+            "description": "created"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/captable/convertibles/{id}": {
+      "delete": {
+        "operationId": "delete_captable_convertibles_by_id",
+        "summary": "Removes one of the caller org's convertible notes, taking its principal out of the cap table's unconverted-instrument totals.",
+        "description": "Removes one of the caller org's convertible notes, taking its\nprincipal out of the cap table's unconverted-instrument totals. An id this org\ndoes not hold is not found.\n\nOnly a SuperAdmin or an admin of the org may call it; a member who is neither is\nrefused 403.",
+        "tags": [
+          "captable"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the convertible note to delete.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/captable.captableDeleted"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/captable/investments": {
+      "get": {
+        "operationId": "get_captable_investments",
+        "summary": "Returns the caller org's investments, newest first.",
+        "description": "Returns the caller org's investments, newest first. It spans\nevery round, so it is the flat ledger of cheques written into the company,\neach naming its investor and the round it went into.\n\nOnly a SuperAdmin or an admin of the org may call it; a member who is neither is\nrefused 403.",
+        "tags": [
+          "captable"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/captable.captableInvestments"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/captable/options": {
+      "get": {
+        "operationId": "get_captable_options",
+        "summary": "Returns the caller org's option grants, newest first.",
+        "description": "Returns the caller org's option grants, newest first. Each row is\njoined to its grantee and its equity plan. Grants that are EXERCISED, EXPIRED\nor CANCELLED are listed here but do not dilute the cap table.\n\nOnly a SuperAdmin or an admin of the org may call it; a member who is neither is\nrefused 403.",
+        "tags": [
+          "captable"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/captable.captableOptions"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      },
+      "post": {
+        "operationId": "post_captable_options",
+        "summary": "Grants options to a stakeholder from an equity plan.",
+        "description": "Grants options to a stakeholder from an equity plan.\n\nOnly a SuperAdmin or an admin of the org may call it; a member who is neither is\nrefused 403.",
+        "tags": [
+          "captable"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/captable.captableOptionIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/captable.captableCreated"
+                }
+              }
+            },
+            "description": "created"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/captable/options/{id}": {
+      "delete": {
+        "operationId": "delete_captable_options_by_id",
+        "summary": "Removes one of the caller org's option grants, taking its shares out of the cap table's granted-options and fully-diluted counts.",
+        "description": "Removes one of the caller org's option grants, taking its shares\nout of the cap table's granted-options and fully-diluted counts. An id this org\ndoes not hold is not found.\n\nOnly a SuperAdmin or an admin of the org may call it; a member who is neither is\nrefused 403.",
+        "tags": [
+          "captable"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the option grant to delete.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/captable.captableDeleted"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/captable/plans": {
+      "get": {
+        "operationId": "get_captable_plans",
+        "summary": "Returns the caller org's equity plans, newest first.",
+        "description": "Returns the caller org's equity plans, newest first. An equity\nplan is an option pool: a reserve of shares, drawn from one share class, that\noption grants are written against.\n\nOnly a SuperAdmin or an admin of the org may call it; a member who is neither is\nrefused 403.",
+        "tags": [
+          "captable"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/captable.captableEquityPlans"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      },
+      "post": {
+        "operationId": "post_captable_plans",
+        "summary": "Opens an equity plan that options are granted from.",
+        "description": "Opens an equity plan that options are granted from.\n\nOnly a SuperAdmin or an admin of the org may call it; a member who is neither is\nrefused 403.",
+        "tags": [
+          "captable"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/captable.captableEquityPlanIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/captable.captableCreated"
+                }
+              }
+            },
+            "description": "created"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/captable/rounds": {
+      "get": {
+        "operationId": "get_captable_rounds",
+        "summary": "Returns the caller org's fundraising rounds, newest first.",
+        "description": "Returns the caller org's fundraising rounds, newest first. A round\ngroups a fundraising event; a PRICED round also carries the share class and\nprice per share it issues at.\n\nOnly a SuperAdmin or an admin of the org may call it; a member who is neither is\nrefused 403.",
+        "tags": [
+          "captable"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/captable.captableRounds"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      },
+      "post": {
+        "operationId": "post_captable_rounds",
+        "summary": "Opens a priced round that investments can be added to.",
+        "description": "Opens a priced round that investments can be added to.\n\nThe round opens OPEN; investing into a closed one is refused.\n\nOnly a SuperAdmin or an admin of the org may call it; a member who is neither is\nrefused 403.",
+        "tags": [
+          "captable"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/captable.captableRoundIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/captable.captableCreated"
+                }
+              }
+            },
+            "description": "created"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/captable/rounds/{id}": {
+      "get": {
+        "operationId": "get_captable_rounds_by_id",
+        "summary": "Returns one of the caller org's fundraising rounds together with every investment written into it, oldest first.",
+        "description": "Returns one of the caller org's fundraising rounds together with every\ninvestment written into it, oldest first. A round id that does not exist in the\ncaller's org is not found — including one that exists in another tenant, since\nthe org comes from the caller's principal and is part of the lookup.\n\nOnly a SuperAdmin or an admin of the org may call it; a member who is neither is\nrefused 403.",
+        "tags": [
+          "captable"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the round to read. It is the path segment: the URL is the addressing\nauthority, and the org it is resolved in comes from the caller's principal,\nso an id from another tenant is simply not found.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/captable.captableRoundDetail"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/captable/rounds/{id}/close": {
+      "post": {
+        "operationId": "post_captable_rounds_by_id_close",
+        "summary": "Closes one of the caller org's fundraising rounds, recording the close date and moving its status to CLOSED.",
+        "description": "Closes one of the caller org's fundraising rounds, recording the\nclose date and moving its status to CLOSED. Only an OPEN round can be closed:\na round that is already closed — like an id this org does not hold — is not\nfound. Closing a round does not change what was invested in it.\n\nOnly a SuperAdmin or an admin of the org may call it; a member who is neither is\nrefused 403.",
+        "tags": [
+          "captable"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the round to close. It is the path segment: the URL is the\naddressing authority, and the org it is resolved in comes from the\ncaller's principal, so an id from another tenant is simply not found.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/captable.captableRoundCloseRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/captable.captableUpdated"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/captable/rounds/{id}/investments": {
+      "post": {
+        "operationId": "post_captable_rounds_by_id_investments",
+        "summary": "Records one investor's money into an open round.",
+        "description": "Records one investor's money into an open round.\n\nThe round must be OPEN; investing into a closed one is refused. Where the round\ncarries a price per share, the investment also issues the shares it buys and the\nanswer names them.\n\nOnly a SuperAdmin or an admin of the org may call it; a member who is neither is\nrefused 403.",
+        "tags": [
+          "captable"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the round to invest in. The URL is the addressing authority — a path\nsegment binds after the body and after the query — so the address decides\nwhich round is written whatever a body claims.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/captable.captableInvestmentIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/captable.captableInvested"
+                }
+              }
+            },
+            "description": "created"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/captable/safes": {
+      "get": {
+        "operationId": "get_captable_safes",
+        "summary": "Returns the caller org's SAFEs, newest first.",
+        "description": "Returns the caller org's SAFEs, newest first. A SAFE is a simple\nagreement for future equity: its capital sits OUTSIDE issued equity until it\nconverts, so it is not part of the share counts.\n\nOnly a SuperAdmin or an admin of the org may call it; a member who is neither is\nrefused 403.",
+        "tags": [
+          "captable"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/captable.captableSafes"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      },
+      "post": {
+        "operationId": "post_captable_safes",
+        "summary": "Records a SAFE — a simple agreement for future equity.",
+        "description": "Records a SAFE — a simple agreement for future equity.\n\nOnly a SuperAdmin or an admin of the org may call it; a member who is neither is\nrefused 403.",
+        "tags": [
+          "captable"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/captable.captableSafeIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/captable.captableCreated"
+                }
+              }
+            },
+            "description": "created"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/captable/safes/{id}": {
+      "delete": {
+        "operationId": "delete_captable_safes_by_id",
+        "summary": "Removes one of the caller org's SAFEs, taking its capital out of the cap table's unconverted-instrument totals.",
+        "description": "Removes one of the caller org's SAFEs, taking its capital out of the\ncap table's unconverted-instrument totals. An id this org does not hold is not\nfound.\n\nOnly a SuperAdmin or an admin of the org may call it; a member who is neither is\nrefused 403.",
+        "tags": [
+          "captable"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the SAFE to delete.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/captable.captableDeleted"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/captable/shares": {
+      "get": {
+        "operationId": "get_captable_shares",
+        "summary": "Returns the caller org's share certificates, newest first.",
+        "description": "Returns the caller org's share certificates, newest first. Each row\nis joined to its holder and its share class, so a certificate names who holds\nit and what class it is in without a second call.\n\nOnly a SuperAdmin or an admin of the org may call it; a member who is neither is\nrefused 403.",
+        "tags": [
+          "captable"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/captable.captableShares"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      },
+      "post": {
+        "operationId": "post_captable_shares",
+        "summary": "Issues a share certificate to a stakeholder.",
+        "description": "Issues a share certificate to a stakeholder.\n\nThe certificate id must be UNIQUE within the company — a duplicate is refused\n409, not silently merged — and both the stakeholder and the share class must\nbelong to this company, so an id from another tenant is a 400 rather than a\ncross-company issuance.\n\nOnly a SuperAdmin or an admin of the org may call it; a member who is neither is\nrefused 403.",
+        "tags": [
+          "captable"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/captable.captableShareIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/captable.captableCreated"
+                }
+              }
+            },
+            "description": "created"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/captable/shares/transfer": {
+      "post": {
+        "operationId": "post_captable_shares_transfer",
+        "summary": "Moves shares from one stakeholder to another.",
+        "description": "Moves shares from one stakeholder to another.\n\nOmit `quantity` to transfer the whole certificate, which REASSIGNS it and mints\nno new share. Send a quantity below the amount held to SPLIT it — the source\ncertificate keeps the remainder, and a split additionally requires\n`certificateId` for the new certificate, which must be unique in the company.\nA quantity outside 1..held is refused, so a transfer can never over-issue.\n\nBoth outcomes answer 200: a transfer records a movement between holders and\nmints no security of its own, which is why this is not a 201 the way an\ninvestment is.\n\nOnly a SuperAdmin or an admin of the org may call it; a member who is neither is\nrefused 403.",
+        "tags": [
+          "captable"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/captable.captableShareTransfer"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/captable.captableTransferred"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/captable/shares/{id}": {
+      "delete": {
+        "operationId": "delete_captable_shares_by_id",
+        "summary": "Removes one of the caller org's share certificates, taking its shares out of the cap table's outstanding and fully-diluted counts.",
+        "description": "Removes one of the caller org's share certificates, taking its\nshares out of the cap table's outstanding and fully-diluted counts. An id this\norg does not hold is not found.\n\nOnly a SuperAdmin or an admin of the org may call it; a member who is neither is\nrefused 403.",
+        "tags": [
+          "captable"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the share certificate to delete.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/captable.captableDeleted"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/captable/stakeholders": {
+      "get": {
+        "operationId": "get_captable_stakeholders",
+        "summary": "Returns the caller org's stakeholders, newest first.",
+        "description": "Returns the caller org's stakeholders, newest first. The\nresponse is a bare JSON array, not an envelope. Each row carries the holder's\ncontact and address fields alongside the company's name.\n\nOnly a SuperAdmin or an admin of the org may call it; a member who is neither is\nrefused 403.",
+        "tags": [
+          "captable"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/captable.captableStakeholder"
+                  },
+                  "type": "array"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      },
+      "post": {
+        "operationId": "post_captable_stakeholders",
+        "summary": "Add stakeholders to the cap table",
+        "description": "Records the people and institutions that can hold equity — the rows every share, option, SAFE, note and investment is issued to.\n\nThe body is ONE stakeholder object or an ARRAY of them, and the array is the point: a whole roster loads in a single call. Email is the identity within the company, so a stakeholder whose email is already on the table is SKIPPED rather than duplicated or rejected — the 201 reports how many rows were actually inserted, which is what makes re-running an import safe. Validation is all-or-nothing across the batch: one bad entry refuses the whole array.\n\nWrites the caller's OWN cap table: the org resolved from the validated principal selects the tenant's store and scopes every row, so there is no field by which a caller can write into another company's table; a request with no validated org is refused 401, and one from a member who is neither a SuperAdmin nor an admin of the org is refused 403. The whole write runs in one transaction, so a refusal leaves nothing behind. Validation is the cap-table bundle's and so is its refusal: a bad body comes back as {success:false, message, errors:[…]} with the failing fields listed, and numeric fields accept a number OR a numeric string. Bodies are capped at 1 MiB.",
+        "tags": [
+          "captable"
+        ],
+        "x-public": true
+      }
+    },
+    "/v1/captable/stakeholders/{id}": {
+      "delete": {
+        "operationId": "delete_captable_stakeholders_by_id",
+        "summary": "Removes one of the caller org's stakeholders.",
+        "description": "Removes one of the caller org's stakeholders. It REFUSES to\norphan issued equity: a holder that still holds share certificates or option\ngrants cannot be deleted, and answers 400 saying so — release or transfer the\nholdings first. An id this org does not hold is not found.\n\nOnly a SuperAdmin or an admin of the org may call it; a member who is neither is\nrefused 403.",
+        "tags": [
+          "captable"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the stakeholder to delete.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/captable.captableDeleted"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      },
+      "patch": {
+        "operationId": "patch_captable_stakeholders_by_id",
+        "summary": "Changes one of the caller org's stakeholders.",
+        "description": "Changes one of the caller org's stakeholders. It is a\nPARTIAL update: only the fields the request names are written, and a field\nsent as null clears that column. A request that names no updatable field is\nrefused, and an id this org does not hold is not found.\n\nThe values are stored as sent. Unlike adding a stakeholder, this route does\nnot check the email's shape or the type and relationship vocabularies, so it\ncan record a value that adding one would have rejected.\n\nOnly a SuperAdmin or an admin of the org may call it; a member who is neither is\nrefused 403.",
+        "tags": [
+          "captable"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the stakeholder to update. It is the path segment: the URL is the\naddressing authority, and the org it is resolved in comes from the\ncaller's principal, so an id from another tenant is simply not found.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/captable.captableStakeholderPatch"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/captable.captableUpdated"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/captable/summary": {
+      "get": {
+        "operationId": "get_captable_summary",
+        "summary": "Computes the caller org's cap table.",
+        "description": "Computes the caller org's cap table. It answers who owns what on a\nfully-diluted basis: outstanding shares, granted options, per-stakeholder\nownership percentages, each share class's authorized versus issued position,\nand the capital sitting on SAFEs and convertible notes that have not yet\nconverted. Only non-terminal option grants dilute — EXERCISED, EXPIRED and\nCANCELLED grants are excluded, so equity issued through an exercised option is\nnever counted twice.\n\nOnly a SuperAdmin or an admin of the org may call it; a member who is neither is\nrefused 403.",
+        "tags": [
+          "captable"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/captable.captableSummary"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "captable.captableClassHolding": {
+        "properties": {
+          "authorized": {
+            "description": "Authorized is how many shares of the class are authorized.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "classType": {
+            "description": "ClassType is COMMON or PREFERRED.",
+            "type": "string"
+          },
+          "issued": {
+            "description": "Issued is how many shares of the class have been issued.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "name": {
+            "description": "Name is the class name.",
+            "type": "string"
+          },
+          "shareClassId": {
+            "description": "ShareClassID addresses the class this position is for.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "captable.captableCompany": {
+        "properties": {
+          "createdAt": {
+            "description": "CreatedAt is when the company row was seeded, in unix milliseconds.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "id": {
+            "description": "ID is the company id, which is the tenant's own org id.",
+            "type": "string"
+          },
+          "incorporationCountry": {
+            "description": "IncorporationCountry is the ISO country the entity is incorporated in.",
+            "type": "string"
+          },
+          "incorporationState": {
+            "description": "IncorporationState is the state or province of incorporation.",
+            "type": "string"
+          },
+          "incorporationType": {
+            "description": "IncorporationType is the entity kind, e.g. LLC or C_CORP.",
+            "type": "string"
+          },
+          "name": {
+            "description": "Name is the company's legal name.",
+            "type": "string"
+          },
+          "publicId": {
+            "description": "PublicID is the company's shareable public identifier.",
+            "type": "string"
+          },
+          "updatedAt": {
+            "description": "UpdatedAt is when the company row last changed, in unix milliseconds.",
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "captable.captableCompanyUpdate": {
+        "properties": {
+          "incorporationCountry": {
+            "description": "IncorporationCountry is the ISO country the entity is incorporated in.\nOptional; omitted, null or empty clears it. Any JSON scalar is accepted\nand stored as its text."
+          },
+          "incorporationState": {
+            "description": "IncorporationState is the state or province of incorporation. Optional;\nomitted, null or empty clears it. Any JSON scalar is accepted and stored\nas its text."
+          },
+          "incorporationType": {
+            "description": "IncorporationType is the entity kind, e.g. LLC or C_CORP. Optional;\nomitted, null or empty clears it. Any JSON scalar is accepted and stored\nas its text."
+          },
+          "name": {
+            "description": "Name is the company's legal name. Required, and it must be a non-empty\nstring — anything else is refused with the cap table's own validation\nerror."
+          }
+        },
+        "type": "object"
+      },
+      "captable.captableConvertibleIn": {
+        "properties": {
+          "additionalTerms": {
+            "description": "AdditionalTerms is free text for anything the fields above do not carry. Optional."
+          },
+          "boardApprovalDate": {
+            "description": "BoardApprovalDate is when the board approved it, YYYY-MM-DD."
+          },
+          "capital": {
+            "description": "Capital is the principal lent, in the company's currency."
+          },
+          "conversionCap": {
+            "description": "ConversionCap is the valuation the note converts at, at most. Optional."
+          },
+          "discountRate": {
+            "description": "DiscountRate is the discount to the next round's price, as a percentage. Optional."
+          },
+          "interestRate": {
+            "description": "InterestRate is the annual interest the principal accrues, as a percentage. Optional."
+          },
+          "issueDate": {
+            "description": "IssueDate is when the note was issued, YYYY-MM-DD."
+          },
+          "publicId": {
+            "description": "PublicID is the note's identifier. It must be UNIQUE within the company; reusing one is refused 409."
+          },
+          "stakeholderId": {
+            "description": "StakeholderID is the lender. It must name a stakeholder of THIS company."
+          },
+          "status": {
+            "description": "Status is DRAFT, ACTIVE, PENDING, EXPIRED or CANCELLED."
+          },
+          "type": {
+            "description": "Type is CCD, OCD or NOTE."
+          }
+        },
+        "type": "object"
+      },
+      "captable.captableConvertibles": {
+        "properties": {
+          "notes": {
+            "$ref": "#/components/schemas/captable.captableInstrumentTotal",
+            "description": "Notes is the convertible notes total."
+          },
+          "safes": {
+            "$ref": "#/components/schemas/captable.captableInstrumentTotal",
+            "description": "Safes is the SAFEs total."
+          }
+        },
+        "type": "object"
+      },
+      "captable.captableCreated": {
+        "properties": {
+          "id": {
+            "description": "ID is the created row's id.",
+            "type": "string"
+          },
+          "message": {
+            "description": "Message is the human sentence the cap table wrote, e.g. \"Share issued\".",
+            "type": "string"
+          },
+          "success": {
+            "description": "Success is true when the row was written.",
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
+      "captable.captableDeleted": {
+        "properties": {
+          "success": {
+            "description": "Success is true when the row was removed.",
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
+      "captable.captableEquityPlan": {
+        "properties": {
+          "boardApprovalDate": {
+            "description": "BoardApprovalDate is the ISO date the board approved the plan.",
+            "type": "string"
+          },
+          "comments": {
+            "description": "Comments is free-form notes on the plan.",
+            "type": "string"
+          },
+          "createdAt": {
+            "description": "CreatedAt is when the plan was recorded, in unix milliseconds.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "defaultCancellatonBehavior": {
+            "description": "DefaultCancellatonBehavior is what happens to cancelled grants, RETIRE or\nRETURN_TO_POOL. The key is spelled as the cap-table wire spells it.",
+            "type": "string"
+          },
+          "id": {
+            "description": "ID is the equity plan id.",
+            "type": "string"
+          },
+          "initialSharesReserved": {
+            "description": "InitialSharesReserved is how many shares the plan reserves.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "name": {
+            "description": "Name is the plan name, e.g. \"2026 Stock Option Plan\".",
+            "type": "string"
+          },
+          "planEffectiveDate": {
+            "description": "PlanEffectiveDate is the ISO date the plan takes effect.",
+            "type": "string"
+          },
+          "shareClassId": {
+            "description": "ShareClassID is the class the reserved shares come from.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "captable.captableEquityPlanIn": {
+        "properties": {
+          "boardApprovalDate": {
+            "description": "BoardApprovalDate is when the board adopted the plan, YYYY-MM-DD."
+          },
+          "comments": {
+            "description": "Comments is a free-text note kept with the plan. Optional."
+          },
+          "defaultCancellatonBehavior": {
+            "description": "DefaultCancellatonBehavior is what happens to cancelled grants: RETIRE, RETURN_TO_POOL, HOLD_AS_CAPITAL_STOCK or DEFINED_PER_PLAN_SECURITY.\n\nThe key is spelled `defaultCancellatonBehavior` — one `l` — because that is\nthe wire, and correcting it here would silently drop the field."
+          },
+          "initialSharesReserved": {
+            "description": "InitialSharesReserved is how many shares the plan may grant. A whole number."
+          },
+          "name": {
+            "description": "Name is the plan's name, e.g. \"2026 Stock Option Plan\"."
+          },
+          "planEffectiveDate": {
+            "description": "PlanEffectiveDate is when the plan takes effect, YYYY-MM-DD. Optional."
+          },
+          "shareClassId": {
+            "description": "ShareClassID is the class the plan grants from. It must name a class of THIS company."
+          }
+        },
+        "type": "object"
+      },
+      "captable.captableEquityPlans": {
+        "properties": {
+          "data": {
+            "description": "Data is every equity plan on the caller org's cap table, newest first.",
+            "items": {
+              "$ref": "#/components/schemas/captable.captableEquityPlan"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "captable.captableHolding": {
+        "properties": {
+          "fullyDiluted": {
+            "description": "FullyDiluted is shares plus options.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "name": {
+            "description": "Name is the stakeholder's name.",
+            "type": "string"
+          },
+          "options": {
+            "description": "Options is the shares under this stakeholder's non-terminal option grants.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "ownershipPct": {
+            "description": "OwnershipPct is fullyDiluted as a percentage of the company's\nfullyDilutedShares, rounded to two decimals; 0 when nothing is issued.",
+            "format": "double",
+            "type": "number"
+          },
+          "shares": {
+            "description": "Shares is the shares this stakeholder holds by certificate.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "stakeholderId": {
+            "description": "StakeholderID addresses the stakeholder these totals are for.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "captable.captableInstrumentTotal": {
+        "properties": {
+          "capital": {
+            "description": "Capital is the total capital across those instruments.",
+            "format": "double",
+            "type": "number"
+          },
+          "count": {
+            "description": "Count is how many instruments there are.",
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "captable.captableInvested": {
+        "properties": {
+          "id": {
+            "description": "ID is the investment record's id.",
+            "type": "string"
+          },
+          "message": {
+            "description": "Message is the human sentence the cap table wrote.",
+            "type": "string"
+          },
+          "newShareId": {
+            "description": "NewShareID names the certificate the investment issued, when the round\ncarries a price per share. Null when the round prices later, which is a\nrecorded investment and not a failure.",
+            "type": "string"
+          },
+          "success": {
+            "description": "Success is true when the investment was recorded.",
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
+      "captable.captableInvestment": {
+        "properties": {
+          "amount": {
+            "description": "Amount is the cash invested.",
+            "format": "double",
+            "type": "number"
+          },
+          "date": {
+            "description": "Date is the ISO date of the investment.",
+            "type": "string"
+          },
+          "id": {
+            "description": "ID is the investment id.",
+            "type": "string"
+          },
+          "roundId": {
+            "description": "RoundID is the round the cheque went into.",
+            "type": "string"
+          },
+          "shareClassId": {
+            "description": "ShareClassID is the class shares were issued in, for a priced round.",
+            "type": "string"
+          },
+          "shares": {
+            "description": "Shares is how many shares the investment bought; 0 when the round issues\nno equity at the time of investment.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "stakeholderId": {
+            "description": "StakeholderID is the investor.",
+            "type": "string"
+          },
+          "stakeholderName": {
+            "description": "StakeholderName is that investor's name.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "captable.captableInvestmentIn": {
+        "properties": {
+          "amount": {
+            "description": "Amount is the money invested, in the round's own currency. Required and must\nbe positive."
+          },
+          "comments": {
+            "description": "Comments is a free-text note kept with the investment. Optional."
+          },
+          "date": {
+            "description": "Date is when the investment was made, YYYY-MM-DD. Optional: omitted, it is\nrecorded as today."
+          },
+          "id": {
+            "description": "ID is the round to invest in. The URL is the addressing authority — a path\nsegment binds after the body and after the query — so the address decides\nwhich round is written whatever a body claims.",
+            "type": "string"
+          },
+          "stakeholderId": {
+            "description": "StakeholderID is the investor. Required, and it must reference a stakeholder\nof the same company."
+          }
+        },
+        "type": "object"
+      },
+      "captable.captableInvestments": {
+        "properties": {
+          "data": {
+            "description": "Data is every investment across every round, newest first.",
+            "items": {
+              "$ref": "#/components/schemas/captable.captableInvestment"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "captable.captableNote": {
+        "properties": {
+          "capital": {
+            "description": "Capital is the principal the investor lent.",
+            "format": "double",
+            "type": "number"
+          },
+          "conversionCap": {
+            "description": "ConversionCap is the valuation cap on conversion, if any.",
+            "format": "double",
+            "type": "number"
+          },
+          "discountRate": {
+            "description": "DiscountRate is the discount to the next round's price, if any.",
+            "format": "double",
+            "type": "number"
+          },
+          "id": {
+            "description": "ID is the note id.",
+            "type": "string"
+          },
+          "interestRate": {
+            "description": "InterestRate is the annual interest rate, if any.",
+            "format": "double",
+            "type": "number"
+          },
+          "issueDate": {
+            "description": "IssueDate is the ISO date the note was signed.",
+            "type": "string"
+          },
+          "publicId": {
+            "description": "PublicID is the note's shareable identifier, unique within the company.",
+            "type": "string"
+          },
+          "stakeholderId": {
+            "description": "StakeholderID is the investor.",
+            "type": "string"
+          },
+          "stakeholderName": {
+            "description": "StakeholderName is that investor's name.",
+            "type": "string"
+          },
+          "status": {
+            "description": "Status is the note's state, e.g. DRAFT or ACTIVE.",
+            "type": "string"
+          },
+          "type": {
+            "description": "Type is the instrument kind, e.g. NOTE.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "captable.captableNotes": {
+        "properties": {
+          "data": {
+            "description": "Data is every convertible note, newest first.",
+            "items": {
+              "$ref": "#/components/schemas/captable.captableNote"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "captable.captableOption": {
+        "properties": {
+          "cliffYears": {
+            "description": "CliffYears is how many years before any of the grant vests.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "equityPlanId": {
+            "description": "EquityPlanID is the plan the grant draws from.",
+            "type": "string"
+          },
+          "equityPlanName": {
+            "description": "EquityPlanName is that plan's name.",
+            "type": "string"
+          },
+          "exercisePrice": {
+            "description": "ExercisePrice is the strike price per share.",
+            "format": "double",
+            "type": "number"
+          },
+          "expirationDate": {
+            "description": "ExpirationDate is the ISO date the grant expires.",
+            "type": "string"
+          },
+          "grantId": {
+            "description": "GrantID is the grant number, unique within the company.",
+            "type": "string"
+          },
+          "id": {
+            "description": "ID is the option id.",
+            "type": "string"
+          },
+          "issueDate": {
+            "description": "IssueDate is the ISO date the grant was issued.",
+            "type": "string"
+          },
+          "quantity": {
+            "description": "Quantity is how many shares the grant covers.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "stakeholderId": {
+            "description": "StakeholderID is the grantee.",
+            "type": "string"
+          },
+          "stakeholderName": {
+            "description": "StakeholderName is that grantee's name.",
+            "type": "string"
+          },
+          "status": {
+            "description": "Status is the grant's state, e.g. DRAFT, ACTIVE, EXERCISED, EXPIRED or\nCANCELLED. Only non-terminal grants dilute the cap table.",
+            "type": "string"
+          },
+          "type": {
+            "description": "Type is the grant kind, ISO or NSO.",
+            "type": "string"
+          },
+          "vestingYears": {
+            "description": "VestingYears is the total vesting period in years.",
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "captable.captableOptionIn": {
+        "properties": {
+          "boardApprovalDate": {
+            "description": "BoardApprovalDate is when the board approved the grant, YYYY-MM-DD."
+          },
+          "cliffYears": {
+            "description": "CliffYears is how long before ANY of the grant vests. A whole number; 0 for no cliff."
+          },
+          "equityPlanId": {
+            "description": "EquityPlanID is the plan the options come from. It must name a plan of THIS company."
+          },
+          "exercisePrice": {
+            "description": "ExercisePrice is the strike price per share, in the company's currency."
+          },
+          "expirationDate": {
+            "description": "ExpirationDate is when unexercised options lapse, YYYY-MM-DD."
+          },
+          "grantId": {
+            "description": "GrantID is the grant's identifier. It must be UNIQUE within the company; reusing one is refused 409."
+          },
+          "issueDate": {
+            "description": "IssueDate is when the grant was made, YYYY-MM-DD."
+          },
+          "notes": {
+            "description": "Notes is a free-text note kept with the grant. Optional."
+          },
+          "quantity": {
+            "description": "Quantity is how many options to grant. A whole number above 0."
+          },
+          "rule144Date": {
+            "description": "Rule144Date is when the Rule 144 holding period starts, YYYY-MM-DD."
+          },
+          "stakeholderId": {
+            "description": "StakeholderID is who receives the grant. It must name a stakeholder of THIS company."
+          },
+          "status": {
+            "description": "Status is DRAFT, ACTIVE, EXERCISED, EXPIRED or CANCELLED."
+          },
+          "type": {
+            "description": "Type is ISO, NSO or RSU."
+          },
+          "vestingStartDate": {
+            "description": "VestingStartDate is when vesting begins, YYYY-MM-DD."
+          },
+          "vestingYears": {
+            "description": "VestingYears is the total vesting period. A whole number."
+          }
+        },
+        "type": "object"
+      },
+      "captable.captableOptions": {
+        "properties": {
+          "data": {
+            "description": "Data is every option grant, newest first.",
+            "items": {
+              "$ref": "#/components/schemas/captable.captableOption"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "captable.captableRound": {
+        "properties": {
+          "closeDate": {
+            "description": "CloseDate is the ISO date the round closed, once it has.",
+            "type": "string"
+          },
+          "createdAt": {
+            "description": "CreatedAt is when the round was recorded, in unix milliseconds.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "id": {
+            "description": "ID is the round id.",
+            "type": "string"
+          },
+          "name": {
+            "description": "Name is the round name, e.g. \"Series A\".",
+            "type": "string"
+          },
+          "preMoneyValuation": {
+            "description": "PreMoneyValuation is the pre-money valuation, for a priced round.",
+            "format": "double",
+            "type": "number"
+          },
+          "pricePerShare": {
+            "description": "PricePerShare is the price per share, for a priced round.",
+            "format": "double",
+            "type": "number"
+          },
+          "raisedAmount": {
+            "description": "RaisedAmount is how much has been invested so far.",
+            "format": "double",
+            "type": "number"
+          },
+          "roundType": {
+            "description": "RoundType is PRICED, SAFE or CONVERTIBLE_NOTE.",
+            "type": "string"
+          },
+          "shareClassId": {
+            "description": "ShareClassID is the class a priced round issues into.",
+            "type": "string"
+          },
+          "status": {
+            "description": "Status is OPEN or CLOSED.",
+            "type": "string"
+          },
+          "targetAmount": {
+            "description": "TargetAmount is how much the round set out to raise.",
+            "format": "double",
+            "type": "number"
+          }
+        },
+        "type": "object"
+      },
+      "captable.captableRoundCloseRequest": {
+        "properties": {
+          "closeDate": {
+            "description": "CloseDate is the date to record the round as closed on. Optional: omitted,\nnull or empty records TODAY. Any JSON scalar is accepted and stored as its\ntext, and the text is stored unparsed, so a caller that wants an ISO date\nsends one."
+          },
+          "id": {
+            "description": "ID is the round to close. It is the path segment: the URL is the\naddressing authority, and the org it is resolved in comes from the\ncaller's principal, so an id from another tenant is simply not found.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "captable.captableRoundDetail": {
+        "properties": {
+          "investments": {
+            "description": "Investments is every investment into this round, oldest first.",
+            "items": {
+              "$ref": "#/components/schemas/captable.captableRoundInvestment"
+            },
+            "type": "array"
+          },
+          "round": {
+            "$ref": "#/components/schemas/captable.captableRound",
+            "description": "Round is the round's own terms — name, type, valuation, target and status —\nas against the investments beside it."
+          }
+        },
+        "type": "object"
+      },
+      "captable.captableRoundIn": {
+        "properties": {
+          "name": {
+            "description": "Name is the round's name, e.g. \"Series A\"."
+          },
+          "preMoneyValuation": {
+            "description": "PreMoneyValuation is the company's valuation before the new money. Optional."
+          },
+          "pricePerShare": {
+            "description": "PricePerShare is the price investors pay per share. An investment into a round with a price ISSUES the shares it buys; one into a round priced later records the money alone."
+          },
+          "roundType": {
+            "description": "RoundType is PRICED, SAFE or CONVERTIBLE."
+          },
+          "shareClassId": {
+            "description": "ShareClassID is the class investors receive. It must name a class of THIS company."
+          },
+          "targetAmount": {
+            "description": "TargetAmount is how much the round aims to raise, in the company's currency."
+          }
+        },
+        "type": "object"
+      },
+      "captable.captableRoundInvestment": {
+        "properties": {
+          "amount": {
+            "description": "Amount is the cash invested.",
+            "format": "double",
+            "type": "number"
+          },
+          "comments": {
+            "description": "Comments is the note recorded with the cheque, if any.",
+            "type": "string"
+          },
+          "date": {
+            "description": "Date is the ISO date of the investment.",
+            "type": "string"
+          },
+          "id": {
+            "description": "ID is the investment id.",
+            "type": "string"
+          },
+          "shares": {
+            "description": "Shares is how many shares the investment bought; 0 when the round issues no\nequity at the time of investment.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "stakeholderId": {
+            "description": "StakeholderID is the investor.",
+            "type": "string"
+          },
+          "stakeholderName": {
+            "description": "StakeholderName is that investor's name.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "captable.captableRoundTotals": {
+        "properties": {
+          "count": {
+            "description": "Count is how many rounds the company has recorded.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "totalRaised": {
+            "description": "TotalRaised is the sum of every round's raised amount.",
+            "format": "double",
+            "type": "number"
+          }
+        },
+        "type": "object"
+      },
+      "captable.captableRounds": {
+        "properties": {
+          "data": {
+            "description": "Data is every round, newest first.",
+            "items": {
+              "$ref": "#/components/schemas/captable.captableRound"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "captable.captableSafe": {
+        "properties": {
+          "capital": {
+            "description": "Capital is the cash the investor put in.",
+            "format": "double",
+            "type": "number"
+          },
+          "discountRate": {
+            "description": "DiscountRate is the discount to the next round's price, if any.",
+            "format": "double",
+            "type": "number"
+          },
+          "id": {
+            "description": "ID is the SAFE id.",
+            "type": "string"
+          },
+          "issueDate": {
+            "description": "IssueDate is the ISO date the SAFE was signed.",
+            "type": "string"
+          },
+          "mfn": {
+            "description": "MFN is true when the SAFE carries a most-favoured-nation clause.",
+            "type": "boolean"
+          },
+          "proRata": {
+            "description": "ProRata is true when the SAFE carries pro-rata rights.",
+            "type": "boolean"
+          },
+          "publicId": {
+            "description": "PublicID is the SAFE's shareable identifier, unique within the company.",
+            "type": "string"
+          },
+          "stakeholderId": {
+            "description": "StakeholderID is the investor.",
+            "type": "string"
+          },
+          "stakeholderName": {
+            "description": "StakeholderName is that investor's name.",
+            "type": "string"
+          },
+          "status": {
+            "description": "Status is the SAFE's state, e.g. DRAFT or ACTIVE.",
+            "type": "string"
+          },
+          "type": {
+            "description": "Type is POST_MONEY or PRE_MONEY.",
+            "type": "string"
+          },
+          "valuationCap": {
+            "description": "ValuationCap is the valuation cap, if any.",
+            "format": "double",
+            "type": "number"
+          }
+        },
+        "type": "object"
+      },
+      "captable.captableSafeIn": {
+        "properties": {
+          "additionalTerms": {
+            "description": "AdditionalTerms is free text for anything the fields above do not carry. Optional."
+          },
+          "boardApprovalDate": {
+            "description": "BoardApprovalDate is when the board approved it, YYYY-MM-DD."
+          },
+          "capital": {
+            "description": "Capital is the money invested, in the company's currency."
+          },
+          "discountRate": {
+            "description": "DiscountRate is the discount to the next round's price, as a percentage. Optional."
+          },
+          "issueDate": {
+            "description": "IssueDate is when the SAFE was signed, YYYY-MM-DD."
+          },
+          "publicId": {
+            "description": "PublicID is the SAFE's identifier. It must be UNIQUE within the company; reusing one is refused 409."
+          },
+          "stakeholderId": {
+            "description": "StakeholderID is the investor. It must name a stakeholder of THIS company."
+          },
+          "status": {
+            "description": "Status is DRAFT, ACTIVE, PENDING, EXPIRED or CANCELLED."
+          },
+          "type": {
+            "description": "Type is PRE_MONEY or POST_MONEY — which side of the new money the cap is measured on."
+          },
+          "valuationCap": {
+            "description": "ValuationCap is the valuation the SAFE converts at, at most. Optional; omit for an uncapped SAFE."
+          }
+        },
+        "type": "object"
+      },
+      "captable.captableSafes": {
+        "properties": {
+          "data": {
+            "description": "Data is every SAFE, newest first.",
+            "items": {
+              "$ref": "#/components/schemas/captable.captableSafe"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "captable.captableShare": {
+        "properties": {
+          "capitalContribution": {
+            "description": "CapitalContribution is the cash paid for the certificate, if recorded.",
+            "format": "double",
+            "type": "number"
+          },
+          "certificateId": {
+            "description": "CertificateID is the certificate number, unique within the company.",
+            "type": "string"
+          },
+          "companyLegends": {
+            "description": "CompanyLegends are the restrictive legends printed on the certificate.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "id": {
+            "description": "ID is the share id.",
+            "type": "string"
+          },
+          "issueDate": {
+            "description": "IssueDate is the ISO date the certificate was issued.",
+            "type": "string"
+          },
+          "pricePerShare": {
+            "description": "PricePerShare is the price paid per share, if recorded.",
+            "format": "double",
+            "type": "number"
+          },
+          "quantity": {
+            "description": "Quantity is how many shares the certificate covers.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "shareClassId": {
+            "description": "ShareClassID is the class the shares belong to.",
+            "type": "string"
+          },
+          "shareClassName": {
+            "description": "ShareClassName is that class's name.",
+            "type": "string"
+          },
+          "shareClassType": {
+            "description": "ShareClassType is that class's type, COMMON or PREFERRED.",
+            "type": "string"
+          },
+          "stakeholderId": {
+            "description": "StakeholderID is the holder of the certificate.",
+            "type": "string"
+          },
+          "stakeholderName": {
+            "description": "StakeholderName is that holder's name.",
+            "type": "string"
+          },
+          "status": {
+            "description": "Status is ACTIVE or DRAFT.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "captable.captableShareClass": {
+        "properties": {
+          "classType": {
+            "description": "ClassType is COMMON or PREFERRED.",
+            "type": "string"
+          },
+          "companyName": {
+            "description": "CompanyName is the name of the company whose cap table this is.",
+            "type": "string"
+          },
+          "conversionRights": {
+            "description": "ConversionRights describes what the class converts into, e.g.\nCONVERTS_TO_FUTURE_ROUND.",
+            "type": "string"
+          },
+          "id": {
+            "description": "ID is the share class id.",
+            "type": "string"
+          },
+          "idx": {
+            "description": "Idx is the class's 1-based position within the company, in creation order.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "initialSharesAuthorized": {
+            "description": "InitialSharesAuthorized is how many shares of this class are authorized.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "liquidationPreferenceMultiple": {
+            "description": "LiquidationPreferenceMultiple is the preference multiple on liquidation.",
+            "format": "double",
+            "type": "number"
+          },
+          "name": {
+            "description": "Name is the class name, e.g. \"Common\" or \"Series A Preferred\".",
+            "type": "string"
+          },
+          "parValue": {
+            "description": "ParValue is the par value per share.",
+            "format": "double",
+            "type": "number"
+          },
+          "participationCapMultiple": {
+            "description": "ParticipationCapMultiple caps participation on liquidation; 0 is uncapped.",
+            "format": "double",
+            "type": "number"
+          },
+          "prefix": {
+            "description": "Prefix is the certificate prefix, CS for common and PS for preferred.",
+            "type": "string"
+          },
+          "pricePerShare": {
+            "description": "PricePerShare is the issue price per share.",
+            "format": "double",
+            "type": "number"
+          },
+          "seniority": {
+            "description": "Seniority orders classes in a liquidation waterfall; higher is more senior.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "votesPerShare": {
+            "description": "VotesPerShare is how many votes one share of this class carries.",
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "captable.captableShareClassAmend": {
+        "properties": {
+          "boardApprovalDate": {
+            "description": "BoardApprovalDate is when the board approved the class, YYYY-MM-DD."
+          },
+          "classType": {
+            "description": "ClassType is COMMON or PREFERRED."
+          },
+          "conversionRights": {
+            "description": "ConversionRights is CONVERTS_TO_FUTURE_ROUND or CONVERTS_TO_SHARE_CLASS_ID. The second requires convertsToShareClassId."
+          },
+          "convertsToShareClassId": {
+            "description": "ConvertsToShareClassID names the class this one converts into. Required when conversionRights is CONVERTS_TO_SHARE_CLASS_ID, ignored otherwise."
+          },
+          "id": {
+            "description": "ID addresses the resource. The URL is the addressing authority — a path\nsegment binds after the body and after the query — so the address decides\nwhich row is written whatever a body claims.",
+            "type": "string"
+          },
+          "initialSharesAuthorized": {
+            "description": "InitialSharesAuthorized is how many shares this class may issue. A whole number."
+          },
+          "liquidationPreferenceMultiple": {
+            "description": "LiquidationPreferenceMultiple is the multiple of invested capital paid out before junior classes — 1 for a 1x preference."
+          },
+          "name": {
+            "description": "Name is the share class's name, e.g. \"Series A Preferred\"."
+          },
+          "parValue": {
+            "description": "ParValue is the nominal per-share value on the certificate, in the company's currency."
+          },
+          "participationCapMultiple": {
+            "description": "ParticipationCapMultiple caps participation after the preference is paid, as a multiple of invested capital. 0 for no cap."
+          },
+          "pricePerShare": {
+            "description": "PricePerShare is the issue price for this class, in the company's currency."
+          },
+          "seniority": {
+            "description": "Seniority orders liquidation preference: LOWER is more senior, so 1 is paid before 2."
+          },
+          "stockholderApprovalDate": {
+            "description": "StockholderApprovalDate is when the stockholders approved it, YYYY-MM-DD."
+          },
+          "votesPerShare": {
+            "description": "VotesPerShare is how many votes one share of this class carries. A whole number; 0 for non-voting."
+          }
+        },
+        "type": "object"
+      },
+      "captable.captableShareClassIn": {
+        "properties": {
+          "boardApprovalDate": {
+            "description": "BoardApprovalDate is when the board approved the class, YYYY-MM-DD."
+          },
+          "classType": {
+            "description": "ClassType is COMMON or PREFERRED."
+          },
+          "conversionRights": {
+            "description": "ConversionRights is CONVERTS_TO_FUTURE_ROUND or CONVERTS_TO_SHARE_CLASS_ID. The second requires convertsToShareClassId."
+          },
+          "convertsToShareClassId": {
+            "description": "ConvertsToShareClassID names the class this one converts into. Required when conversionRights is CONVERTS_TO_SHARE_CLASS_ID, ignored otherwise."
+          },
+          "initialSharesAuthorized": {
+            "description": "InitialSharesAuthorized is how many shares this class may issue. A whole number."
+          },
+          "liquidationPreferenceMultiple": {
+            "description": "LiquidationPreferenceMultiple is the multiple of invested capital paid out before junior classes — 1 for a 1x preference."
+          },
+          "name": {
+            "description": "Name is the share class's name, e.g. \"Series A Preferred\"."
+          },
+          "parValue": {
+            "description": "ParValue is the nominal per-share value on the certificate, in the company's currency."
+          },
+          "participationCapMultiple": {
+            "description": "ParticipationCapMultiple caps participation after the preference is paid, as a multiple of invested capital. 0 for no cap."
+          },
+          "pricePerShare": {
+            "description": "PricePerShare is the issue price for this class, in the company's currency."
+          },
+          "seniority": {
+            "description": "Seniority orders liquidation preference: LOWER is more senior, so 1 is paid before 2."
+          },
+          "stockholderApprovalDate": {
+            "description": "StockholderApprovalDate is when the stockholders approved it, YYYY-MM-DD."
+          },
+          "votesPerShare": {
+            "description": "VotesPerShare is how many votes one share of this class carries. A whole number; 0 for non-voting."
+          }
+        },
+        "type": "object"
+      },
+      "captable.captableShareIn": {
+        "properties": {
+          "boardApprovalDate": {
+            "description": "BoardApprovalDate is when the board approved the issuance, YYYY-MM-DD."
+          },
+          "capitalContribution": {
+            "description": "CapitalContribution is cash paid for the shares. Optional."
+          },
+          "certificateId": {
+            "description": "CertificateID is the certificate number. It must be UNIQUE within the company; reusing one is refused 409."
+          },
+          "cliffYears": {
+            "description": "CliffYears is how long before ANY of the grant vests. A whole number; 0 for no cliff."
+          },
+          "companyLegends": {
+            "description": "CompanyLegends are the restrictive legends printed on the certificate.\n\nA LIST, and it must be sent as one: the bundle substitutes an EMPTY list for\nanything that is not an array, so a single string would be accepted and\nsilently discarded — the certificate issued with no legends and nothing\nreporting it.",
+            "items": {},
+            "type": "array"
+          },
+          "debtCancelled": {
+            "description": "DebtCancelled is debt forgiven as consideration. Optional."
+          },
+          "ipContribution": {
+            "description": "IPContribution is intellectual property assigned as consideration, valued in the company's currency. Optional."
+          },
+          "issueDate": {
+            "description": "IssueDate is when the shares were issued, YYYY-MM-DD."
+          },
+          "otherContributions": {
+            "description": "OtherContributions is any other consideration, valued in the company's currency. Optional."
+          },
+          "pricePerShare": {
+            "description": "PricePerShare is what was paid per share. Optional."
+          },
+          "quantity": {
+            "description": "Quantity is how many shares to issue. A whole number above 0."
+          },
+          "rule144Date": {
+            "description": "Rule144Date is when the Rule 144 holding period starts, YYYY-MM-DD. Optional."
+          },
+          "shareClassId": {
+            "description": "ShareClassID is the class being issued. It must name a class of THIS company."
+          },
+          "stakeholderId": {
+            "description": "StakeholderID is who receives the shares. It must name a stakeholder of THIS company."
+          },
+          "status": {
+            "description": "Status is ACTIVE, DRAFT, SIGNED or PENDING."
+          },
+          "vestingStartDate": {
+            "description": "VestingStartDate is when vesting begins, YYYY-MM-DD. Optional; defaults to the issue date."
+          },
+          "vestingYears": {
+            "description": "VestingYears is the total vesting period. A whole number; 0 for fully vested at issue."
+          }
+        },
+        "type": "object"
+      },
+      "captable.captableShareTransfer": {
+        "properties": {
+          "certificateId": {
+            "description": "CertificateID names the NEW certificate a partial transfer issues, and is\nrequired for one — a partial transfer without it is refused 400. It is unused\nby a full transfer, which reassigns the existing certificate.\n\nIt must be unique within the company; reusing one is refused 409. Declaring\nit is not optional in the way the tag suggests: omitting this field from the\nGo type would leave `quantity` accepted and every PARTIAL transfer answering\n\"certificateId is required\" with no way for a caller to supply it — the\nsilent-drop failure this whole conversion was blocked on, one field wide."
+          },
+          "quantity": {
+            "description": "Quantity is how many shares to move. OPTIONAL, and its absence is not zero:\nomitted or null transfers the WHOLE certificate. A value outside 1..held is\nrefused, so a partial transfer can never over-issue.\n\nA full transfer REASSIGNS the certificate and mints no new one; a partial\ntransfer splits it and answers with the new share's id. That is the fact a\ncaller needs from the answer, not from this comment."
+          },
+          "shareId": {
+            "description": "ShareID is the certificate being transferred. Required, and it must name a\nshare in the caller org's own company — a share id from another tenant\nresolves to not-found rather than to another company's certificate."
+          },
+          "toStakeholderId": {
+            "description": "ToStakeholderID is who receives them. Required, and it must reference a\nstakeholder of the SAME company; one that does not is refused 400 rather\nthan creating a dangling holder."
+          }
+        },
+        "type": "object"
+      },
+      "captable.captableShares": {
+        "properties": {
+          "data": {
+            "description": "Data is every issued share certificate, newest first.",
+            "items": {
+              "$ref": "#/components/schemas/captable.captableShare"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "captable.captableStakeholder": {
+        "properties": {
+          "city": {
+            "description": "City is the stakeholder's city, if recorded.",
+            "type": "string"
+          },
+          "companyName": {
+            "description": "CompanyName is the name of the company whose cap table this is.",
+            "type": "string"
+          },
+          "country": {
+            "description": "Country is the stakeholder's two-letter country code.",
+            "type": "string"
+          },
+          "createdAt": {
+            "description": "CreatedAt is when the stakeholder was added, in unix milliseconds.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "currentRelationship": {
+            "description": "CurrentRelationship is how the stakeholder relates to the company, e.g.\nFOUNDER, INVESTOR or EMPLOYEE.",
+            "type": "string"
+          },
+          "email": {
+            "description": "Email is the stakeholder's email, unique within the company.",
+            "type": "string"
+          },
+          "id": {
+            "description": "ID is the stakeholder id.",
+            "type": "string"
+          },
+          "institutionName": {
+            "description": "InstitutionName names the institution, when the stakeholder is one.",
+            "type": "string"
+          },
+          "name": {
+            "description": "Name is the stakeholder's full name.",
+            "type": "string"
+          },
+          "stakeholderType": {
+            "description": "StakeholderType is INDIVIDUAL or INSTITUTION.",
+            "type": "string"
+          },
+          "state": {
+            "description": "State is the stakeholder's state or province, if recorded.",
+            "type": "string"
+          },
+          "streetAddress": {
+            "description": "StreetAddress is the stakeholder's street address, if recorded.",
+            "type": "string"
+          },
+          "taxId": {
+            "description": "TaxID is the stakeholder's tax identifier, if recorded.",
+            "type": "string"
+          },
+          "zipcode": {
+            "description": "Zipcode is the stakeholder's postal code, if recorded.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "captable.captableStakeholderPatch": {
+        "properties": {
+          "city": {
+            "description": "City is the stakeholder's city."
+          },
+          "currentRelationship": {
+            "description": "CurrentRelationship is how the stakeholder relates to the company, e.g.\nFOUNDER, INVESTOR or EMPLOYEE. This route stores it as sent — unlike\nadding a stakeholder, it is not checked against the vocabulary."
+          },
+          "email": {
+            "description": "Email is the stakeholder's email. This route stores it as sent — unlike\nadding a stakeholder, it is not checked for shape or uniqueness."
+          },
+          "id": {
+            "description": "ID is the stakeholder to update. It is the path segment: the URL is the\naddressing authority, and the org it is resolved in comes from the\ncaller's principal, so an id from another tenant is simply not found.",
+            "type": "string"
+          },
+          "institutionName": {
+            "description": "InstitutionName names the institution, when the stakeholder is one."
+          },
+          "name": {
+            "description": "Name is the stakeholder's full name."
+          },
+          "stakeholderType": {
+            "description": "StakeholderType is INDIVIDUAL or INSTITUTION. This route stores it as\nsent — unlike adding a stakeholder, it is not checked against the\nvocabulary."
+          },
+          "state": {
+            "description": "State is the stakeholder's state or province."
+          },
+          "streetAddress": {
+            "description": "StreetAddress is the stakeholder's street address."
+          },
+          "taxId": {
+            "description": "TaxID is the stakeholder's tax identifier."
+          },
+          "zipcode": {
+            "description": "Zipcode is the stakeholder's postal code."
+          }
+        },
+        "type": "object"
+      },
+      "captable.captableSummary": {
+        "properties": {
+          "byShareClass": {
+            "description": "ByShareClass is each share class's authorized-versus-issued position, in\nclass creation order.",
+            "items": {
+              "$ref": "#/components/schemas/captable.captableClassHolding"
+            },
+            "type": "array"
+          },
+          "byStakeholder": {
+            "description": "ByStakeholder is each stakeholder's position, largest holding first.",
+            "items": {
+              "$ref": "#/components/schemas/captable.captableHolding"
+            },
+            "type": "array"
+          },
+          "company": {
+            "$ref": "#/components/schemas/captable.captableSummaryCompany",
+            "description": "Company names the company the cap table is computed for."
+          },
+          "convertibles": {
+            "$ref": "#/components/schemas/captable.captableConvertibles",
+            "description": "Convertibles is the capital on SAFEs and notes that have not converted."
+          },
+          "rounds": {
+            "$ref": "#/components/schemas/captable.captableRoundTotals",
+            "description": "Rounds is the fundraising rollup."
+          },
+          "totals": {
+            "$ref": "#/components/schemas/captable.captableTotals",
+            "description": "Totals is the company-wide share count."
+          }
+        },
+        "type": "object"
+      },
+      "captable.captableSummaryCompany": {
+        "properties": {
+          "id": {
+            "description": "ID is the company id, which is the tenant's own org id.",
+            "type": "string"
+          },
+          "name": {
+            "description": "Name is the company's legal name.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "captable.captableTotals": {
+        "properties": {
+          "fullyDilutedShares": {
+            "description": "FullyDilutedShares is outstandingShares plus grantedOptions.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "grantedOptions": {
+            "description": "GrantedOptions is the shares under non-terminal option grants — grants that\nare EXERCISED, EXPIRED or CANCELLED are excluded, so nothing double-counts.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "outstandingShares": {
+            "description": "OutstandingShares is the sum of every issued share certificate.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "shareClasses": {
+            "description": "ShareClasses is how many share classes the company has authorized.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "stakeholders": {
+            "description": "Stakeholders is how many stakeholders the company has.",
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "captable.captableTransferred": {
+        "properties": {
+          "message": {
+            "description": "Message is the human sentence the cap table wrote, e.g. \"Share transferred\".",
+            "type": "string"
+          },
+          "newShareId": {
+            "description": "NewShareID names the certificate a PARTIAL transfer created. It is null on a\nfull transfer, which reassigns the existing certificate instead of splitting\nit — so null here means \"no new certificate\", never \"the transfer failed\".",
+            "type": "string"
+          },
+          "success": {
+            "description": "Success is true when the transfer was applied.",
+            "type": "boolean"
+          },
+          "transferred": {
+            "description": "Transferred is how many shares moved.",
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "captable.captableUpdated": {
+        "properties": {
+          "message": {
+            "description": "Message is the human sentence the cap table wrote, e.g. \"Company updated\".",
+            "type": "string"
+          },
+          "success": {
+            "description": "Success is true when the update was applied.",
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
+      "problem-details": {
+        "description": "An RFC 9457 problem document.",
+        "properties": {
+          "code": {
+            "description": "A stable token a client can branch on, when the refusal names one.",
+            "type": "string"
+          },
+          "detail": {
+            "description": "What was refused, for a person to read.",
+            "type": "string"
+          },
+          "status": {
+            "description": "The HTTP status.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "title": {
+            "description": "The status's reason phrase.",
+            "type": "string"
+          },
+          "type": {
+            "description": "about:blank",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "status",
+          "detail"
+        ],
+        "type": "object"
+      }
+    },
+    "securitySchemes": {
+      "bearer": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "The caller's credential, sent as `Authorization: Bearer \u003ctoken\u003e`. It is either an access token minted by Hanzo IAM or an API key (pk-/sk-). X-Authorization, and HTTP Basic carrying the token as the password, are accepted spellings of the same header for clients that cannot set Authorization; a browser presents the session cookie instead. Every operation requires it unless it says `security: []`."
+      }
+    }
+  }
+}

@@ -1,0 +1,822 @@
+package framework
+
+import (
+	"bytes"
+	"encoding/json"
+	"fmt"
+	"io"
+	"net/http"
+	"net/http/httptest"
+	"net/url"
+	"strconv"
+	"testing"
+	"time"
+
+	"github.com/hanzoai/doctype"
+
+	"github.com/hanzoai/cloud/internal/planetest"
+	"github.com/hanzoai/cloud/sdk"
+	luxlog "github.com/luxfi/log"
+	"github.com/zap-proto/zip"
+)
+
+func mountApp(t *testing.T) *zip.App {
+	t.Helper()
+	return mountAs(t, func(string, string) []string { return []string{RoleSystemManager} })
+}
+
+// mountAs is mountApp with the roles IAM gives each caller — what the permission
+// tests need, since the model under test is which role admits what.
+func mountAs(t *testing.T, roles func(org, user string) []string) *zip.App {
+	t.Helper()
+	// IAM says who manages, entitlement says which modules are on. Both are peers
+	// in production; a test that mounts this surface needs them or every caller is
+	// a role-less member of an org that has enabled nothing.
+	planetest.Roled(t, roles)
+	planetest.Entitled(t, func(string, string) bool { return true })
+	app := zip.New(zip.Config{Logger: luxlog.New("test")})
+	compose(app)
+	t.Setenv("CLOUD_DATA_DIR", t.TempDir())
+	if err := Use(app, cloud.Deps{}); err != nil {
+		t.Fatalf("Use:  %v", err)
+	}
+	t.Cleanup(func() { _ = Shutdown() })
+	return app
+}
+
+// call issues a request with an explicit principal (org+user) and optional admin.
+func call(t *testing.T, app *zip.App, method, path, org, user string, admin bool, body any) (int, []byte) {
+	t.Helper()
+	var r io.Reader
+	if body != nil {
+		b, _ := json.Marshal(body)
+		r = bytes.NewReader(b)
+	}
+	req := httptest.NewRequest(method, path, r)
+	if body != nil {
+		req.Header.Set("Content-Type", "application/json")
+	}
+	if org != "" {
+		req.Header.Set("X-Org-Id", org)
+	}
+	if user != "" {
+		req.Header.Set("X-User-Id", user) // the validated-principal signal
+	}
+	if admin {
+		req.Header.Set("X-User-IsAdmin", "true")
+	}
+	resp, err := app.Test(req, zip.TestConfig{Timeout: 30 * time.Second, FailOnTimeout: true})
+	if err != nil {
+		t.Fatalf("Test %s %s: %v", method, path, err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	b, _ := io.ReadAll(resp.Body)
+	return resp.StatusCode, b
+}
+
+// do is the common case: user "u_<org>", not admin.
+func do(t *testing.T, app *zip.App, method, path, org string, body any) (int, []byte) {
+	return call(t, app, method, path, org, "u_"+org, false, body)
+}
+
+func taskDocType() map[string]any {
+	return map[string]any{
+		"name": "Task", "module": "Projects", "isSubmittable": true, "autoname": "TASK-.#####",
+		"fields": []map[string]any{
+			{"fieldname": "subject", "fieldtype": "Data", "reqd": true},
+			{"fieldname": "priority", "fieldtype": "Select", "options": "Low\nHigh"},
+			{"fieldname": "estimate", "fieldtype": "Int"},
+		},
+	}
+}
+
+// TestDocTypeAndDocumentRoundTrip is the end-to-end wire proof: define a DocType,
+// CRUD documents against the generic surface, and the metadata-driven naming +
+// validation all hold.
+func TestDocTypeAndDocumentRoundTrip(t *testing.T) {
+	app := mountApp(t)
+
+	// Define the DocType (bootstrap member is a manager on a fresh org).
+	code, body := do(t, app, http.MethodPost, "/v1/framework/doctypes", "acme", taskDocType())
+	if code != http.StatusCreated {
+		t.Fatalf("define doctype want 201, got %d (%s)", code, body)
+	}
+	// The static /doctypes route must win over the generic /:doctype route.
+	code, body = do(t, app, http.MethodGet, "/v1/framework/doctypes", "acme", nil)
+	var dtList struct {
+		Data []DocType `json:"data"`
+	}
+	_ = json.Unmarshal(body, &dtList)
+	if code != http.StatusOK || len(dtList.Data) != 1 || dtList.Data[0].Name != "Task" {
+		t.Fatalf("list doctypes want [Task], got %d %+v", code, dtList.Data)
+	}
+
+	// Create a document via the generic surface; naming series applies.
+	code, body = do(t, app, http.MethodPost, "/v1/framework/Projects.Task", "acme",
+		map[string]any{"subject": "Ship framework", "priority": "High", "estimate": 5})
+	if code != http.StatusCreated {
+		t.Fatalf("create doc want 201, got %d (%s)", code, body)
+	}
+	var doc map[string]any
+	_ = json.Unmarshal(body, &doc)
+	name, _ := doc["name"].(string)
+	if name == "" || doc["subject"] != "Ship framework" || doc["docstatus"] != float64(0) {
+		t.Fatalf("create doc round-trip mismatch: %+v", doc)
+	}
+	if doc["estimate"] != float64(5) { // Int coerced
+		t.Fatalf("estimate want 5, got %v", doc["estimate"])
+	}
+
+	// Get it back.
+	code, body = do(t, app, http.MethodGet, "/v1/framework/Projects.Task/"+name, "acme", nil)
+	if code != http.StatusOK {
+		t.Fatalf("get doc want 200, got %d (%s)", code, body)
+	}
+
+	// Update it.
+	code, body = do(t, app, http.MethodPut, "/v1/framework/Projects.Task/"+name, "acme",
+		map[string]any{"subject": "Ship it", "priority": "Low", "estimate": 8})
+	_ = json.Unmarshal(body, &doc)
+	if code != http.StatusOK || doc["subject"] != "Ship it" || doc["estimate"] != float64(8) {
+		t.Fatalf("update doc want 200/updated, got %d %+v", code, doc)
+	}
+
+	// List.
+	code, body = do(t, app, http.MethodGet, "/v1/framework/Projects.Task", "acme", nil)
+	var list struct {
+		Data []map[string]any `json:"data"`
+	}
+	_ = json.Unmarshal(body, &list)
+	if code != http.StatusOK || len(list.Data) != 1 {
+		t.Fatalf("list docs want 1, got %d %+v", code, list.Data)
+	}
+
+	// Delete.
+	if code, _ := do(t, app, http.MethodDelete, "/v1/framework/Projects.Task/"+name, "acme", nil); code != http.StatusNoContent {
+		t.Fatalf("delete doc want 204, got %d", code)
+	}
+	if code, _ := do(t, app, http.MethodGet, "/v1/framework/Projects.Task/"+name, "acme", nil); code != http.StatusNotFound {
+		t.Fatalf("get deleted want 404, got %d", code)
+	}
+}
+
+// TestWireValidation covers the field-type + reference rejections over HTTP.
+func TestWireValidation(t *testing.T) {
+	app := mountApp(t)
+	do(t, app, http.MethodPost, "/v1/framework/doctypes", "acme", taskDocType())
+
+	// Missing reqd subject → 400.
+	if code, _ := do(t, app, http.MethodPost, "/v1/framework/Projects.Task", "acme", map[string]any{"priority": "High"}); code != http.StatusBadRequest {
+		t.Fatalf("missing reqd want 400, got %d", code)
+	}
+	// Bad Select option → 400.
+	if code, _ := do(t, app, http.MethodPost, "/v1/framework/Projects.Task", "acme", map[string]any{"subject": "x", "priority": "Urgent"}); code != http.StatusBadRequest {
+		t.Fatalf("bad select want 400, got %d", code)
+	}
+	// Int as text → 400.
+	if code, _ := do(t, app, http.MethodPost, "/v1/framework/Projects.Task", "acme", map[string]any{"subject": "x", "estimate": "five"}); code != http.StatusBadRequest {
+		t.Fatalf("bad int want 400, got %d", code)
+	}
+	// Unknown doctype → 404.
+	if code, _ := do(t, app, http.MethodPost, "/v1/framework/Projects.Ghost", "acme", map[string]any{"a": "b"}); code != http.StatusNotFound {
+		t.Fatalf("unknown doctype want 404, got %d", code)
+	}
+}
+
+// TestSubmitCancelLifecycle covers docstatus transitions over HTTP.
+func TestSubmitCancelLifecycle(t *testing.T) {
+	app := mountApp(t)
+	do(t, app, http.MethodPost, "/v1/framework/doctypes", "acme", taskDocType())
+	_, body := do(t, app, http.MethodPost, "/v1/framework/Projects.Task", "acme", map[string]any{"subject": "x"})
+	var doc map[string]any
+	_ = json.Unmarshal(body, &doc)
+	name := doc["name"].(string)
+
+	// submit 0→1.
+	code, body := do(t, app, http.MethodPost, "/v1/framework/Projects.Task/"+name+"/submit", "acme", nil)
+	_ = json.Unmarshal(body, &doc)
+	if code != http.StatusOK || doc["docstatus"] != float64(1) {
+		t.Fatalf("submit want docstatus 1, got %d %v", code, doc["docstatus"])
+	}
+	// editing a submitted doc → 409.
+	if code, _ := do(t, app, http.MethodPut, "/v1/framework/Projects.Task/"+name, "acme", map[string]any{"subject": "y"}); code != http.StatusConflict {
+		t.Fatalf("edit submitted want 409, got %d", code)
+	}
+	// deleting a submitted doc → 409.
+	if code, _ := do(t, app, http.MethodDelete, "/v1/framework/Projects.Task/"+name, "acme", nil); code != http.StatusConflict {
+		t.Fatalf("delete submitted want 409, got %d", code)
+	}
+	// cancel 1→2.
+	code, body = do(t, app, http.MethodPost, "/v1/framework/Projects.Task/"+name+"/cancel", "acme", nil)
+	_ = json.Unmarshal(body, &doc)
+	if code != http.StatusOK || doc["docstatus"] != float64(2) {
+		t.Fatalf("cancel want docstatus 2, got %d %v", code, doc["docstatus"])
+	}
+	// re-submit a cancelled doc → 409.
+	if code, _ := do(t, app, http.MethodPost, "/v1/framework/Projects.Task/"+name+"/submit", "acme", nil); code != http.StatusConflict {
+		t.Fatalf("resubmit cancelled want 409, got %d", code)
+	}
+}
+
+// TestForgedPrincipalRefused is the F4 guard: a caller who forges X-Org-Id with
+// NO validated principal (no X-User-Id) is refused 403 on EVERY route, never
+// served or allowed to mutate another tenant's data. This asserts principal
+// AUTHENTICITY, not just WHERE org=? scoping.
+func TestForgedPrincipalRefused(t *testing.T) {
+	app := mountApp(t)
+	// Seed a real tenant through the validated path.
+	do(t, app, http.MethodPost, "/v1/framework/doctypes", "victim", taskDocType())
+
+	forged := func(method, path string, body any) int {
+		var r io.Reader
+		if body != nil {
+			b, _ := json.Marshal(body)
+			r = bytes.NewReader(b)
+		}
+		req := httptest.NewRequest(method, path, r)
+		if body != nil {
+			req.Header.Set("Content-Type", "application/json")
+		}
+		req.Header.Set("X-Org-Id", "victim") // forged; equals a real tenant
+		// deliberately NO X-User-Id — the anonymous-forge signature.
+		resp, err := app.Test(req, zip.TestConfig{Timeout: 30 * time.Second, FailOnTimeout: true})
+		if err != nil {
+			t.Fatalf("forged %s %s: %v", method, path, err)
+		}
+		defer func() { _ = resp.Body.Close() }()
+		return resp.StatusCode
+	}
+
+	routes := []struct {
+		method, path string
+		body         any
+	}{
+		{http.MethodGet, "/v1/framework/doctypes", nil},
+		{http.MethodPost, "/v1/framework/doctypes", taskDocType()},
+		{http.MethodGet, "/v1/framework/Projects.Task", nil},
+		{http.MethodPost, "/v1/framework/Projects.Task", map[string]any{"subject": "pwn"}},
+		{http.MethodGet, "/v1/framework/Projects.Task/TASK-00001", nil},
+		{http.MethodDelete, "/v1/framework/Projects.Task/TASK-00001", nil},
+		{http.MethodPost, "/v1/framework/Projects.Task/TASK-00001/submit", nil},
+		{http.MethodPost, "/v1/framework/Projects.Task/TASK-00001/cancel", nil},
+		{http.MethodGet, "/v1/framework/doctypes/Projects.Task", nil},
+		{http.MethodPut, "/v1/framework/doctypes/Projects.Task", taskDocType()},
+		{http.MethodDelete, "/v1/framework/doctypes/Projects.Task", nil},
+		{http.MethodGet, "/v1/framework/modules", nil},
+		{http.MethodGet, "/v1/framework/modules/cms", nil},
+		{http.MethodPost, "/v1/framework/modules/cms/install", nil},
+		{http.MethodGet, "/v1/framework/summary", nil},
+	}
+	for _, r := range routes {
+		if code := forged(r.method, r.path, r.body); code != http.StatusForbidden {
+			t.Fatalf("forged %s %s want 403, got %d", r.method, r.path, code)
+		}
+	}
+}
+
+// TestCrossOrgIsolation proves one validated tenant cannot see or touch another's
+// doctypes or documents, even with exact names.
+func TestCrossOrgIsolation(t *testing.T) {
+	app := mountApp(t)
+	// acme defines Task and creates a doc.
+	do(t, app, http.MethodPost, "/v1/framework/doctypes", "acme", taskDocType())
+	_, body := do(t, app, http.MethodPost, "/v1/framework/Projects.Task", "acme", map[string]any{"subject": "acme secret"})
+	var doc map[string]any
+	_ = json.Unmarshal(body, &doc)
+	name := doc["name"].(string)
+
+	// evil (its own valid principal) cannot see acme's Task doctype.
+	if code, _ := do(t, app, http.MethodGet, "/v1/framework/doctypes/Task", "evil", nil); code != http.StatusNotFound {
+		t.Fatalf("evil GET acme doctype want 404, got %d", code)
+	}
+	// evil listing acme's Task doctype documents → 404 (doctype unknown in evil).
+	if code, _ := do(t, app, http.MethodGet, "/v1/framework/Projects.Task", "evil", nil); code != http.StatusNotFound {
+		t.Fatalf("evil list Task want 404, got %d", code)
+	}
+	// Even if evil defines its OWN Task, it cannot read acme's document by name.
+	do(t, app, http.MethodPost, "/v1/framework/doctypes", "evil", taskDocType())
+	if code, _ := do(t, app, http.MethodGet, "/v1/framework/Projects.Task/"+name, "evil", nil); code != http.StatusNotFound {
+		t.Fatalf("evil GET acme doc want 404, got %d", code)
+	}
+	// evil's own list is empty (its own Task has no docs).
+	code, body := do(t, app, http.MethodGet, "/v1/framework/Projects.Task", "evil", nil)
+	var list struct {
+		Data []map[string]any `json:"data"`
+	}
+	_ = json.Unmarshal(body, &list)
+	if code != http.StatusOK || len(list.Data) != 0 {
+		t.Fatalf("evil Task list want empty, got %d %+v", code, list.Data)
+	}
+	// acme's doc survives.
+	if code, _ := do(t, app, http.MethodGet, "/v1/framework/Projects.Task/"+name, "acme", nil); code != http.StatusOK {
+		t.Fatalf("acme doc must survive, got %d", code)
+	}
+}
+
+// TestPermissionEnforcement covers the full permission model: bootstrap, strict
+// enforcement after configuration, role-scoped rights, System Manager + global
+// admin bypass.
+func TestPermissionEnforcement(t *testing.T) {
+	// The grants IAM holds: u1 manages, u2 is an Agent, u3 has nothing.
+	app := mountAs(t, func(_, user string) []string {
+		switch user {
+		case "u1":
+			return []string{RoleSystemManager}
+		case "u2":
+			return []string{"Agent"}
+		}
+		return nil
+	})
+	const org = "acme"
+
+	// u1 (bootstrap manager) defines a Ticket restricted to the Agent role.
+	ticket := map[string]any{
+		"name": "Ticket", "module": "test",
+		"fields": []map[string]any{{"fieldname": "subject", "fieldtype": "Data", "reqd": true}},
+		"permissions": []map[string]any{
+			{"role": "Agent", "read": true, "create": true},
+		},
+	}
+	if code, b := call(t, app, http.MethodPost, "/v1/framework/doctypes", org, "u1", false, ticket); code != http.StatusCreated {
+		t.Fatalf("u1 define ticket want 201, got %d (%s)", code, b)
+	}
+
+	// The org is now configured: u3 (no roles) is DENIED read on Ticket.
+	if code, _ := call(t, app, http.MethodGet, "/v1/framework/test.Ticket", org, "u3", false, nil); code != http.StatusForbidden {
+		t.Fatalf("u3 read Ticket want 403, got %d", code)
+	}
+	// u3 cannot create either.
+	if code, _ := call(t, app, http.MethodPost, "/v1/framework/test.Ticket", org, "u3", false, map[string]any{"subject": "x"}); code != http.StatusForbidden {
+		t.Fatalf("u3 create Ticket want 403, got %d", code)
+	}
+	// u3 (not a manager anymore) cannot define doctypes.
+	if code, _ := call(t, app, http.MethodPost, "/v1/framework/doctypes", org, "u3", false, taskDocType()); code != http.StatusForbidden {
+		t.Fatalf("u3 define doctype want 403, got %d", code)
+	}
+
+	// u2 (Agent) CAN read + create.
+	if code, _ := call(t, app, http.MethodGet, "/v1/framework/test.Ticket", org, "u2", false, nil); code != http.StatusOK {
+		t.Fatalf("u2 read Ticket want 200, got %d", code)
+	}
+	code, body := call(t, app, http.MethodPost, "/v1/framework/test.Ticket", org, "u2", false, map[string]any{"subject": "help"})
+	if code != http.StatusCreated {
+		t.Fatalf("u2 create Ticket want 201, got %d (%s)", code, body)
+	}
+	var doc map[string]any
+	_ = json.Unmarshal(body, &doc)
+	tname := doc["name"].(string)
+	// but Agent has NO delete right → 403.
+	if code, _ := call(t, app, http.MethodDelete, "/v1/framework/test.Ticket/"+tname, org, "u2", false, nil); code != http.StatusForbidden {
+		t.Fatalf("u2 delete Ticket want 403 (no delete perm), got %d", code)
+	}
+
+	// A SuperAdmin who only named the org holds no role in it (HIP-0527 §2): the
+	// per-doctype perms refuse them like anyone else.
+	if code, _ := call(t, app, http.MethodDelete, "/v1/framework/test.Ticket/"+tname, org, "root", true, nil); code != http.StatusForbidden {
+		t.Fatalf("header-only SuperAdmin delete Ticket want 403, got %d", code)
+	}
+	// System Manager (u1) can define doctypes.
+	if code, _ := call(t, app, http.MethodPost, "/v1/framework/doctypes", org, "u1", false, taskDocType()); code != http.StatusCreated {
+		t.Fatalf("u1 (SM) define doctype want 201, got %d", code)
+	}
+}
+
+// TestPasswordRedactedOverWire proves a Password field never leaves the wire in
+// clear or as a hash.
+func TestPasswordRedactedOverWire(t *testing.T) {
+	app := mountApp(t)
+	const org = "acme"
+	cred := map[string]any{
+		"name": "Cred", "module": "test", "autoname": "field:key",
+		"fields": []map[string]any{
+			{"fieldname": "key", "fieldtype": "Data", "reqd": true},
+			{"fieldname": "secret", "fieldtype": "Password"},
+		},
+	}
+	do(t, app, http.MethodPost, "/v1/framework/doctypes", org, cred)
+	code, body := do(t, app, http.MethodPost, "/v1/framework/test.Cred", org, map[string]any{"key": "api", "secret": "hunter2"})
+	if code != http.StatusCreated {
+		t.Fatalf("create cred want 201, got %d (%s)", code, body)
+	}
+	if bytes.Contains(body, []byte("hunter2")) {
+		t.Fatalf("plaintext password leaked on the wire: %s", body)
+	}
+	if bytes.Contains(body, []byte("$argon2id$")) {
+		t.Fatalf("password hash leaked on the wire: %s", body)
+	}
+	var doc map[string]any
+	_ = json.Unmarshal(body, &doc)
+	if doc["secret"] != doctype.RedactedMarker {
+		t.Fatalf("secret want redacted marker, got %v", doc["secret"])
+	}
+}
+
+// TestListFilterAndOrder exercises json_extract filtering + ordering over the
+// wire — proving the bound-parameter argument alignment in ListDocuments.
+func TestListFilterAndOrder(t *testing.T) {
+	app := mountApp(t)
+	const org = "acme"
+	do(t, app, http.MethodPost, "/v1/framework/doctypes", org, taskDocType())
+	for _, tk := range []map[string]any{
+		{"subject": "a", "priority": "Low", "estimate": 3},
+		{"subject": "b", "priority": "High", "estimate": 1},
+		{"subject": "c", "priority": "High", "estimate": 2},
+	} {
+		if code, b := do(t, app, http.MethodPost, "/v1/framework/Projects.Task", org, tk); code != http.StatusCreated {
+			t.Fatalf("seed want 201, got %d (%s)", code, b)
+		}
+	}
+	// unmarshalList decodes into a FRESH target (json.Unmarshal merges into reused
+	// maps, so a shared variable would carry stale keys between assertions).
+	unmarshalList := func(b []byte) []map[string]any {
+		var l struct {
+			Data []map[string]any `json:"data"`
+		}
+		if err := json.Unmarshal(b, &l); err != nil {
+			t.Fatalf("unmarshal list: %v (%s)", err, b)
+		}
+		return l.Data
+	}
+
+	// Filter priority=High → 2 rows.
+	code, body := do(t, app, http.MethodGet, `/v1/framework/Projects.Task?filters={"priority":"High"}`, org, nil)
+	if rows := unmarshalList(body); code != http.StatusOK || len(rows) != 2 {
+		t.Fatalf("filter High want 2 rows, got %d %+v", code, rows)
+	}
+	// order_by estimate asc → first is estimate 1.
+	code, body = do(t, app, http.MethodGet, "/v1/framework/Projects.Task?order_by=estimate%20asc", org, nil)
+	if rows := unmarshalList(body); code != http.StatusOK || len(rows) != 3 || rows[0]["estimate"] != float64(1) {
+		t.Fatalf("order_by estimate asc want first=1, got %d %+v", code, rows)
+	}
+	// Unknown filter field → 400 (not a silent cross-field query).
+	if code, _ := do(t, app, http.MethodGet, `/v1/framework/Projects.Task?filters={"nope":"x"}`, org, nil); code != http.StatusBadRequest {
+		t.Fatalf("unknown filter want 400, got %d", code)
+	}
+	// fields projection returns only requested + envelope keys.
+	code, body = do(t, app, http.MethodGet, "/v1/framework/Projects.Task?fields=subject&limit=1", org, nil)
+	rows := unmarshalList(body)
+	if code != http.StatusOK || len(rows) != 1 {
+		t.Fatalf("projection want 1 row, got %d", code)
+	}
+	if _, hasSubject := rows[0]["subject"]; !hasSubject {
+		t.Fatalf("projection must keep subject: %+v", rows[0])
+	}
+	if _, hasPriority := rows[0]["priority"]; hasPriority {
+		t.Fatalf("projection must drop priority: %+v", rows[0])
+	}
+}
+
+// TestLinkAndFetchFrom proves Link relations validate in-org and fetch_from
+// auto-populates from the linked document.
+func TestLinkAndFetchFrom(t *testing.T) {
+	app := mountApp(t)
+	const org = "acme"
+	// Customer with a name + region.
+	do(t, app, http.MethodPost, "/v1/framework/doctypes", org, map[string]any{
+		"name": "Customer", "module": "test", "autoname": "field:code",
+		"fields": []map[string]any{
+			{"fieldname": "code", "fieldtype": "Data", "reqd": true},
+			{"fieldname": "region", "fieldtype": "Data"},
+		},
+	})
+	// Order links to Customer and fetches its region.
+	do(t, app, http.MethodPost, "/v1/framework/doctypes", org, map[string]any{
+		"name": "SalesOrder", "module": "test",
+		"fields": []map[string]any{
+			{"fieldname": "customer", "fieldtype": "Link", "options": "test.Customer", "reqd": true},
+			{"fieldname": "region", "fieldtype": "Data", "fetchFrom": "customer.region"},
+		},
+	})
+	do(t, app, http.MethodPost, "/v1/framework/test.Customer", org, map[string]any{"code": "ACME", "region": "West"})
+
+	// Valid link + fetch_from.
+	code, body := do(t, app, http.MethodPost, "/v1/framework/test.SalesOrder", org, map[string]any{"customer": "ACME"})
+	if code != http.StatusCreated {
+		t.Fatalf("create order want 201, got %d (%s)", code, body)
+	}
+	var doc map[string]any
+	_ = json.Unmarshal(body, &doc)
+	if doc["region"] != "West" {
+		t.Fatalf("fetch_from want region=West, got %v", doc["region"])
+	}
+	// Dangling link → 422.
+	if code, _ := do(t, app, http.MethodPost, "/v1/framework/test.SalesOrder", org, map[string]any{"customer": "GHOST"}); code != http.StatusUnprocessableEntity {
+		t.Fatalf("dangling link want 422, got %d", code)
+	}
+}
+
+// TestSingleSubmitImmutability is the LOW-1 fix: a submitted Single must be
+// immutable — PUT/POST (both upsert via writeSingle) must 409, data unchanged —
+// the SAME immutability the non-Single path enforces.
+func TestSingleSubmitImmutability(t *testing.T) {
+	app := mountApp(t)
+	const org = "acme"
+	settings := map[string]any{
+		"name": "Settings", "module": "test", "isSingle": true, "isSubmittable": true,
+		"fields": []map[string]any{{"fieldname": "value", "fieldtype": "Data"}},
+	}
+	if code, b := do(t, app, http.MethodPost, "/v1/framework/doctypes", org, settings); code != http.StatusCreated {
+		t.Fatalf("define single want 201, got %d (%s)", code, b)
+	}
+	// Create the single.
+	code, body := do(t, app, http.MethodPost, "/v1/framework/test.Settings", org, map[string]any{"value": "v1"})
+	var doc map[string]any
+	_ = json.Unmarshal(body, &doc)
+	if code != http.StatusCreated || doc["value"] != "v1" || doc["docstatus"] != float64(0) {
+		t.Fatalf("create single want 201/v1/draft, got %d %+v", code, doc)
+	}
+	// Submit it (0→1).
+	code, body = do(t, app, http.MethodPost, "/v1/framework/test.Settings/Settings/submit", org, nil)
+	_ = json.Unmarshal(body, &doc)
+	if code != http.StatusOK || doc["docstatus"] != float64(1) {
+		t.Fatalf("submit single want docstatus 1, got %d %+v", code, doc)
+	}
+	// PUT on a submitted single → 409 (this was the mutable bug).
+	if code, _ := do(t, app, http.MethodPut, "/v1/framework/test.Settings/Settings", org, map[string]any{"value": "v2"}); code != http.StatusConflict {
+		t.Fatalf("PUT submitted single want 409, got %d", code)
+	}
+	// POST (upsert) on a submitted single → also 409 (same guard, both verbs).
+	if code, _ := do(t, app, http.MethodPost, "/v1/framework/test.Settings", org, map[string]any{"value": "v3"}); code != http.StatusConflict {
+		t.Fatalf("POST submitted single want 409, got %d", code)
+	}
+	// Data unchanged, still submitted.
+	code, body = do(t, app, http.MethodGet, "/v1/framework/test.Settings/Settings", org, nil)
+	_ = json.Unmarshal(body, &doc)
+	if code != http.StatusOK || doc["value"] != "v1" || doc["docstatus"] != float64(1) {
+		t.Fatalf("submitted single must be unchanged (v1/docstatus 1), got %d %+v", code, doc)
+	}
+}
+
+// TestPermlessDefaultClosed is the LOW-2 fix: a doctype with no declared perms is
+// DEFAULT-CLOSED (manager-only), not open to every org member; and the org
+// owner/creator (first to administer) is the System Manager — one-time.
+func TestPermlessDefaultClosed(t *testing.T) {
+	// owner1 manages; every other member holds nothing.
+	app := mountAs(t, func(_, user string) []string {
+		if user == "owner1" {
+			return []string{RoleSystemManager}
+		}
+		return nil
+	})
+	const org = "acme"
+	memo := map[string]any{
+		"name": "Memo", "module": "test",
+		"fields": []map[string]any{{"fieldname": "body", "fieldtype": "Data", "reqd": true}},
+		// deliberately NO permissions → must NOT become open-to-all.
+	}
+	// owner1 is the FIRST to administer acme → becomes System Manager (org now configured).
+	if code, b := call(t, app, http.MethodPost, "/v1/framework/doctypes", org, "owner1", false, memo); code != http.StatusCreated {
+		t.Fatalf("owner1 define Memo want 201, got %d (%s)", code, b)
+	}
+	// A role-less non-owner on the CONFIGURED org is DENIED on the permless doctype.
+	if code, _ := call(t, app, http.MethodGet, "/v1/framework/test.Memo", org, "member2", false, nil); code != http.StatusForbidden {
+		t.Fatalf("member2 read permless Memo want 403 (default-closed), got %d", code)
+	}
+	if code, _ := call(t, app, http.MethodPost, "/v1/framework/test.Memo", org, "member2", false, map[string]any{"body": "x"}); code != http.StatusForbidden {
+		t.Fatalf("member2 create permless Memo want 403, got %d", code)
+	}
+	// Owner seeding is ONE-TIME: member2 cannot become manager by defining.
+	if code, _ := call(t, app, http.MethodPost, "/v1/framework/doctypes", org, "member2", false, taskDocType()); code != http.StatusForbidden {
+		t.Fatalf("member2 define doctype want 403 (owner seeding is one-time), got %d", code)
+	}
+	// The owner (System Manager) CAN read + create.
+	if code, _ := call(t, app, http.MethodGet, "/v1/framework/test.Memo", org, "owner1", false, nil); code != http.StatusOK {
+		t.Fatalf("owner1 read Memo want 200, got %d", code)
+	}
+	if code, b := call(t, app, http.MethodPost, "/v1/framework/test.Memo", org, "owner1", false, map[string]any{"body": "y"}); code != http.StatusCreated {
+		t.Fatalf("owner1 create Memo want 201, got %d (%s)", code, b)
+	}
+	// The seeded default perm is EXPLICIT on the returned doctype (never silently permless).
+	code, body := call(t, app, http.MethodGet, "/v1/framework/doctypes/test.Memo", org, "owner1", false, nil)
+	var got DocType
+	_ = json.Unmarshal(body, &got)
+	if code != http.StatusOK || len(got.Perms) != 1 || got.Perms[0].Role != RoleSystemManager || !got.Perms[0].Read {
+		t.Fatalf("Memo must carry an explicit System Manager perm, got %d %+v", code, got.Perms)
+	}
+}
+
+// TestFrameworkListPageExactTotal seeds more than 2,500 documents and walks
+// every page, asserting the exact total, no duplicate name, no skipped name,
+// and that the final page's `next` is empty.
+func TestFrameworkListPageExactTotal(t *testing.T) {
+
+	app := mountApp(t)
+	const org = "acme"
+	const total = 2507
+	const page = 200
+
+	do(t, app, http.MethodPost, "/v1/framework/doctypes", org, taskDocType())
+
+	for i := 0; i < total; i++ {
+		if code, _ := do(t, app, http.MethodPost, "/v1/framework/Projects.Task", org,
+			map[string]any{"subject": fmt.Sprintf("task-%05d", i), "priority": "High"}); code != http.StatusCreated {
+			t.Fatalf("create doc %d want 201, got %d", i, code)
+		}
+	}
+
+	var (
+		all     []string
+		cursor  string
+		pages   int
+		seenTot int64
+	)
+	for {
+		q := "/v1/framework/Projects.Task?limit=" + strconv.Itoa(page)
+		if cursor != "" {
+			q += "&cursor=" + url.QueryEscape(cursor)
+		}
+		code, body := do(t, app, http.MethodGet, q, org, nil)
+		if code != http.StatusOK {
+			t.Fatalf("list page %d want 200, got %d (%s)", pages, code, body)
+		}
+		var list struct {
+			Data  []map[string]any `json:"data"`
+			Next  string           `json:"next"`
+			Total int64            `json:"total"`
+		}
+		if err := json.Unmarshal(body, &list); err != nil {
+			t.Fatalf("unmarshal page %d: %v", pages, err)
+		}
+		if pages == 0 {
+			seenTot = list.Total
+		}
+		if list.Total != int64(total) {
+			t.Fatalf("page %d total want %d, got %d", pages, total, list.Total)
+		}
+		for _, d := range list.Data {
+			name, _ := d["name"].(string)
+			all = append(all, name)
+		}
+		pages++
+		if list.Next == "" {
+			break
+		}
+		cursor = list.Next
+	}
+
+	if seenTot != int64(total) {
+		t.Fatalf("total want %d, got %d", total, seenTot)
+	}
+	if len(all) != total {
+		t.Fatalf("rows walked want %d, got %d across %d pages", total, len(all), pages)
+	}
+	if len(all) != len(setOfStr(all)) {
+		t.Fatalf("duplicate names across pages: %d rows but %d unique", len(all), len(setOfStr(all)))
+	}
+}
+
+// TestFrameworkListPageEmpty returns zero rows and total 0 for an empty doctype.
+func TestFrameworkListPageEmpty(t *testing.T) {
+
+	app := mountApp(t)
+	const org = "acme"
+	do(t, app, http.MethodPost, "/v1/framework/doctypes", org, taskDocType())
+
+	code, body := do(t, app, http.MethodGet, "/v1/framework/Projects.Task?limit=100", org, nil)
+	if code != http.StatusOK {
+		t.Fatalf("list empty want 200, got %d (%s)", code, body)
+	}
+	var list struct {
+		Data  []map[string]any `json:"data"`
+		Next  string           `json:"next"`
+		Total int64            `json:"total"`
+	}
+	if err := json.Unmarshal(body, &list); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if list.Total != 0 {
+		t.Fatalf("total want 0, got %d", list.Total)
+	}
+	if len(list.Data) != 0 {
+		t.Fatalf("data want empty, got %d", len(list.Data))
+	}
+	if list.Next != "" {
+		t.Fatalf("next want empty on last page, got %q", list.Next)
+	}
+}
+
+// TestFrameworkListCursorStableUnderInserts seeds 2,500 documents, takes page 1,
+// inserts more documents, then takes page 2 with the same cursor and asserts no
+// row was duplicated or skipped relative to the snapshot taken before inserts.
+func TestFrameworkListCursorStableUnderInserts(t *testing.T) {
+
+	app := mountApp(t)
+	const org = "acme"
+	const base = 2500
+
+	do(t, app, http.MethodPost, "/v1/framework/doctypes", org, taskDocType())
+
+	for i := 0; i < base; i++ {
+		if code, _ := do(t, app, http.MethodPost, "/v1/framework/Projects.Task", org,
+			map[string]any{"subject": fmt.Sprintf("old-%05d", i), "priority": "High"}); code != http.StatusCreated {
+			t.Fatalf("create doc %d want 201, got %d", i, code)
+		}
+	}
+
+	// Snapshot page 1 (200 rows, newest-updated first).
+	q := "/v1/framework/Projects.Task?limit=200"
+	code, body := do(t, app, http.MethodGet, q, org, nil)
+	if code != http.StatusOK {
+		t.Fatalf("page1 want 200, got %d (%s)", code, body)
+	}
+	var page1 struct {
+		Data  []map[string]any `json:"data"`
+		Next  string           `json:"next"`
+		Total int64            `json:"total"`
+	}
+	if err := json.Unmarshal(body, &page1); err != nil {
+		t.Fatalf("unmarshal page1: %v", err)
+	}
+	if page1.Total != int64(base) {
+		t.Fatalf("page1 total want %d, got %d", base, page1.Total)
+	}
+	if len(page1.Data) != 200 {
+		t.Fatalf("page1 rows want 200, got %d", len(page1.Data))
+	}
+	cursor := page1.Next
+
+	// Insert new docs (bigger created_at, sort above existing).
+	for i := 0; i < 300; i++ {
+		if code, _ := do(t, app, http.MethodPost, "/v1/framework/Projects.Task", org,
+			map[string]any{"subject": fmt.Sprintf("new-%05d", i), "priority": "High"}); code != http.StatusCreated {
+			t.Fatalf("insert doc %d want 201, got %d", i, code)
+		}
+	}
+
+	// Page 2 with the same cursor must continue exactly where page 1 left off.
+	q2 := "/v1/framework/Projects.Task?limit=200&cursor=" + url.QueryEscape(cursor)
+	code, body2 := do(t, app, http.MethodGet, q2, org, nil)
+	if code != http.StatusOK {
+		t.Fatalf("page2 want 200, got %d (%s)", code, body2)
+	}
+	var page2 struct {
+		Data  []map[string]any `json:"data"`
+		Next  string           `json:"next"`
+		Total int64            `json:"total"`
+	}
+	if err := json.Unmarshal(body2, &page2); err != nil {
+		t.Fatalf("unmarshal page2: %v", err)
+	}
+	if len(page2.Data) == 0 {
+		t.Fatalf("page2 must have rows after inserting above page1")
+	}
+	all := map[string]bool{}
+	for _, d := range page1.Data {
+		name, _ := d["name"].(string)
+		all[name] = true
+	}
+	for _, d := range page2.Data {
+		name, _ := d["name"].(string)
+		if all[name] {
+			t.Fatalf("page2 duplicated page1 name %s", name)
+		}
+		all[name] = true
+	}
+	c := page2.Next
+	for c != "" {
+		q := "/v1/framework/Projects.Task?limit=200&cursor=" + url.QueryEscape(c)
+		code, body := do(t, app, http.MethodGet, q, org, nil)
+		if code != http.StatusOK {
+			t.Fatalf("walk page want 200, got %d (%s)", code, body)
+		}
+		var p struct {
+			Data []map[string]any `json:"data"`
+			Next string           `json:"next"`
+		}
+		if err := json.Unmarshal(body, &p); err != nil {
+			t.Fatalf("unmarshal walk page: %v", err)
+		}
+		for _, d := range p.Data {
+			name, _ := d["name"].(string)
+			if all[name] {
+				t.Fatalf("duplicate after insert: %s", name)
+			}
+			all[name] = true
+		}
+		c = p.Next
+	}
+	if len(all) != base {
+		t.Fatalf("union from snapshot cursor want %d rows, got %d", base, len(all))
+	}
+	if page2.Total != int64(base+300) {
+		t.Fatalf("page2 total after insert want %d, got %d", base+300, page2.Total)
+	}
+}
+
+func setOfStr(ss []string) map[string]bool {
+	m := map[string]bool{}
+	for _, s := range ss {
+		m[s] = true
+	}
+	return m
+}
+
+// TestNoOrgRefused is the belt-and-suspenders no-principal check on the read path.
+func TestNoOrgRefused(t *testing.T) {
+	app := mountApp(t)
+	for _, p := range []string{"/v1/framework/doctypes", "/v1/framework/modules", "/v1/framework/summary", "/v1/framework/Projects.Task"} {
+		if code, _ := call(t, app, http.MethodGet, p, "", "", false, nil); code != http.StatusForbidden {
+			t.Fatalf("no-principal GET %s want 403, got %d", p, code)
+		}
+	}
+}

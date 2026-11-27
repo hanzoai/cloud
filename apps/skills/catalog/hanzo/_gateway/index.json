@@ -1,0 +1,32 @@
+{
+  "$schema": "https://schemas.agentskills.io/discovery/0.2.0/schema.json",
+  "base_url": "https://api.hanzo.ai",
+  "brand": "hanzo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://hanzo.id",
+  "mcp": {
+    "description": "Model Context Protocol over JSON-RPC 2.0 — one POST per message, stateless, protocol revision 2026-07-28. tools/list answers without a credential with one tool per subsystem (its operations in the \"op\" enum) plus \"describe\", which returns one operation's input schema. tools/call names a subsystem tool and carries {\"op\": <operation>, \"input\": <its arguments>}; it takes the same bearer the REST API does, and a call that carries none is answered 401 with a WWW-Authenticate header naming the resource metadata at /.well-known/oauth-protected-resource, which names the authorization server to sign in at. The tool surface is the public contract: the operator's admin product is not offered, and a name that would disclose a secret or mutate an identity is withheld — the list says how many, under _meta.",
+    "method": "POST",
+    "url": "https://api.hanzo.ai/v1/mcp"
+  },
+  "skill_count": 2,
+  "skills": [
+    {
+      "description": "Read gateway config: Returns the EFFECTIVE edge policy the caller is subject to: the platform CORS allowlist and pre-auth per-IP flood cap in force, plus the caller's own authenticated rate ceiling, edge-cache TTLs and accepted-method allowlist..",
+      "digest": "sha256:17bc717b71ffd76d4231dcc2caca06c52b4bfd2aefacead9fcb3d2bc16cc63f7",
+      "name": "gateway_config",
+      "service": "gateway",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/gateway_config/SKILL.md"
+    },
+    {
+      "description": "Read gateway traffic: Report who is calling this org's API right now.",
+      "digest": "sha256:f6a58c67414b5c0ecd66158dfad54b2153efd4232ebcd60373c4710f193db332",
+      "name": "gateway_traffic",
+      "service": "gateway",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/gateway_traffic/SKILL.md"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

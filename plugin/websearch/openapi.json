@@ -1,0 +1,588 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Hanzo Cloud API",
+    "description": "Package websearch is a web search and a page fetch your agents can call.",
+    "version": "v1"
+  },
+  "servers": [
+    {
+      "url": "https://api.hanzo.ai"
+    }
+  ],
+  "security": [
+    {
+      "bearer": []
+    }
+  ],
+  "tags": [
+    {
+      "name": "websearch"
+    }
+  ],
+  "paths": {
+    "/v1/websearch": {
+      "post": {
+        "operationId": "search_web",
+        "summary": "Search the live web",
+        "description": "Searches the live web and answers with ranked results.\n\nThis is the fleet's path to what is happening RIGHT NOW — today's weather, an\noutage, a release that postdates any model's training. `q` is the query and\n`language` narrows it to a locale. The answer is `{query, number_of_results,\nresults:[{url, title, content, engine}]}`, where `content` is the ENGINE's\nsnippet and not the page: read a page with POST /v1/crawl.\n\nIt is served in-process by a Go meta-search over the engines the platform\nenables (GET /v1/websearch/engines): Mojeek's API by default when the platform\nholds its key, otherwise the keyless engines that answer from this cluster. The\nenabled engines run concurrently and their hits are merged, deduplicated by\nnormalised URL (host and path, trailing slash and fragment dropped, query kept,\nso distinct queries stay distinct results) and capped at 30. Hits that several\nengines agree on rank first; ties keep a stable order.\n\nIt fails SOFT on the engines. One that errors, times out or is served a\nbot-challenge page contributes zero results and never fails the call, so an\nempty `results` is a real answer — nothing was found — and not an outage. The\narray is always present, never null.\n\nTwo refusals in the order they have to be asked, both in the PREAMBLE. A typed\nop is also an MCP tool, a call-plane operation, a graph field and a CLI\ncommand, and every one of those invokes it with no route and therefore no\nmiddleware — so what admits a caller here is asked where every caller reaches\nit rather than in a middleware only one of them passes through.\n\nA VALIDATED PRINCIPAL IS REQUIRED, and there is no tenant beyond that: the\nresults are public web pages, identical for every caller, so nothing here is\nscoped and nothing here can leak across orgs.\n\nTHEN THE ANTI-FORGERY TOKEN, immediately before the money, because that is\nwhat it is about. This search is the SAME bought meta-search the compat\nendpoint runs — the engines cost, and account.Shared/meter.go bills the\ncaller's ledger for the answer — so a page the caller never visited must not\nbe able to spend for them by sending their browser here with a cookie they\nalready hold. Nothing leaks; the answer is unreadable cross-origin. What\nmoves is money.\n\nIt is account's control, the one every operation in this estate asks, and it\nis a no-op the moment a caller PRESENTS a credential (Bearer, gateway, API\nkey) — which is every service and console caller here — so it costs a CLI, an\nagent and an API client nothing. Only the ambient-cookie path is asked for the\nechoed token. The raw /v1/websearch/search route asks the same control on its\ngroup (see Mount), so the two addresses of one search are admitted alike.",
+        "tags": [
+          "websearch"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/websearch.webSearchQuery"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/websearch.webSearchResults"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/websearch/engines": {
+      "get": {
+        "operationId": "list_search_engines",
+        "summary": "Lists every engine web search can run and how the platform runs it.",
+        "description": "Lists every engine web search can run and how the platform runs it.\n\nFor each engine: whether it is enabled and its place in the run order, whether\nit takes an API key and whether it needs one, whether the platform holds that\nkey (`keyed` — the key itself is never returned), whether it answers from this\ncluster as things stand (`available`), the option values it is asked with and\nthe options it supports with their bounds. Enabled engines come first, in the\norder they run.\n\n`saved` is false when no setting is stored, and the engines shown enabled are\nthen the default: Mojeek alone when its key is held, otherwise bing, ddg and\nMojeek — Mojeek's keyless page does not answer from this cluster on its own.\n\nSuperAdmin only. 503 when the settings store or KMS cannot answer: a board\nthat guessed would show an operator a configuration nobody saved.",
+        "tags": [
+          "websearch"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/websearch.searchEngines"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      },
+      "put": {
+        "operationId": "set_search_engines",
+        "summary": "Replaces the platform's web search engine setting and answers the result.",
+        "description": "Replaces the platform's web search engine setting and answers the result.\n\n`enabled` lists the engines searches run, in order — at least one, each a\nregistered engine named once, and at least one that is available (needs no key\nhere, or its key is held). `options` gives each engine's values by name; an\nengine or a field left out takes its default, because the setting replaces the\nstored one whole. A count must lie within the engine's bounds, a language is a\ntag like `en` or `en-US`, a region a two-letter country code, and an option the\nengine does not support is refused.\n\nSuperAdmin only. 400 names every problem with the setting at once; 503 when\nthe settings store or KMS cannot answer. The answer is the engine list as it\nnow stands, so the caller sees the effect without a second read.",
+        "tags": [
+          "websearch"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "enabled": [
+                  "mojeek"
+                ],
+                "options": {
+                  "mojeek": {
+                    "count": 30,
+                    "language": "en",
+                    "region": "GB"
+                  }
+                }
+              },
+              "schema": {
+                "$ref": "#/components/schemas/websearch.searchEnginesSet"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/websearch.searchEngines"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/websearch/engines/{name}/key": {
+      "delete": {
+        "operationId": "delete_search_engine_key",
+        "summary": "Removes an engine's API key from KMS.",
+        "description": "Removes an engine's API key from KMS.\n\nSearches stop using the key at once. Removing a key that is not held answers\nthe same as removing one that is. 409 when the saved setting would be left with\nno engine that can answer — enable bing or ddg first.\n\nSuperAdmin only. 404 for an engine that does not exist, 400 for one that takes\nno key, 503 when the settings store or KMS cannot answer.",
+        "tags": [
+          "websearch"
+        ],
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "description": "Name is the engine, from the path.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/websearch.searchEngineKeyed"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      },
+      "put": {
+        "operationId": "set_search_engine_key",
+        "summary": "Seals an engine's API key in KMS, replacing any key held.",
+        "description": "Seals an engine's API key in KMS, replacing any key held.\n\nThe key is the platform's: it lives in KMS under the platform org admin at\n/websearch/\u003cENGINE\u003e_KEY (env prod), every search reads it from there at the\nmoment it runs, and no\noperation returns, logs or echoes it — the answer says only that a key is now\nheld. Only an engine that takes a key accepts one (mojeek, brave).\n\nSuperAdmin only. 404 for an engine that does not exist, 400 for one that takes\nno key or a key that is empty, longer than 4096 bytes or holds whitespace or\ncontrol characters, 503 when KMS cannot take it.",
+        "tags": [
+          "websearch"
+        ],
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "description": "Name is the engine, from the path.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/websearch.searchEngineKey"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/websearch.searchEngineKeyed"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/websearch/scrape": {
+      "post": {
+        "operationId": "post_websearch_scrape",
+        "summary": "Fetch one page and get its extracted markdown, in the firecrawl envelope.",
+        "description": "Takes {url} and answers {success, data:{markdown, metadata}} — the exact contract a firecrawl client decodes. The fetch, extraction and optional browser render run in-process; there is no crawler pod to be down.\n\nThe shared service key is required as an Authorization Bearer, compared in constant time: unset on the deployment is 503, missing or wrong is 401. Unlike search, a validated principal does NOT substitute for it — this is the service-to-service endpoint.\n\nA page is archived under the caller's own org and project, taken from the verified principal when there is one, so a scrape lands in the same corpus /v1/crawl fills and a URL already read under that scope is answered from the archive without touching the network. A service caller carrying no principal shares the unscoped prefix.\n\nThe URL is caller-supplied and fetched from INSIDE the cluster, which makes this a request-forgery primitive by construction: in-namespace service DNS and a cloud metadata endpoint that hands credentials to anyone who asks are both a resolution away. Only http and https are accepted, and every address actually dialled must be public unicast — loopback, link-local, private and multicast are refused. The check lives in the DIALER rather than on the hostname, because resolving a name to validate it and then letting the transport resolve it again is a gap DNS rebinding walks straight through; redirects re-enter the same dialer, so a public URL that bounces to the metadata address is refused at the hop that matters.\n\nThe one thing to get right: FAILURE IS 200. A missing or unparseable url, a body over the 1 MiB read cap, and a fetch that could not be completed all answer HTTP 200 with success:false and a reason — a firecrawl client reads data.success, not the status line. Only the two auth refusals use a status code, so a caller that branches on HTTP status alone will read every failed scrape as a success.",
+        "tags": [
+          "websearch"
+        ],
+        "x-public": true
+      }
+    },
+    "/v1/websearch/search": {
+      "delete": {
+        "operationId": "delete_websearch_search",
+        "summary": "Web meta-search, in the SearXNG JSON envelope.",
+        "description": "Answers {query, number_of_results, results:[{url, title, content, engine}]} — the exact /search?format=json contract a SearXNG client decodes, so an agent tool configured against SearXNG reaches this with no change. `q` is the query and `language` narrows it; both are read from the QUERY STRING.\n\nServed in-process by a Go meta-search over the engines the platform enables (GET /v1/websearch/engines). The enabled engines run concurrently and their hits are merged, deduplicated by normalised URL (host and path, trailing slash and fragment dropped, query kept — distinct queries are distinct results) and capped at 30. Hits several engines agree on rank first.\n\nTWO WAYS IN, one-way equivalent, and no third: a validated principal — the same gate the whole data plane uses — passes straight through, and a caller without one must present the shared service key as X-API-Key, compared in constant time. A deployment with no key configured answers 503 rather than opening the surface to everyone, and a missing or wrong key is 401. It is never an open proxy. There is no tenant scoping beyond that gate, and there is nothing to scope: the results are public web pages, identical for every caller.\n\nIt fails SOFT on the engines and closed only on the gate. An engine that errors or is served a bot-challenge page contributes zero results and never fails the request, so an empty `results` is a real answer — nothing was found — and not an outage. The array is always present, never null.\n\nThe one thing to get right: every method answers identically. This is one handler registered for all of them, and it reads only the query string, so a body sent on the write verbs is ignored rather than refused.",
+        "tags": [
+          "websearch"
+        ],
+        "x-public": true
+      },
+      "get": {
+        "operationId": "get_websearch_search",
+        "summary": "Web meta-search, in the SearXNG JSON envelope.",
+        "description": "Answers {query, number_of_results, results:[{url, title, content, engine}]} — the exact /search?format=json contract a SearXNG client decodes, so an agent tool configured against SearXNG reaches this with no change. `q` is the query and `language` narrows it; both are read from the QUERY STRING.\n\nServed in-process by a Go meta-search over the engines the platform enables (GET /v1/websearch/engines). The enabled engines run concurrently and their hits are merged, deduplicated by normalised URL (host and path, trailing slash and fragment dropped, query kept — distinct queries are distinct results) and capped at 30. Hits several engines agree on rank first.\n\nTWO WAYS IN, one-way equivalent, and no third: a validated principal — the same gate the whole data plane uses — passes straight through, and a caller without one must present the shared service key as X-API-Key, compared in constant time. A deployment with no key configured answers 503 rather than opening the surface to everyone, and a missing or wrong key is 401. It is never an open proxy. There is no tenant scoping beyond that gate, and there is nothing to scope: the results are public web pages, identical for every caller.\n\nIt fails SOFT on the engines and closed only on the gate. An engine that errors or is served a bot-challenge page contributes zero results and never fails the request, so an empty `results` is a real answer — nothing was found — and not an outage. The array is always present, never null.\n\nThe one thing to get right: every method answers identically. This is one handler registered for all of them, and it reads only the query string, so a body sent on the write verbs is ignored rather than refused.",
+        "tags": [
+          "websearch"
+        ],
+        "x-public": true
+      },
+      "patch": {
+        "operationId": "patch_websearch_search",
+        "summary": "Web meta-search, in the SearXNG JSON envelope.",
+        "description": "Answers {query, number_of_results, results:[{url, title, content, engine}]} — the exact /search?format=json contract a SearXNG client decodes, so an agent tool configured against SearXNG reaches this with no change. `q` is the query and `language` narrows it; both are read from the QUERY STRING.\n\nServed in-process by a Go meta-search over the engines the platform enables (GET /v1/websearch/engines). The enabled engines run concurrently and their hits are merged, deduplicated by normalised URL (host and path, trailing slash and fragment dropped, query kept — distinct queries are distinct results) and capped at 30. Hits several engines agree on rank first.\n\nTWO WAYS IN, one-way equivalent, and no third: a validated principal — the same gate the whole data plane uses — passes straight through, and a caller without one must present the shared service key as X-API-Key, compared in constant time. A deployment with no key configured answers 503 rather than opening the surface to everyone, and a missing or wrong key is 401. It is never an open proxy. There is no tenant scoping beyond that gate, and there is nothing to scope: the results are public web pages, identical for every caller.\n\nIt fails SOFT on the engines and closed only on the gate. An engine that errors or is served a bot-challenge page contributes zero results and never fails the request, so an empty `results` is a real answer — nothing was found — and not an outage. The array is always present, never null.\n\nThe one thing to get right: every method answers identically. This is one handler registered for all of them, and it reads only the query string, so a body sent on the write verbs is ignored rather than refused.",
+        "tags": [
+          "websearch"
+        ],
+        "x-public": true
+      },
+      "post": {
+        "operationId": "post_websearch_search",
+        "summary": "Web meta-search, in the SearXNG JSON envelope.",
+        "description": "Answers {query, number_of_results, results:[{url, title, content, engine}]} — the exact /search?format=json contract a SearXNG client decodes, so an agent tool configured against SearXNG reaches this with no change. `q` is the query and `language` narrows it; both are read from the QUERY STRING.\n\nServed in-process by a Go meta-search over the engines the platform enables (GET /v1/websearch/engines). The enabled engines run concurrently and their hits are merged, deduplicated by normalised URL (host and path, trailing slash and fragment dropped, query kept — distinct queries are distinct results) and capped at 30. Hits several engines agree on rank first.\n\nTWO WAYS IN, one-way equivalent, and no third: a validated principal — the same gate the whole data plane uses — passes straight through, and a caller without one must present the shared service key as X-API-Key, compared in constant time. A deployment with no key configured answers 503 rather than opening the surface to everyone, and a missing or wrong key is 401. It is never an open proxy. There is no tenant scoping beyond that gate, and there is nothing to scope: the results are public web pages, identical for every caller.\n\nIt fails SOFT on the engines and closed only on the gate. An engine that errors or is served a bot-challenge page contributes zero results and never fails the request, so an empty `results` is a real answer — nothing was found — and not an outage. The array is always present, never null.\n\nThe one thing to get right: every method answers identically. This is one handler registered for all of them, and it reads only the query string, so a body sent on the write verbs is ignored rather than refused.",
+        "tags": [
+          "websearch"
+        ],
+        "x-public": true
+      },
+      "put": {
+        "operationId": "put_websearch_search",
+        "summary": "Web meta-search, in the SearXNG JSON envelope.",
+        "description": "Answers {query, number_of_results, results:[{url, title, content, engine}]} — the exact /search?format=json contract a SearXNG client decodes, so an agent tool configured against SearXNG reaches this with no change. `q` is the query and `language` narrows it; both are read from the QUERY STRING.\n\nServed in-process by a Go meta-search over the engines the platform enables (GET /v1/websearch/engines). The enabled engines run concurrently and their hits are merged, deduplicated by normalised URL (host and path, trailing slash and fragment dropped, query kept — distinct queries are distinct results) and capped at 30. Hits several engines agree on rank first.\n\nTWO WAYS IN, one-way equivalent, and no third: a validated principal — the same gate the whole data plane uses — passes straight through, and a caller without one must present the shared service key as X-API-Key, compared in constant time. A deployment with no key configured answers 503 rather than opening the surface to everyone, and a missing or wrong key is 401. It is never an open proxy. There is no tenant scoping beyond that gate, and there is nothing to scope: the results are public web pages, identical for every caller.\n\nIt fails SOFT on the engines and closed only on the gate. An engine that errors or is served a bot-challenge page contributes zero results and never fails the request, so an empty `results` is a real answer — nothing was found — and not an outage. The array is always present, never null.\n\nThe one thing to get right: every method answers identically. This is one handler registered for all of them, and it reads only the query string, so a body sent on the write verbs is ignored rather than refused.",
+        "tags": [
+          "websearch"
+        ],
+        "x-public": true
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "problem-details": {
+        "description": "An RFC 9457 problem document.",
+        "properties": {
+          "code": {
+            "description": "A stable token a client can branch on, when the refusal names one.",
+            "type": "string"
+          },
+          "detail": {
+            "description": "What was refused, for a person to read.",
+            "type": "string"
+          },
+          "status": {
+            "description": "The HTTP status.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "title": {
+            "description": "The status's reason phrase.",
+            "type": "string"
+          },
+          "type": {
+            "description": "about:blank",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "status",
+          "detail"
+        ],
+        "type": "object"
+      },
+      "websearch.searchEngine": {
+        "properties": {
+          "acceptsKey": {
+            "description": "AcceptsKey is whether the engine takes an API key at all.",
+            "type": "boolean"
+          },
+          "available": {
+            "description": "Available is whether the engine answers from this cluster as things\nstand: it needs no key there (bing, ddg), or its key is held. Mojeek's\nkeyless page still runs as a fallback but does not count, because it does\nnot answer from this cluster's egress.",
+            "type": "boolean"
+          },
+          "enabled": {
+            "description": "Enabled is whether searches run it.",
+            "type": "boolean"
+          },
+          "keyed": {
+            "description": "Keyed is whether the platform holds a key for it in KMS. The key itself is\nnever returned by any operation.",
+            "type": "boolean"
+          },
+          "name": {
+            "description": "Name is the engine: `mojeek`, `bing`, `brave` or `ddg`.",
+            "type": "string"
+          },
+          "needsKey": {
+            "description": "NeedsKey is whether the engine answers only with a key.",
+            "type": "boolean"
+          },
+          "options": {
+            "$ref": "#/components/schemas/websearch.searchEngineOptions",
+            "description": "Options are the values the engine is asked with, defaults filled in."
+          },
+          "order": {
+            "description": "Order is its place among the enabled engines, from 1; 0 when disabled.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "supports": {
+            "description": "Supports lists the options the engine reads, with each one's bounds.",
+            "items": {
+              "$ref": "#/components/schemas/websearch.searchEngineOption"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "websearch.searchEngineKey": {
+        "properties": {
+          "key": {
+            "description": "Key is the API key. Sealed in KMS and never returned, logged or echoed.\nNever read from the query string.",
+            "type": "string"
+          },
+          "name": {
+            "description": "Name is the engine, from the path.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "websearch.searchEngineKeyed": {
+        "properties": {
+          "keyed": {
+            "description": "Keyed is whether a key is now held.",
+            "type": "boolean"
+          },
+          "name": {
+            "description": "Name is the engine.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "websearch.searchEngineOption": {
+        "properties": {
+          "default": {
+            "description": "Default is the count used when none is set. Absent for a text option,\nwhose default is unset.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "max": {
+            "description": "Max is the most count the engine accepts. Absent for a text option.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "min": {
+            "description": "Min is the least count the engine accepts. Absent for a text option.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "name": {
+            "description": "Name is the option: `count`, `language` or `region`.",
+            "type": "string"
+          },
+          "param": {
+            "description": "Param is the engine's own query parameter the option sets, such as `t`\nor `rb` for Mojeek.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "websearch.searchEngineOptions": {
+        "properties": {
+          "count": {
+            "description": "Count is how many hits the engine is asked for per search. 0 or absent on\na write means the engine's default; a read reports the value in force.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "language": {
+            "description": "Language is the default language the engine is asked in, as a tag like\n`en` or `en-US`. A search that names its own language overrides it.",
+            "type": "string"
+          },
+          "region": {
+            "description": "Region is a two-letter country code the engine favours, like `GB`.\nStored upper case.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "websearch.searchEngines": {
+        "properties": {
+          "engines": {
+            "description": "Engines are the enabled engines in the order they run, then the rest by\nname.",
+            "items": {
+              "$ref": "#/components/schemas/websearch.searchEngine"
+            },
+            "type": "array"
+          },
+          "saved": {
+            "description": "Saved is whether a setting is stored. False means the default is in\nforce: Mojeek alone when its key is held, else bing, ddg and Mojeek.",
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
+      "websearch.searchEnginesSet": {
+        "properties": {
+          "enabled": {
+            "description": "Enabled are the engines searches run, in order. At least one, each a\nregistered engine named once, and at least one of them must be available.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "options": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/websearch.searchEngineOptions"
+            },
+            "description": "Options are each engine's values, by engine name — for any registered\nengine, enabled or not. An engine or a field left out takes its default:\nthe setting replaces the stored one whole.",
+            "type": "object"
+          }
+        },
+        "type": "object"
+      },
+      "websearch.webEngine": {
+        "properties": {
+          "name": {
+            "description": "Name is the engine, matching the `engine` stamped on each result.",
+            "type": "string"
+          },
+          "outcome": {
+            "description": "Outcome is \"answered\", \"blind\" or \"failed\" — see outcome.go. \"blind\" means\nthe page came back and no results could be read out of it.",
+            "type": "string"
+          },
+          "results": {
+            "description": "Results is how many hits this engine contributed, before the merge\ndeduplicated them against the others.",
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "websearch.webResult": {
+        "properties": {
+          "content": {
+            "description": "Content is the ENGINE's snippet — the few lines shown under the title, not\nthe page's text. Read the page itself with POST /v1/crawl.",
+            "type": "string"
+          },
+          "engine": {
+            "description": "Engine names the backend that found this hit, so one engine's view of a\nquery can be told from another's.",
+            "type": "string"
+          },
+          "title": {
+            "description": "Title is the page's title.",
+            "type": "string"
+          },
+          "url": {
+            "description": "URL is the page's address, as the engine reported it.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "websearch.webSearchQuery": {
+        "properties": {
+          "language": {
+            "description": "Language narrows the engines to a locale, BCP-47-ish (\"en\", \"ja\", \"de\").\nEmpty means no narrowing.",
+            "type": "string"
+          },
+          "q": {
+            "description": "Q is the query. Required — an empty one is refused rather than answered\nwith the whole web.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "websearch.webSearchResults": {
+        "properties": {
+          "engines": {
+            "description": "Engines is one entry per engine asked, in the order they were asked. It is\nADDITIVE to the SearXNG contract, which the LibreChat client ignores as an\nunknown field exactly as it ignores `engine` on a result.",
+            "items": {
+              "$ref": "#/components/schemas/websearch.webEngine"
+            },
+            "type": "array"
+          },
+          "number_of_results": {
+            "description": "NumberOfResults is len(results) — what this answer carries, never an\nestimate of what the web holds.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "query": {
+            "description": "Query is the query that ran, echoed back.",
+            "type": "string"
+          },
+          "results": {
+            "description": "Results are the merged hits, deduplicated by normalised URL and capped at\n30. Always an array and never null: no hits is an ANSWER, not a fault.",
+            "items": {
+              "$ref": "#/components/schemas/websearch.webResult"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      }
+    },
+    "securitySchemes": {
+      "bearer": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "The caller's credential, sent as `Authorization: Bearer \u003ctoken\u003e`. It is either an access token minted by Hanzo IAM or an API key (pk-/sk-). X-Authorization, and HTTP Basic carrying the token as the password, are accepted spellings of the same header for clients that cannot set Authorization; a browser presents the session cookie instead. Every operation requires it unless it says `security: []`."
+      }
+    }
+  }
+}

@@ -3,7 +3,9 @@ package cloud
 // The static rate floor, asserted where it bites.
 //
 // The property under test is the one that was missing: an org nobody configured
-// is still bounded on a service class that names a default.
+// is still bounded on a service class that names a default. "No rule configured"
+// used to mean "no limit", which on an unpriced service means a free denial of
+// service — nothing downstream ever says stop.
 
 import (
 	"net/http"

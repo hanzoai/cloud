@@ -11,7 +11,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/hanzoai/cloud/sdk/sqltest"
+	"github.com/hanzoai/cloud/internal/sqltest"
 	"slices"
 	"strings"
 	"sync"

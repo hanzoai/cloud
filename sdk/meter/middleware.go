@@ -7,9 +7,9 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/hanzoai/account"
 	"github.com/hanzoai/cloud/sdk/brand"
 	"github.com/hanzoai/cloud/sdk/geo"
+	"github.com/hanzoai/account"
 )
 
 // Identity headers minted by the Hanzo gateway (the trust boundary). A product

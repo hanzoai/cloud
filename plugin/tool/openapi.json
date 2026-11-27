@@ -1,0 +1,1886 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Hanzo Cloud API",
+    "description": "Package tools is everything your org can call, in one list: connector actions, functions, agents, skills and your own MCP servers.",
+    "version": "v1"
+  },
+  "servers": [
+    {
+      "url": "https://api.hanzo.ai"
+    }
+  ],
+  "security": [
+    {
+      "bearer": []
+    }
+  ],
+  "tags": [
+    {
+      "name": "tool"
+    }
+  ],
+  "paths": {
+    "/v1/tool": {
+      "get": {
+        "operationId": "get_tool",
+        "summary": "Lists every tool the caller's org and project can reach, from every source, each flagged with whether it is activated.",
+        "description": "Lists every tool the caller's org and project can reach, from every\nsource, each flagged with whether it is activated. This is the discovery\nsurface: one flat set of names spanning connector actions, user functions,\nzap-service routes, agents, skills and the org's own external MCP servers,\ndeduplicated by name so the highest-precedence source wins a collision. It\nlists; it does not call — dispatch is POST /v1/tool/call.",
+        "tags": [
+          "tool"
+        ],
+        "parameters": [
+          {
+            "name": "source",
+            "in": "query",
+            "required": false,
+            "description": "Source keeps only tools from one source — connector, function, zap-service,\nagent, skill or mcp. Empty keeps every source.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "activated",
+            "in": "query",
+            "required": false,
+            "description": "Activated keeps only the tools activated for the caller's org and project,\nand only when it is exactly the string \"true\".",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/tool.toolList"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/tool/activation": {
+      "get": {
+        "operationId": "get_tool_activation",
+        "summary": "Reports which tools are switched on for the caller's org and project.",
+        "description": "Reports which tools are switched on for the caller's org and\nproject. Activation is what makes a tool dispatchable and what makes it visible\nto an agent, so this is the set the MCP tool list is drawn from — every other\ntool in the registry is discoverable but refused at call time.",
+        "tags": [
+          "tool"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/tool.activationSet"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      },
+      "put": {
+        "operationId": "put_tool_activation",
+        "summary": "Switches tools on and off for the caller's org and project, and answers with the resulting activated set.",
+        "description": "Switches tools on and off for the caller's org and project, and\nanswers with the resulting activated set. It is the ONE write path that turns\nskills, plugins and connectors into callable tools — an unactivated tool is\nlisted by discovery but refused 403 at dispatch. Activate is applied before\nDeactivate, so a name in both lists ends up off. More than 256 toggles in one\nrequest is refused 413.\n\nSwitching a skill (skill_\u003cname\u003e) or a tool of an MCP server the org registered\n(\u003cserver\u003e_\u003ctool\u003e) changes what every agent run in the org carries, so it takes\nan admin of the org or a SuperAdmin: a member naming one is refused 403 and\nnothing in the request is switched. Every change is on the org's audit trail\nbefore it is made, and one the trail cannot record is refused 503.",
+        "tags": [
+          "tool"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "activate": [
+                  "cloud_get_ping"
+                ],
+                "deactivate": []
+              },
+              "schema": {
+                "$ref": "#/components/schemas/tool.activationReq"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/tool.activationSet"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/tool/call": {
+      "post": {
+        "operationId": "post_tool_call",
+        "summary": "Runs one of the caller's activated tools and answers with its output.",
+        "description": "Runs one of the caller's activated tools and answers with its output.\n\nThis is the endpoint onto the tool plane's DYNAMIC half — the half no build-time\ncatalogue can hold, because it is per-tenant: an org's connected connector\nactions, its authored skills, its agents and functions, and the tools of every\nexternal MCP server it registered. A tool's existence, its price and its\nactivation are all rows, not code, so they cannot be known until the caller is.\n\nOne policy, the registry's: resolve by precedence, refuse an unactivated tool\n403, settle a priced one through the x402 client or fail closed 402, then\ndispatch to the winning source bound to the caller's own (org, project). One\nmetered unit, one audit record. A caller can only ever dispatch its own tools.\n\nDiscovery is GET /v1/tool — ?activated=true for the callable set.",
+        "tags": [
+          "tool"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "arguments": {
+                  "channel": "#general",
+                  "text": "hi"
+                },
+                "name": "slack_post_message"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/tool.toolCall"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/tool.toolResult"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/tool/catalog": {
+      "get": {
+        "operationId": "get_tool_catalog",
+        "summary": "Lists the MCP servers the public registries publish, as we hold them: our canonical copy of registry.modelcontextprotocol.io, plus what we decided about each entry.",
+        "description": "Lists the MCP servers the public registries publish, as we hold\nthem: our canonical copy of registry.modelcontextprotocol.io, plus what we\ndecided about each entry.\n\nThis is the SHELF an org picks from. A listing with a streamable-http endpoint\ncan be enabled as-is — POST /v1/tool/mcp/servers with its id — and its tools then\njoin the org's tool plane and the fleet's MCP server. A listing that only ships a\nstdio package needs a process to run it, which is why the transports are on\nevery entry rather than implied.\n\nHidden entries are absent: they are the ones we took off the shelf. A platform\nSuperAdmin sees them, because the same query answers \"what is on the shelf\" and\n\"what is in the catalog\" and two queries would drift apart.\n\nIt is PAGED — 50 by default, 200 at most. The public registry publishes tens of\nthousands of servers, so an unbounded answer is a twenty-megabyte response and a\nstorefront that renders in a minute. total is the whole match, not the page.\n\nIt needs no credential: the shelf is a copy of public registries, the same for\nevery org, and a storefront shows it to a visitor before anyone signs in.",
+        "tags": [
+          "tool"
+        ],
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "description": "Q matches the name, title or description, case-insensitively.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "featured",
+            "in": "query",
+            "required": false,
+            "description": "Featured keeps only the listings we put on the front of the shelf, and only\nwhen it is exactly the string \"true\".",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "official",
+            "in": "query",
+            "required": false,
+            "description": "Official keeps only the vendors' OWN servers — not third-party copies of\nthem — and only when it is exactly the string \"true\".",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Limit bounds the page: default 50, maximum 200. A value that is not a\npositive integer reads as the default.",
+            "schema": {
+              "format": "int64",
+              "type": "integer"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "description": "Offset skips that many listings.",
+            "schema": {
+              "format": "int64",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/tool.mcpCatalog"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "security": [],
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/tool/catalog/sync": {
+      "post": {
+        "operationId": "post_tool_catalog_sync",
+        "summary": "Pulls the public MCP registry into our canonical copy and reports what changed.",
+        "description": "Pulls the public MCP registry into our canonical copy and reports\nwhat changed. SuperAdmin only; every other caller is refused.\n\nIt is IDEMPOTENT: a listing is keyed by the publisher's own reverse-DNS name,\nso a second pass over an unchanged registry rewrites the same rows and reports\nadded=0, updated=0. It never deletes — a listing that vanishes upstream may be\none an org has already enabled, and dropping its description would not drop its\nserver. And it never touches CURATION: hidden, featured, an admin-set official\nand a logo survive every sync, because the write does not name those columns.",
+        "tags": [
+          "tool"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/tool.mcpCatalogSync"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/tool/catalog/{id}": {
+      "get": {
+        "operationId": "get_tool_catalog_by_id",
+        "summary": "Returns one catalog entry in full: the publisher's description, its repository and site, every package form with the runtime that launches it, and every hosted endpoint.",
+        "description": "Returns one catalog entry in full: the publisher's description, its\nrepository and site, every package form with the runtime that launches it, and\nevery hosted endpoint. It is what a branding page renders, and what tells a\ncaller whether the listing can be enabled here and now (a streamable-http\nremote) or needs somewhere to run first (a stdio package).\n\nA HIDDEN listing is not served to an org — a shelf that renders what it does\nnot list would be a way around the shelf — but is served to a SuperAdmin, who\nis the one deciding whether to put it back. Like the shelf, it needs no\ncredential.",
+        "tags": [
+          "tool"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the listing, from the path. It is the publisher's reverse-DNS name\nwith its one slash written as an underscore — \"com.stripe_mcp\".",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/tool.MCPListing"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "security": [],
+        "x-public": true,
+        "x-tool": true
+      },
+      "patch": {
+        "operationId": "patch_tool_catalog_by_id",
+        "summary": "Sets what WE say about one catalog entry — hidden, featured, official, logo — and answers with the stored listing.",
+        "description": "Sets what WE say about one catalog entry — hidden, featured,\nofficial, logo — and answers with the stored listing. SuperAdmin only; every\nother caller is refused.\n\nCuration is the half of a catalog row a sync cannot write, and this is the only\nthing that writes it. The upstream half is never editable here: a description\nthat disagreed with the publisher's would be a fork of their listing, and the\nnext sync would silently undo it.",
+        "tags": [
+          "tool"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the listing to curate, from the path.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "featured": true,
+                "official": false
+              },
+              "schema": {
+                "$ref": "#/components/schemas/tool.curateReq"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/tool.MCPListing"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/tool/detect": {
+      "post": {
+        "operationId": "post_tool_detect",
+        "summary": "Recommends which skills and tools in the caller's org and project fit a prompt, and optionally activates them automatically.",
+        "description": "Recommends which skills and tools in the caller's org and project fit a\nprompt, and optionally activates them automatically.\n\nEvery candidate is ranked by what its name and description say against the\nprompt, the rarer a shared word the more it counts, through one vocabulary\nfor how people ask (\"phones\" and \"responsive\", \"excel\" and \"xlsx\"). Its\nprobability needs enough of that evidence, and a candidate well behind the\nbest of its kind (a skill, or an operation or tool) is held under 0.8, so a\nprompt no skill fits recommends none. When autoActivate is true, recommended\nentries that are not yet enabled — and that the caller has authority to\ntoggle — are activated in the caller's (org, project) scope and recorded on\nthe audit trail.",
+        "tags": [
+          "tool"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "autoActivate": true,
+                "prompt": "Review this React pull request and fix the responsive layout bug"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/tool.detectReq"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/tool.detectResult"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/tool/kit": {
+      "get": {
+        "operationId": "get_tool_kit",
+        "summary": "Answers the caller's kit: what their coding runs carry of the org's tool plane.",
+        "description": "Answers the caller's kit: what their coding runs carry of the org's tool\nplane. Skills are the documents of those an admin of the org activated; servers\nare those an admin registered, each by its id with the tools of it an admin\nactivated — never an address or a credential, which stay on the plane. Both\nleave out what the caller muted, and muted names it. It is the one read a run\nmakes, so what it answers is what the caller's runs carry.",
+        "tags": [
+          "tool"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/tool.Kit"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      },
+      "put": {
+        "operationId": "put_tool_kit",
+        "summary": "Mutes and unmutes names of the org's kit for the caller's own runs, and answers the caller's kit after.",
+        "description": "Mutes and unmutes names of the org's kit for the caller's own runs, and\nanswers the caller's kit after. The layer only narrows: a name the org's kit\ndoes not carry is refused 400, since muting it would say nothing, and unmuting\nnever gives the caller more than an admin put in place. It is the caller's own,\nso any member may write it. More than 256 names is refused 413.",
+        "tags": [
+          "tool"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "mute": [
+                  "skill_deploy",
+                  "linear"
+                ],
+                "unmute": []
+              },
+              "schema": {
+                "$ref": "#/components/schemas/tool.muteReq"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/tool.Kit"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/tool/mcp/servers": {
+      "get": {
+        "operationId": "get_tool_mcp_servers",
+        "summary": "Lists the external MCP servers the caller's org has registered.",
+        "description": "Lists the external MCP servers the caller's org has registered.\nEach record carries the URL and the name of the header its credential is\ninjected into; the credential VALUE lives only in KMS and is never returned,\nso hasSecret is the whole of what this surface says about it. Each also says\nwhether its tools could be listed — status, a reason when they could not, and\nhow many there are — so a server that contributes nothing says why.\n\nThe whole URL is answered to an admin of the org or a SuperAdmin, who register\nservers. A member is answered its scheme and host: which server it is, and not\na path or query an admin may have put a key in.",
+        "tags": [
+          "tool"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/tool.mcpServerList"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      },
+      "post": {
+        "operationId": "post_tool_mcp_servers",
+        "summary": "Gives the caller's org one more external MCP server, so its tools join the org's tool plane and the fleet's MCP server.",
+        "description": "Gives the caller's org one more external MCP server, so its tools\njoin the org's tool plane and the fleet's MCP server. It is the ONE way an org\ngains a server, whether it typed the URL in or enabled a catalog listing: both\nwrite the SAME record, and `source` says which it was. A second registration\npath would be a second place for a server to exist, and then a second place to\nforget to check the credential.\n\nThe credential VALUE is sealed in KMS under a per-org ref; the row keeps only\nthe URL, the header name to inject it into, and a has-secret flag — so a secret\nwith no KMS configured is refused 503 rather than stored in the clear. The URL\nis SSRF-validated here and re-checked by the dialer at connect time, which is\nthe DNS-rebinding defense.\n\nEnabling a listing the org already enabled REVISES that server rather than\nadding a near-duplicate beside it, so a retried enable is the same one server.\nAnswers 201 with the stored record.\n\nA server and the tools of it the org activates are carried into every agent run\nin the org, so registering one — or revising one, credential included — takes\nan admin of the org or a SuperAdmin; a member is refused 403. The registration\nis on the org's audit trail before it is made, and one the trail cannot record\nis refused 503.",
+        "tags": [
+          "tool"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "authHeader": "Authorization",
+                "listing": "com.stripe_mcp",
+                "secret": "Bearer …"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/tool.createServerReq"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/tool.MCPServer"
+                }
+              }
+            },
+            "description": "created"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/tool/mcp/servers/{id}": {
+      "delete": {
+        "operationId": "delete_tool_mcp_servers_by_id",
+        "summary": "Deregisters one of the caller org's external MCP servers, so its tools leave the registry.",
+        "description": "Deregisters one of the caller org's external MCP servers, so its\ntools leave the registry. Scoped to the caller's org, so an id belonging to\nanother tenant is a 404 and not a delete. Answers 204 with no body; a server\nthis org does not have is 404. Like registering one it takes an admin of the\norg or a SuperAdmin, and is on the org's audit trail before it is made.",
+        "tags": [
+          "tool"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the server to deregister, from the path.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "no content"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/tool/plugins": {
+      "get": {
+        "operationId": "get_tool_plugins",
+        "summary": "Reports what this deployment actually mounted: every subsystem the composition root declared and whether it is switched on.",
+        "description": "Reports what this deployment actually mounted: every subsystem the\ncomposition root declared and whether it is switched on. A plugin here is\nMOUNTED CODE that extends the deployment's own surface — not a tool an agent\ncalls — so this is an inventory and not a tool source. It is read off the same\nboot snapshot every traced request resolves its subsystem label against, so it\ncannot drift from what is serving. Enabled-only by default, because a caller\nasking what this deployment can do wants what is running; ?all=true adds the\nconfigured-but-off ones.",
+        "tags": [
+          "tool"
+        ],
+        "parameters": [
+          {
+            "name": "all",
+            "in": "query",
+            "required": false,
+            "description": "All includes the configured-but-disabled subsystems too, but only when it is\nexactly the string \"true\". Otherwise only the running ones are reported.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/tool.pluginMountList"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/tool/plugins/authored": {
+      "get": {
+        "operationId": "get_tool_plugins_authored",
+        "summary": "Lists the plugins the caller's org BUILT, newest first, each with the TypeScript as authored.",
+        "description": "Lists the plugins the caller's org BUILT, newest first,\neach with the TypeScript as authored. That is a different set with a different\nlifecycle from GET /v1/tool/plugins, which reports the subsystems this deployment\nmounted. The bundled CommonJS the runtime executes is never included, and\nneither is any credential — a plugin names the connectors provider it needs and\nreads the credential from ctx.auth at run time.",
+        "tags": [
+          "tool"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/tool.authoredPluginList"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/tool/plugins/authored/{id}": {
+      "delete": {
+        "operationId": "delete_tool_plugins_authored_by_id",
+        "summary": "Removes one of the caller org's built plugins, so the runtime can no longer load it.",
+        "description": "Removes one of the caller org's built plugins, so the\nruntime can no longer load it. Scoped to the caller's org, so an id belonging\nto another tenant answers 404 and is not deleted.",
+        "tags": [
+          "tool"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the plugin to remove, from the path.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/tool.pluginDeleted"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/tool/plugins/build": {
+      "post": {
+        "operationId": "post_tool_plugins_build",
+        "summary": "Builds and stores one plugin for the caller's org.",
+        "description": "Builds and stores one plugin for the caller's org. The 201 carries\nthe bundle's size, whether a model wrote the source, and the plugin as stored.\n\nPost `source` to build TypeScript as-is, or `spec` — an OpenAPI document or\nplain prose describing the endpoints — to have one generated; the generated\nsource comes back in the answer, so a caller reads what will run before it\nruns. Exactly one of the two, and `name` must be one lowercase path segment;\nboth or neither is 400.\n\nCOMPILING IS THE GATE. The source goes through the same pipeline the committed\nconnectors do — esbuild to one CommonJS program, then compiled in the goja\nruntime that will actually execute it — and anything that fails is rejected and\nNEVER stored. So a plugin in the store is one this deployment has already\nloaded once, not one a model claimed was fine. A failed build answers 422\ncarrying the diagnostics a caller needs to fix it: the bundler's error\n(`detail`), the source that failed, and whether the model wrote it.\n\nCREDENTIALS ARE NOT PART OF A PLUGIN. A plugin names the connectors `provider`\nit needs and reads that credential from `ctx.auth` at run time, under KMS\ncustody. Source that carries something key-shaped is REFUSED rather than\nsilently persisted — a scrubbed key looks like it worked.",
+        "tags": [
+          "tool"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "name": "acme",
+                "provider": "acme",
+                "spec": "POST /v1/things creates a thing"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/tool.buildRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/tool.buildOut"
+                }
+              }
+            },
+            "description": "created"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/tool/skills": {
+      "get": {
+        "operationId": "get_tool_skills",
+        "summary": "Lists the skills the caller's org can reach — the brand's embedded catalogue plus the org's own authored ones — with each one's activation flag.",
+        "description": "Lists the skills the caller's org can reach — the brand's embedded\ncatalogue plus the org's own authored ones — with each one's activation flag.\nA skill is discovery and activation metadata attached to an agent, never called\ndirectly, so every entry here is non-dispatchable. It is GET /v1/tool narrowed\nto one source, not a second store: a name a caller sees here is the same entry,\nwith the same activation state, that discovery reports.",
+        "tags": [
+          "tool"
+        ],
+        "parameters": [
+          {
+            "name": "activated",
+            "in": "query",
+            "required": false,
+            "description": "Activated keeps only the tools activated for the caller's org and project,\nand only when it is exactly the string \"true\".",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/tool.sourceToolList"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      },
+      "post": {
+        "operationId": "post_tool_skills",
+        "summary": "Adds or revises one of the caller org's own skills, and answers 201 with the stored record.",
+        "description": "Adds or revises one of the caller org's own skills, and answers 201\nwith the stored record. The id is derived from the name, so writing the same\nname again REVISES that skill rather than accumulating near-duplicates that\nwould then collide in the registry. An org's skills are private to it by\nconstruction — they live in a different store from the brand's embedded\ncatalogue and have no path into the public gallery — and a brand skill always\nwins a name collision against an org's.\n\nAn activated skill is carried into every agent run in the org, so writing one\ntakes an admin of the org or a SuperAdmin; a member is refused 403. The write is\non the org's audit trail before it is made, and one the trail cannot record is\nrefused 503.",
+        "tags": [
+          "tool"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "content": "# Triage\n…",
+                "description": "how we triage",
+                "name": "triage"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/tool.skillIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/tool.skillWritten"
+                }
+              }
+            },
+            "description": "created"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/tool/skills/authored": {
+      "get": {
+        "operationId": "get_tool_skills_authored",
+        "summary": "Lists the caller org's OWN skills with their SKILL.md bodies.",
+        "description": "Lists the caller org's OWN skills with their SKILL.md\nbodies. GET /v1/tool/skills is the registry view — the brand's catalogue plus this\norg's, with activation flags and no bodies; this is the EDITABLE set, so it\ncarries the content that view omits and nothing the org did not write.",
+        "tags": [
+          "tool"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/tool.authoredSkillList"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/tool/skills/{id}": {
+      "delete": {
+        "operationId": "delete_tool_skills_by_id",
+        "summary": "Removes one of the caller org's authored skills.",
+        "description": "Removes one of the caller org's authored skills. Scoped to the\ncaller's org, so an id belonging to another tenant is never reached. Removing\nwhat is not there is not an error — the caller's intent is \"gone\", and it is.\nLike writing one it takes an admin of the org or a SuperAdmin, and is on the\norg's audit trail before it is made.",
+        "tags": [
+          "tool"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the skill to remove, from the path. It is the skill's name.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/tool.skillDeleted"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "problem-details": {
+        "description": "An RFC 9457 problem document.",
+        "properties": {
+          "code": {
+            "description": "A stable token a client can branch on, when the refusal names one.",
+            "type": "string"
+          },
+          "detail": {
+            "description": "What was refused, for a person to read.",
+            "type": "string"
+          },
+          "status": {
+            "description": "The HTTP status.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "title": {
+            "description": "The status's reason phrase.",
+            "type": "string"
+          },
+          "type": {
+            "description": "about:blank",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "status",
+          "detail"
+        ],
+        "type": "object"
+      },
+      "tool.AuthoredPlugin": {
+        "properties": {
+          "createdAt": {
+            "description": "CreatedAt is when the plugin was last built, Unix seconds.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "id": {
+            "description": "ID is the plugin's id within the org, and the id a delete addresses.",
+            "type": "string"
+          },
+          "name": {
+            "description": "Name is the plugin's name: one lowercase path segment, the id it runs by.",
+            "type": "string"
+          },
+          "org": {
+            "description": "Org is the org that built the plugin — the validated caller's.",
+            "type": "string"
+          },
+          "provider": {
+            "description": "Provider is the connectors provider whose credential this plugin uses at\nrun time. Absent for a plugin that needs none. The credential itself is\nnever here — it stays under KMS custody in the connectors plane.",
+            "type": "string"
+          },
+          "source": {
+            "description": "Source is the TypeScript as authored (or as generated from a spec).",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "tool.Kit": {
+        "properties": {
+          "excess": {
+            "description": "Excess are servers left out, by id, because a run carries only so many.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "muted": {
+            "description": "Muted are the names the run's person took out of their own runs — a\nskill, a server's tool, or a server by its id. None of them is above.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "omitted": {
+            "description": "Omitted are activated skills left out because a run carries only so many.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "servers": {
+            "description": "Servers are the MCP servers an admin registered and activated tools of, at\nmost KitServers of them.",
+            "items": {
+              "$ref": "#/components/schemas/tool.Remote"
+            },
+            "type": "array"
+          },
+          "skills": {
+            "description": "Skills are the documents of the skills an admin activated, by name.",
+            "items": {
+              "$ref": "#/components/schemas/tool.SkillDoc"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "tool.MCPListing": {
+        "properties": {
+          "description": {
+            "description": "Description is the publisher's one-line summary.",
+            "type": "string"
+          },
+          "featured": {
+            "description": "Featured puts the listing on the front of the shelf. Curation.",
+            "type": "boolean"
+          },
+          "hidden": {
+            "description": "Hidden keeps the listing out of the org-visible catalog. Curation: a sync\nnever changes it. Only a SuperAdmin sets it, and only a SuperAdmin sees a\nhidden entry listed.",
+            "type": "boolean"
+          },
+          "id": {
+            "description": "ID addresses the listing in a URL. It is the reverse-DNS NAME with its one\nslash written as an underscore — reversible, because a namespace never\ncontains an underscore — so the id is readable and stable rather than a\nhash that means nothing to whoever reads a link.",
+            "type": "string"
+          },
+          "logo": {
+            "description": "Logo is the brand mark to render for the listing — the publisher's icon when\nthe entry carries one, or the one an admin set. Curation.",
+            "type": "string"
+          },
+          "name": {
+            "description": "Name is the publisher's reverse-DNS name, e.g. \"com.stripe/mcp\".",
+            "type": "string"
+          },
+          "official": {
+            "description": "Official is whether this is the vendor's OWN server rather than someone\nelse's copy of it. Derived on every sync (see isOfficial) until a\nSuperAdmin sets it explicitly, after which the admin's answer stands.",
+            "type": "boolean"
+          },
+          "packages": {
+            "description": "Packages are the runnable package forms — npm, pypi, oci — each with the\nruntime that launches it and the transport it then speaks.",
+            "items": {
+              "$ref": "#/components/schemas/tool.MCPPackage"
+            },
+            "type": "array"
+          },
+          "registry": {
+            "description": "Registry is the upstream this row was synced from.",
+            "type": "string"
+          },
+          "remotes": {
+            "description": "Remotes are the hosted endpoints the publisher serves the server at.",
+            "items": {
+              "$ref": "#/components/schemas/tool.MCPRemote"
+            },
+            "type": "array"
+          },
+          "repo": {
+            "description": "Repo is the source repository URL, when the entry names one.",
+            "type": "string"
+          },
+          "site": {
+            "description": "Site is the project's homepage, when the entry names one.",
+            "type": "string"
+          },
+          "synced": {
+            "description": "Synced is when this row was last confirmed against upstream, Unix seconds.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "title": {
+            "description": "Title is the human-readable display name, when the entry carries one.",
+            "type": "string"
+          },
+          "transports": {
+            "description": "Transports are the distinct transports this server can be reached over,\nsorted: some of \"stdio\", \"streamable-http\", \"sse\". A listing with\n\"streamable-http\" is one an org can enable here and now; a listing that is\nonly \"stdio\" needs a process to run it.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "vendor": {
+            "description": "Vendor is the namespace half of Name — the publisher, e.g. \"com.stripe\".",
+            "type": "string"
+          },
+          "version": {
+            "description": "Version is the published version of this listing.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "tool.MCPPackage": {
+        "properties": {
+          "identifier": {
+            "description": "Identifier is the package name or download URL.",
+            "type": "string"
+          },
+          "registry": {
+            "description": "Registry is where the package is fetched from: npm, pypi, oci, nuget, mcpb.",
+            "type": "string"
+          },
+          "runtime": {
+            "description": "Runtime is the publisher's hint for what launches it: npx, uvx, docker.",
+            "type": "string"
+          },
+          "transport": {
+            "description": "Transport is what the launched process speaks: usually \"stdio\".",
+            "type": "string"
+          },
+          "version": {
+            "description": "Version is the exact published package version.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "tool.MCPRemote": {
+        "properties": {
+          "transport": {
+            "description": "Transport is \"streamable-http\" or \"sse\".",
+            "type": "string"
+          },
+          "url": {
+            "description": "URL is the endpoint.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "tool.MCPServer": {
+        "properties": {
+          "admitted": {
+            "description": "Admitted is whether an admin of the org, or a SuperAdmin, registered the\nserver. Only an admitted server is carried into the org's agent runs: a\nserver registered before registering one took an admin is not, until an\nadmin registers it again.",
+            "type": "boolean"
+          },
+          "authHeader": {
+            "description": "AuthHeader is the request header the KMS-held credential is injected into,\ne.g. \"Authorization\". Absent when the server needs no credential.",
+            "type": "string"
+          },
+          "createdAt": {
+            "description": "CreatedAt is when the server was registered, Unix seconds.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "hasSecret": {
+            "description": "HasSecret is whether a credential is sealed in KMS for this server. The\nVALUE is never returned by any route.",
+            "type": "boolean"
+          },
+          "id": {
+            "description": "ID is the server's id within the org. It also PREFIXES every tool name the\nserver contributes, which is what keeps two servers' \"search\" apart.",
+            "type": "string"
+          },
+          "listing": {
+            "description": "Listing is the catalog entry this server was enabled from, when it was.\nEmpty means the org typed the URL in itself.",
+            "type": "string"
+          },
+          "name": {
+            "description": "Name is the org's label for the server.",
+            "type": "string"
+          },
+          "org": {
+            "description": "Org is the org that registered the server — the validated caller's.",
+            "type": "string"
+          },
+          "reason": {
+            "description": "Reason says why a server that is not \"ok\" is not, in words any member may\nbe shown: never the server's address.",
+            "type": "string"
+          },
+          "source": {
+            "description": "Source is where the registration came from: \"catalog\" when it was enabled\noff the shelf, \"org\" when the org registered the URL itself. It is DERIVED\nfrom Listing rather than stored, because two columns for one fact is two\nchances to disagree.",
+            "type": "string"
+          },
+          "status": {
+            "description": "Status is whether the server's tools could be listed when the org's\nservers were read: \"ok\", \"unreachable\", \"refused\" or \"error\". Only the\nlisting answers it; a registration does not.",
+            "type": "string"
+          },
+          "tools": {
+            "description": "Tools is how many tools the server listed, when it listed them.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "url": {
+            "description": "URL is the server's JSON-RPC endpoint. Always a public http(s) host: the\nregistration boundary and the dialer both refuse anything else.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "tool.Price": {
+        "properties": {
+          "amount": {
+            "description": "Amount is what ONE call costs, EXACTLY: an 18-decimal USD value, so a\nper-call price of $0.0025 is $0.0025 and not a cent-floored zero. Cents\ncannot hold a per-token price, and a tool plane is where per-token prices\nlive."
+          },
+          "currency": {
+            "description": "Currency is the ISO 4217 code, e.g. \"USD\". Empty means USD.",
+            "type": "string"
+          },
+          "recipient": {
+            "description": "Recipient is the payout wallet ref the marketplace seller is paid at.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "tool.Remote": {
+        "properties": {
+          "name": {
+            "description": "Name is the server's id in the org, which also prefixes its tools on the\ntool plane, and names it to ToolsRelay.",
+            "type": "string"
+          },
+          "tools": {
+            "description": "Tools are the tools of it an admin activated, each by the server's own\nname for it: all a run's harness may call of it.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "tool.Skill": {
+        "properties": {
+          "admitted": {
+            "description": "Admitted is whether an admin of the org, or a SuperAdmin, wrote this\ncontent. Only admitted content is carried into the org's agent runs. A\npush writes content nobody administering the org attested, and a skill\nwritten before writing one took an admin says no until an admin writes it\nagain.",
+            "type": "boolean"
+          },
+          "content": {
+            "description": "Content is the SKILL.md body, markdown.",
+            "type": "string"
+          },
+          "createdAt": {
+            "description": "CreatedAt is when the skill was last written, Unix seconds.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "description": {
+            "description": "Description is the one-line summary discovery shows for the skill.",
+            "type": "string"
+          },
+          "id": {
+            "description": "ID is the skill's id within the org. It is DERIVED from Name, so writing\nthe same name again revises that skill rather than adding another.",
+            "type": "string"
+          },
+          "name": {
+            "description": "Name is the skill's name: one lowercase path segment (a-z0-9, _ or -).",
+            "type": "string"
+          },
+          "org": {
+            "description": "Org is the org that authored the skill — the validated caller's, never a\nvalue the body supplied.",
+            "type": "string"
+          },
+          "source": {
+            "description": "Source is the repository the skill was read from, \"\u003cproject\u003e/\u003cname\u003e\" or\n\"\u003cname\u003e\"; empty for a skill written through the API. A push replaces every\nskill of its source at once, so a skill leaves when its file does.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "tool.SkillDoc": {
+        "properties": {
+          "content": {
+            "description": "Content is the skill's SKILL.md, verbatim.",
+            "type": "string"
+          },
+          "name": {
+            "description": "Name is the skill's bare name, which is also the directory its SKILL.md\nis written into.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "tool.Tool": {
+        "properties": {
+          "activated": {
+            "description": "Activated is filled by the registry from the activation store for the\nrequesting (org,project); providers leave it zero. An unactivated tool is\ndiscoverable but refused 403 at dispatch.",
+            "type": "boolean"
+          },
+          "description": {
+            "description": "Description is the prose a model reads to decide whether to call the tool.",
+            "type": "string"
+          },
+          "dispatchable": {
+            "description": "Dispatchable is whether the tool can be CALLED. False for a listing-only\nentry: a skill is activated and attached to an agent, never called.",
+            "type": "boolean"
+          },
+          "inputSchema": {
+            "description": "Schema is the JSON Schema of the call arguments — the MCP inputSchema.\nAbsent for a tool that takes none."
+          },
+          "name": {
+            "description": "Name is the tool's id in the flat, fleet-wide tool namespace — the value a\ntools/call passes. Unique across sources: a collision is resolved by source\nprecedence before the caller ever sees it.",
+            "type": "string"
+          },
+          "price": {
+            "$ref": "#/components/schemas/tool.Price",
+            "description": "Price is what a call costs and who is paid, absent for a free tool.\nEnforcement is the x402 settlement client; this is the declaration."
+          },
+          "source": {
+            "description": "Source is where the tool comes from: connector, function, zap-service,\nagent, skill or mcp.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "tool.activationReq": {
+        "properties": {
+          "activate": {
+            "description": "Activate switches these tool names on for the caller's org and project.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "deactivate": {
+            "description": "Deactivate switches these tool names off.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "tool.activationSet": {
+        "properties": {
+          "enabled": {
+            "description": "Enabled is every tool name activated for the caller's org and project.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "tool.authoredPluginList": {
+        "properties": {
+          "plugins": {
+            "description": "Plugins is every plugin this org built, newest first, each carrying the\nTypeScript as authored. The bundled artifact is never rendered.",
+            "items": {
+              "$ref": "#/components/schemas/tool.AuthoredPlugin"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "tool.authoredSkillList": {
+        "properties": {
+          "skills": {
+            "description": "Skills is every skill this org authored, each with its SKILL.md content.",
+            "items": {
+              "$ref": "#/components/schemas/tool.Skill"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "tool.buildOut": {
+        "properties": {
+          "bytes": {
+            "description": "Bytes is the size of the bundled CommonJS the runtime will execute.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "generated": {
+            "description": "Generated is whether a model wrote the source from a spec, rather than the\ncaller posting the source itself.",
+            "type": "boolean"
+          },
+          "plugin": {
+            "$ref": "#/components/schemas/tool.AuthoredPlugin",
+            "description": "Plugin is the plugin as stored, with its derived id and build time."
+          }
+        },
+        "type": "object"
+      },
+      "tool.buildRequest": {
+        "properties": {
+          "name": {
+            "description": "Name is the plugin's name: one lowercase path segment (a-z0-9, _ or -),\nand the id the runtime loads it by.",
+            "type": "string"
+          },
+          "provider": {
+            "description": "Provider is the connectors provider whose credential the plugin reads at\nrun time. Empty for a plugin that needs none.",
+            "type": "string"
+          },
+          "source": {
+            "description": "Source is TypeScript to build as-is. Exactly one of Source or Spec.",
+            "type": "string"
+          },
+          "spec": {
+            "description": "Spec is API documentation — an OpenAPI document, or prose describing the\nendpoints — that the generator turns into Source. The generated source is\nreturned in the response, so a caller can read what will run before it runs.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "tool.createServerReq": {
+        "properties": {
+          "authHeader": {
+            "description": "AuthHeader is the request header the credential is injected into, e.g.\n\"Authorization\". Empty means the server needs no credential.",
+            "type": "string"
+          },
+          "listing": {
+            "description": "Listing enables a CATALOG entry instead — the id from GET /v1/tool/catalog.\nThe endpoint is the listing's own streamable-http remote, so a listing that\nonly ships a stdio package is refused: there is nothing to reach yet.",
+            "type": "string"
+          },
+          "name": {
+            "description": "Name labels the server for the org. Required with URL; with Listing it\ndefaults to the listing's own title.",
+            "type": "string"
+          },
+          "secret": {
+            "description": "Secret is the credential VALUE. It is sealed into KMS under a per-org ref\nand never stored in SQLite, never listed, and never returned.",
+            "type": "string"
+          },
+          "url": {
+            "description": "URL is the server's JSON-RPC endpoint. It must be an http(s) URL naming a\nPUBLIC host: loopback, link-local, private and cloud-metadata addresses are\nrefused here and again when the dialer connects. A URL carrying a credential\n(user:password@) is refused: the credential is the secret.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "tool.curateReq": {
+        "properties": {
+          "featured": {
+            "description": "Featured puts the listing on the front of the shelf, or takes it off.",
+            "type": "boolean"
+          },
+          "hidden": {
+            "description": "Hidden takes the listing off the org-visible shelf, or puts it back.",
+            "type": "boolean"
+          },
+          "id": {
+            "description": "ID is the listing to curate, from the path.",
+            "type": "string"
+          },
+          "logo": {
+            "description": "Logo is the brand mark to render, an https URL. Empty clears ours and lets\nthe next sync adopt the publisher's own icon again.",
+            "type": "string"
+          },
+          "official": {
+            "description": "Official overrides the derivation: setting it makes this answer FINAL, so\nno later sync re-derives over it. That is the difference between a default\nand a decision — the derivation can only tell that a domain-verified\npublisher serves the endpoint, not that the product is theirs.",
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
+      "tool.detectRecommendation": {
+        "properties": {
+          "activated": {
+            "description": "Activated reports whether the candidate is switched on for the caller's\norg and project after processing autoActivate.",
+            "type": "boolean"
+          },
+          "description": {
+            "description": "Description summarizes what the skill or tool does.",
+            "type": "string"
+          },
+          "name": {
+            "description": "Name is the tool or skill identifier as reported by GET /v1/tool (for\nexample \"skill_dev\", \"skill_ui\", or \"github_create_issue\").",
+            "type": "string"
+          },
+          "probability": {
+            "description": "Probability is how likely the candidate fits the prompt, in [0, 1];\n0.8 or more means it clearly does.",
+            "format": "double",
+            "type": "number"
+          },
+          "source": {
+            "description": "Source names the provider that owns the entry: skill, mcp, connector,\nfunction, agent or zap-service.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "tool.detectReq": {
+        "properties": {
+          "autoActivate": {
+            "description": "AutoActivate switches on the recommended skills and tools that the caller\nis permitted to activate for the current org and project scope.",
+            "type": "boolean"
+          },
+          "maxSkills": {
+            "description": "MaxSkills bounds how many skills are returned (default 6, max 16).",
+            "format": "int64",
+            "type": "integer"
+          },
+          "maxTools": {
+            "description": "MaxTools bounds how many callable tools are returned (default 8, max 32).",
+            "format": "int64",
+            "type": "integer"
+          },
+          "prompt": {
+            "description": "Prompt is the user message, task description, or conversation turn to\nevaluate against the organization's available skills and tools.",
+            "type": "string"
+          },
+          "threshold": {
+            "description": "Threshold is the minimum calibrated probability (0 to 1, default 0.55) a\nskill or tool must score to be recommended.",
+            "format": "double",
+            "type": "number"
+          }
+        },
+        "type": "object"
+      },
+      "tool.detectResult": {
+        "properties": {
+          "activated": {
+            "description": "Activated lists the tool and skill names that were newly switched on by\nthis call when autoActivate was set.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "decisionId": {
+            "description": "DecisionID is the identifier of the decision (POST /v1/decisions) the\ncandidates were ranked by, when a decision model ranked them; absent\nfrom rank-1.",
+            "type": "string"
+          },
+          "model": {
+            "description": "Model names what ranked the candidates (\"rank-1\").",
+            "type": "string"
+          },
+          "skills": {
+            "description": "Skills lists the recommended skills (skill_\u003cname\u003e), ordered from highest\nto lowest probability.",
+            "items": {
+              "$ref": "#/components/schemas/tool.detectRecommendation"
+            },
+            "type": "array"
+          },
+          "tools": {
+            "description": "Tools lists the recommended callable tools, ordered from highest to\nlowest probability.",
+            "items": {
+              "$ref": "#/components/schemas/tool.detectRecommendation"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "tool.mcpCatalog": {
+        "properties": {
+          "catalog": {
+            "description": "Catalog is this page of listings, featured first, then by name.",
+            "items": {
+              "$ref": "#/components/schemas/tool.MCPListing"
+            },
+            "type": "array"
+          },
+          "limit": {
+            "description": "Limit is the page size that was actually applied — the default or the clamp,\nwhen the request asked for neither or for too much.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "offset": {
+            "description": "Offset is where this page started, so a caller pages from what the server\ndid rather than from what it asked for.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "total": {
+            "description": "Total is how many listings the filter matched, which is more than this page\nholds whenever there is a next one.",
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "tool.mcpCatalogSync": {
+        "properties": {
+          "added": {
+            "description": "Added is how many listings the catalog did not have before.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "registry": {
+            "description": "Registry is the upstream this pass read.",
+            "type": "string"
+          },
+          "total": {
+            "description": "Total is how many listings the catalog holds now.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "updated": {
+            "description": "Updated is how many the publisher has changed since we last looked.",
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "tool.mcpServerList": {
+        "properties": {
+          "servers": {
+            "description": "Servers is every external MCP server this org has registered. No secret\nVALUE is ever included — only whether one is set.",
+            "items": {
+              "$ref": "#/components/schemas/tool.MCPServer"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "tool.muteReq": {
+        "properties": {
+          "mute": {
+            "description": "Mute takes these out of the caller's runs: a skill (skill_\u003cname\u003e), a\nserver's tool (\u003cserver\u003e_\u003ctool\u003e) or a whole server (\u003cserver\u003e), each one the\norg's kit carries.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "unmute": {
+            "description": "Unmute gives these back, as far as the org's kit carries them.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "tool.pluginDeleted": {
+        "properties": {
+          "deleted": {
+            "description": "Deleted is the plugin id that is now gone.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "tool.pluginMount": {
+        "properties": {
+          "enabled": {
+            "description": "Enabled is whether this subsystem is switched on in this deployment.",
+            "type": "boolean"
+          },
+          "name": {
+            "description": "Name is the subsystem's name, the same label a traced request resolves to.",
+            "type": "string"
+          },
+          "prefixes": {
+            "description": "Prefixes are the URL prefixes this subsystem serves.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "tool.pluginMountList": {
+        "properties": {
+          "plugins": {
+            "description": "Plugins is every subsystem the composition root declared, filtered to the\nenabled ones unless all=true.",
+            "items": {
+              "$ref": "#/components/schemas/tool.pluginMount"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "tool.skillDeleted": {
+        "properties": {
+          "deleted": {
+            "description": "Deleted is the skill id that is now gone.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "tool.skillIn": {
+        "properties": {
+          "content": {
+            "description": "Content is the SKILL.md body. Required, at most 256 KiB.",
+            "type": "string"
+          },
+          "description": {
+            "description": "Description is the one-line summary discovery shows for the skill.",
+            "type": "string"
+          },
+          "name": {
+            "description": "Name is the skill's id within the org: one lowercase path segment\n(a-z0-9, _ or -). Writing an existing name REVISES that skill.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "tool.skillWritten": {
+        "properties": {
+          "skill": {
+            "$ref": "#/components/schemas/tool.Skill",
+            "description": "Skill is the skill as stored, with its derived id and creation time."
+          }
+        },
+        "type": "object"
+      },
+      "tool.sourceToolList": {
+        "properties": {
+          "source": {
+            "description": "Source is the source these tools came from.",
+            "type": "string"
+          },
+          "tools": {
+            "description": "Tools is the caller's tools from that source. Never null.",
+            "items": {
+              "$ref": "#/components/schemas/tool.Tool"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "tool.toolCall": {
+        "properties": {
+          "arguments": {
+            "additionalProperties": {},
+            "description": "Arguments is the tool's own input object, passed through verbatim to\nwhichever source owns it.",
+            "type": "object"
+          },
+          "name": {
+            "description": "Name is the tool to run, exactly as GET /v1/tool reports it.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "tool.toolList": {
+        "properties": {
+          "incomplete": {
+            "description": "Incomplete names the sources that did not answer this listing, and\n\"activation\" when the activation store could not be read. Tools from a named\nsource are absent, not nonexistent, and with \"activation\" every activated flag\nreads false. Omitted when every source answered.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "tools": {
+            "description": "Tools is every tool the caller may see, deduplicated by name with source\nprecedence applied.",
+            "items": {
+              "$ref": "#/components/schemas/tool.Tool"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "tool.toolResult": {
+        "properties": {
+          "name": {
+            "description": "Name is the tool that ran.",
+            "type": "string"
+          },
+          "result": {
+            "description": "Result is the tool's own output, verbatim — its shape is the tool's, not\nthis plane's."
+          }
+        },
+        "type": "object"
+      }
+    },
+    "securitySchemes": {
+      "bearer": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "The caller's credential, sent as `Authorization: Bearer \u003ctoken\u003e`. It is either an access token minted by Hanzo IAM or an API key (pk-/sk-). X-Authorization, and HTTP Basic carrying the token as the password, are accepted spellings of the same header for clients that cannot set Authorization; a browser presents the session cookie instead. Every operation requires it unless it says `security: []`."
+      }
+    }
+  }
+}

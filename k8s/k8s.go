@@ -1,0 +1,60 @@
+package k8s
+
+import "k8s.io/apimachinery/pkg/runtime/schema"
+
+// Apps is the operator's App CR (hanzo.ai/v1) — the ONE workload kind the fleet
+// runs on. `Service` is the v0.3.0 alias it replaced; the fleet holds zero of them,
+// so there is deliberately no ServicesGVR here to scan as well.
+var Apps = schema.GroupVersionResource{Group: "hanzo.ai", Version: "v1", Resource: "apps"}
+
+// Deployments is the live Deployment behind each App — the source of the RUNNING
+// image tag, since the App CR's status does not surface it.
+var Deployments = schema.GroupVersionResource{Group: "apps", Version: "v1", Resource: "deployments"}
+
+// Namespaces backs scan-set discovery: asking which namespaces exist is how the
+// fleet is found, rather than hardcoding a list that goes stale on the next tenant.
+var Namespaces = schema.GroupVersionResource{Version: "v1", Resource: "namespaces"}
+
+// Pods is the running pod itself. Read almost nowhere — an App CR is the right
+// altitude for a workload — but the sandbox warm pool addresses pods DIRECTLY,
+// because claiming a box is a label patch on one specific already-running pod
+// and there is no CR whose desired state expresses "that one, now, for this
+// tenant".
+var Pods = schema.GroupVersionResource{Version: "v1", Resource: "pods"}
+
+// Volumes is the PersistentVolumeClaim an app declares storage against. A claim
+// is a DIFFERENT lifetime from the workload that mounts it: the App CR is desired
+// state and can be deleted and recreated freely, while the claim holds the only
+// copy of the tenant's data. Nothing here deletes one.
+var Volumes = schema.GroupVersionResource{Version: "v1", Resource: "persistentvolumeclaims"}
+
+// Nodes are the machines. The sandbox asks for one by name to learn whether a
+// project disk's node still exists: a local disk does not outlive its machine.
+var Nodes = schema.GroupVersionResource{Version: "v1", Resource: "nodes"}
+
+// RuntimeClasses is the isolation boundary a pod may name (node.k8s.io/v1), and
+// the object that says WHERE a pod naming it may land: `scheduling.nodeSelector`
+// and `scheduling.tolerations` are merged by the apiserver into every such pod.
+// That merge is why the sandbox reads this rather than writing a nodeSelector of
+// its own — the class already holds the fact, and a second copy in a pod spec is
+// one that goes stale the day the pool moves.
+var RuntimeClasses = schema.GroupVersionResource{Group: "node.k8s.io", Version: "v1", Resource: "runtimeclasses"}
+
+// CDApplications is Hanzo CD's Application CR (apps.hanzo.ai/v1alpha1) — the
+// GitOps plane's own record of a tracked git source: the revision it last applied,
+// its sync verdict, and its deploy history. A different fact from Apps: an App is
+// ONE workload's desired state, a CD Application is the git→cluster pipeline that
+// WRITES those Apps, so "the App CR declares vX" and "CD has applied commit abc"
+// answer different questions and neither implies the other.
+var CDApplications = schema.GroupVersionResource{Group: "apps.hanzo.ai", Version: "v1alpha1", Resource: "applications"}
+
+// CDAppProjects is Hanzo CD's AppProject CR (apps.hanzo.ai/v1alpha1) — the policy
+// envelope a CD Application is admitted under: which repos it may pull from, which
+// destinations it may write to, which resource kinds it may create. A different
+// question from CDApplications: an Application is ONE tracked git source, a project
+// is the boundary a whole set of them may act within.
+//
+// Same group as every other CD kind. Nothing has ever served argoproj.io here — a
+// GVR naming that group comes back "the server doesn't have a resource type", which
+// a caller treating any error as "CD is not installed" reads as absence.
+var CDAppProjects = schema.GroupVersionResource{Group: "apps.hanzo.ai", Version: "v1alpha1", Resource: "appprojects"}

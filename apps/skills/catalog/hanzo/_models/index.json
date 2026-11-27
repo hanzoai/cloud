@@ -1,0 +1,48 @@
+{
+  "$schema": "https://schemas.agentskills.io/discovery/0.2.0/schema.json",
+  "base_url": "https://api.hanzo.ai",
+  "brand": "hanzo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://hanzo.id",
+  "mcp": {
+    "description": "Model Context Protocol over JSON-RPC 2.0 — one POST per message, stateless, protocol revision 2026-07-28. tools/list answers without a credential with one tool per subsystem (its operations in the \"op\" enum) plus \"describe\", which returns one operation's input schema. tools/call names a subsystem tool and carries {\"op\": <operation>, \"input\": <its arguments>}; it takes the same bearer the REST API does, and a call that carries none is answered 401 with a WWW-Authenticate header naming the resource metadata at /.well-known/oauth-protected-resource, which names the authorization server to sign in at. The tool surface is the public contract: the operator's admin product is not offered, and a name that would disclose a secret or mutate an identity is withheld — the list says how many, under _meta.",
+    "method": "POST",
+    "url": "https://api.hanzo.ai/v1/mcp"
+  },
+  "skill_count": 4,
+  "skills": [
+    {
+      "description": "Read models access: Returns the caller's own standing for a gated model: \"granted\", \"requested\", or empty when they have never asked..",
+      "digest": "sha256:b125178affc5501db7f470ad142116d27e92ea5d72852b0aa3028f4a1c883253",
+      "name": "models_access",
+      "service": "models",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/models_access/SKILL.md"
+    },
+    {
+      "description": "Read models models: Returns the list of available models from the routing table..",
+      "digest": "sha256:3f32af3c4eddd372678cd30d4397e52c4346c986e5ee8c1ae8010c3a45c8bdce",
+      "name": "models_models",
+      "service": "models",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/models_models/SKILL.md"
+    },
+    {
+      "description": "Read models providers: Public, secret-free list of the providers serving the models that GET /v1/models lists — the same source, projected..",
+      "digest": "sha256:22dfc4149ce5c88cd3961f19f295d04164364bc4f093bca74145e924dca4be82",
+      "name": "models_providers",
+      "service": "models",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/models_providers/SKILL.md"
+    },
+    {
+      "description": "Read models vendors: Lists every model a vendor lists now, each entry exactly as the vendor listed it (prices, context, output bound, modalities, parameters, created, expiration), and when the list was last synced., Lists the changes syncs read in a vendor's model list, newest fi",
+      "digest": "sha256:6da8dbef4333f7fab89bfca96824b6ad731d3eac90e6709f674c94397cfd435b",
+      "name": "models_vendors",
+      "service": "models",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/models_vendors/SKILL.md"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

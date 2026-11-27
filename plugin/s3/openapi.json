@@ -1,0 +1,1135 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Hanzo Cloud API",
+    "description": "Package s3 is object storage: your buckets and the files in them, with signed URLs for upload and download.",
+    "version": "v1"
+  },
+  "servers": [
+    {
+      "url": "https://api.hanzo.ai"
+    }
+  ],
+  "security": [
+    {
+      "bearer": []
+    }
+  ],
+  "tags": [
+    {
+      "name": "s3"
+    }
+  ],
+  "paths": {
+    "/v1/s3/buckets": {
+      "get": {
+        "operationId": "get_s3_buckets",
+        "summary": "Lists the caller org's own buckets.",
+        "description": "Lists the caller org's own buckets.\n\nOnly the caller's: every bucket is physically named under a per-org prefix and\nthe listing strips that prefix, so a tenant sees friendly names and another\ntenant's buckets are not in the answer at all. Another org's bucket is not\nrefused but INVISIBLE, so this cannot be used to learn that a name is taken\nelsewhere.\n\nBilled per call: the balance is checked BEFORE anything is touched, so an\nunfunded org is refused with nothing done, and the debit lands only once the\nwork has succeeded.",
+        "tags": [
+          "s3"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/s3.bucketList"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      },
+      "post": {
+        "operationId": "post_s3_buckets",
+        "summary": "Makes a new bucket for the caller's org and answers 201 with it.",
+        "description": "Makes a new bucket for the caller's org and answers 201 with it.\n\nIt requires an admin of the org, a SuperAdmin, or the org's own application\n(CI makes its cache bucket on first use): every member of the org uses\nits buckets, and only an admin makes or removes one. Anyone else is refused 403\nwith nothing created.\n\nThe physical name is derived from the caller's validated org, so a tenant can\nonly ever create inside its own namespace and no request field can redirect\nthat. A name already taken in the org is 409.\n\nBilled per call: the balance is checked BEFORE anything is touched, so an\nunfunded org is refused with nothing created, and the debit lands only once the\nbucket exists.",
+        "tags": [
+          "s3"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/s3.bucketIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/s3.bucketItem"
+                }
+              }
+            },
+            "description": "created"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/s3/buckets/{bucket}": {
+      "delete": {
+        "operationId": "delete_s3_buckets_by_bucket",
+        "summary": "Removes an EMPTY bucket and answers 204.",
+        "description": "Removes an EMPTY bucket and answers 204.\n\nIt requires an admin of the org, or a SuperAdmin, as creating one does; anyone\nelse is refused 403 with nothing deleted.\n\nA non-empty bucket is 409 rather than a cascade: deleting a tenant's objects\nbehind a single bucket call is not a thing this surface will do silently. A\nbucket the caller's org does not own is the same 404 an unknown name gives.\n\nBilled per call: the balance is checked BEFORE anything is touched, so an\nunfunded org is refused with nothing deleted, and the debit lands only once the\nbucket is gone.",
+        "tags": [
+          "s3"
+        ],
+        "parameters": [
+          {
+            "name": "bucket",
+            "in": "path",
+            "required": true,
+            "description": "Bucket is the bucket's friendly name, from the path.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "no content"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/s3/buckets/{bucket}/blob/{wildcard1}": {
+      "get": {
+        "operationId": "get_s3_buckets_by_bucket_blob_by_wildcard1",
+        "summary": "Read one object's bytes",
+        "description": "Answers the object's stored bytes.\n\nServed INERT — application/octet-stream, attachment, nosniff — because the content type would otherwise be one caller's claim about another caller's download, and this store holds whatever an org put in it. A caller that knows what it stored reads the bytes; a browser saves them rather than rendering them.\n\nThe counterpart of the PUT above, and the address GET /v1/s3/buckets/{bucket}/objects/{key} hands back where there is no public store to sign against.",
+        "tags": [
+          "s3"
+        ],
+        "parameters": [
+          {
+            "name": "bucket",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "wildcard1",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "put": {
+        "operationId": "put_s3_buckets_by_bucket_blob_by_wildcard1",
+        "summary": "Write one object's bytes",
+        "description": "Stores the request body as the object at this address and answers its key and size. The body IS the object: whatever is sent is what is stored, and the declared Content-Type is kept with it.\n\nThis is the address POST /v1/s3/buckets/{bucket}/objects hands back on a deployment whose object store has no browser-routable host. Where one exists that mint answers a presigned URL against the store instead and the bytes never pass through this API — the caller follows {url, method} either way and does not choose.\n\nBounded: a body over the limit is refused 413 rather than held. An empty body is refused — a zero-byte object is almost always a failed read upstream.",
+        "tags": [
+          "s3"
+        ],
+        "parameters": [
+          {
+            "name": "bucket",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "wildcard1",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/s3/buckets/{bucket}/objects": {
+      "get": {
+        "operationId": "get_s3_buckets_by_bucket_objects",
+        "summary": "Lists one folder level of a bucket.",
+        "description": "Lists one folder level of a bucket.\n\nFolder-style by default: sub-prefixes come back as directory entries, which is\nthe file-manager view. `?recursive=true` lists every key flat under the prefix\ninstead. Keys are RELATIVE to `?prefix=`, and the listing is bounded so a huge\nbucket cannot exhaust memory — Total is what came back, not what the bucket\nholds.\n\nBilled per call: the balance is checked BEFORE anything is touched, so an\nunfunded org is refused with nothing read, and the debit lands only once the\nlisting has succeeded.",
+        "tags": [
+          "s3"
+        ],
+        "parameters": [
+          {
+            "name": "bucket",
+            "in": "path",
+            "required": true,
+            "description": "Bucket is the bucket to list, from the path.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "prefix",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "recursive",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/s3.objectList"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      },
+      "post": {
+        "operationId": "post_s3_buckets_by_bucket_objects",
+        "summary": "Mints a presigned PUT URL the caller uploads to DIRECTLY.",
+        "description": "Mints a presigned PUT URL the caller uploads to DIRECTLY.\n\nThe bytes never pass through this binary and the admin credential never leaves\nthe server: the URL is signed against the PUBLIC host, scoped to exactly this\nbucket and key, and expires. A deployment with no public endpoint configured\ncannot mint one and answers 503 rather than a URL that will not work.\n\nBilled per call — for MINTING the URL, which is the work this operation does;\nthe upload that follows it goes straight to the store and is not seen here. The\nbalance is checked BEFORE anything is touched, so an unfunded org is refused\nwith no URL issued.",
+        "tags": [
+          "s3"
+        ],
+        "parameters": [
+          {
+            "name": "bucket",
+            "in": "path",
+            "required": true,
+            "description": "Bucket is the bucket to upload into, from the path.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/s3.uploadIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/s3.presignResponse"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/s3/buckets/{bucket}/objects/{wildcard1}": {
+      "delete": {
+        "operationId": "delete_s3_buckets_by_bucket_objects_by_wildcard1",
+        "summary": "Removes one object and answers 204.",
+        "description": "Removes one object and answers 204.\n\nIt removes ONE object and never a prefix: a key that looks like a folder deletes\nthe placeholder at that key, not the objects beneath it. The key is path-cleaned\nfirst, so the delete cannot reach outside the bucket it names, and a bucket the\ncaller's org does not own is the same 404 an unknown name gives.\n\nBilled per call: the balance is checked BEFORE anything is touched, so an\nunfunded org is refused with nothing deleted, and the debit lands only once the\nobject is gone.",
+        "tags": [
+          "s3"
+        ],
+        "parameters": [
+          {
+            "name": "bucket",
+            "in": "path",
+            "required": true,
+            "description": "Bucket is the bucket's friendly name, from the path.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "wildcard1",
+            "in": "path",
+            "required": true,
+            "description": "Key is the object's key within the bucket — everything after that bucket's\n/objects/. It MAY contain \"/\", because a key is a path and this segment is\ncaptured whole: \"2019/summer/a.jpg\" is one key, not three. It is\npath-cleaned before use, so \"../\" reaches nothing outside the bucket, and a\nkey that is empty, absolute or a bare folder marker is refused 400.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "no content"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      },
+      "get": {
+        "operationId": "get_s3_buckets_by_bucket_objects_by_wildcard1",
+        "summary": "Mints a presigned GET URL the caller downloads from DIRECTLY.",
+        "description": "Mints a presigned GET URL the caller downloads from DIRECTLY.\n\nThe bytes never pass through this binary and the admin credential never leaves\nthe server: the URL is signed against the PUBLIC host, scoped to exactly this\nbucket and key, and expires. It carries a content disposition of attachment\nnaming the object's file name, so a browser following it saves the object rather\nthan rendering it in place. A deployment with no public endpoint configured\ncannot mint one and answers 503 rather than a URL that will not work.\n\nBilled per call — for MINTING the URL, which is the work this operation does;\nthe download that follows it comes straight from the store and is not seen here.\nThe balance is checked BEFORE anything is touched, so an unfunded org is refused\nwith no URL issued.",
+        "tags": [
+          "s3"
+        ],
+        "parameters": [
+          {
+            "name": "bucket",
+            "in": "path",
+            "required": true,
+            "description": "Bucket is the bucket's friendly name, from the path.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "wildcard1",
+            "in": "path",
+            "required": true,
+            "description": "Key is the object's key within the bucket — everything after that bucket's\n/objects/. It MAY contain \"/\", because a key is a path and this segment is\ncaptured whole: \"2019/summer/a.jpg\" is one key, not three. It is\npath-cleaned before use, so \"../\" reaches nothing outside the bucket, and a\nkey that is empty, absolute or a bare folder marker is refused 400.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/s3.presignResponse"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/s3/buckets/{bucket}/uploads": {
+      "post": {
+        "operationId": "post_s3_buckets_by_bucket_uploads",
+        "summary": "Begins a multipart upload of a large file into one of the caller's org buckets.",
+        "description": "Begins a multipart upload of a large file into one of the caller's\norg buckets. Then mint presigned URLs for its parts with POST\n.../uploads/{upload}/parts, PUT each part's bytes to its URL — every part but\nthe last exactly partSize bytes — and assemble the object with POST\n.../uploads/{upload}/complete. A dropped connection loses nothing:\nGET .../uploads/{upload} lists the parts already stored, so only the rest are\nsent again. Use this for anything over a few megabytes; a small file takes the\nsingle presigned PUT of POST /v1/s3/buckets/{bucket}/objects.",
+        "tags": [
+          "s3"
+        ],
+        "parameters": [
+          {
+            "name": "bucket",
+            "in": "path",
+            "required": true,
+            "description": "Bucket is the bucket to upload into, from the path.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "key": "chat/backup.tar",
+                "type": "application/x-tar"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/s3.uploadStart"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/s3.uploadStarted"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/s3/buckets/{bucket}/uploads/{upload}": {
+      "delete": {
+        "operationId": "delete_s3_buckets_by_bucket_uploads_by_upload",
+        "summary": "Aborts a multipart upload and deletes the parts it stored.",
+        "description": "Aborts a multipart upload and deletes the parts it stored. The\nobject it would have become is never created.",
+        "tags": [
+          "s3"
+        ],
+        "parameters": [
+          {
+            "name": "bucket",
+            "in": "path",
+            "required": true,
+            "description": "Bucket is the bucket, from the path.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "upload",
+            "in": "path",
+            "required": true,
+            "description": "Upload is the upload's id, from the path.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "key",
+            "in": "query",
+            "required": false,
+            "description": "Key is the object key the upload was started on. In the query for a read\nor an abandon, in the body to complete.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/s3.uploadGone"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      },
+      "get": {
+        "operationId": "get_s3_buckets_by_bucket_uploads_by_upload",
+        "summary": "Answers the parts a multipart upload already holds, in order: what a client resuming after a dropped connection reads to send only the rest.",
+        "description": "Answers the parts a multipart upload already holds, in order: what\na client resuming after a dropped connection reads to send only the rest.",
+        "tags": [
+          "s3"
+        ],
+        "parameters": [
+          {
+            "name": "bucket",
+            "in": "path",
+            "required": true,
+            "description": "Bucket is the bucket, from the path.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "upload",
+            "in": "path",
+            "required": true,
+            "description": "Upload is the upload's id, from the path.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "key",
+            "in": "query",
+            "required": false,
+            "description": "Key is the object key the upload was started on. In the query for a read\nor an abandon, in the body to complete.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/s3.storedParts"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/s3/buckets/{bucket}/uploads/{upload}/complete": {
+      "post": {
+        "operationId": "post_s3_buckets_by_bucket_uploads_by_upload_complete",
+        "summary": "Assembles a multipart upload into its object from every part the store holds, in order.",
+        "description": "Assembles a multipart upload into its object from every part the\nstore holds, in order. The parts must run 1, 2, 3 … with no gap; a gap is 409,\nnaming the first part missing, and the upload stays open to send it.",
+        "tags": [
+          "s3"
+        ],
+        "parameters": [
+          {
+            "name": "bucket",
+            "in": "path",
+            "required": true,
+            "description": "Bucket is the bucket, from the path.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "upload",
+            "in": "path",
+            "required": true,
+            "description": "Upload is the upload's id, from the path.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/s3.uploadRef"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/s3.uploadDone"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/s3/buckets/{bucket}/uploads/{upload}/parts": {
+      "post": {
+        "operationId": "post_s3_buckets_by_bucket_uploads_by_upload_parts",
+        "summary": "Answers presigned PUT URLs for some parts of a multipart upload, at most 64 a call, each valid for minutes: mint them as the upload reaches them.",
+        "description": "Answers presigned PUT URLs for some parts of a multipart upload, at\nmost 64 a call, each valid for minutes: mint them as the upload reaches them.\nPUT a part's bytes to its URL as they are — no headers are signed — and the\nstore answers the part's ETag, which completing does not need.",
+        "tags": [
+          "s3"
+        ],
+        "parameters": [
+          {
+            "name": "bucket",
+            "in": "path",
+            "required": true,
+            "description": "Bucket is the bucket, from the path.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "upload",
+            "in": "path",
+            "required": true,
+            "description": "Upload is the upload's id, from the path.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/s3.uploadParts"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/s3.partURLs"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/s3/health": {
+      "get": {
+        "operationId": "get_s3_health",
+        "summary": "Reports whether this deployment can serve object storage.",
+        "description": "Reports whether this deployment can serve object storage.\n\nIt is a REAL probe rather than a constant: 200 when admin credentials are\npresent, so the store is reachable in principle, and 503 with the reason when\nthey are not. It is deliberately NOT gated — liveness has to be probe-able\nwithout a token — so it is the one operation here that names no bucket and\nbills nothing.",
+        "tags": [
+          "s3"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/s3.s3Health"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/s3.s3Health"
+                }
+              }
+            },
+            "description": "service unavailable"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "problem-details": {
+        "description": "An RFC 9457 problem document.",
+        "properties": {
+          "code": {
+            "description": "A stable token a client can branch on, when the refusal names one.",
+            "type": "string"
+          },
+          "detail": {
+            "description": "What was refused, for a person to read.",
+            "type": "string"
+          },
+          "status": {
+            "description": "The HTTP status.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "title": {
+            "description": "The status's reason phrase.",
+            "type": "string"
+          },
+          "type": {
+            "description": "about:blank",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "status",
+          "detail"
+        ],
+        "type": "object"
+      },
+      "s3.bucketIn": {
+        "properties": {
+          "name": {
+            "description": "Name is the bucket's friendly name, matching\n^[a-z0-9]([a-z0-9-]{0,38}[a-z0-9])?$. It is validated AS GIVEN and never\nlower-cased for you: a client that creates \"Photos\" and then lists \"photos\"\nwould be reading a bucket it did not make, so mixed case is a clean 400.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "s3.bucketItem": {
+        "properties": {
+          "createdAt": {
+            "description": "unix seconds",
+            "format": "int64",
+            "type": "integer"
+          },
+          "name": {
+            "description": "friendly name",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "s3.bucketList": {
+        "properties": {
+          "buckets": {
+            "description": "Buckets are the caller org's buckets, friendly names, oldest first as the\nstore returns them.",
+            "items": {
+              "$ref": "#/components/schemas/s3.bucketItem"
+            },
+            "type": "array"
+          },
+          "total": {
+            "description": "Total is how many buckets this org has. It equals len(buckets): the listing\nis not paged, because an org's bucket count is small by construction.",
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "s3.objectItem": {
+        "properties": {
+          "etag": {
+            "description": "ETag is the store's entity tag for the bytes currently at this key, with the\nquotes the store wraps it in stripped. It is an opaque VERSION and not a\nchecksum to verify against: a single-part upload's tag happens to be the MD5\nof the content and a multipart upload's is not, and nothing here says which\nthis was. Compare two reads of one key to learn whether the object changed;\nabsent for a folder entry, and for an object the store reports none for.",
+            "type": "string"
+          },
+          "isDir": {
+            "description": "true for a folder (common prefix)",
+            "type": "boolean"
+          },
+          "key": {
+            "description": "key RELATIVE to the requested prefix",
+            "type": "string"
+          },
+          "lastModified": {
+            "description": "unix seconds (0 for a folder)",
+            "format": "int64",
+            "type": "integer"
+          },
+          "size": {
+            "description": "bytes (0 for a folder)",
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "s3.objectList": {
+        "properties": {
+          "bucket": {
+            "description": "Bucket is the bucket that was listed, friendly name.",
+            "type": "string"
+          },
+          "objects": {
+            "description": "Objects are the entries at this level, keys RELATIVE to Prefix.",
+            "items": {
+              "$ref": "#/components/schemas/s3.objectItem"
+            },
+            "type": "array"
+          },
+          "prefix": {
+            "description": "Prefix is the sub-folder the listing was scoped to, cleaned. Empty for the\nbucket root.",
+            "type": "string"
+          },
+          "total": {
+            "description": "Total is how many entries came back. The listing is BOUNDED, so a bucket\nwith more keys than the cap answers the cap and this says so — it is not a\ncount of what the bucket holds.",
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "s3.partURL": {
+        "properties": {
+          "part": {
+            "description": "Part is the part number.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "url": {
+            "description": "URL is the presigned address to PUT the part's bytes to, directly.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "s3.partURLs": {
+        "properties": {
+          "expiresIn": {
+            "description": "Expiry is how many seconds the URLs stay valid.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "urls": {
+            "description": "URLs are one presigned PUT per part asked for.",
+            "items": {
+              "$ref": "#/components/schemas/s3.partURL"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "s3.presignResponse": {
+        "properties": {
+          "expiresIn": {
+            "description": "seconds until the URL expires",
+            "format": "int64",
+            "type": "integer"
+          },
+          "key": {
+            "description": "Key is the object key the URL was signed for, relative to the bucket root\nand path-cleaned — so it is what the store will actually read or write, which\nis not always the string the caller sent. The signature covers this one bucket\nand this one key: a URL minted here reaches nothing else.",
+            "type": "string"
+          },
+          "method": {
+            "description": "\"PUT\" (upload) or \"GET\" (download)",
+            "type": "string"
+          },
+          "url": {
+            "description": "presigned URL the browser follows directly",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "s3.s3Health": {
+        "properties": {
+          "error": {
+            "description": "Error is why the probe is degraded, in plain words. Absent when it is not.",
+            "type": "string"
+          },
+          "presign": {
+            "description": "Presign is whether presigned upload and download URLs can be minted, which\nneeds a PUBLIC endpoint on top of the credentials. False does not make the\nsurface degraded — listing and creating still work.\n\nNOT omitempty. On the ready path the untyped probe wrote this key\nunconditionally, and omitting a false one would turn what a\nhealthy-but-presignless deployment reports from \"presign: false\" into\nsilence — two different facts. The degraded body now carries it too, which is\nthe one delta of typing this: the probe answers ONE shape under both of its\nstatuses, which is what makes a single declared Out honest.",
+            "type": "boolean"
+          },
+          "ready": {
+            "description": "Ready is whether this deployment can serve object operations at all: true\nonly when admin credentials are configured.",
+            "type": "boolean"
+          },
+          "service": {
+            "description": "Service names the subsystem this probe is for. Always \"s3\".",
+            "type": "string"
+          },
+          "status": {
+            "description": "Status is \"ok\" when the store is reachable in principle, \"degraded\" when it\nis not. It is the field to read; the HTTP status carries the same fact for a\ncaller that only looks at the code.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "s3.storedPart": {
+        "properties": {
+          "etag": {
+            "description": "ETag is the store's tag for its bytes, quotes stripped.",
+            "type": "string"
+          },
+          "part": {
+            "description": "Part is the part number.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "size": {
+            "description": "Size is its length in bytes.",
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "s3.storedParts": {
+        "properties": {
+          "key": {
+            "description": "Key is the object key it is bound to.",
+            "type": "string"
+          },
+          "parts": {
+            "description": "Parts are the parts stored, in order. A client resuming sends the others.",
+            "items": {
+              "$ref": "#/components/schemas/s3.storedPart"
+            },
+            "type": "array"
+          },
+          "upload": {
+            "description": "Upload is the upload's id.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "s3.uploadDone": {
+        "properties": {
+          "etag": {
+            "description": "ETag is the assembled object's tag, quotes stripped.",
+            "type": "string"
+          },
+          "key": {
+            "description": "Key is the object's key.",
+            "type": "string"
+          },
+          "parts": {
+            "description": "Parts is how many parts it was assembled from.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "size": {
+            "description": "Size is the object's length in bytes: the sum of its parts.",
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "s3.uploadGone": {
+        "properties": {
+          "upload": {
+            "description": "Upload is the id of the upload abandoned; its stored parts are deleted.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "s3.uploadIn": {
+        "properties": {
+          "bucket": {
+            "description": "Bucket is the bucket to upload into, from the path.",
+            "type": "string"
+          },
+          "key": {
+            "description": "Key is the object key relative to the bucket root. It is path-cleaned, so a\n\"../\" cannot escape the bucket, and an empty or unclean key is 400.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "s3.uploadParts": {
+        "properties": {
+          "bucket": {
+            "description": "Bucket is the bucket, from the path.",
+            "type": "string"
+          },
+          "key": {
+            "description": "Key is the object key the upload was started on.",
+            "type": "string"
+          },
+          "parts": {
+            "description": "Parts are the part numbers to mint URLs for, from 1. At most 64 a call.",
+            "items": {
+              "format": "int64",
+              "type": "integer"
+            },
+            "type": "array"
+          },
+          "upload": {
+            "description": "Upload is the upload's id, from the path.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "s3.uploadRef": {
+        "properties": {
+          "bucket": {
+            "description": "Bucket is the bucket, from the path.",
+            "type": "string"
+          },
+          "key": {
+            "description": "Key is the object key the upload was started on. In the query for a read\nor an abandon, in the body to complete.",
+            "type": "string"
+          },
+          "upload": {
+            "description": "Upload is the upload's id, from the path.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "s3.uploadStart": {
+        "properties": {
+          "bucket": {
+            "description": "Bucket is the bucket to upload into, from the path.",
+            "type": "string"
+          },
+          "key": {
+            "description": "Key is the object key the upload will become, relative to the bucket\nroot. It is path-cleaned, so a \"../\" cannot escape the bucket.",
+            "type": "string"
+          },
+          "type": {
+            "description": "Type is the object's media type, kept with it once it is assembled.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "s3.uploadStarted": {
+        "properties": {
+          "key": {
+            "description": "Key is the object key the upload is bound to.",
+            "type": "string"
+          },
+          "partSize": {
+            "description": "PartSize is the size every part but the last must be, in bytes. The\nnumber of parts is the file's size divided by it, rounded up.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "upload": {
+            "description": "Upload is the upload's id, which every later call names.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      }
+    },
+    "securitySchemes": {
+      "bearer": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "The caller's credential, sent as `Authorization: Bearer \u003ctoken\u003e`. It is either an access token minted by Hanzo IAM or an API key (pk-/sk-). X-Authorization, and HTTP Basic carrying the token as the password, are accepted spellings of the same header for clients that cannot set Authorization; a browser presents the session cookie instead. Every operation requires it unless it says `security: []`."
+      }
+    }
+  }
+}

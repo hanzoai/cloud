@@ -1,0 +1,475 @@
+{
+ "_": "The skills an org holds from its repositories (.agents/skills/<name>/SKILL.md), as GET /v1/tool/skills/authored listed them for the hanzo org on 2026-11-20: description is the stored column, content the file's frontmatter.",
+ "skills": [
+  {
+   "name": "adding-inbox-sources",
+   "description": "Add a new warehouse-backed source to the Insights Desktop Self-driving Inbox (the feature that ships GitHub, Linear, Zendesk, pganalyze, Jira). A source syncs one warehouse table (issues/tickets/conversations) and a cloud \"signals scout\" watches it and emits findings. Use when asked to \"add a new inbox/self-driving source\", \"wire up <Jira/GitLab/Sentry/Intercom/Freshdesk/Front/Gorgias/etc> as a signal source\", or to extend the source-toggle grid. Covers all three surfaces (insights/insights scout emitter + insights/code UI wiring + the context-mill self-driving wizard skill that offers the source in `npx @hanzo/wizard self-driving`), the deploy ordering between them, and created_via attribution.",
+   "content": "---\nname: adding-inbox-sources\ndescription: Add a new warehouse-backed source to the Insights Desktop Self-driving Inbox (the feature that ships GitHub, Linear, Zendesk, pganalyze, Jira). A source syncs one warehouse table (issues/tickets/conversations) and a cloud \"signals scout\" watches it and emits findings. Use when asked to \"add a new inbox/self-driving source\", \"wire up <Jira/GitLab/Sentry/Intercom/Freshdesk/Front/Gorgias/etc> as a signal source\", or to extend the source-toggle grid. Covers all three surfaces (insights/insights scout emitter + insights/code UI wiring + the context-mill self-driving wizard skill that offers the source in `npx @hanzo/wizard self-driving`), the deploy ordering between them, and created_via attribution.\n---\n"
+  },
+  {
+   "name": "adding-ingestion-warnings",
+   "description": ">",
+   "content": "---\nname: adding-ingestion-warnings\ndescription: >\n  How to add a new ingestion warning type to the event ingestion pipeline.\n  Use when emitting a new warning from nodejs ingestion code (emitIngestionWarning, captureIngestionWarning, pipeline `warnings` arrays, `drop()` with warnings), when adding a warning type, category, or severity, or when a typecheck error says a string is not assignable to IngestionWarningType.\n  Covers the INGESTION_WARNING_TYPES registry (the single source of truth for type, category, and severity), the details-key conventions that Datastore v2 materializes into columns, debouncing, and the downstream surfaces to keep in sync (v1 UI map, resolving-ingestion-warnings skill, docs, v2 API).\n---\n"
+  },
+  {
+   "name": "adding-mcp-store-servers",
+   "description": "Add a third-party MCP server (Linear, Notion, GitHub, ...) to the Insights MCP store catalog. Use when asked to \"add X to the MCP store\", expand the MCP server marketplace, or fix a broken catalog entry. Covers finding the vendor's remote MCP endpoint, probing it (handshake, OAuth discovery, DCR), authoring the catalog entry in products/mcp_store/backend/catalog.py, verification tiers, and the operator handoff for servers without Dynamic Client Registration.",
+   "content": "---\nname: adding-mcp-store-servers\ndescription: Add a third-party MCP server (Linear, Notion, GitHub, ...) to the Insights MCP store catalog. Use when asked to \"add X to the MCP store\", expand the MCP server marketplace, or fix a broken catalog entry. Covers finding the vendor's remote MCP endpoint, probing it (handshake, OAuth discovery, DCR), authoring the catalog entry in products/mcp_store/backend/catalog.py, verification tiers, and the operator handoff for servers without Dynamic Client Registration.\n---\n"
+  },
+  {
+   "name": "adding-personinsights-rpc",
+   "description": ">",
+   "content": "---\nname: adding-personinsights-rpc\ndescription: >\n  Guide for adding a new RPC to personinsights-replica and personinsights-router.\n  Covers eligibility checks, proto definition, code generation for Python and Node.js clients,\n  Rust implementation (storage trait, postgres queries, service handler, router wiring),\n  and index compatibility validation. Use when adding a new gRPC endpoint to personinsights,\n  migrating a Django ORM query to personinsights, or extending the personinsights service API.\n---\n"
+  },
+  {
+   "name": "adding-product-alerting",
+   "description": ">",
+   "content": "---\nname: adding-product-alerting\ndescription: >\n  Recommended repo-engineering guide when adding alerting to a Insights product or\n  extending the shared alerts platform. Routes lifecycle state machines,\n  AlertPolicy, destinations, InsightsFunction dispatch, email, fixed-cadence and calendar\n  scheduling, insight evaluation, the AlertWizard, and shared alert editor components. Use for product alert implementations,\n  shared destination types, lifecycle or scheduling options, advanced alert settings,\n  and platform alert infrastructure. Not for configuring alerts in an existing product.\n---\n"
+  },
+  {
+   "name": "adding-project-secret-api-key-auth",
+   "description": "How to gate a Insights API endpoint with project secret API key (PSAK) auth — a project-scoped, user-less service credential. Use when adding PSAK support to a viewset action, allowing a new scope for PSAKs, handling synthetic users (ProjectSecretAPIKeyUser), or choosing PSAK-aware rate throttles. Trigger terms: PSAK, ProjectSecretAPIKey, project secret API key, sk- token, service auth, programmatic endpoint auth.",
+   "content": "---\nname: adding-project-secret-api-key-auth\ndescription: 'How to gate a Insights API endpoint with project secret API key (PSAK) auth — a project-scoped, user-less service credential. Use when adding PSAK support to a viewset action, allowing a new scope for PSAKs, handling synthetic users (ProjectSecretAPIKeyUser), or choosing PSAK-aware rate throttles. Trigger terms: PSAK, ProjectSecretAPIKey, project secret API key, sk- token, service auth, programmatic endpoint auth.'\n---\n"
+  },
+  {
+   "name": "adopting-generated-api-types",
+   "description": "Use when migrating frontend code from manual API client calls (`api.get`, `api.create`, `api.surveys.get`, `api.dashboards.list`, `new ApiRequest()`) and handwritten TypeScript interfaces to generated API functions and types. Triggers on files importing from `lib/api`, files with `api.get<`, `api.create<`, `api.<entity>.<method>`, manual interface definitions that duplicate backend serializers, or any frontend file that constructs API URLs by hand. Covers the full replacement workflow — finding the generated equivalent, swapping imports, adapting call sites, and removing dead manual types.",
+   "content": "---\nname: adopting-generated-api-types\ndescription: Use when migrating frontend code from manual API client calls (`api.get`, `api.create`, `api.surveys.get`, `api.dashboards.list`, `new ApiRequest()`) and handwritten TypeScript interfaces to generated API functions and types. Triggers on files importing from `lib/api`, files with `api.get<`, `api.create<`, `api.<entity>.<method>`, manual interface definitions that duplicate backend serializers, or any frontend file that constructs API URLs by hand. Covers the full replacement workflow — finding the generated equivalent, swapping imports, adapting call sites, and removing dead manual types.\n---\n"
+  },
+  {
+   "name": "agent-browser",
+   "description": "Browser automation CLI for AI agents. Use when the user needs to interact with websites, including navigating pages, filling forms, clicking buttons, taking screenshots, extracting data, testing web apps, or automating any browser task. Triggers include requests to \"open a website\", \"fill out a form\", \"click a button\", \"take a screenshot\", \"scrape data from a page\", \"test this web app\", \"login to a site\", \"automate browser actions\", or any task requiring programmatic web interaction.",
+   "content": "---\nname: agent-browser\ndescription: Browser automation CLI for AI agents. Use when the user needs to interact with websites, including navigating pages, filling forms, clicking buttons, taking screenshots, extracting data, testing web apps, or automating any browser task. Triggers include requests to \"open a website\", \"fill out a form\", \"click a button\", \"take a screenshot\", \"scrape data from a page\", \"test this web app\", \"login to a site\", \"automate browser actions\", or any task requiring programmatic web interaction.\nallowed-tools: Bash(agent-browser:*)\n---\n"
+  },
+  {
+   "name": "analyzing-experiment-query-performance",
+   "description": ">",
+   "content": "---\nname: analyzing-experiment-query-performance\ndescription: >\n  Pull and interpret production experiment query-performance data from the staff-only\n  `/v1/debug_ch_queries` endpoints backing the `/instance/query_performance` scene:\n  slowest experiment queries, precompute read/build health, and preaggregation cache footprint.\n  Covers prod-US and prod-EU via a `query_performance:read` personal API key, all query params,\n  and response field semantics (exception codes, exposure paths, precompute skip reasons, job states).\n  Use when investigating slow or failing experiment queries, precompute regressions,\n  307/159/241 errors, preaggregation table growth, or when asked how experiment query\n  performance or the precompute rollout is doing in production.\n---\n"
+  },
+  {
+   "name": "analyzing-insights-across-teams",
+   "description": ">",
+   "content": "---\nname: analyzing-insights-across-teams\ndescription: >\n  Analyze Insights insights, dashboards, or teams beyond the current project by\n  querying the prod Postgres replicas synced into the dogfood data warehouse\n  (US project 2, \"Insights App + Website\"). Use when asked to analyze insights\n  across all teams or projects, another team's insights, or fleet-wide\n  insight/dashboard usage — cases where `system.insights` only returns the\n  current project's rows and the agent would otherwise report the data as\n  inaccessible. Covers the synced table names for US and EU and the\n  column-verification workflow.\n---\n"
+  },
+  {
+   "name": "auditing-llm-gateway-parity",
+   "description": ">",
+   "content": "---\nname: auditing-llm-gateway-parity\ndescription: >\n  Audits services/llm-gateway against Insights/ai-gateway and updates services/llm-gateway/PARITY.md from current implementation evidence. Use when either gateway changes auth, attribution, billing, endpoints, providers, models, routing, or metadata; when reviewing a Python gateway change; or when asked to refresh, verify, or report gateway parity. This skill updates the parity record but does not migrate callers.\n---\n"
+  },
+  {
+   "name": "auditing-warehouse-source-coverage",
+   "description": "Audit already-implemented Data warehouse import sources for endpoints, schemas, and tables the vendor's API offers but we never wired up. Use when asked whether a source is missing endpoints, to find new endpoints a vendor has added since a source was built, to refresh COVERAGE_GAPS.md, to prioritize which source to deepen next, or to check coverage before an integration review. Covers dumping our real endpoint inventory credential-free, ranking sources by production adoption, diffing against vendor OpenAPI/GraphQL specs, and recording findings. Not for implementing a source (use implementing-warehouse-sources), adding a vendor API version (warehouse-source-new-version), or writing source docs (documenting-warehouse-sources).",
+   "content": "---\nname: auditing-warehouse-source-coverage\ndescription: Audit already-implemented Data warehouse import sources for endpoints, schemas, and tables the vendor's API offers but we never wired up. Use when asked whether a source is missing endpoints, to find new endpoints a vendor has added since a source was built, to refresh COVERAGE_GAPS.md, to prioritize which source to deepen next, or to check coverage before an integration review. Covers dumping our real endpoint inventory credential-free, ranking sources by production adoption, diffing against vendor OpenAPI/GraphQL specs, and recording findings. Not for implementing a source (use implementing-warehouse-sources), adding a vendor API version (warehouse-source-new-version), or writing source docs (documenting-warehouse-sources).\n---\n"
+  },
+  {
+   "name": "authoring-ci-workflows",
+   "description": ">",
+   "content": "---\nname: authoring-ci-workflows\ndescription: >\n  Use when adding or editing a GitHub Actions workflow, composite action, or reusable workflow under `.github/` — new CI jobs, triggers, matrices, checkout/clone tuning, action pinning, GitHub App token auth, concurrency groups, `timeout-minutes`, `paths` filters, caching, or runner choice.\n  Covers Insights's workflow-authoring conventions and the reasons behind them: the 500-runs/10s dispatch cap, shallow vs full clone, per-SHA push concurrency, dedicated App-token rate-limit buckets, and fork-safe secrets on a public repo.\n  Points to the linters (`bin/insightscli lint:workflows`, actionlint) that enforce the mechanical rules, and to the narrower skills for production deploys, secrets, and Depot runners.\n  Not for debugging red CI (use debugging-ci-failures) or wiring a new secret end to end (use managing-github-actions-secrets).\n---\n"
+  },
+  {
+   "name": "autoresolving-pr-conflicts",
+   "description": ">",
+   "content": "---\nname: autoresolving-pr-conflicts\ndescription: >\n  Operating procedure for the conflict-autoresolver agent: sweep open Insights/insights\n  PRs that conflict with master, resolve the trivial conflicts (generated artifacts\n  deterministically, source conflicts with judgment), land a single signed commit on\n  the PR head, and flag everything else for a human. Use when running as the\n  \"Autoresolve PR conflicts\" Loop, when asked to sweep or auto-resolve merge\n  conflicts against master, or when asked to bring a conflicting PR up to date\n  without rewriting its history. Trigger terms: conflict sweep, autoresolve,\n  merge conflicts, conflicting PRs, bring PR up to date, restack.\n  Operators setting up the Loop itself: see references/loop-setup.md.\n---\n"
+  },
+  {
+   "name": "building-product-empty-states",
+   "description": "Guide for adding a product setup empty state — the skippable first-run screen a product scene shows until real data arrives, built on the shared ProductEmptyState component. Use when adding an empty state or first-run/setup screen to a product scene, declaring `emptyState` on a `SceneExport`, writing a product setup-status detection logic, building an animated example-data preview widget, or migrating away from the deprecated `ProductIntroduction` component. Covers the `productSetupStatusLogic` single-layer contract, real-data detection rules, local-only skip semantics, wizard commands, and design tokens.",
+   "content": "---\nname: building-product-empty-states\ndescription: Guide for adding a product setup empty state — the skippable first-run screen a product scene shows until real data arrives, built on the shared ProductEmptyState component. Use when adding an empty state or first-run/setup screen to a product scene, declaring `emptyState` on a `SceneExport`, writing a product setup-status detection logic, building an animated example-data preview widget, or migrating away from the deprecated `ProductIntroduction` component. Covers the `productSetupStatusLogic` single-layer contract, real-data detection rules, local-only skip semantics, wizard commands, and design tokens.\n---\n"
+  },
+  {
+   "name": "code-review",
+   "description": "Hanzo standard code quality, simplification, and correctness review: structural simplicity, 1,000-line file discipline, blast-radius verification, runtime proof, deslop, and cross-boundary agreement checks. Enabled by default across Hanzo Dev, Hanzo MCP, and Hanzo AI.",
+   "content": "---\nname: code-review\ndescription: \"Hanzo standard code quality, simplification, and correctness review: structural simplicity, 1,000-line file discipline, blast-radius verification, runtime proof, deslop, and cross-boundary agreement checks. Enabled by default across Hanzo Dev, Hanzo MCP, and Hanzo AI.\"\nsource: hanzoai/skills\n---\n"
+  },
+  {
+   "name": "codexbar",
+   "description": "CodexBar read. Provider usage, limits, credits, config health. JSON. No writes.",
+   "content": "---\nname: codexbar\ndescription: \"CodexBar read. Provider usage, limits, credits, config health. JSON. No writes.\"\n---\n"
+  },
+  {
+   "name": "datastore-migrations",
+   "description": "Datastore migration patterns and rules. Use when creating or modifying Datastore migrations.",
+   "content": "---\nname: datastore-migrations\ndescription: Datastore migration patterns and rules. Use when creating or modifying Datastore migrations.\n---\n"
+  },
+  {
+   "name": "debugging-ci-failures",
+   "description": ">",
+   "content": "---\nname: debugging-ci-failures\ndescription: >\n  Debugs failing GitHub Actions CI runs for Insights PRs, commits, and branches,\n  and answers broad CI-health questions (\"is CI red?\", \"is master green today?\",\n  \"what's broken right now?\"). Use when the user asks why CI is red, asks for the\n  current CI or master status, or mentions a failing check, GitHub Actions run,\n  Depot runner, workflow, job, shard, flaky test, lint failure, typecheck\n  failure, snapshot diff, migration check, generated types drift, or skills\n  build failure. Start with the `insightscli ci:insights` digest (aggregated cross-run\n  CI intelligence), then guides read-only inspection, failure classification,\n  smallest local reproduction with insightscli, and safe reporting without rerunning CI\n  or posting to GitHub.\n---\n"
+  },
+  {
+   "name": "debugging-local-task-agent-runs",
+   "description": "Debug the output of local Insights task runs — the wizard cloud-run path that executes inside a Docker sandbox under the local Temporal `process-task` workflow (the wizard that integrates Insights, then the coding agent that commits and opens the PR). Use when a local run looks stuck, failed, or silent, or when you need to read the wizard or agent logs. Covers the `.env.local` keys + `ai_features` intent required for cloud runs locally, finding the task UUID (docker ps, temporal CLI, Temporal UI at localhost:8081), tailing live logs inside the sandbox container (`/tmp/insights-wizard.log`, `/tmp/agent-server.log`), and reading the durable per-run console log from object storage after the sandbox is torn down. Trigger terms: task-sandbox, run_wizard, agent-server, process-task, SANDBOX_PROVIDER, LLM_GATEWAY, cloud_run, insights-wizard.log.",
+   "content": "---\nname: debugging-local-task-agent-runs\ndescription: 'Debug the output of local Insights task runs — the wizard cloud-run path that executes inside a Docker sandbox under the local Temporal `process-task` workflow (the wizard that integrates Insights, then the coding agent that commits and opens the PR). Use when a local run looks stuck, failed, or silent, or when you need to read the wizard or agent logs. Covers the `.env.local` keys + `ai_features` intent required for cloud runs locally, finding the task UUID (docker ps, temporal CLI, Temporal UI at localhost:8081), tailing live logs inside the sandbox container (`/tmp/insights-wizard.log`, `/tmp/agent-server.log`), and reading the durable per-run console log from object storage after the sandbox is torn down. Trigger terms: task-sandbox, run_wizard, agent-server, process-task, SANDBOX_PROVIDER, LLM_GATEWAY, cloud_run, insights-wizard.log.'\n---\n"
+  },
+  {
+   "name": "depot-container-builds",
+   "description": ">",
+   "content": "---\nname: depot-container-builds\ndescription: >\n  Configures and runs Depot remote container builds using `depot build` and `depot bake`.\n  Use when building Docker images, creating Dockerfiles with Depot, pushing images to registries,\n  building multi-platform/multi-arch images (linux/amd64, linux/arm64), debugging container build\n  failures, optimizing Dockerfile layer caching, using docker-bake.hcl or docker-compose builds,\n  or migrating from `docker build` / `docker buildx build` to Depot. Also use when the user\n  mentions depot build, depot bake, container builds, image builds, or asks about Depot's\n  build cache, build parallelism, or ephemeral registry.\n---\n"
+  },
+  {
+   "name": "depot-github-runners",
+   "description": ">",
+   "content": "---\nname: depot-github-runners\ndescription: >\n  Configures Depot-managed GitHub Actions runners as a drop-in replacement for GitHub-hosted\n  runners. Use when setting up or migrating GitHub Actions workflows to use Depot runners,\n  choosing runner sizes (CPU/RAM), configuring runs-on labels, setting up ARM or Windows or\n  macOS runners, troubleshooting GitHub Actions runner issues, configuring egress filtering,\n  using Depot Cache with GitHub Actions, or running Dagger/Dependabot on Depot runners.\n  Also use when the user mentions depot-ubuntu, depot-windows, depot-macos runner labels,\n  or asks about faster/cheaper GitHub Actions runners.\n---\n"
+  },
+  {
+   "name": "dev",
+   "description": ">",
+   "content": "---\nname: dev\ndescription: >\n  Hanzo Dev Mode: the smallest change that fully solves the task,\n  and a reply a busy human understands in one read (-53% code, -41% time, -26% cost,\n  -45% tokens, 98% of risky logic ships with a test). Use on any coding task\n  (writing, fixing, refactoring, reviewing, auditing, choosing dependencies) and\n  when the user says \"dev\", \"be lazy\", \"simplest solution\", \"yagni\",\n  or complains about over-engineering or bloat. Levels: lite, full (default), ultra.\nargument-hint: \"[lite|full|ultra|review|audit|debt|gain|help|off]\"\nlicense: MIT\n---\n"
+  },
+  {
+   "name": "django-migrations",
+   "description": "Django migration patterns and safety workflow for Insights. Use when creating, adjusting, or reviewing Django/Postgres migrations, including non-blocking index/constraint changes, multi-phase schema changes, data backfills, migration conflict rebasing, and product model moves that require SeparateDatabaseAndState. Also use for any deletion or removal of a model, table, column, product, or app — including deleting migration files or retiring a feature — even when no migration is written.",
+   "content": "---\nname: django-migrations\ndescription: Django migration patterns and safety workflow for Insights. Use when creating, adjusting, or reviewing Django/Postgres migrations, including non-blocking index/constraint changes, multi-phase schema changes, data backfills, migration conflict rebasing, and product model moves that require SeparateDatabaseAndState. Also use for any deletion or removal of a model, table, column, product, or app — including deleting migration files or retiring a feature — even when no migration is written.\n---\n"
+  },
+  {
+   "name": "django-startup-time",
+   "description": ">",
+   "content": "---\nname: django-startup-time\ndescription: >\n  Keep heavy imports off the django.setup() path that every process (web, celery, temporal,\n  migrate, shell, CI) pays for. Use when touching AppConfig.ready(), wiring signal receivers,\n  editing the lazy API router (insights/api/rest_router.py or its __init__.py shim), deferring a\n  heavy import, when the startup-import-budget guard fails, or when merging master into a\n  long-lived branch that made the router lazy.\n---\n"
+  },
+  {
+   "name": "documenting-warehouse-sources",
+   "description": "Write or update the user-facing hanzo.ai documentation for a Insights Data warehouse import source. Use when adding a new source doc, fixing an inconsistent or stub source doc, or standardizing the docs at contents/docs/cdp/sources. Covers the canonical template, shared snippets, the auto-rendered <SourceParameters /> and <SourceTables /> components, frontmatter, and the docsUrl/slug rule that prevents 404s.",
+   "content": "---\nname: documenting-warehouse-sources\ndescription: Write or update the user-facing hanzo.ai documentation for a Insights Data warehouse import source. Use when adding a new source doc, fixing an inconsistent or stub source doc, or standardizing the docs at contents/docs/cdp/sources. Covers the canonical template, shared snippets, the auto-rendered <SourceParameters /> and <SourceTables /> components, frontmatter, and the docsUrl/slug rule that prevents 404s.\n---\n"
+  },
+  {
+   "name": "docx",
+   "description": "Word Document, Spec & Contract Redlining (`docx`). Draft, edit, and redline `.docx` specifications, MSAs/NDAs, RFCs, and executive memos with clean heading styles, tracked changes, and tables.",
+   "content": "---\nname: docx\ndescription: \"Word Document, Spec & Contract Redlining (`docx`). Draft, edit, and redline `.docx` specifications, MSAs/NDAs, RFCs, and executive memos with clean heading styles, tracked changes, and tables.\"\nsource: hanzoai/skills\n---\n"
+  },
+  {
+   "name": "establishing-code-ownership",
+   "description": "Determine which Insights team owns a file, directory, or code path, or enumerate all code a team owns (via distributed `owners.yaml`, `products/*/product.yaml`, and `.github/CODEOWNERS`). Use when assigning a reviewer, attributing a bug or slow query to a team, routing work, scoping a team-wide audit, or answering \"who owns X\" / \"what does team Y own\".",
+   "content": "---\nname: establishing-code-ownership\ndescription: Determine which Insights team owns a file, directory, or code path, or enumerate all code a team owns (via distributed `owners.yaml`, `products/*/product.yaml`, and `.github/CODEOWNERS`). Use when assigning a reviewer, attributing a bug or slow query to a team, routing work, scoping a team-wide audit, or answering \"who owns X\" / \"what does team Y own\".\n---\n"
+  },
+  {
+   "name": "extending-personinsights-test-harness",
+   "description": ">",
+   "content": "---\nname: extending-personinsights-test-harness\ndescription: >\n  When and how to add scenarios, chaos events, and invariants to the personinsights\n  e2e test harness (rust/personinsights-test-harness). Use after fixing a bug or\n  regression in the personinsights leader path (leader, router, writer, replica,\n  coordination protocol) so the fix gets a permanent regression scenario; when\n  adding a new failure mode to test (crashes, drains, zombies, lag, failover);\n  or when a new correctness property needs asserting during runs. Trigger\n  terms: personinsights gate, chaos scenario, test harness, leader path regression,\n  handoff bug, eviction, writer lag, acked write.\n---\n"
+  },
+  {
+   "name": "finding-llm-gateway-migration-candidates",
+   "description": ">",
+   "content": "---\nname: finding-llm-gateway-migration-candidates\ndescription: >\n  Finds and ranks callers that could move from services/llm-gateway to Insights/ai-gateway. Use when asked what to migrate next, to find low-risk gateway migration candidates, to audit remaining Python gateway callers, or to identify callers blocked by Go gateway parity. Searches code and deployment wiring, inventories each caller's required contract, filters out unsupported migrations, and returns an evidence-backed shortlist without changing callers.\n---\n"
+  },
+  {
+   "name": "fixing-flaky-tests",
+   "description": ">",
+   "content": "---\nname: fixing-flaky-tests\ndescription: >\n  Guides an agent through reproducing, root-causing, fixing, and validating flaky tests in the Insights monorepo.\n  Use when a test fails intermittently in CI but passes on rerun or locally, when `insightscli ci:insights` or the debugging-ci-failures skill classifies a failure as a flaky test, when given a GitHub Actions URL for a flaky job, or when asked to deflake, stabilize, or fix a flaky Jest, pytest, or Playwright test.\n  Core discipline: reproduce locally before changing anything, fix the root cause (never mask it with sleeps, retries, or bigger timeouts), and prove the fix with an N-run validation loop sized to the observed failure rate.\n  Stabilizing is not the only valid outcome — the skill also gates whether the test should exist, so deleting a test that catches nothing real, or re-leveling one that flakes because of the level it runs at, are first-class endings.\n---\n"
+  },
+  {
+   "name": "frontend-design",
+   "description": "Create distinctive, production-grade frontend interfaces with high design quality. Use this skill when the user asks to build web components, pages, artifacts, posters, or applications (examples include websites, landing pages, dashboards, React components, HTML/CSS layouts, or when styling/beautifying any web UI). Generates creative, polished code and UI design that avoids generic AI aesthetics.",
+   "content": "---\nname: frontend-design\ndescription: Create distinctive, production-grade frontend interfaces with high design quality. Use this skill when the user asks to build web components, pages, artifacts, posters, or applications (examples include websites, landing pages, dashboards, React components, HTML/CSS layouts, or when styling/beautifying any web UI). Generates creative, polished code and UI design that avoids generic AI aesthetics.\nlicense: Complete terms in LICENSE.txt\n---\n"
+  },
+  {
+   "name": "gating-production-deploys",
+   "description": ">",
+   "content": "---\nname: gating-production-deploys\ndescription: >\n  Use when adding or editing a GitHub Actions workflow that pushes a container\n  image to a registry (ECR/ghcr/Docker Hub via build-push-action) or dispatches a\n  production deploy (a `commit_state_update` repository_dispatch to Insights/charts).\n  Those run from a single canonical deploy repo, gated by the CD_DEPLOY_ENABLED\n  variable. Does NOT apply to workflows that publish GitHub releases, npm, crates,\n  or Homebrew — those stay on the public repo.\n---\n"
+  },
+  {
+   "name": "generating-datastore-query-performance-reports",
+   "description": ">",
+   "content": "---\nname: generating-datastore-query-performance-reports\ndescription: >\n  Produce and structure slow-query performance reports for Insights's production\n  Datastore (US and EU). Use when asked for a slow query report, query performance\n  analysis over the last N days, per-team query cost, OOM or timeout investigation,\n  cluster cost/memory regressions, or materialization candidates. Covers the modern\n  `query_log_archive` source (typed `lc_*` columns, multi-day retention), how to\n  categorize and attribute slow queries, root-cause patterns (unmaterialized\n  JSONExtract, high-cardinality breakdowns, heavy joins), and the report structure.\n  Runs queries via the `query-datastore-via-metabase` skill.\n---\n"
+  },
+  {
+   "name": "gh-cli",
+   "description": "GitHub CLI (gh) comprehensive reference for repositories, issues, pull requests, Actions, projects, releases, gists, codespaces, organizations, extensions, and all GitHub operations from the command line.",
+   "content": "---\nname: gh-cli\ndescription: GitHub CLI (gh) comprehensive reference for repositories, issues, pull requests, Actions, projects, releases, gists, codespaces, organizations, extensions, and all GitHub operations from the command line.\n---\n"
+  },
+  {
+   "name": "hanzo-post",
+   "description": "Manage, connect, automate, schedule, publish, and analyze social media & CMS channels across Hanzo AI and employee accounts via Hanzo Post (post.hanzo.ai) MCP, CLI (hanzo-post), and Public REST API.",
+   "content": "---\nname: hanzo-post\ndescription: \"Manage, connect, automate, schedule, publish, and analyze social media & CMS channels across Hanzo AI and employee accounts via Hanzo Post (post.hanzo.ai) MCP, CLI (hanzo-post), and Public REST API.\"\nmetadata:\n  {\n    \"bot\":\n      {\n        \"requires\": { \"bins\": [\"node\"] },\n        \"install\":\n          [\n            {\n              \"id\": \"npm\",\n              \"kind\": \"npm\",\n              \"package\": \"@hanzo/post\",\n              \"label\": \"Install Hanzo Post CLI & SDK (@hanzo/post)\",\n            },\n          ],\n      },\n  }\n---\n"
+  },
+  {
+   "name": "implementing-mcp-tools",
+   "description": "Guide for exposing Insights product endpoints as MCP tools. Use when creating new or updating API endpoints, adding MCP tool definitions, scaffolding YAML configs, or writing serializers with good descriptions. Covers the full pipeline from Django serializer to generated TypeScript tool handler.",
+   "content": "---\nname: implementing-mcp-tools\ndescription: 'Guide for exposing Insights product endpoints as MCP tools. Use when creating new or updating API endpoints, adding MCP tool definitions, scaffolding YAML configs, or writing serializers with good descriptions. Covers the full pipeline from Django serializer to generated TypeScript tool handler.'\n---\n"
+  },
+  {
+   "name": "implementing-mcp-ui-apps",
+   "description": "Guide for adding MCP UI apps — interactive visualizations that render tool results in MCP clients like Claude Desktop. Use when adding a new detail or list view for an MCP tool, creating view components in products/*/mcp/apps/, or linking tools to UI apps via YAML.",
+   "content": "---\nname: implementing-mcp-ui-apps\ndescription: 'Guide for adding MCP UI apps — interactive visualizations that render tool results in MCP clients like Claude Desktop. Use when adding a new detail or list view for an MCP tool, creating view components in products/*/mcp/apps/, or linking tools to UI apps via YAML.'\n---\n"
+  },
+  {
+   "name": "implementing-warehouse-sources",
+   "description": "Implement and extend Insights Data warehouse import sources. Use when adding a new source under products/warehouse_sources/backend/temporal/data_imports/sources, adding datasets/endpoints to an existing source, or adding incremental sync, resumable imports, webhook ingestion, pagination, credentials validation, and source tests.",
+   "content": "---\nname: implementing-warehouse-sources\ndescription: Implement and extend Insights Data warehouse import sources. Use when adding a new source under products/warehouse_sources/backend/temporal/data_imports/sources, adding datasets/endpoints to an existing source, or adding incremental sync, resumable imports, webhook ingestion, pagination, credentials validation, and source tests.\n---\n"
+  },
+  {
+   "name": "improving-drf-endpoints",
+   "description": "Use when editing, reviewing, or auditing DRF viewsets and serializers in Insights. Triggers on files in insights/api/, products/*/backend/api/, products/*/backend/presentation/, or any file importing rest_framework. Covers field typing, schema annotations, enum collision fixes, and OpenAPI spec quality — everything that flows downstream into generated TypeScript types and MCP tools.",
+   "content": "---\nname: improving-drf-endpoints\ndescription: Use when editing, reviewing, or auditing DRF viewsets and serializers in Insights. Triggers on files in insights/api/, products/*/backend/api/, products/*/backend/presentation/, or any file importing rest_framework. Covers field typing, schema annotations, enum collision fixes, and OpenAPI spec quality — everything that flows downstream into generated TypeScript types and MCP tools.\n---\n"
+  },
+  {
+   "name": "ingestion-pipeline-doctor-nodejs",
+   "description": ">",
+   "content": "---\nname: ingestion-pipeline-doctor-nodejs\ndescription: >\n  Ingestion pipeline architecture overview and convention reference.\n  Use when you need a quick orientation to the pipeline framework\n  or want to know which doctor agent to use for a specific concern.\n---\n"
+  },
+  {
+   "name": "insights-desktop",
+   "description": ">",
+   "content": "---\nname: insights-desktop\ndescription: >\n  Scopes work to the desktop app at products/desktop — a nested standalone pnpm/turbo/Biome\n  workspace imported from Insights/code, not part of the root frontend or Django build. Use when\n  the user says /insights-desktop, or works on the Electron desktop app, apps/code, apps/web,\n  apps/mobile, packages/core, packages/ui, packages/workspace-server, @hanzo/api-client,\n  @hanzo/agent, or the agent framework. Pins the working directory to products/desktop, swaps\n  in that tree's toolchain and conventions in place of the monorepo's, and defines the few paths\n  outside the tree that may be touched (Django APIs the app calls, desktop-* CI, resync config).\n---\n"
+  },
+  {
+   "name": "insightscli",
+   "description": ">",
+   "content": "---\nname: insightscli\ndescription: >\n  Insights developer CLI and repo tooling reference. Use when the user mentions\n  insightscli, asks about repo CLI tools, bin scripts, Makefiles, how to run/build/test/lint,\n  or any dev environment commands.\n---\n"
+  },
+  {
+   "name": "instrumenting-first-party-metrics",
+   "description": "How to instrument Insights's own Metrics product from Insights-owned code — record counters, gauges, and histograms that land in insights.metrics, the same way customers do. Use when adding application metrics in this monorepo (web, Celery, Temporal), when asked to push or ship metrics into insights metrics, or when unsure whether the SDK in this environment supports insights.metrics yet. Covers the environment decision (SDK-first per the public docs, OTel fallback when the SDK path is not available), the exact version gates per SDK, what is already wired internally, and how to validate metrics actually arrive.",
+   "content": "---\nname: instrumenting-first-party-metrics\ndescription: \"How to instrument Insights's own Metrics product from Insights-owned code — record counters, gauges, and histograms that land in insights.metrics, the same way customers do. Use when adding application metrics in this monorepo (web, Celery, Temporal), when asked to push or ship metrics into insights metrics, or when unsure whether the SDK in this environment supports insights.metrics yet. Covers the environment decision (SDK-first per the public docs, OTel fallback when the SDK path is not available), the exact version gates per SDK, what is already wired internally, and how to validate metrics actually arrive.\"\n---\n"
+  },
+  {
+   "name": "isolating-product-facade-contracts",
+   "description": "Plan and execute product isolation migrations to a facade plus contract layer in Insights, following the Visual review architecture. Use when a product still exposes internals (models/logic/views) across boundaries and needs migration toward contracts.py + facade/api.py + presentation separation, with a PR strategy that minimizes review latency and conflicts with parallel work.",
+   "content": "---\nname: isolating-product-facade-contracts\ndescription: Plan and execute product isolation migrations to a facade plus contract layer in Insights, following the Visual review architecture. Use when a product still exposes internals (models/logic/views) across boundaries and needs migration toward contracts.py + facade/api.py + presentation separation, with a PR strategy that minimizes review latency and conflicts with parallel work.\n---\n"
+  },
+  {
+   "name": "manage-dashboard-widgets",
+   "description": ">",
+   "content": "---\nname: manage-dashboard-widgets\ndescription: >\n  Guides Insights engineers through dashboard widget platform work — ship a new\n  widget_type (WIDGET_REGISTRY, catalog, run_widgets, WidgetCard) or update a shipped\n  type (config, query, layout, RBAC, tile filter bar, list footer, titleHref, throttles).\n  Use for WidgetSpec, widget_specs/, widget-configs.zod.ts, insightscli build:openapi,\n  error_tracking_list, session_replay_list, widgetFilters, formatWidgetListCountFooter,\n  widget_query_throttle, or WidgetCard composition. New types need widget-intake confirmation\n  first. Not for MCP batch-add of existing types or adding tiles to a dashboard.\n---\n"
+  },
+  {
+   "name": "managing-github-actions-secrets",
+   "description": ">",
+   "content": "---\nname: managing-github-actions-secrets\ndescription: >\n  Creates and updates GitHub Actions secrets for Insights workflows. Use when\n  adding a new CI secret, rotating an existing secret, wiring a workflow to an\n  API token, package registry credential, deploy key, or any value referenced\n  via `${{ secrets.* }}` in `.github/workflows/`.\n---\n"
+  },
+  {
+   "name": "merging-prs",
+   "description": ">",
+   "content": "---\nname: merging-prs\ndescription: >\n  Merge a PR into `master` through the Trunk merge queue and babysit it until it\n  lands. Enqueue with a `/trunk merge` comment, then watch the `Trunk Merge Queue\n  (master)` check run and the PR state until it is MERGED or the queue kicks it\n  out, reporting the Trunk bot's failure reason. Use when asked to merge a PR,\n  \"merge when ready\", \"land it\", \"ship it\", or to babysit/watch a PR through the\n  queue. Never use `gh pr merge` in this repo — the queue is the only path into\n  master.\n---\n"
+  },
+  {
+   "name": "migrating-llm-gateway-callers",
+   "description": ">",
+   "content": "---\nname: migrating-llm-gateway-callers\ndescription: >\n  Migrates an LLM caller from services/llm-gateway to Insights/ai-gateway. Use when adding a gateway caller, converting an existing Python gateway integration, adopting shared Go-capable client builders, changing gateway URLs or headers for a caller, or removing a Python fallback. Inventories the caller's contract, checks the parity record, implements the supported migration, updates tests, and stops with a documented blocker when Go parity is missing.\n---\n"
+  },
+  {
+   "name": "modifying-taxonomic-filter",
+   "description": "Guides safe modification of the TaxonomicFilter — Insights's multi-tab picker for events, actions, properties, cohorts, and more. Front-loads the empirical product reality (what users actually pick and search for) plus the three live variants (legacy-control, legacy-pill behind TAXONOMIC_FILTER_CATEGORY_DROPDOWN, and the opt-in rebuild menu behind TAXONOMIC_FILTER_MENU_REBUILD) so changes are judged against real behavior and mirrored across surfaces, not made against one arm in isolation. Use when adding features, fixing bugs, or refactoring TaxonomicFilter, the rebuild menu, or the headless filter panel.",
+   "content": "---\nname: modifying-taxonomic-filter\ndescription: Guides safe modification of the TaxonomicFilter — Insights's multi-tab picker for events, actions, properties, cohorts, and more. Front-loads the empirical product reality (what users actually pick and search for) plus the three live variants (legacy-control, legacy-pill behind TAXONOMIC_FILTER_CATEGORY_DROPDOWN, and the opt-in rebuild menu behind TAXONOMIC_FILTER_MENU_REBUILD) so changes are judged against real behavior and mirrored across surfaces, not made against one arm in isolation. Use when adding features, fixing bugs, or refactoring TaxonomicFilter, the rebuild menu, or the headless filter panel.\n---\n"
+  },
+  {
+   "name": "monitoring-capture-service",
+   "description": ">",
+   "content": "---\nname: monitoring-capture-service\ndescription: >\n  Guide for using the Grafana MCP to monitor and diagnose the capture service\n  (rust/capture) in production. Use when investigating latency, event loss,\n  Kafka backpressure, Redis issues, rate limiting, Envoy proxy issues, or any\n  capture health question. Covers prod-us and prod-eu environments.\n---\n"
+  },
+  {
+   "name": "monitoring-ingestion-pipeline",
+   "description": ">",
+   "content": "---\nname: monitoring-ingestion-pipeline\ndescription: >\n  Guide for using the Grafana MCP to monitor and diagnose the Node.js ingestion\n  pipeline workers in production. Use when investigating event lag, drops,\n  pipeline errors, person/group processing, Kafka consumer health, Redis,\n  Postgres, Datastore downstream health, or any ingestion worker question.\n  Covers prod-us and prod-eu environments.\n---\n"
+  },
+  {
+   "name": "optimizing-datastore-and-insightsql-queries",
+   "description": "Workflow for optimizing Datastore and InsightsQL queries. Use when a InsightsQL query, query runner, insight, or report is too slow; when a hand-written Datastore query (via `sync_execute` or in a migration) is too slow; when Datastore times out or hits memory limits; when investigating a slow `system.query_log` row; or when reviewing a proposed InsightsQL printer change for performance. Covers extracting the Datastore SQL, common smells (`FROM ... FINAL`, `JSONExtract` over properties, missing skip indexes, self-joins, CTE blow-up), measuring against a real cluster, and applying the fix at the right layer (printer, query runner, or migration). Does NOT cover Postgres / Django ORM / app-database queries; those need pganalyze and the Postgres section of `query-performance-optimization.md`.",
+   "content": "---\nname: optimizing-datastore-and-insightsql-queries\ndescription: Workflow for optimizing Datastore and InsightsQL queries. Use when a InsightsQL query, query runner, insight, or report is too slow; when a hand-written Datastore query (via `sync_execute` or in a migration) is too slow; when Datastore times out or hits memory limits; when investigating a slow `system.query_log` row; or when reviewing a proposed InsightsQL printer change for performance. Covers extracting the Datastore SQL, common smells (`FROM ... FINAL`, `JSONExtract` over properties, missing skip indexes, self-joins, CTE blow-up), measuring against a real cluster, and applying the fix at the right layer (printer, query runner, or migration). Does NOT cover Postgres / Django ORM / app-database queries; those need pganalyze and the Postgres section of `query-performance-optimization.md`.\n---\n"
+  },
+  {
+   "name": "pdf",
+   "description": "PDF Extraction, Form Processing & Report Generation (`pdf`). Parse tables, OCR scanned documents, fill/merge/split PDFs, and render print-ready technical reports and signed agreements.",
+   "content": "---\nname: pdf\ndescription: \"PDF Extraction, Form Processing & Report Generation (`pdf`). Parse tables, OCR scanned documents, fill/merge/split PDFs, and render print-ready technical reports and signed agreements.\"\nsource: hanzoai/skills\n---\n"
+  },
+  {
+   "name": "playwright-test",
+   "description": "Write a playwright test, make sure it runs, and is not flaky.",
+   "content": "---\nname: playwright-test\ndescription: Write a playwright test, make sure it runs, and is not flaky.\nallowed-tools: Bash, Read, Edit, Write, Glob, Grep, Agent, mcp__playwright__*\n---\n"
+  },
+  {
+   "name": "porting-code-prs",
+   "description": ">",
+   "content": "---\nname: porting-code-prs\ndescription: >\n  Recreate open Insights/code pull requests as Insights/insights PRs against the imported\n  products/desktop/ tree, preserving commit authorship. Use when asked to port, remake,\n  migrate or recreate Insights/code PRs onto the monorepo after the desktop import, whether\n  a single PR or a sweep of everything an author has open. Covers enumerating an author's\n  open PRs, applying the patch series with git am --directory, the 3-way fallback via\n  fetching the source PR head, the paths that must never be blind-applied (.github\n  workflows, lockfiles, drift-listed local patches), verification from products/desktop/\n  and opening the monorepo PR with original attribution. Trigger terms: Insights/code,\n  code repo PRs, desktop migration, port my PRs, remake PRs onto the monorepo.\n---\n"
+  },
+  {
+   "name": "postgres",
+   "description": "PostgreSQL best practices, query optimization, connection troubleshooting, and performance improvement. Load when working with Postgres databases.",
+   "content": "---\nname: postgres\ndescription: PostgreSQL best practices, query optimization, connection troubleshooting, and performance improvement. Load when working with Postgres databases.\nlicense: MIT\nmetadata:\n  author: planetscale\n  version: \"1.0.0\"\n---\n"
+  },
+  {
+   "name": "pptx",
+   "description": "Presentation & Executive Deck Builder (`pptx`). Generate, edit, and structure `.pptx` slide decks, board presentations, pitch decks, and QBR readouts with crisp visual hierarchy and speaker notes.",
+   "content": "---\nname: pptx\ndescription: \"Presentation & Executive Deck Builder (`pptx`). Generate, edit, and structure `.pptx` slide decks, board presentations, pitch decks, and QBR readouts with crisp visual hierarchy and speaker notes.\"\nsource: hanzoai/skills\n---\n"
+  },
+  {
+   "name": "qa-frontend",
+   "description": ">",
+   "content": "---\nname: qa-frontend\ndescription: >\n  Internal Insights developer frontend/browser QA skill. Use only when a Insights\n  developer explicitly asks to run frontend QA, browser-test a PR, verify a UI\n  flow against the local Insights stack, use qa-frontend, or QA current frontend\n  changes with browser/runtime evidence. Do not use for generic code review, PR\n  review, \"check my changes\", CI debugging, or security audit; use qa-team,\n  debugging-ci-failures, or security-audit instead. Runs in PR mode or local\n  mode, plans adaptive browser and visual checks, drives browser MCP/tooling\n  such as Playwright MCP or Chrome DevTools MCP, captures evidence, and applies\n  only approved/narrow fixes.\nallowed-tools: Bash, Read, Edit, Write, Glob, Grep, Agent, mcp__playwright__*, mcp__chrome-devtools__*, mcp__phrocs__*\n---\n"
+  },
+  {
+   "name": "qa-team",
+   "description": ">",
+   "content": "---\nname: qa-team\ndescription: >\n  Multi-agent QA review team for code changes. This skill should be used when the user\n  asks to \"review my code\", \"run QA\", \"qa-team\", \"review this branch\", \"code review\",\n  \"check my changes\", or wants a comprehensive multi-perspective code review of the\n  current branch's changes. Spawns parallel specialist agents (security, database,\n  reliability, compatibility, data integrity, performance, frontend, copy) that\n  independently review the diff and produce a converged report. Also includes\n  two generalist reviewers for convergence validation.\n---\n"
+  },
+  {
+   "name": "qa-test",
+   "description": "CodexBar live QA/e2e testing: run provider usage matrix checks, validate real app config, use Peekaboo for menu proof, use Browser Use/official docs for API spec or logged-in dashboard checks, and handle 1Password credentials safely.",
+   "content": "---\nname: qa-test\ndescription: \"CodexBar live QA/e2e testing: run provider usage matrix checks, validate real app config, use Peekaboo for menu proof, use Browser Use/official docs for API spec or logged-in dashboard checks, and handle 1Password credentials safely.\"\n---\n"
+  },
+  {
+   "name": "query-datastore-via-metabase",
+   "description": ">",
+   "content": "---\nname: query-datastore-via-metabase\ndescription: >\n  Run Datastore `system.query_log` analysis via the internal Metabase API.\n  Use when investigating slow queries, materialization candidates, per-team\n  query performance, Datastore cost or memory issues, or any system.query_log\n  question. Covers prod-us and prod-eu, SSO-gated cookie auth via `insightscli`,\n  and ready-to-run query patterns.\n---\n"
+  },
+  {
+   "name": "querying-local-postgres",
+   "description": "Run read-only SQL against the local Postgres app database (SELECT, EXPLAIN, EXPLAIN ANALYZE on SELECT). Default local URL postgres://insights:insights@localhost:5432/insights; else DATABASE_URL. Use when querying the local DB, inspecting tables, debugging data, or analyzing query plans. Mutations are strictly forbidden.",
+   "content": "---\nname: querying-local-postgres\ndescription: Run read-only SQL against the local Postgres app database (SELECT, EXPLAIN, EXPLAIN ANALYZE on SELECT). Default local URL postgres://insights:insights@localhost:5432/insights; else DATABASE_URL. Use when querying the local DB, inspecting tables, debugging data, or analyzing query plans. Mutations are strictly forbidden.\nallowed-tools: Bash\n---\n"
+  },
+  {
+   "name": "querying-topfn",
+   "description": ">",
+   "content": "---\nname: querying-topfn\ndescription: >\n  Query topfn — the ingestion pipeline's heavy-hitter store in Datastore — to\n  identify hot or expensive actors (team_id, distinct_id, session_id,\n  partition) during incident triage. Use when investigating ingestion lag, a\n  hot or lagging Kafka partition, expensive person processing, merge storms,\n  or any \"which team or distinct_id is causing this\" question. Covers the\n  internal Metabase access path (SSO via insightscli), the topfn schema, and the\n  cost-vs-volume query lens. Internal-only: results contain cross-customer\n  identifiers.\n---\n"
+  },
+  {
+   "name": "react-doctor",
+   "description": "Diagnose and fix React codebase health issues. Use when reviewing React code, fixing performance problems, auditing security, or improving code quality.",
+   "content": "---\nname: react-doctor\ndescription: Diagnose and fix React codebase health issues. Use when reviewing React code, fixing performance problems, auditing security, or improving code quality.\nversion: 1.0.0\n---\n"
+  },
+  {
+   "name": "release-codexbar",
+   "description": "CodexBar release: versioning, notarization, appcast, Homebrew, post-release bump.",
+   "content": "---\nname: release-codexbar\ndescription: \"CodexBar release: versioning, notarization, appcast, Homebrew, post-release bump.\"\n---\n"
+  },
+  {
+   "name": "reviewing-personinsights-protocol",
+   "description": ">",
+   "content": "---\nname: reviewing-personinsights-protocol\ndescription: >\n  The full review process for personinsights coordination-protocol changes —\n  leases, fencing, handoffs, supervisors, failure budgets, warming, and\n  changelog semantics. Use before pushing or requesting review on any\n  personinsights protocol changeset, when asked for an exhaustive or careful\n  review of personinsights code, and after any reviewer finds a gap the author\n  missed. Covers the adversarial two-pass process, the review lens\n  dimensions, the model-checking and test layers a change must clear, and\n  the red-check-every-fix discipline.\n---\n"
+  },
+  {
+   "name": "run-insights",
+   "description": "Start, inspect, and drive the Insights dev stack. Use for /run and /verify on this repo — when asked to launch Insights, check whether the stack is healthy, inspect a running process, or verify a UI change against the live app.",
+   "content": "---\nname: run-insights\ndescription: Start, inspect, and drive the Insights dev stack. Use for /run and /verify on this repo — when asked to launch Insights, check whether the stack is healthy, inspect a running process, or verify a UI change against the live app.\n---\n"
+  },
+  {
+   "name": "running-ci-preflight",
+   "description": ">",
+   "content": "---\nname: running-ci-preflight\ndescription: >\n  Catch the deterministic CI failures reachable from your diff before pushing, with `insightscli ci:preflight`.\n  Use when the pre-push hook blocks a push, before reporting a task done, or after editing Python,\n  serializers, migrations, workflows, or dependency manifests — to avoid burning a CI matrix on a failure\n  you could catch locally (formatting, lint, broken lockfiles, OpenAPI drift, migration conflict, stale branch).\n  Trigger terms: ci:preflight, preflight, pre-push checks, pre-push hook failed, \"will this break CI\".\n---\n"
+  },
+  {
+   "name": "scene-menu-bar",
+   "description": "Conventions for adding or editing the SceneMenuBar above a scene's <SceneTitleSection>. Use when adding new menu items, moving items between menus, gating behind feature flags, building a new scene's menubar, or wiring rich inputs (tags, combobox) into the bar.",
+   "content": "---\nname: scene-menu-bar\ndescription: Conventions for adding or editing the SceneMenuBar above a scene's <SceneTitleSection>. Use when adding new menu items, moving items between menus, gating behind feature flags, building a new scene's menubar, or wiring rich inputs (tags, combobox) into the bar.\n---\n"
+  },
+  {
+   "name": "security-audit",
+   "description": ">",
+   "content": "---\nname: security-audit\ndescription: >\n  Focused security audit of code, calibrated to surface real exploitable bugs and suppress\n  theoretical findings. Use when the user asks to \"audit\", \"security-audit\",\n  \"find vulnerabilities\", \"check for IDOR/SSRF/XSS/injection\", or wants a security\n  review of a file, directory, branch diff, or PR. Covers access control, injection,\n  auth/secrets, sensitive data, business logic, web boundary, and AI agent/LLM trifecta\n  risks. Produces calibrated findings with data flow, exploit request, fix, and\n  confidence — no theoretical or defense-in-depth nits.\n---\n"
+  },
+  {
+   "name": "sending-notifications",
+   "description": "How to send real-time in-app notifications from Insights backend code. Use when integrating notifications into a new feature, wiring up a notification source (alerts, comments, approvals, pipelines, issues), or choosing the right target type and priority for a notification.",
+   "content": "---\nname: sending-notifications\ndescription: 'How to send real-time in-app notifications from Insights backend code. Use when integrating notifications into a new feature, wiring up a notification source (alerts, comments, approvals, pipelines, issues), or choosing the right target type and priority for a notification.'\n---\n"
+  },
+  {
+   "name": "setting-feature-flags-in-storybook",
+   "description": "Use when writing a Storybook story for a component gated on a feature flag — boolean flags or multivariate/experiment-arm variants. Covers the `featureFlags` story parameter and why imperatively setting flags renders the flag-off branch in visual-regression snapshots while passing in jest.",
+   "content": "---\nname: setting-feature-flags-in-storybook\ndescription: 'Use when writing a Storybook story for a component gated on a feature flag — boolean flags or multivariate/experiment-arm variants. Covers the `featureFlags` story parameter and why imperatively setting flags renders the flag-off branch in visual-regression snapshots while passing in jest.'\n---\n"
+  },
+  {
+   "name": "setting-up-devbox",
+   "description": "Guide a Insights engineer through spinning up, connecting to, running commands on, and mirroring local code to a remote devbox (a Coder workspace running the full Insights stack). Use when asked to set up a devbox, start or connect to a devbox, configure remote dev, get gh CLI / Claude Code authed on a devbox, run a command on a devbox, sync a local checkout so you can edit locally while the stack runs remotely (devbox:sync), or diagnose why a devbox command fails. Covers the tailnet prerequisite, insightscli devbox commands, Coder user secrets for auth, one-way local->remote sync via mutagen, and verifying with devbox:exec. How each dev personalizes their box is left to them.",
+   "content": "---\nname: setting-up-devbox\ndescription: Guide a Insights engineer through spinning up, connecting to, running commands on, and mirroring local code to a remote devbox (a Coder workspace running the full Insights stack). Use when asked to set up a devbox, start or connect to a devbox, configure remote dev, get gh CLI / Claude Code authed on a devbox, run a command on a devbox, sync a local checkout so you can edit locally while the stack runs remotely (devbox:sync), or diagnose why a devbox command fails. Covers the tailnet prerequisite, insightscli devbox commands, Coder user secrets for auth, one-way local->remote sync via mutagen, and verifying with devbox:exec. How each dev personalizes their box is left to them.\n---\n"
+  },
+  {
+   "name": "setup-web-tests",
+   "description": "Set up Python test environment in Claude Code for web where flox is unavailable. Use when you need to run backend tests and `uv sync` fails due to Python version mismatch.",
+   "content": "---\nname: setup-web-tests\ndescription: Set up Python test environment in Claude Code for web where flox is unavailable. Use when you need to run backend tests and `uv sync` fails due to Python version mismatch.\n---\n"
+  },
+  {
+   "name": "stacking-prs",
+   "description": ">",
+   "content": "---\nname: stacking-prs\ndescription: >\n  Create and manage GitHub native Stacked PRs in this repo with the `gh stack` CLI.\n  Use when asked to stack PRs, split a large change into a stack, add a layer to a stack,\n  restack or rebase a stack, adopt existing branches or PRs into a stack, check out\n  someone else's stack, or land a stack. Covers creating and submitting stacks\n  (draft-first), cascade rebases with `gh stack sync`, and landing one bottom-first\n  via `/merging-prs` rather than `gh stack merge`.\n---\n"
+  },
+  {
+   "name": "survey-sdk-audit",
+   "description": "Audit Insights survey SDK features and version requirements",
+   "content": "---\nname: survey-sdk-audit\ndescription: Audit Insights survey SDK features and version requirements\n---\n"
+  },
+  {
+   "name": "triaging-web-analytics-support",
+   "description": ">",
+   "content": "---\nname: triaging-web-analytics-support\ndescription: >\n  Triage web analytics support tickets end to end: enumerate open tickets from\n  the in-app conversations product and their Zendesk mirrors, classify each\n  into a diagnostic shape (frontend crash, \"two numbers don't match\", traffic\n  count drop, tracker not loading / undercounting vs a competitor, ad-platform\n  integration error, channel type misclassification), run the matching\n  playbook, and produce reply drafts plus fix PRs where warranted. Use when\n  asked to triage the web analytics support channel, investigate a web\n  analytics Zendesk or conversations ticket, or explain metric discrepancies a\n  customer reported. Internal-only: queries cross-customer support and usage\n  data; never copy customer names or their traffic numbers into public\n  artifacts (PRs, issues, commits).\n---\n"
+  },
+  {
+   "name": "ui",
+   "description": ">",
+   "content": "---\nname: ui\ndescription: >\n  Design, build, or port user interfaces on the Hanzo stack (@hanzo/ui, @hanzo/gui,\n  @hanzo/design tokens) while achieving measured visual parity across mobile, duo,\n  laptop, and desktop viewports. Use when creating or refactoring UI screens,\n  porting a reference implementation, or fixing layout and responsive regressions.\nlicense: MIT\n---\n"
+  },
+  {
+   "name": "update-gvisor-maintainers",
+   "description": ">",
+   "content": "---\nname: update-gvisor-maintainers\ndescription: >\n  Update the gVisor maintainer roster in governance/maintainers.yaml or the\n  specialization areas in governance/areas.yaml, and regenerate the files derived\n  from them (.github/reviewer.json, MAINTAINERS.md and CODEOWNERS).\n  Use when a maintainer goes on hiatus, returns from hiatus, is added, steps down to\n  emeritus, changes employer or specialization, or when MAINTAINERS.md /\n  reviewer.json / CODEOWNERS are out of sync.\n---\n"
+  },
+  {
+   "name": "using-kea-disposables",
+   "description": "Use when adding timers (`setInterval`, `setTimeout`), event listeners (`window.addEventListener`, `document.addEventListener`, `MediaQueryList.addEventListener`), or any other resource that needs cleanup inside a kea logic. Every logic has `cache.disposables.add(setup, key?, options?)` and `cache.disposables.dispose(key)` available via the globally registered `disposablesPlugin` (`frontend/src/kea-disposables.ts`). Replaces the bare `cache.foo = setInterval(...)` + `beforeUnmount: clearInterval(cache.foo)` pattern and auto-pauses background work when the tab is hidden.",
+   "content": "---\nname: using-kea-disposables\ndescription: 'Use when adding timers (`setInterval`, `setTimeout`), event listeners (`window.addEventListener`, `document.addEventListener`, `MediaQueryList.addEventListener`), or any other resource that needs cleanup inside a kea logic. Every logic has `cache.disposables.add(setup, key?, options?)` and `cache.disposables.dispose(key)` available via the globally registered `disposablesPlugin` (`frontend/src/kea-disposables.ts`). Replaces the bare `cache.foo = setInterval(...)` + `beforeUnmount: clearInterval(cache.foo)` pattern and auto-pauses background work when the tab is hidden.'\n---\n"
+  },
+  {
+   "name": "vercel-react-best-practices",
+   "description": "React and Next.js performance optimization guidelines from Vercel Engineering. This skill should be used when writing, reviewing, or refactoring React/Next.js code to ensure optimal performance patterns. Triggers on tasks involving React components, Next.js pages, data fetching, bundle optimization, or performance improvements.",
+   "content": "---\nname: vercel-react-best-practices\ndescription: React and Next.js performance optimization guidelines from Vercel Engineering. This skill should be used when writing, reviewing, or refactoring React/Next.js code to ensure optimal performance patterns. Triggers on tasks involving React components, Next.js pages, data fetching, bundle optimization, or performance improvements.\nlicense: MIT\nmetadata:\n  author: vercel\n  version: \"1.0.0\"\n---\n"
+  },
+  {
+   "name": "visualizing-change-over-time",
+   "description": ">",
+   "content": "---\nname: visualizing-change-over-time\ndescription: >\n  Helps Insights engineers and agents pick the right chart when a request is about\n  visualizing change over time, before/after comparisons, or period-over-period\n  movement while building UI with @hanzo/quill-charts (dashboards, reports, the\n  mcp_analytics frontend, custom visualizations). Use when a user asks how something\n  \"changed\", \"moved\", \"grew\", \"dropped\", \"improved\", or \"regressed\" between two\n  points or periods, or mentions \"before/after\", \"period over period\", \"week over\n  week\", \"delta\", \"slope graph\", \"slopegraph\", or comparing many series across two\n  snapshots. Surfaces both the `SlopeChart` quill component and the native\n  `ChartDisplayType.SlopeGraph` insight display as options.\n---\n"
+  },
+  {
+   "name": "warehouse-source-new-version",
+   "description": "Add support for a new vendor API version to an existing Data warehouse import source, or deprecate an old one. Use when a vendor ships a new API version (Stripe date versions, Shopify quarterly versions, header-pinned revisions, /vN/ URL bumps), when implementing a version-update or deprecation task for a source under products/warehouse_sources/backend/temporal/data_imports/sources, or when repinning an ExternalDataSource to a different version. Covers deciding whether a newly announced version needs supporting at all, version declaration, dispatch, pinning semantics, deprecation metadata, and migration scripts.",
+   "content": "---\nname: warehouse-source-new-version\ndescription: Add support for a new vendor API version to an existing Data warehouse import source, or deprecate an old one. Use when a vendor ships a new API version (Stripe date versions, Shopify quarterly versions, header-pinned revisions, /vN/ URL bumps), when implementing a version-update or deprecation task for a source under products/warehouse_sources/backend/temporal/data_imports/sources, or when repinning an ExternalDataSource to a different version. Covers deciding whether a newly announced version needs supporting at all, version declaration, dispatch, pinning semantics, deprecation metadata, and migration scripts.\n---\n"
+  },
+  {
+   "name": "web-design-guidelines",
+   "description": "Review UI code for Web Interface Guidelines compliance. Use when asked to \"review my UI\", \"check accessibility\", \"audit design\", \"review UX\", or \"check my site against best practices\".",
+   "content": "---\nname: web-design-guidelines\ndescription: Review UI code for Web Interface Guidelines compliance. Use when asked to \"review my UI\", \"check accessibility\", \"audit design\", \"review UX\", or \"check my site against best practices\".\nmetadata:\n  author: vercel\n  version: \"1.0.0\"\n  argument-hint: <file-or-pattern>\n---\n"
+  },
+  {
+   "name": "writing-code-comments",
+   "description": ">",
+   "content": "---\nname: writing-code-comments\ndescription: >\n  Gates whether a code comment should exist and forces the ones that stay to explain why, not what.\n  Use ALWAYS before writing or editing a comment in any language (Python, TypeScript, Go, Rust, SQL), and when reviewing a diff that adds comments.\n  Removes the comment types that clutter the codebase: narration that restates the code, change-history and chat-context notes (\"previously did X\", \"per PR #123\", \"AI:\"), commented-out code, and redundant docstrings.\n  Keeps the ones that earn their place: a non-obvious why, a warning about a non-local consequence, a pointer to context a future reader can't reconstruct.\n  Not for user-facing copy (see `/writing-user-facing-copy`) or commit messages.\n---\n"
+  },
+  {
+   "name": "writing-datastore-queries",
+   "description": "Guide for writing performant Datastore queries in Insights product code. Use when writing InsightsQL query runners, designing a Datastore table for a new product, adding materialized columns or skip indexes, or choosing a row ID format. For optimizing an existing query that is already too slow, use `/optimizing-datastore-and-insightsql-queries` instead.",
+   "content": "---\nname: writing-datastore-queries\ndescription: Guide for writing performant Datastore queries in Insights product code. Use when writing InsightsQL query runners, designing a Datastore table for a new product, adding materialized columns or skip indexes, or choosing a row ID format. For optimizing an existing query that is already too slow, use `/optimizing-datastore-and-insightsql-queries` instead.\n---\n"
+  },
+  {
+   "name": "writing-evals",
+   "description": ">",
+   "content": "---\nname: writing-evals\ndescription: >\n  Teaches how to write and run evals on the `products/insights_ai/eval_harness/` harness — sandboxed agent suites that execute the real coding agent in a Docker or Modal sandbox against a seeded Hedgebox project, and one-shot suites that score a single in-process model invocation per case.\n  Use when adding or changing eval suites, cases, scorers, seeders, or synthesizers under `products/insights_ai/evals/` or `products/*/evals/`, when touching the harness under `products/insights_ai/eval_harness/`, or when running or debugging those evals (`insightscli evals`).\n  Covers suite kinds and discovery, case anatomy, the seeder/synthesizer split, the one-branch scorer patterns, and how to read results.\n  Not for the LLM Analytics product's evaluation features.\n---\n"
+  },
+  {
+   "name": "writing-kea-logics",
+   "description": "Guide for writing or reviewing Insights kea logic files (`*Logic.ts` / `*Logic.tsx`). Use when creating a new logic, adding actions/reducers/selectors/listeners/loaders/forms/router bindings, choosing between reducer vs selector vs cache, deciding between listeners and `kea-subscriptions`, wiring React with `useValues`/`useActions`/`BindLogic`, or onboarding to kea conventions. Read keajs.org for upstream API; this skill captures Insights-specific conventions and idioms.",
+   "content": "---\nname: writing-kea-logics\ndescription: Guide for writing or reviewing Insights kea logic files (`*Logic.ts` / `*Logic.tsx`). Use when creating a new logic, adding actions/reducers/selectors/listeners/loaders/forms/router bindings, choosing between reducer vs selector vs cache, deciding between listeners and `kea-subscriptions`, wiring React with `useValues`/`useActions`/`BindLogic`, or onboarding to kea conventions. Read keajs.org for upstream API; this skill captures Insights-specific conventions and idioms.\n---\n"
+  },
+  {
+   "name": "writing-pr-descriptions",
+   "description": ">",
+   "content": "---\nname: writing-pr-descriptions\ndescription: >\n  Shapes a PR body into something a reviewer understands at a glance.\n  Use ALWAYS before writing or editing a PR description, before `gh pr create` or `gh pr edit --body`, and when asked to improve an existing description.\n  Puts the effect a person sees in the first line and the mechanism under it, routes each remaining fact to the form that carries it fastest (bullet, table, diagram, screenshot, collapsed block), cuts everything a reviewer does not need, then holds what survives to a checkable shape: one fact per bullet, sentences under 25 words, active voice, no idioms.\n  Makes the body stand alone, so a reader who opens no files still knows why the PR is necessary and what it does, sizes the body to the change so a small PR reads as small, and makes every claim either linked to its evidence or labeled as unchecked.\n  Ends with a scan test the agent runs over its own draft, reading only the title and the first line of two sections.\n  Not for commit messages (see AGENTS.md, \"Commit types\") or user-facing product copy (see `/writing-user-facing-copy`).\n---\n"
+  },
+  {
+   "name": "writing-skills",
+   "description": "Guide for writing Insights agent skills — job-to-be-done templates that teach agents how to use MCP tools to achieve a goal. Use when adding new product functionality that agents should know how to work with, creating a new skill, or updating existing skills in products/*/skills/.",
+   "content": "---\nname: writing-skills\ndescription: 'Guide for writing Insights agent skills — job-to-be-done templates that teach agents how to use MCP tools to achieve a goal. Use when adding new product functionality that agents should know how to work with, creating a new skill, or updating existing skills in products/*/skills/.'\n---\n"
+  },
+  {
+   "name": "writing-tests",
+   "description": ">",
+   "content": "---\nname: writing-tests\ndescription: >\n  Gates whether a new test should exist and forces it to be efficient, protecting CI from low-value test bloat.\n  Use before adding or substantially changing any pytest, Jest, or Playwright test — whenever an agent or engineer is about to write tests for a new feature, bugfix, or PR.\n  Front-loads the value bar (every test must catch a realistic regression no existing test already catches; test behavior through the public interface, not implementation details; collapse near-duplicates into parameterized cases) and the efficiency bar (deterministic, isolated, fast; pick the cheapest test level; Django TestCase over TransactionTestCase; no sleeps, no real network).\n  Includes a \"don't write it\" decision tree. For fixing an existing flaky test use `/fixing-flaky-tests`; after this gate says a Playwright test is warranted, use `/playwright-test` for mechanics.\n---\n"
+  },
+  {
+   "name": "writing-user-facing-copy",
+   "description": ">",
+   "content": "---\nname: writing-user-facing-copy\ndescription: >\n  Sets the voice and word choices for any text a person reads in Insights: UI labels, buttons, tooltips, empty and error states, notifications, in-app messages, onboarding, docs, and support replies.\n  Use ALWAYS before writing or editing user-facing copy, and whenever a code change adds or changes a string a user will see.\n  Enforces a humane, neutral tone: no editorializing, no sales-y or edgy one-liners, no em-dashes (use hyphens or rewrite), sentence case, plain language.\n  Also carries feature-naming rules that are easy to get wrong, most importantly how to talk about the Wizard (name it \"Wizard\" once, then call it \"the setup agent\" / \"the agent\").\n  Not for internal code comments, commit messages, or variable names.\n---\n"
+  },
+  {
+   "name": "xlsx",
+   "description": "Excel & Spreadsheet Financial Modeling (`xlsx`). Create, audit, and transform `.xlsx` workbooks with dynamic formulas, multi-sheet financial statements, pivot tables, sensitivity matrices, and zero hardcoded magic numbers.",
+   "content": "---\nname: xlsx\ndescription: \"Excel & Spreadsheet Financial Modeling (`xlsx`). Create, audit, and transform `.xlsx` workbooks with dynamic formulas, multi-sheet financial statements, pivot tables, sensitivity matrices, and zero hardcoded magic numbers.\"\nsource: hanzoai/skills\n---\n"
+  }
+ ]
+}

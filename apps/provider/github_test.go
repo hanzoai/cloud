@@ -1,0 +1,277 @@
+package provider
+
+import (
+	"context"
+	"crypto/rand"
+	"crypto/rsa"
+	"crypto/x509"
+	"encoding/json"
+	"encoding/pem"
+	"net/http"
+	"net/http/httptest"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/hanzoai/cloud/internal/sqltest"
+)
+
+// github_test.go proves the GitHub-App engine: provider registration + gating, the
+// install URL, the installation_id exchange, installation-token minting, the repo
+// list (paginated), and the authed repos handler — every GitHub API call driven
+// against a mock server (the exact seal/mint/list path production uses, no fakes in
+// the code under test).
+
+// testAppKey generates a throwaway RSA private key in PKCS1 PEM — the form the App
+// private key takes in GITHUB_APP_PRIVATE_KEY.
+func testAppKey(t *testing.T) string {
+	t.Helper()
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		t.Fatalf("rsa: %v", err)
+	}
+	return string(pem.EncodeToMemory(&pem.Block{
+		Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(key),
+	}))
+}
+
+// resetGithubApp clears the App-transport + token cache so a test's fresh mock
+// server + creds are used, never a prior test's.
+func resetGithubApp() {
+	ghApp.mu.Lock()
+	ghApp.tr = nil
+	ghApp.loadedFor = ""
+	ghApp.tokens = map[int64]cachedInstallToken{}
+	ghApp.mu.Unlock()
+	resetGrantCache() // the per-installation grant-set cache is App state too
+}
+
+// mockGitHub stands in for the GitHub API: it mints installation tokens, reports an
+// installation's account, and lists repositories (paginated). Unauthenticated (a
+// mock) — it only shapes responses.
+func mockGitHub(t *testing.T, repos []map[string]any) *httptest.Server {
+	t.Helper()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case strings.HasSuffix(r.URL.Path, "/access_tokens"):
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"token": "ghs_installation_token", "expires_at": time.Now().Add(time.Hour).UTC().Format(time.RFC3339),
+			})
+		case strings.HasPrefix(r.URL.Path, "/app/installations/"):
+			_ = json.NewEncoder(w).Encode(map[string]any{"account": map[string]any{"login": "acme-gh"}})
+		case r.URL.Path == "/installation/repositories":
+			// One page per test set (per_page=100 is larger than our sets).
+			_ = json.NewEncoder(w).Encode(map[string]any{"total_count": len(repos), "repositories": repos})
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	t.Cleanup(srv.Close)
+	return srv
+}
+
+// withGithubApp points the App engine at srv and injects test App creds.
+func withGithubApp(t *testing.T, srv *httptest.Server) {
+	t.Helper()
+	old := githubAPIBase
+	githubAPIBase = srv.URL
+	t.Cleanup(func() { githubAPIBase = old; resetGithubApp() })
+	t.Setenv(githubAppIDEnv, "424242")
+	t.Setenv(githubAppKeyEnv, testAppKey(t))
+	t.Setenv(githubAppSlugEnv, "hanzo")
+	resetGithubApp()
+}
+
+func TestGitHubProviderRegistered(t *testing.T) {
+	p, ok := registry["github"]
+	if !ok {
+		t.Fatal("github provider not registered")
+	}
+	if p.RedirectPath != callbackPath("github") {
+		t.Fatalf("RedirectPath %q must equal %q", p.RedirectPath, callbackPath("github"))
+	}
+	if len(p.Secrets) != 0 {
+		t.Fatalf("github custodies no sealed secrets (tokens minted on demand), got %v", p.Secrets)
+	}
+}
+
+// TestGitHubConfiguredGating proves the card is inert until the App creds land — the
+// whole "no side effects on deploy" property.
+func TestGitHubConfiguredGating(t *testing.T) {
+	t.Setenv(githubAppSlugEnv, "")
+	t.Setenv(githubAppIDEnv, "")
+	t.Setenv(githubAppKeyEnv, "")
+	if githubConfigured() {
+		t.Fatal("must be unconfigured with no env")
+	}
+	t.Setenv(githubAppSlugEnv, "hanzo")
+	if githubConfigured() {
+		t.Fatal("slug alone must not configure (mint needs id+key)")
+	}
+	t.Setenv(githubAppIDEnv, "1")
+	t.Setenv(githubAppKeyEnv, "pem")
+	if !githubConfigured() {
+		t.Fatal("slug+id+key must configure")
+	}
+}
+
+// TestGitHubAuthorizeURL: with the App's OAuth client the connect starts at
+// GitHub's authorization page, which returns even for an account the App is
+// already on, and shows GitHub's account picker, so a connect after a Disconnect
+// can choose another account; without it, at the install page, since nothing
+// could prove who installed anyway.
+func TestGitHubAuthorizeURL(t *testing.T) {
+	raw, err := githubAuthorize(OAuthConfig{Extra: map[string]string{githubSlugKey: "hanzo"}}, "", "st9")
+	if err != nil {
+		t.Fatalf("authorize: %v", err)
+	}
+	if !strings.HasPrefix(raw, "https://github.com/apps/hanzo/installations/new?state=st9") {
+		t.Fatalf("unexpected install URL: %s", raw)
+	}
+	raw, err = githubAuthorize(OAuthConfig{ClientID: "Iv23x", ClientSecret: "s", Extra: map[string]string{githubSlugKey: "hanzo"}},
+		"https://api.hanzo.ai/v1/provider/github/callback", "st9")
+	if err != nil {
+		t.Fatalf("authorize: %v", err)
+	}
+	if raw != "https://github.com/login/oauth/authorize?client_id=Iv23x&prompt=select_account&redirect_uri=https%3A%2F%2Fapi.hanzo.ai%2Fv1%2Fprovider%2Fgithub%2Fcallback&state=st9" {
+		t.Fatalf("unexpected authorization URL: %s", raw)
+	}
+}
+
+// TestGitHubDeclaresNoExchange pins the registration that makes the callback
+// unable to bind: the App install returns an installation id, an id a caller
+// supplies is not a grant, so the provider trades nothing on the callback. The
+// generic dispatcher reads this field to refuse — see github_bind_test.go.
+func TestGitHubDeclaresNoExchange(t *testing.T) {
+	p, ok := registry["github"]
+	if !ok {
+		t.Fatal("github provider not registered")
+	}
+	if p.Exchange != nil {
+		t.Fatal("github must declare no callback exchange; githubClaim binds an installation")
+	}
+	if p.Authorize == nil {
+		t.Fatal("github still sends the user to GitHub's install page")
+	}
+}
+
+// TestInstallationTokenMint proves a fresh installation token is minted from the App
+// key for a connected org, and cached (a second call does not re-mint).
+func TestInstallationTokenMint(t *testing.T) {
+	sqltest.Engines(t, func(t *testing.T, _ sqltest.Open) {
+		app := newApp(t, newKMS(t))
+		srv := mockGitHub(t, nil)
+		withGithubApp(t, srv)
+		_ = app
+
+		// Connect org "acme" to installation 555.
+		if err := mounted.State.store.Upsert(context.Background(), Connection{
+			Org: "acme", Provider: "github", ExternalID: "555", AccountLabel: "acme-gh",
+		}); err != nil {
+			t.Fatalf("upsert: %v", err)
+		}
+		tok, err := InstallationToken(context.Background(), "acme", "")
+		if err != nil {
+			t.Fatalf("mint: %v", err)
+		}
+		if tok != "ghs_installation_token" {
+			t.Fatalf("unexpected token %q", tok)
+		}
+
+		// A never-connected org fails closed — never a value.
+		if _, err := InstallationToken(context.Background(), "stranger", ""); err == nil {
+			t.Fatal("un-connected org must fail closed, got a token")
+		}
+	})
+}
+
+// TestInstallationReposList proves the installation repo list is parsed from the
+// GitHub response.
+func TestInstallationReposList(t *testing.T) {
+	repos := []map[string]any{
+		{"name": "alpha", "full_name": "acme-gh/alpha", "private": true, "default_branch": "main", "clone_url": "https://github.com/acme-gh/alpha.git"},
+		{"name": "beta", "full_name": "acme-gh/beta", "private": false, "default_branch": "trunk", "clone_url": "https://github.com/acme-gh/beta.git"},
+	}
+	srv := mockGitHub(t, repos)
+	withGithubApp(t, srv)
+
+	got, err := installationRepos(context.Background(), "tok")
+	if err != nil {
+		t.Fatalf("list: %v", err)
+	}
+	if len(got) != 2 || got[0].Name != "alpha" || got[1].FullName != "acme-gh/beta" || got[1].DefaultBranch != "trunk" {
+		t.Fatalf("unexpected repos: %+v", got)
+	}
+}
+
+// TestReposHandlerOrgScope proves the org's installations are an ADMIN's view:
+// an org admin who has not connected their own GitHub sees the repositories in
+// the installations their org holds; a member who has not is asked to connect;
+// an admin of an org holding nothing sees nothing, never another org's.
+func TestReposHandlerOrgScope(t *testing.T) {
+	sqltest.Engines(t, func(t *testing.T, _ sqltest.Open) {
+		repos := []map[string]any{
+			{"name": "widgets", "full_name": "acme-gh/widgets", "private": true, "default_branch": "main", "clone_url": "https://github.com/acme-gh/widgets.git"},
+		}
+		srv := mockGitHub(t, repos)
+		withGithubApp(t, srv)
+		app := newApp(t, newKMS(t))
+		repoIndex = newIndexCache()
+		t.Cleanup(func() { repoIndex = newIndexCache() })
+
+		if err := mounted.State.store.Upsert(context.Background(), Connection{
+			Org: "acme", Provider: "github", ExternalID: "777", AccountLabel: "acme-gh",
+		}); err != nil {
+			t.Fatalf("upsert: %v", err)
+		}
+		type page struct {
+			Repos     []githubRepoItem `json:"repos"`
+			Connected bool             `json:"connected"`
+		}
+		read := func(r httpResult) page {
+			t.Helper()
+			if r.Code != http.StatusOK {
+				t.Fatalf("repos want 200, got %d (%s)", r.Code, r.Body)
+			}
+			var p page
+			if err := json.Unmarshal(r.Body, &p); err != nil {
+				t.Fatalf("json: %v", err)
+			}
+			return p
+		}
+
+		// acme's admin sees its installation's repo.
+		if p := read(cfReq(t, app, http.MethodGet, "/v1/provider/github/repos", "acme", true, nil)); len(p.Repos) != 1 ||
+			p.Repos[0].Name != "widgets" || p.Repos[0].InstallationID != 777 || p.Connected {
+			t.Fatalf("acme admin should see [widgets] from installation 777, got %+v", p)
+		}
+		// acme's member who connected nothing is asked to connect.
+		if p := read(req(t, app, http.MethodGet, "/v1/provider/github/repos", "acme", nil)); len(p.Repos) != 0 || p.Connected {
+			t.Fatalf("an unconnected member must see nothing, got %+v", p)
+		}
+		// beta's admin holds nothing and never sees acme's.
+		if p := read(cfReq(t, app, http.MethodGet, "/v1/provider/github/repos", "beta", true, nil)); len(p.Repos) != 0 {
+			t.Fatalf("beta must not see acme's repos, got %+v", p)
+		}
+		// No principal → 401.
+		if r := req(t, app, http.MethodGet, "/v1/provider/github/repos", "", nil); r.Code != http.StatusUnauthorized {
+			t.Fatalf("no-principal repos want 401, got %d", r.Code)
+		}
+	})
+}
+
+// TestReposHandlerUnconfigured503 proves the whole surface is inert (503) when the
+// App creds are absent — the deploy-safety property.
+func TestReposHandlerUnconfigured503(t *testing.T) {
+	sqltest.Engines(t, func(t *testing.T, _ sqltest.Open) {
+		t.Setenv(githubAppIDEnv, "")
+		t.Setenv(githubAppKeyEnv, "")
+		t.Setenv(githubAppSlugEnv, "")
+		resetGithubApp()
+		app := newApp(t, newKMS(t))
+		_ = mounted.State.store.Upsert(context.Background(), Connection{Org: "acme", Provider: "github", ExternalID: "1"})
+		if r := req(t, app, http.MethodGet, "/v1/provider/github/repos", "acme", nil); r.Code != http.StatusServiceUnavailable {
+			t.Fatalf("unconfigured repos want 503, got %d (%s)", r.Code, r.Body)
+		}
+	})
+}

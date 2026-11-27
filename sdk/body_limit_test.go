@@ -6,12 +6,16 @@ import "testing"
 //
 // A chat request carries its whole prompt in the request body, so the edge's
 // BodyLimit is a hard ceiling on the context window no matter what the model
-// catalog advertises. Left at the default, every 1M-context route —
-// deepseek-v4-pro, and anything glm-5.2 overflows into once a prompt passes its
-// 262,144 cap — was unreachable: fasthttp rejected the body before any handler
-// ran and answered the opaque 400 "Error when parsing request", which reads like
-// a malformed payload rather than a size cap.
+// catalog advertises. The zip/fiber framework default is 4 MiB; a 1M-token
+// prompt serializes to roughly 4.3 MB of JSON (measured on prod: 2 MB of body
+// carried 466,148 prompt tokens, ~4.5 bytes/token). Left at the default, every
+// 1M-context route — deepseek-v4-pro, and anything glm-5.2 overflows into once
+// a prompt passes its 262,144 cap — was unreachable: fasthttp rejected the body
+// before any handler ran and answered the opaque 400 "Error when parsing
+// request", which reads like a malformed payload rather than a size cap.
 //
+// This pins the ceiling above a real 1M-token prompt so the regression cannot
+// come back silently.
 //
 // This pins the configured VALUE. Binding it to the socket is zip's, from
 // v1.28.3, and zip's own TestHTTPTransport_BodyLimitReachesTheSocket asserts
@@ -19,6 +23,7 @@ import "testing"
 // transport.
 
 // oneMillionTokenBody is a conservative byte estimate for a 1M-token prompt.
+// Measured ~4.5 bytes/token; 4.3 keeps the floor conservative.
 const oneMillionTokenBody = 1_000_000 * 43 / 10 // ~4.3 MB
 
 // zipFrameworkDefault is the zip/fiber BodyLimit applied when Config.BodyLimit

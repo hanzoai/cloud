@@ -34,9 +34,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/hanzoai/cloud/sdk/principal"
 	"github.com/hanzoai/authz"
 	"github.com/hanzoai/authz/edge"
-	"github.com/hanzoai/cloud/sdk/principal"
 
 	"github.com/hanzoai/cloud/sdk/scrub"
 )
@@ -344,6 +344,46 @@ func claimedIssuer(raw string) string {
 		return ""
 	}
 	return p.Iss
+}
+
+// claimedAudience reads the primary `aud` (or `azp`) from a JWT's payload. Only
+// called on a bearer that has already passed signature/issuer/audience checks.
+func claimedAudience(raw string) string {
+	parts := strings.Split(raw, ".")
+	if len(parts) != 3 {
+		return ""
+	}
+	b, err := base64.RawURLEncoding.DecodeString(parts[1])
+	if err != nil {
+		return ""
+	}
+	var p struct {
+		Aud any    `json:"aud"`
+		Azp string `json:"azp"`
+	}
+	if json.Unmarshal(b, &p) != nil {
+		return ""
+	}
+	switch v := p.Aud.(type) {
+	case string:
+		if v != "" {
+			return v
+		}
+	case []any:
+		for _, item := range v {
+			if s, ok := item.(string); ok && s != "" {
+				if p.Azp != "" && s == p.Azp {
+					return s
+				}
+			}
+		}
+		for _, item := range v {
+			if s, ok := item.(string); ok && s != "" {
+				return s
+			}
+		}
+	}
+	return p.Azp
 }
 
 // kmsMachineAudSuffix is the fixed suffix of a per-org PaaS-KMS sync machine

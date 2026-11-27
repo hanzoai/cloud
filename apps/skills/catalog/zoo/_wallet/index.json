@@ -1,0 +1,32 @@
+{
+  "$schema": "https://schemas.agentskills.io/discovery/0.2.0/schema.json",
+  "base_url": "https://api.zoo.ngo",
+  "brand": "zoo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://zoolabs.id",
+  "mcp": {
+    "description": "Model Context Protocol over JSON-RPC 2.0 — one POST per message, stateless, protocol revision 2026-07-28. tools/list answers without a credential with one tool per subsystem (its operations in the \"op\" enum) plus \"describe\", which returns one operation's input schema. tools/call names a subsystem tool and carries {\"op\": <operation>, \"input\": <its arguments>}; it takes the same bearer the REST API does, and a call that carries none is answered 401 with a WWW-Authenticate header naming the resource metadata at /.well-known/oauth-protected-resource, which names the authorization server to sign in at. The tool surface is the public contract: the operator's admin product is not offered, and a name that would disclose a secret or mutate an identity is withheld — the list says how many, under _meta.",
+    "method": "POST",
+    "url": "https://api.zoo.ngo/v1/mcp"
+  },
+  "skill_count": 2,
+  "skills": [
+    {
+      "description": "Read wallet accounts: Returns the caller org's wallet accounts, newest first..",
+      "digest": "sha256:8dea7dd5d82875fd6829b2a1aadde73120a81ea165bef97b60b23dbc287678ff",
+      "name": "wallet_accounts",
+      "service": "wallet",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/wallet_accounts/SKILL.md"
+    },
+    {
+      "description": "Read wallet wallet: Returns the caller org's wallets, newest first, optionally NARROWED within the org by project, agent or account., Returns one of the caller org's wallets: its scope, custody kind, tier, chain and on-chain address..",
+      "digest": "sha256:de182c670c573922ed422df1b5e552212104833f2abfffa5e75be0d410765591",
+      "name": "wallet_wallet",
+      "service": "wallet",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/wallet_wallet/SKILL.md"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

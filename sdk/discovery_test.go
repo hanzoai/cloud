@@ -294,3 +294,54 @@ func TestNoFetchPerRequest(t *testing.T) {
 		t.Errorf("the discovery document was fetched %d times for 50 tokens, want 1", n)
 	}
 }
+
+// Concurrent cold-start callers share the in-flight discovery fetch instead of
+// losing the race to ErrNoDiscovery while the first request is fetching.
+func TestDiscoveryColdStartCoalescesConcurrentCallers(t *testing.T) {
+	gate := make(chan struct{})
+	started := make(chan struct{}, 1)
+	var hits atomic.Int64
+	var srv *httptest.Server
+	srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hits.Add(1)
+		select {
+		case started <- struct{}{}:
+		default:
+		}
+		<-gate
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"issuer":   srv.URL,
+			"jwks_uri": srv.URL + "/jwks",
+		})
+	}))
+	t.Cleanup(srv.Close)
+
+	d, err := newDiscovery(srv.URL+WellKnown, srv.Client(), discoveryTTL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	const callers = 4
+	errs := make([]error, callers)
+	docs := make([]Document, callers)
+	var wg sync.WaitGroup
+	for i := range callers {
+		wg.Add(1)
+		go func(idx int) {
+			defer wg.Done()
+			docs[idx], errs[idx] = d.Document()
+		}(i)
+	}
+	<-started
+	time.Sleep(20 * time.Millisecond)
+	close(gate)
+	wg.Wait()
+
+	for i := range callers {
+		if errs[i] != nil || docs[i].Issuer != srv.URL {
+			t.Fatalf("caller %d = %+v, %v; want valid document", i, docs[i], errs[i])
+		}
+	}
+	if got := hits.Load(); got != 1 {
+		t.Fatalf("discovery fetched %d times for %d concurrent cold-start callers, want 1", got, callers)
+	}
+}

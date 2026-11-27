@@ -456,6 +456,8 @@ func OrgFrom(ctx context.Context) (string, bool) {
 // send and often cannot send — the edge mints it from the token and strips any
 // client copy. Read literally it is an instruction to do the thing you already
 // did, so it sends you to look at your request when the answer is your identity.
+// Measured cost, not a style note: it misdirected three separate diagnoses in one
+// day, one of them into rebuilding a CLI path that was never broken.
 //
 // Refused/RefusedFrom is the Org/OrgFrom pair again: one question, two shapes, for
 // a handler that holds the request and a core that holds only the context.

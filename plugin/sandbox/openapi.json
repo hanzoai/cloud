@@ -1,0 +1,2194 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Hanzo Cloud API",
+    "description": "Package sandbox is the ONE compute primitive: a sandbox is a gVisor pod that runs somebody else's code, and every lifetime is the same object.",
+    "version": "v1"
+  },
+  "servers": [
+    {
+      "url": "https://api.hanzo.ai"
+    }
+  ],
+  "security": [
+    {
+      "bearer": []
+    }
+  ],
+  "tags": [
+    {
+      "name": "dev"
+    },
+    {
+      "name": "sandbox"
+    }
+  ],
+  "paths": {
+    "/v1/dev/health": {
+      "get": {
+        "operationId": "get_dev_health",
+        "summary": "Dev service liveness",
+        "description": "Answers that the service is mounted.",
+        "tags": [
+          "dev"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/sandbox.healthOut"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/dev/sessions": {
+      "post": {
+        "operationId": "post_dev_sessions",
+        "summary": "Lease the caller's cloud cell and start Dev in it",
+        "description": "Leases the caller's cell (or resolves a linked desktop when execution.via\nis \"desktop\"), or resumes it, and starts Dev in it.\n\nThe cell the project already holds is found by asking the sandbox who has it;\nleasing over it would be refused, because a project's disk attaches to one cell.\nA lease the sandbox refuses — quota, no node — is the answer, untouched. A desktop\ndispatch refusal is likewise returned untouched with no fallback.",
+        "tags": [
+          "dev"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/sandbox.sessionIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/sandbox.Session"
+                }
+              }
+            },
+            "description": "created"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/dev/sessions/{id}": {
+      "delete": {
+        "operationId": "delete_dev_sessions_by_id",
+        "summary": "End a cloud cell",
+        "description": "Gives the cell back (or releases a linked-desktop dispatch lease). The disk is\nkept; a lease ends, a person's work does not. A cell or lease already gone is already\nended.",
+        "tags": [
+          "dev"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the session, from POST /v1/dev/sessions.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "lease",
+            "in": "query",
+            "required": false,
+            "description": "Lease is the dispatch lease to release when ending a linked-desktop session.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "no content"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/dev/sessions/{id}/interrupt": {
+      "post": {
+        "operationId": "post_dev_sessions_by_id_interrupt",
+        "summary": "Stop the commands a session is running",
+        "description": "Stops the commands running in a session's cell and keeps the cell and\nthe session.",
+        "tags": [
+          "dev"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the session, from POST /v1/dev/sessions.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/sandbox.Stopped"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/dev/sessions/{id}/resume": {
+      "post": {
+        "operationId": "post_dev_sessions_by_id_resume",
+        "summary": "Bring a suspended session back",
+        "description": "Brings a suspended session back.",
+        "tags": [
+          "dev"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the session, from POST /v1/dev/sessions.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/sandbox.Session"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/dev/sessions/{id}/suspend": {
+      "post": {
+        "operationId": "post_dev_sessions_by_id_suspend",
+        "summary": "Put a session away and give its cell back",
+        "description": "Puts a session away: its cell is given back, its disk and its work stay, and\nit takes no turn until resumed.",
+        "tags": [
+          "dev"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the session, from POST /v1/dev/sessions.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "no content"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/sandbox": {
+      "get": {
+        "operationId": "get_sandbox",
+        "summary": "Lists the sandboxes the caller holds, newest first.",
+        "description": "Lists the sandboxes the caller holds, newest first.\n\nA member holds the sandboxes they leased; an admin of the org, or a SuperAdmin,\nholds every one in it. `?project=` and `?status=` narrow it. Only the caller's\norg's: the store is keyed on the validated org, so another tenant's sandbox is\nnot something this operation can return.",
+        "tags": [
+          "sandbox"
+        ],
+        "parameters": [
+          {
+            "name": "project",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/sandbox.sandboxList"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      },
+      "post": {
+        "operationId": "post_sandbox",
+        "summary": "Leases a sandbox — a real computer — for the caller's org.",
+        "description": "Leases a sandbox — a real computer — for the caller's org.\n\nThe class decides what it is for and therefore its image, working directory\nand isolation. A dev or desktop sandbox is SINGLE-ATTACH per project, so\nasking twice for one project resumes the one that exists rather than paying\nfor a second; an exec sandbox carries no project and is bounded per org\ninstead, refused 429 past the ceiling because the caller's correct response is\nto wait.\n\nAnswers 201 with the sandbox as leased, which names the runtime it GOT — not\nthe one that was asked for.",
+        "tags": [
+          "sandbox"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/sandbox.sandboxIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/sandbox.Sandbox"
+                }
+              }
+            },
+            "description": "created"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/sandbox/computer": {
+      "post": {
+        "operationId": "computer_in_sandbox",
+        "summary": "Use a desktop sandbox's screen, mouse, keyboard and browser",
+        "description": "Performs one GUI or shell action inside a sandbox the caller\nholds: screenshot, click, move, drag, scroll, type, key, navigate, wait or\nshell. Coordinates in click, move, drag and scroll are pixel coordinates of the\nscreenshot.",
+        "tags": [
+          "sandbox"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/sandbox.ComputerIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/sandbox.ComputerOut"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/sandbox/end": {
+      "post": {
+        "operationId": "end_sandbox",
+        "summary": "End a sandbox and release it",
+        "description": "Ends the caller's sandbox lease: the pod goes, and the volume goes only\nwhen the caller asked for that too.",
+        "tags": [
+          "sandbox"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/sandbox.EndIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "no content"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/sandbox/lease": {
+      "post": {
+        "operationId": "lease_sandbox",
+        "summary": "Lease a sandbox — a real computer — or resume one you hold",
+        "description": "Leases the caller's sandbox, or returns the one it named if that\nlease is still running, or gives it a pod again if it is parked — with its\ndisk as it was left.\n\nWhat comes back is a real computer: a pod under a runtime boundary with a\ntoolchain already in it, its own filesystem, and a lease that ends it. Every\nother op here acts on the one this returns.",
+        "tags": [
+          "sandbox"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/sandbox.LeaseIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/sandbox.Leased"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/sandbox/preview/{id}/{port}/{wildcard1}": {
+      "delete": {
+        "operationId": "delete_sandbox_preview_by_id_by_port_by_wildcard1",
+        "summary": "A preview's own request",
+        "description": "What a browser asks of a preview host, https://sandbox-\u003cid\u003e-preview-\u003cport\u003e.\u003capex\u003e/, rewritten here by the router and carried to the port inside the sandbox: pages, assets, APIs and WebSockets, answered in the app's own shape. Served only under that host, to a browser holding the cookie POST /v1/sandbox/{id}/preview's URL sets. It is not called directly.",
+        "tags": [
+          "sandbox"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "port",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "wildcard1",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "get": {
+        "operationId": "get_sandbox_preview_by_id_by_port_by_wildcard1",
+        "summary": "A preview's own request",
+        "description": "What a browser asks of a preview host, https://sandbox-\u003cid\u003e-preview-\u003cport\u003e.\u003capex\u003e/, rewritten here by the router and carried to the port inside the sandbox: pages, assets, APIs and WebSockets, answered in the app's own shape. Served only under that host, to a browser holding the cookie POST /v1/sandbox/{id}/preview's URL sets. It is not called directly.",
+        "tags": [
+          "sandbox"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "port",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "wildcard1",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "patch": {
+        "operationId": "patch_sandbox_preview_by_id_by_port_by_wildcard1",
+        "summary": "A preview's own request",
+        "description": "What a browser asks of a preview host, https://sandbox-\u003cid\u003e-preview-\u003cport\u003e.\u003capex\u003e/, rewritten here by the router and carried to the port inside the sandbox: pages, assets, APIs and WebSockets, answered in the app's own shape. Served only under that host, to a browser holding the cookie POST /v1/sandbox/{id}/preview's URL sets. It is not called directly.",
+        "tags": [
+          "sandbox"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "port",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "wildcard1",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "post": {
+        "operationId": "post_sandbox_preview_by_id_by_port_by_wildcard1",
+        "summary": "A preview's own request",
+        "description": "What a browser asks of a preview host, https://sandbox-\u003cid\u003e-preview-\u003cport\u003e.\u003capex\u003e/, rewritten here by the router and carried to the port inside the sandbox: pages, assets, APIs and WebSockets, answered in the app's own shape. Served only under that host, to a browser holding the cookie POST /v1/sandbox/{id}/preview's URL sets. It is not called directly.",
+        "tags": [
+          "sandbox"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "port",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "wildcard1",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "put": {
+        "operationId": "put_sandbox_preview_by_id_by_port_by_wildcard1",
+        "summary": "A preview's own request",
+        "description": "What a browser asks of a preview host, https://sandbox-\u003cid\u003e-preview-\u003cport\u003e.\u003capex\u003e/, rewritten here by the router and carried to the port inside the sandbox: pages, assets, APIs and WebSockets, answered in the app's own shape. Served only under that host, to a browser holding the cookie POST /v1/sandbox/{id}/preview's URL sets. It is not called directly.",
+        "tags": [
+          "sandbox"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "port",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "wildcard1",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/sandbox/quota": {
+      "get": {
+        "operationId": "get_sandbox_quota",
+        "summary": "Answers the caller's sandbox quota: the account it belongs to — the org, or a person in the signup org — how many of that account's paid sandboxes are running, and how many may run at once (-1 for no bound).",
+        "description": "Answers the caller's sandbox quota: the account it belongs to — the org, or a\nperson in the signup org — how many of that account's paid sandboxes are\nrunning, and how many may run at once (-1 for no bound). Staff set the quota per\norg or per plan; where they set none it is 100.",
+        "tags": [
+          "sandbox"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "account": "acme",
+                  "quota": 100,
+                  "running": 3
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/sandbox.Quota"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/sandbox/read": {
+      "post": {
+        "operationId": "read_sandbox_file",
+        "summary": "Read a file from a sandbox you hold",
+        "description": "Reads one path in the caller's sandbox: a file's bytes, or a\ndirectory's entries when the path names one.",
+        "tags": [
+          "sandbox"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/sandbox.PathIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/sandbox.Blob"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/sandbox/run": {
+      "post": {
+        "operationId": "run_in_sandbox",
+        "summary": "Run a command in a sandbox you hold and read its output",
+        "description": "Runs one command inside the caller's sandbox and answers its exit code,\nstdout and stderr. A non-zero exit is a successful call carrying a failed\nprogram, so it comes back as data and not as an error.\n\nName a `session` and the command NARRATES INTO IT: its output is appended to\nthat session's live log as the program produces it, so anything watching the\nsession — GET /v1/agent/sessions/stream, scoped to one run with ?root= —\nwatches the work happen rather than waiting for the verdict. Without it the\ncall is what it always was: silent until it returns, which for an agentic run\nis twenty-five minutes of blank screen.\n\nThe session is named; the TENANT is not. It is the org the caller already\nproved, so a session belonging to somebody else is absent from the org this\ncall acts for and the append is refused there.",
+        "tags": [
+          "sandbox"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/sandbox.RunIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/sandbox.Ran"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/sandbox/stop": {
+      "post": {
+        "operationId": "stop_run",
+        "summary": "Stop what a sandbox is running, and keep the sandbox",
+        "description": "Interrupts whatever the caller's sandbox is running and answers how\nmany commands it ended. The sandbox stays leased — stop ends the WORK, end ends\nthe RESOURCE — so whoever stopped a run can still read what it left behind.",
+        "tags": [
+          "sandbox"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/sandbox.StopIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/sandbox.Stopped"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/sandbox/write": {
+      "post": {
+        "operationId": "write_sandbox_file",
+        "summary": "Write a file into a sandbox you hold",
+        "description": "Writes bytes to one path in the caller's sandbox, creating parents,\nand answers the resolved path.",
+        "tags": [
+          "sandbox"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/sandbox.WriteIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/sandbox.Wrote"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/sandbox/{id}": {
+      "delete": {
+        "operationId": "delete_sandbox_by_id",
+        "summary": "Ends a sandbox and releases the compute behind it.",
+        "description": "Ends a sandbox and releases the compute behind it. Answers 204.\n\nENDING IS NOT STOPPING. This releases the resource: the pod goes and anything\nonly inside it goes with it. To end what a sandbox is RUNNING while keeping\nthe sandbox — the checkout, the logs, the half-written file — the verb is\nPOST /v1/sandbox/stop.\n\n`?purge=1` additionally removes the record, so the sandbox stops being listed\nat all rather than being listed as ended.",
+        "tags": [
+          "sandbox"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the sandbox to end, from the path.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "purge",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "no content"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      },
+      "get": {
+        "operationId": "get_sandbox_by_id",
+        "summary": "Returns one sandbox: its class, project, image, the runtime it was given, its status and when its lease ends.",
+        "description": "Returns one sandbox: its class, project, image, the runtime it was\ngiven, its status and when its lease ends.\n\nA sandbox is its lessee's and its org admins'. An id the caller does not hold —\nanother org's, or another member's — is the same 404 an unknown id gives.",
+        "tags": [
+          "sandbox"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the sandbox to address, from the path.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/sandbox.Sandbox"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/sandbox/{id}/agent": {
+      "post": {
+        "operationId": "post_sandbox_by_id_agent",
+        "summary": "Have a model work a sandbox",
+        "description": "Says what to do on a sandbox you hold, and a model does it there while you watch: a shell on any sandbox, and on a desktop or a browser the screen too — it takes a screenshot, clicks where it sees, types, presses keys, opens addresses and runs commands. The answer is a text/event-stream, one event a step, ending with `end`.\n\nThe body is JSON: `message` (required, what to do, in words), `history` (the conversation so far, oldest first, each {role: user|assistant, text}) and `model` (a model id from GET /v1/models; empty takes the deployment's).\n\nEvents (`event:` name, `data:` JSON): `say` {text} the model's words; `act` {tool, args} a tool it reached for; `result` {tool, ok, text} what the tool answered; `error` {text} the turn could not go on; `end` {rounds} the turn is over. A `: ping` comment every 15 seconds keeps intermediaries from closing the stream.\n\nThe server keeps nothing between turns: send the conversation so far as `history` ({role: user|assistant, text}). The model is billed to the caller's account at the gateway's rates, and the sandbox hour is the one the lease already bills. Open the sandbox's screen (POST /v1/sandbox/{id}/screen/ticket) beside it to watch.\n\n409 when the sandbox is not running; 404 for a sandbox you do not hold; 503 where no model gateway is mounted.",
+        "tags": [
+          "sandbox"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "x-public": true
+      }
+    },
+    "/v1/sandbox/{id}/exec": {
+      "post": {
+        "operationId": "post_sandbox_by_id_exec",
+        "summary": "Runs one command in a sandbox the caller holds and answers with its exit code, stdout and stderr.",
+        "description": "Runs one command in a sandbox the caller holds and answers with\nits exit code, stdout and stderr.\n\nSend `argv` — an argument vector cannot be word-split by accident — or\n`command` for a shell line, which is the only input here that ever reaches a\nshell. A non-zero exit is a SUCCESSFUL call carrying a failed command: the\nstatus is 200 and the exit code is in the answer, because \"the command failed\"\nand \"the call failed\" are different facts.",
+        "tags": [
+          "sandbox"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the sandbox to run in, from the path.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/sandbox.execRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/sandbox.ExecResult"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/sandbox/{id}/fs": {
+      "get": {
+        "operationId": "get_sandbox_by_id_fs",
+        "summary": "Read a file, or list a directory",
+        "description": "Reads one file from the sandbox's project directory as text, or lists the entries when the path names a directory. Paths resolve under the project root and a path that climbs out is refused rather than rewritten.",
+        "tags": [
+          "sandbox"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "x-public": true
+      },
+      "post": {
+        "operationId": "post_sandbox_by_id_fs",
+        "summary": "Write a file",
+        "description": "Writes the request body to one file in the sandbox's project directory, creating parent directories. Same confinement as the read above.",
+        "tags": [
+          "sandbox"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "x-public": true
+      }
+    },
+    "/v1/sandbox/{id}/pause": {
+      "post": {
+        "operationId": "post_sandbox_by_id_pause",
+        "summary": "Stops the pod, keeps the row and the volume, and settles the tail: POST /v1/sandbox/:id/pause.",
+        "description": "Stops the pod, keeps the row and the volume, and settles the tail: POST\n/v1/sandbox/:id/pause.\n\nThe claim, the stop and the ship are ONE settlement for the same reason a\nretirement is — the snapshot that carries the advanced watermark has to carry\nthe new state, or a successor hydrates a running row for a pod that is gone\nand bills for it until the reaper notices.",
+        "tags": [
+          "sandbox"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the sandbox to address, from the path.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/sandbox.Sandbox"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/sandbox/{id}/ports": {
+      "get": {
+        "operationId": "get_sandbox_by_id_ports",
+        "summary": "Lists the TCP ports something listens on in a sandbox the caller holds, each with the preview host that serves it — what the sandbox's Browser can open.",
+        "description": "Lists the TCP ports something listens on in a sandbox the caller\nholds, each with the preview host that serves it — what the sandbox's Browser\ncan open. A dev server started in the sandbox appears here once it listens.",
+        "tags": [
+          "sandbox"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the sandbox, from the path.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/sandbox.Ports"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/sandbox/{id}/preview": {
+      "post": {
+        "operationId": "post_sandbox_by_id_preview",
+        "summary": "Opens a port of a sandbox the caller holds in a browser.",
+        "description": "Opens a port of a sandbox the caller holds in a browser.\n\nIt answers a URL at an origin of the preview's own —\nhttps://sandbox-\u003cid\u003e-preview-\u003cport\u003e.\u003capex\u003e/ — carrying a single-use ticket.\nOpening it sets a cookie on that origin and lands on its root, and from then on\nevery request there is carried to the port inside the sandbox: pages, assets,\nAPIs and WebSockets, as the app serves them on localhost. The preview stays open\nfor twelve hours or until the sandbox stops running; a preview answering 401 is\nopened again by asking for another URL. A sandbox that is not running is 409.",
+        "tags": [
+          "sandbox"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the sandbox, from the path.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/sandbox.previewIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/sandbox.previewGrant"
+                }
+              }
+            },
+            "description": "created"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/sandbox/{id}/resume": {
+      "post": {
+        "operationId": "post_sandbox_by_id_resume",
+        "summary": "Gives a parked sandbox a pod again: POST /v1/sandbox/:id/resume.",
+        "description": "Gives a parked sandbox a pod again: POST /v1/sandbox/:id/resume.\n\nThe pod is NEW and so is its lease: a fresh pod name, because a pod name is\nnever reused (store.go), the volume the row already names, a lease of the\nclass's own length from now, and the RESUMING caller's credential rather than\nthe one that took the lease — a session is short-lived and the one that parked\nit is gone.",
+        "tags": [
+          "sandbox"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the sandbox to address, from the path.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/sandbox.Sandbox"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/sandbox/{id}/screen": {
+      "get": {
+        "operationId": "get_sandbox_by_id_screen",
+        "summary": "The screen, as a page",
+        "description": "A complete, self-contained desktop — noVNC inline, no other origin — that opens its own socket and draws this sandbox's display. Embed it in an iframe and there is nothing else to build.\n\n`ticket` is the credential from the POST above, carried through to the socket. The page is NOT gated: it is inert markup and does not redeem the ticket, because a ticket is spent once and a page that spent it would hold a credential that no longer opens anything. `frame-ancestors` admits our own brands' hosts and nothing further.\n\nIt is served for every class, not only for `desktop`. The class is a fact about the image, and a sandbox with no VNC server already fails exactly — the connection is refused and the page says so — where a check here would be a second opinion about what is running inside a pod, formed from a label rather than from the pod.",
+        "tags": [
+          "sandbox"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "x-public": true
+      }
+    },
+    "/v1/sandbox/{id}/screen/ticket": {
+      "post": {
+        "operationId": "post_sandbox_by_id_screen_ticket",
+        "summary": "Mints a short-lived grant to open the screen of a desktop sandbox.",
+        "description": "Mints a short-lived grant to open the screen of a desktop\nsandbox. Same properties as the terminal ticket, for the other endpoint.",
+        "tags": [
+          "sandbox"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the sandbox to address, from the path.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/sandbox.ticketGrant"
+                }
+              }
+            },
+            "description": "created"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/sandbox/{id}/screen/ws": {
+      "get": {
+        "operationId": "get_sandbox_by_id_screen_ws",
+        "summary": "The screen, as a socket",
+        "description": "Upgrades to a WebSocket carrying RFB — the VNC wire protocol — from the sandbox's display, for a host that brings its own client. Requires `ticket`; a missing, expired or already-spent one answers 401 without upgrading.\n\nTHE WIRE IS RFB, in BINARY frames both ways, and it is not interpreted here: this is a pipe between the caller's client and the server inside the pod.\n\nTHE PIXELS COME OUT THROUGH THE EXEC CHANNEL. The display binds 127.0.0.1 only and deliberately nothing else, so there is no address to dial — `socat` joins the stream to that loopback port over the same Kubernetes exec subresource every other call into a sandbox uses. One way in, one thing to authorize, nothing further exposed.\n\nThe window size is ignored. A browser pane is not the X server's geometry, and the client scales what it is given rather than asking a server with no RandR to resize itself.",
+        "tags": [
+          "sandbox"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "x-public": true
+      }
+    },
+    "/v1/sandbox/{id}/terminal": {
+      "get": {
+        "operationId": "get_sandbox_by_id_terminal",
+        "summary": "The terminal, as a page",
+        "description": "A complete, self-contained terminal — xterm inline, no other origin — that opens its own socket and runs a shell in this sandbox. Embed it in an iframe and there is nothing else to build.\n\n`ticket` is the credential from the POST above and `arg` names the session (see the socket below); both are simply carried through to the socket. The page is NOT gated — it is inert markup and does not redeem the ticket, because a ticket is spent once and a page that spent it would hold a credential that no longer opens anything.\n\nWhen the terminal is up it posts `{source:\"hanzo-term\", ready:true}` to its parent frame, so a host can tell a live terminal from a page that failed into something else. `frame-ancestors` admits our own brands' hosts and nothing further.",
+        "tags": [
+          "sandbox"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "x-public": true
+      }
+    },
+    "/v1/sandbox/{id}/terminal/ticket": {
+      "post": {
+        "operationId": "post_sandbox_by_id_terminal_ticket",
+        "summary": "Mints a short-lived grant to open a terminal on a sandbox.",
+        "description": "Mints a short-lived grant to open a terminal on a sandbox.\n\nThe ticket travels in the query string of the URL it answers with, because a\nbrowser cannot set an Authorization header on a WebSocket handshake. It is\nsingle-purpose and short-lived for exactly that reason. A sandbox that is not\nrunning is 409 rather than a ticket that cannot be used.",
+        "tags": [
+          "sandbox"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the sandbox to address, from the path.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/sandbox.ticketGrant"
+                }
+              }
+            },
+            "description": "created"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/sandbox/{id}/terminal/ws": {
+      "get": {
+        "operationId": "get_sandbox_by_id_terminal_ws",
+        "summary": "The terminal, as a socket",
+        "description": "Upgrades to a WebSocket carrying a login shell on a pseudo-terminal inside the sandbox — for a host that brings its own emulator. Requires `ticket`; a missing, expired or already-spent one answers 401 without upgrading.\n\nTHE WIRE. A text frame is stdin, unless it is the one control object `{\"resize\":{\"cols\":N,\"rows\":M}}`; a binary frame is always stdin. Output comes back as BINARY frames, because a pty emits arbitrary bytes cut at arbitrary offsets and a text frame carrying half a rune is one the browser closes the connection over.\n\n`arg` names a SESSION: the shell runs under `tmux new -A -s \u003carg\u003e`, which attaches to that session if it exists and creates it if it does not — so one sandbox holds as many terminals as a caller has names for. It is 1-64 characters of letters, digits, `-` or `_` and may not begin with `-`; anything else is 400. Without `arg` the shell is unnamed and unmultiplexed.\n\nThe shell is `zsh -l`, falling back to `bash -l` and then to `sh -l`, and to the plain shell again when the image has no tmux. Every step is a preference and none is a requirement: whatever else the image carries — the hanzo CLI included — is a command to type, never a condition for getting a prompt.",
+        "tags": [
+          "sandbox"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "x-public": true
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "problem-details": {
+        "description": "An RFC 9457 problem document.",
+        "properties": {
+          "code": {
+            "description": "A stable token a client can branch on, when the refusal names one.",
+            "type": "string"
+          },
+          "detail": {
+            "description": "What was refused, for a person to read.",
+            "type": "string"
+          },
+          "status": {
+            "description": "The HTTP status.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "title": {
+            "description": "The status's reason phrase.",
+            "type": "string"
+          },
+          "type": {
+            "description": "about:blank",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "status",
+          "detail"
+        ],
+        "type": "object"
+      },
+      "sandbox.Blob": {
+        "properties": {
+          "data": {
+            "contentEncoding": "base64",
+            "description": "Data is the file's bytes, verbatim, base64 on the wire. Empty for a directory\nand for an empty file alike; Dir is what tells those apart.",
+            "type": "string"
+          },
+          "dir": {
+            "description": "Dir says which of the two answers this is: true and the path is a directory,\nso read Entries; false and it is a file, so read Data. Nothing else\ndistinguishes them — an empty file and an empty directory look alike here.",
+            "type": "boolean"
+          },
+          "entries": {
+            "description": "Entries is a directory's contents as bare NAMES, not paths — one level, no\nrecursion, dotfiles included, \".\" and \"..\" excluded (`ls -1A`). Empty for a\nfile, and for an empty directory.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "path": {
+            "description": "Path is the RESOLVED absolute path that was read — the caller's relative path\njoined onto the sandbox's working directory (Leased.Workdir), so it names the\nsame file for a reader who does not know the class.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "sandbox.ComputerIn": {
+        "properties": {
+          "action": {
+            "description": "Action selects the computer-use step: screenshot, click, move, drag, scroll,\ntype, key, navigate, autofill, save_credential, wait, or shell.",
+            "type": "string"
+          },
+          "button": {
+            "description": "Button names the mouse button for click: left (default), right or middle.",
+            "type": "string"
+          },
+          "command": {
+            "description": "Command is the shell command line run in the sandbox terminal when Action is\nshell (up to 8000 characters).",
+            "type": "string"
+          },
+          "credential": {
+            "description": "Credential selects the Unified Vault login or secret by id, name, envVar, or\ndomain (e.g. \"github.com\") when Action is autofill, or provides an optional\ndisplay name override when Action is save_credential. Secret values never\ntravel in ComputerIn; autofill unseals from KMS and save_credential reads and\nunlinks /dev/shm/.hanzo-credential.json inside the sandbox and seals directly\ninto KMS.",
+            "type": "string"
+          },
+          "double": {
+            "description": "Double sends a double-click instead of a single click when Action is click.",
+            "type": "boolean"
+          },
+          "dy": {
+            "description": "DY is the scroll delta in notches (-50..50, non-zero): positive scrolls down,\nnegative scrolls up.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "field": {
+            "description": "Field selects which part of Credential to type when Action is autofill:\nlogin (default: username, Tab, password), login_totp (username, Tab, password,\nTab, 6-digit TOTP), username, password, totp, or secret.",
+            "type": "string"
+          },
+          "id": {
+            "description": "ID is the sandbox to act on, from an earlier lease. When omitted inside an\nagent run, the agent runtime fills in the bot's own desktop computer.",
+            "type": "string"
+          },
+          "keys": {
+            "description": "Keys is one to ten space- or comma-separated key chords as xdotool names them\n(Return, Tab, Escape, ctrl+l, alt+Left, ctrl+shift+t) when Action is key.",
+            "type": "string"
+          },
+          "seconds": {
+            "description": "Seconds is how long to wait (0..10) for the screen to settle when Action is\nwait.",
+            "format": "double",
+            "type": "number"
+          },
+          "submit": {
+            "description": "Submit presses Return after autofilling the credential when Action is autofill.",
+            "type": "boolean"
+          },
+          "text": {
+            "description": "Text is the literal string typed into whichever window has keyboard focus\nwhen Action is type (up to 4000 characters).",
+            "type": "string"
+          },
+          "toX": {
+            "description": "ToX is the destination horizontal pixel coordinate on the screen (0..20000)\nwhen Action is drag.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "toY": {
+            "description": "ToY is the destination vertical pixel coordinate on the screen (0..20000)\nwhen Action is drag.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "url": {
+            "description": "URL is the http or https address opened in the desktop browser when Action is\nnavigate.",
+            "type": "string"
+          },
+          "x": {
+            "description": "X is the horizontal pixel coordinate on the screen (0..20000), used by click,\nmove, drag and scroll.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "y": {
+            "description": "Y is the vertical pixel coordinate on the screen (0..20000), used by click,\nmove, drag and scroll.",
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "sandbox.ComputerOut": {
+        "properties": {
+          "image": {
+            "description": "Image holds the captured screen as a data:image/jpeg;base64,... URL when\nAction was screenshot and succeeded; empty otherwise.",
+            "type": "string"
+          },
+          "ok": {
+            "description": "OK reports whether the GUI or shell action succeeded.",
+            "type": "boolean"
+          },
+          "text": {
+            "description": "Text describes what happened or carries the shell command's exit code and\noutput.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "sandbox.EndIn": {
+        "properties": {
+          "id": {
+            "description": "ID is the sandbox whose lease ends, from an earlier lease.",
+            "type": "string"
+          },
+          "purge": {
+            "description": "Purge deletes the project's DISK as well. It is opt-in because the disk holds\nthe only copy of the checkout: ending a lease is cheap and reversible,\ndeleting someone's uncommitted work is neither.",
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
+      "sandbox.ExecResult": {
+        "properties": {
+          "exitCode": {
+            "description": "ExitCode is the command's own exit status. A non-zero one is a SUCCESSFUL\ncall carrying a failed command — the HTTP status stays 200, because \"the\ncommand failed\" and \"the call failed\" are different facts and a caller has\nto be able to tell them apart.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "stderr": {
+            "description": "Stderr is everything it wrote to standard error. It is populated on a\nsuccessful run too — plenty of tools report progress there — so it is not a\nsignal that anything went wrong; ExitCode is.",
+            "type": "string"
+          },
+          "stdout": {
+            "description": "Stdout is everything the command wrote to standard output, as text.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "sandbox.Execution": {
+        "properties": {
+          "account": {
+            "description": "Account is the provider account id when Via is \"key\".",
+            "type": "string"
+          },
+          "desktop": {
+            "description": "Desktop is the linked source id (src_...) when Via is \"desktop\".",
+            "type": "string"
+          },
+          "instance": {
+            "description": "Instance is the login instance id on Desktop (for example \"claude-1\") when Via\nis \"desktop\". Optional when Provider already names the instance id.",
+            "type": "string"
+          },
+          "provider": {
+            "description": "Provider is the provider catalog name (for example \"claude\") or login instance\nid when Via is \"desktop\".",
+            "type": "string"
+          },
+          "via": {
+            "description": "Via selects the route: \"cell\" (default, cloud cell on Zen), \"key\" (cloud cell\nbacked by a sealed provider account key) or \"desktop\" (the caller's linked\ndesktop resolved by source dispatch).",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "sandbox.LeaseIn": {
+        "properties": {
+          "bearer": {
+            "description": "Bearer is the person's OWN token, relayed by the sibling that received it, so\nthe sandbox signs in as them: it is exchanged for a token of the same subject\nthat lives no longer than the lease, exactly as the token on POST\n/v1/sandboxes is. Empty leases a sandbox that holds no identity.\n\nSet it ONLY from a token cloud already validated on this person's own call:\ncloud.CallerBearer on an HTTP request, or the verified cap of a ZAP stream.\nNever a credential of ours and never an API key. IAM mints only for the\nsubject the token names, so whoever relays it lands that person and nobody\nelse; the sandbox signs a pod in only for the caller who leased it.\n\nIt is on the wire because the plane carries this struct between processes,\nthe way TokenIn carries a bearer. It is never logged, never stored on the\nsandbox row, and never echoed back: Leased has no field for it.",
+            "type": "string"
+          },
+          "class": {
+            "description": "Class is what KIND of computer to lease, and the set is closed:\n\n\texec     a throwaway one that keeps nothing. Seconds to minutes.\n\tdev      a coding one, with the project's own disk attached. Hours.\n\tdesktop  a dev one that also has a screen.\n\tbrowser  a desktop with Chromium open full screen, for a page to watch or drive.\n\tandroid  a desktop with a phone running on that screen.\n\nEmpty leases an `exec`, which is the right answer for running a program and\nthe wrong one for working on a repository, because it keeps nothing.\n\nAn `android` needs a node that can virtualise a CPU, so it is the one class\na deployment may not be able to place. Where the fleet has none, the lease\nsucceeds and the pod stays Pending naming the device it is waiting for —\nwhich is the honest answer, because the alternative is an emulator running\non an interpreted CPU and never finishing its boot.",
+            "type": "string"
+          },
+          "cluster": {
+            "description": "Cluster names one of the org's ATTACHED clusters to run the lease on —\nthe fleet-local name a BYO cluster was registered under. Empty runs where\nleases have always run, the home cluster. The named cluster must carry\nthe sandbox namespace and the gvisor runtime class; a name the org has\nnot attached is refused 404.",
+            "type": "string"
+          },
+          "disk": {
+            "description": "Disk gives a sandbox with no Project a disk of its OWN, so what it writes\nsurvives a park: small — the size its working directory always had — billed\nas storage for as long as it exists, and deleted with the lease. Without it a\nproject-less sandbox keeps its files in the pod and loses them with it. A\nproject sandbox has the project's disk and ignores this.",
+            "type": "boolean"
+          },
+          "id": {
+            "description": "ID names a sandbox to RESUME, and is the id an earlier lease answered with.\nEmpty asks for a new one. A caller that holds an id and omits it does not get\na second view of the same computer, it gets a second computer.",
+            "type": "string"
+          },
+          "project": {
+            "description": "Project names the disk to attach, and is REQUIRED for every class but `exec`.\n\nOne live sandbox per project: the disk attaches to one computer at a time, so\na second lease over a project that already has one is refused by name rather\nthan handed a silently empty disk.",
+            "type": "string"
+          },
+          "runtime": {
+            "description": "Runtime is the isolation boundary asked for: `gvisor` shares a filesystem\nand holds a project volume, `kata-fc` is a microVM that boots slower and\nreads files faster but has no shared filesystem at all. Empty asks for the\nfleet's default, which is the right answer unless you are measuring.\n\nIt is a REQUEST. The owner decides, and refuses a combination it cannot\nhonour — a volume under a runtime with no shared filesystem would write\ninto a tmpfs and lose the bytes at exit. Read Leased.Runtime for what the\nsandbox actually got.",
+            "type": "string"
+          },
+          "ttlSec": {
+            "description": "TTLSec bounds the lease in seconds. Unset takes the class default. Nothing\nruns forever, because a sandbox is somebody else's code on our nodes.",
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "sandbox.Leased": {
+        "properties": {
+          "carried": {
+            "description": "Carried says the lease is extended for as long as it works and its wallet\npays for the next hour. A lease that is not carried ends at ExpiresAt\nwhatever it is doing: a free one.",
+            "type": "boolean"
+          },
+          "class": {
+            "description": "Class is what was actually leased, from the closed set LeaseIn.Class names:\nexec | dev | desktop | browser | android. A request that named none leased an `exec`,\nso this is where a caller learns which kind of computer it is holding, and it\nis what Workdir below follows from.",
+            "type": "string"
+          },
+          "cluster": {
+            "description": "Cluster is the attached cluster this sandbox runs on, when one was named.\nEmpty is the home cluster.",
+            "type": "string"
+          },
+          "endsAt": {
+            "description": "EndsAt is when the sandbox is ended whatever it is doing and however it is paid, Unix\nseconds: the longest a sandbox may live (a day by default), counted from when it was\ncreated and not from this lease, so a resumed sandbox has less than a fresh one. A caller\nthat works in it past this loses the work in it. Absent for a sandbox with no such\nceiling (a desktop).",
+            "format": "int64",
+            "type": "integer"
+          },
+          "expiresAt": {
+            "description": "ExpiresAt is when the lease ends, Unix seconds. A resumed sandbox keeps the\nexpiry it had, so this is not always a fresh lease's.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "id": {
+            "description": "ID names this computer for every later call — run, read, write, stop and end\nall take it, and a LeaseIn carrying it resumes THIS sandbox instead of leasing\na second one. Minted here; a caller cannot choose it, and a resumed lease that\nhad expired comes back under a new one.",
+            "type": "string"
+          },
+          "runtime": {
+            "description": "Runtime is the boundary this sandbox GOT, which need not be the one asked\nfor — carried for the same reason Workdir is, that it is a fact only the\nowner knows and a caller assuming it would be holding a second copy. Empty\nis the node's default runtime, and a real answer.",
+            "type": "string"
+          },
+          "status": {
+            "description": "Status is where the pod stands, from the store's three: pending | running |\nerror. A lease that ANSWERS has already waited for the pod, so this reads\n`running` — a start that failed is a 503 and no sandbox at all. Read it\nanyway: exec refuses a sandbox that is not running, so anything else here is\nthe reason the next call will not work.",
+            "type": "string"
+          },
+          "workdir": {
+            "description": "Workdir is the absolute directory this sandbox keeps files in, and what a\nrelative path in a later read, write or run resolves against — /work for dev,\ndesktop and android (the project volume's mount point), /mnt/data for exec\n(the artifact directory the code tool tells the model to write to). A path\nthat climbs above it is refused rather than rewritten.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "sandbox.PathIn": {
+        "properties": {
+          "id": {
+            "description": "ID is the sandbox to read from, from an earlier lease.",
+            "type": "string"
+          },
+          "path": {
+            "description": "Path is read relative to the sandbox's working directory unless it is\nabsolute, and a path that climbs out of it is refused rather than rewritten.\nEmpty names the working directory itself, which lists it.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "sandbox.Port": {
+        "properties": {
+          "host": {
+            "description": "Host is the preview host that serves it, the same for as long as the\nsandbox lives, parked or running.",
+            "type": "string"
+          },
+          "port": {
+            "description": "Port is the TCP port.",
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "sandbox.Ports": {
+        "properties": {
+          "ports": {
+            "description": "Ports are the listening ports, ascending. Never null.",
+            "items": {
+              "$ref": "#/components/schemas/sandbox.Port"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "sandbox.Quota": {
+        "properties": {
+          "account": {
+            "description": "Account is the account the quota belongs to: the org, or a person in the\nsignup org.",
+            "type": "string"
+          },
+          "quota": {
+            "description": "Quota is how many it may hold at once; -1 for no bound.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "running": {
+            "description": "Running is how many of its paid sandboxes hold a pod now.",
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "sandbox.Ran": {
+        "properties": {
+          "exitCode": {
+            "description": "ExitCode is the PROGRAM's own status — 0 succeeded, anything else is what it\nreturned, and a Command runs under `sh -c` so its shell's conventions apply.\nA command that never reached an exit does not arrive here at all: a timeout\nor a stop cancels the channel, and that is an error on the call rather than a\ncode of ours invented to fill this field.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "stderr": {
+            "description": "Stderr is standard error, kept apart from Stdout so a caller reading a\nprogram's OUTPUT is not reading its diagnostics as data. Same 1 MiB cap, same\nredaction. A program that failed usually says why here and nowhere else.",
+            "type": "string"
+          },
+          "stdout": {
+            "description": "Stdout is what the program wrote to standard output, collected whole rather\nthan streamed — to watch it arrive instead, name a RunIn.Session and read that\nsession's feed. Capped at 1 MiB, past which it ends in \"[truncated at 1MiB]\".\nEvery string named in RunIn.Blind is replaced by \"[redacted]\" before it gets\nhere, and before it reaches the session.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "sandbox.RunIn": {
+        "properties": {
+          "argv": {
+            "description": "Argv is the program and its arguments, already split — the form no shell can\nmisread. Give this or Command, not both.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "blind": {
+            "description": "Blind is the set of secrets this command must never publish.\n\nIt exists because output is redacted where it is PRODUCED or not at all. A\ncaller that scrubbed the returned result would still have streamed the\nunredacted bytes into the session as they were written — to a durable event\nstore, an SSE feed and a chat thread — because the narration leaves the\nsandbox by a different path from the result. Nothing downstream can take a\nsecret back out of a message that has already been delivered.\n\nThe sandbox holds these only for the life of the one command, applies them\nto every stream leaving it, and never logs or stores them.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "command": {
+            "description": "Command is a shell line, run by `sh -c`. Use it when a pipeline or a\nredirection is the point, and Argv when it is not.",
+            "type": "string"
+          },
+          "dir": {
+            "description": "Dir runs the command somewhere other than the sandbox's working directory,\nwhich Leased.Workdir names.",
+            "type": "string"
+          },
+          "events": {
+            "description": "Events says the command writes JSON lines to stdout, one event each, as an\nagent harness's --json does: each is appended to Session as one `event`, in\nthe shape the command wrote it, and stderr is narrated as output.",
+            "type": "boolean"
+          },
+          "id": {
+            "description": "ID is the sandbox to run in, from an earlier lease.",
+            "type": "string"
+          },
+          "session": {
+            "description": "Session is the live agent session this command narrates into: its output is\nappended there AS IT IS PRODUCED, so every surface watching that session\nwatches the command work instead of a blank pause. A long run is otherwise a\nsilence with a verdict at the end.\n\nIt names a SESSION and never a tenant. The org is the one the caller already\nproved, so a session belonging to somebody else is simply absent from the org\nthis call acts for and the append is refused there. Empty means nothing is\nwatching, and then nothing is sent.",
+            "type": "string"
+          },
+          "stdin": {
+            "description": "Stdin is fed to the program on standard input. This is how bytes reach a file\nwithout being quoted into a shell line: `cat \u003e path` with the contents here\nwrites them exactly.",
+            "type": "string"
+          },
+          "timeoutSec": {
+            "description": "TimeoutSec bounds this ONE command, so a wedged program holds the caller for\nits own timeout rather than for the whole lease.",
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "sandbox.Sandbox": {
+        "properties": {
+          "actor": {
+            "description": "Actor is the subject who LEASED this sandbox — the validated caller of the\nact that took the lease, never a value a request supplied. A sandbox is its\nlessee's: it holds their session, and a coding run's holds a write key to a\nrepository and the codebase's secrets. So the org gates which store a row is\nin, and this gates who in the org may act on it (holder.holds): the lessee,\nor an admin of the org, or a SuperAdmin. Empty is a lease taken by the org's\nown background work, which no person holds.",
+            "type": "string"
+          },
+          "class": {
+            "description": "Class is what the sandbox is FOR, and it decides the image, the working\ndirectory and the isolation: \"exec\" for a code-interpreter call (workdir\n/mnt/data, no project, bounded per org), \"dev\" for a workspace bound to a\nproject (workdir /work, single-attach), \"desktop\" for one with a screen.",
+            "type": "string"
+          },
+          "cluster": {
+            "description": "Cluster is the attached cluster this sandbox runs on — the fleet-local\nname the lease named — or empty for the home cluster. Immutable for the\nlife of the lease, like the pod it locates: every later call into the\nsandbox reads it to reach the right apiserver.",
+            "type": "string"
+          },
+          "connectedAt": {
+            "description": "ConnectedAt is when somebody was last known to have this sandbox's project\nOPEN, Unix seconds. It is a fact with an EXPIRY rather than a flag: a\nwatcher restamps it every beat of its stream, and it goes stale on its own\nwhen the stream dies, so nothing has to be turned off by a process that may\nnot be there any more. The reaper reads it to choose WHICH idle allowance\napplies — see lifecycle.go.\n\nZero means nobody has said so, which puts the sandbox on the short clock.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "createdAt": {
+            "description": "CreatedAt is when the lease was taken, Unix seconds — by the lease that made\nthe sandbox, and again by each resume, which gives a parked sandbox a new pod\non a new lease. The ceiling on a sandbox's life runs from it.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "error": {
+            "description": "Error is why the sandbox could not come up, in plain words. Present only\nwith status \"error\", and it is the field to read rather than inferring a\ncause from the absence of a pod.",
+            "type": "string"
+          },
+          "expiresAt": {
+            "description": "ExpiresAt is when the lease ends, Unix seconds. Past it the reaper may take\nthe sandbox at any time; it is a deadline, not a guarantee of survival until\nthen, since an idle sandbox goes sooner.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "id": {
+            "description": "ID is the sandbox's server-minted handle and what every operation addresses\nit by. The caller does not choose it.",
+            "type": "string"
+          },
+          "image": {
+            "description": "Image is the container image this sandbox is actually running — the one the\nclass chose, or an override the policy admitted. It is what ran, not what\nwas asked for.",
+            "type": "string"
+          },
+          "kind": {
+            "description": "Kind is the resource family this row belongs to. Always \"sandbox\" here; it\nexists because the store this shares is keyed across kinds.",
+            "type": "string"
+          },
+          "lastUsedAt": {
+            "description": "LastUsedAt is when the sandbox last did work, Unix seconds. The reaper reads\nit: a sandbox idle past the idle window is reclaimed even inside its TTL,\nbecause an idle lease is capacity nobody is using.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "org": {
+            "description": "Org is the org that holds the lease — the validated caller's, never a value\na request supplied. It is also the store's key, so a sandbox is not merely\nfiltered out of another org's answers; it is unreachable from them.",
+            "type": "string"
+          },
+          "project": {
+            "description": "Project is the project this sandbox is bound to. A dev or desktop sandbox\nhas one and is SINGLE-ATTACH under it, so asking twice resumes rather than\nleasing a second; an exec sandbox has none.",
+            "type": "string"
+          },
+          "runtime": {
+            "description": "Runtime is the isolation boundary this sandbox GOT, which is not always the\none it asked for: a caller states a preference and runtimeFor answers with\nwhat the sandbox can actually have. Reported so a person comparing two\nruntimes is comparing the runtimes they got rather than the ones they typed\n— the difference between those two is the whole reason to record it.\n\nEmpty means the node's default runtime, which is a real answer and not a\nmissing one.\n\nThis is not a copy that can go stale. runtimeClassName is IMMUTABLE on a\npod, a sandbox's pod is created once and never recreated (restartPolicy\nNever, no pool), and its name is never reused — so for as long as the pod\nthis row names exists, it is running this runtime. The alternative, asking\nthe apiserver on every read, buys nothing and costs a round trip per row.",
+            "type": "string"
+          },
+          "status": {
+            "description": "Status is where the sandbox is in its life: \"pending\" while the pod is\ncoming up, \"running\" once it can take work, \"error\" when it cannot, and\n\"parked\" when its pod is stopped and its disk kept, until a resume. Only a\nrunning sandbox takes an exec or mints an interactive ticket.",
+            "type": "string"
+          },
+          "volume": {
+            "description": "Volume is the persistent volume attached to the sandbox, when it has one. A\nproject sandbox keeps its work across leases through the project's disk; a\nsandbox with no project has one only if its lease asked for a disk of its\nown, which keeps its files across a park and is deleted with the lease.\nWithout either, everything is lost with the pod.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "sandbox.Session": {
+        "properties": {
+          "execution": {
+            "$ref": "#/components/schemas/sandbox.Execution",
+            "description": "Execution is the resolved execution route when the caller requested one."
+          },
+          "expires": {
+            "description": "Expires is when Lease lapses by itself, RFC 3339 UTC. Set when Lease is set.",
+            "type": "string"
+          },
+          "id": {
+            "description": "ID is the sandbox id (or linked source id when Execution.Via is \"desktop\"); it\nkeys the thread list and local caches, and names the session in later calls.",
+            "type": "string"
+          },
+          "label": {
+            "description": "Label is shown beside the thread list.",
+            "type": "string"
+          },
+          "lease": {
+            "description": "Lease is the dispatch hold on the linked desktop's login instance when\nExecution.Via is \"desktop\". Release it when the run ends.",
+            "type": "string"
+          },
+          "sandbox": {
+            "description": "Sandbox is the sandbox backing the terminal and browser dock. It equals ID for\na sandbox session and is absent for a wasm or linked-desktop session that holds\nno cloud cell.",
+            "type": "string"
+          },
+          "zap": {
+            "description": "Zap is the https endpoint that accepts WebTransport sessions for this cell or\nlinked desktop. A session is one bidirectional stream of ZAP envelopes,\nauthenticated by the caller's IAM bearer as the first envelope's cap.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "sandbox.StopIn": {
+        "properties": {
+          "id": {
+            "description": "ID is the sandbox to interrupt, from an earlier lease. Every command running\nin it stops; the lease itself survives, so the checkout and the half-written\nfiles are still there to read. Use EndIn to give the computer back.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "sandbox.Stopped": {
+        "properties": {
+          "stopped": {
+            "description": "Stopped counts the commands that were still running and were interrupted.\nZero says the sandbox was idle, not that the stop failed — see above.",
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "sandbox.WriteIn": {
+        "properties": {
+          "data": {
+            "contentEncoding": "base64",
+            "description": "Data is the file's bytes, and replaces whatever was there.",
+            "type": "string"
+          },
+          "id": {
+            "description": "ID is the sandbox to write into, from an earlier lease.",
+            "type": "string"
+          },
+          "path": {
+            "description": "Path is confined the same way PathIn.Path is. Missing parent directories are\ncreated.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "sandbox.Wrote": {
+        "properties": {
+          "bytes": {
+            "description": "Bytes is how many bytes the file now holds. A write REPLACES the file, so this\nis its whole length and not an amount appended, and 0 is a legitimate answer:\na WriteIn with no Data truncates the file to nothing.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "path": {
+            "description": "Path is where the bytes actually landed: the caller's path resolved against\nthe sandbox's working directory (Leased.Workdir), which is what a later read\nor a shell line inside the sandbox has to name.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "sandbox.execRequest": {
+        "properties": {
+          "argv": {
+            "description": "Argv is the command as an argument vector, which is the honest form: it\ncannot be word-split by accident. Send this OR Command, not both.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "command": {
+            "description": "Command is a shell line, for a caller that holds one. It is a convenience\nover Argv and is the only input that ever reaches a shell.",
+            "type": "string"
+          },
+          "dir": {
+            "description": "Dir is the working directory to run in. Empty runs in the class's own\nworkdir — /mnt/data for exec, /work for dev.",
+            "type": "string"
+          },
+          "id": {
+            "description": "ID is the sandbox to run in, from the path.",
+            "type": "string"
+          },
+          "stdin": {
+            "description": "Stdin is fed to the command on its standard input.",
+            "type": "string"
+          },
+          "timeoutSec": {
+            "description": "TimeoutSec bounds the run in seconds. Zero takes the default.",
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "sandbox.healthOut": {
+        "properties": {
+          "status": {
+            "description": "Status is \"ok\".",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "sandbox.previewGrant": {
+        "properties": {
+          "expiresIn": {
+            "description": "ExpiresIn is how long the ticket in URL is good for, in seconds.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "host": {
+            "description": "Host is the preview's origin host, the same for every ticket for this port\nof this sandbox, before and after the sandbox is parked and resumed.",
+            "type": "string"
+          },
+          "port": {
+            "description": "Port is the port the preview serves.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "url": {
+            "description": "URL opens the preview: its own origin, with a single-use ticket that sets\nthe preview's cookie and redirects to its root. Open it in a frame or a tab\nwithin ExpiresIn seconds, and mint another to reopen.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "sandbox.previewIn": {
+        "properties": {
+          "id": {
+            "description": "ID is the sandbox, from the path.",
+            "type": "string"
+          },
+          "port": {
+            "description": "Port is the TCP port inside the sandbox to open, 1 to 65535. Whatever\nlistens on it on localhost is what the address serves.",
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "sandbox.sandboxIn": {
+        "properties": {
+          "class": {
+            "description": "Class is what the sandbox is FOR: \"exec\" for a code-interpreter call,\n\"dev\" for a workspace bound to a project, \"desktop\" for one with a screen.\nIt decides the image, the working directory and the isolation.",
+            "type": "string"
+          },
+          "cluster": {
+            "description": "Cluster names one of the org's attached clusters to run the sandbox on —\nthe fleet-local name it was registered under. Empty runs on the home\ncluster. The named cluster must carry the sandbox namespace and the\nvisor runtime class; a name the org has not attached is 404.",
+            "type": "string"
+          },
+          "image": {
+            "description": "Image overrides the image the class would pick. Honoured only for a caller\nthe policy admits, and the sandbox that comes back names the image it GOT.",
+            "type": "string"
+          },
+          "project": {
+            "description": "Project binds the sandbox to one of the org's projects. Required for a dev\nor desktop class, which are single-attach per project; an exec sandbox\ncarries none.",
+            "type": "string"
+          },
+          "runtime": {
+            "description": "Runtime asks for an isolation: runc, visor, kata-clh or kata-fc. It is a\nREQUEST, not a guarantee — the sandbox that comes back carries the runtime\nit was actually given, which is the field to read.",
+            "type": "string"
+          },
+          "ttlSec": {
+            "description": "TTLSec is how long the lease runs before the reaper may take it, in\nseconds. Zero takes the class's own default.",
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "sandbox.sandboxList": {
+        "properties": {
+          "sandboxes": {
+            "description": "Sandboxes are the sandboxes the caller holds that match the filter: the\nones they leased, or every one in the org for an admin of it. Never null.",
+            "items": {
+              "$ref": "#/components/schemas/sandbox.Sandbox"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "sandbox.sessionIn": {
+        "properties": {
+          "execution": {
+            "$ref": "#/components/schemas/sandbox.Execution",
+            "description": "Execution selects where the session runs and which credential backs its model\ncalls: {via:\"cell\"} (default), {via:\"key\", account:\"...\"} or\n{via:\"desktop\", desktop:\"src_...\", provider:\"...\", instance:\"...\"} (HIP-1350)."
+          },
+          "runtime": {
+            "description": "Runtime is who answers the session's frames: \"sandbox\" (the real Dev server in a\ncell), \"wasm\", \"source\" (a linked desktop via Execution) or \"auto\". Empty is\n\"sandbox\".",
+            "type": "string"
+          },
+          "thread": {
+            "description": "Thread keeps a separate cell for this thread. Empty is the caller's own cell.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "sandbox.ticketGrant": {
+        "properties": {
+          "expiresIn": {
+            "description": "ExpiresIn is how long the ticket is good for, in seconds.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "ticket": {
+            "description": "Ticket is the grant itself. It is single-purpose and short-lived, and it\ntravels in a query string because a WebSocket handshake carries no\nAuthorization header a browser can set.",
+            "type": "string"
+          },
+          "url": {
+            "description": "URL is the PATH to open, ticket included — not an absolute URL. Which host\nthis address wears in public is the edge's answer and not this process's, so\nan absolute URL would be a guess; the client already knows the host it is\ntalking to. It names the PAGE, which is what a caller embeds — the page\nfinds its own socket, and a caller that wants the raw socket adds `/ws`.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      }
+    },
+    "securitySchemes": {
+      "bearer": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "The caller's credential, sent as `Authorization: Bearer \u003ctoken\u003e`. It is either an access token minted by Hanzo IAM or an API key (pk-/sk-). X-Authorization, and HTTP Basic carrying the token as the password, are accepted spellings of the same header for clients that cannot set Authorization; a browser presents the session cookie instead. Every operation requires it unless it says `security: []`."
+      }
+    }
+  }
+}

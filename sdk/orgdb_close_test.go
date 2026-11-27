@@ -2,11 +2,13 @@ package cloud
 
 // orgdb_close_test.go — CloseAll is TERMINAL.
 //
-// Every caller of CloseAll is a Shutdown path, and a request still in flight
-// during a rollout reaches For() after it — so the store came back to life in a
-// process that is on its way out, re-hydrating and re-claiming the fence lease
-// the NEW pod is claiming at that moment. Two live writers for one org, from a
-// handle nobody thought was reachable.
+// The defect these hold shut is that CloseAll used to be a RESET rather than a
+// close: it closed every handle and then installed fresh empty maps, so the very
+// next For() opened the file again. Every caller of CloseAll is a Shutdown path,
+// and a request still in flight during a rollout reaches For() after it — so the
+// store came back to life in a process that is on its way out, re-hydrating and
+// re-claiming the fence lease the NEW pod is claiming at that moment. Two live
+// writers for one org, from a handle nobody thought was reachable.
 
 import (
 	"database/sql"
@@ -37,9 +39,9 @@ func TestOrgStoreCloseAllIsTerminal(t *testing.T) {
 		t.Fatalf("CloseAll: %v", err)
 	}
 
-	// A request that was in flight when Shutdown ran reaches For() here. It must be
-	// REFUSED. Re-opening resurrects the file — and on a durable deployment
-	// re-hydrates it and re-claims the lease the successor pod holds.
+	// THE DEFECT. A request that was in flight when Shutdown ran reaches For()
+	// here. It must be REFUSED. Re-opening resurrects the file — and on a durable
+	// deployment re-hydrates it and re-claims the lease the successor pod holds.
 	if _, err := cache.For(ns); !errors.Is(err, ErrStoreClosed) {
 		t.Fatalf("For after CloseAll must refuse with ErrStoreClosed, got err=%v", err)
 	}

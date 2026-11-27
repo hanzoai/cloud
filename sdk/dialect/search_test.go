@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/hanzoai/cloud/internal/sqltest"
 	"github.com/hanzoai/cloud/sdk/dialect"
-	"github.com/hanzoai/cloud/sdk/sqltest"
 )
 
 // notes is a table with rows in it before it has an index, which is how a file that

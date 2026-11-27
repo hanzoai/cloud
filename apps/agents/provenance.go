@@ -1,0 +1,473 @@
+package agents
+
+// provenance.go makes a build READABLE: the agent session that produced a
+// project, published so a visitor can follow how template X became product Y —
+// the prompt, the reasoning, the diffs, the deploy — and fork from any turn.
+//
+// THE ONE STORE. A build story is not a new subsystem: a session already IS an
+// ordered log of turns (sessions_store.go), so "the build of project P" is just
+// the sessions tagged Project=P. Two columns carry the whole feature —
+// `project` (which product this session built) and `published` (its author's
+// decision to show the world) — and nothing else about a session changes.
+//
+// THE BINDING LIVES IN GIT. A turn is tied to the commit it produced by a
+// `Hanzo-Session:`/`Hanzo-Turn:` trailer ON THAT COMMIT (new work), or by a note
+// under refs/notes/hanzo-provenance carrying the same two lines (history that
+// already exists and must not be rewritten). Git is the authority; this package
+// only ever PARSES it (ParseLinks). There is deliberately no commit⇄turn table:
+// a table is a second copy of a fact git already holds, and a second copy is a
+// thing that can disagree with the commits it claims to describe. Anyone can
+// re-derive every link this API returns with one `git log` — see ProvenanceLogFormat.
+//
+// SECRETS NEVER ENTER. Every event body is scanned by the same engine the code
+// -security surface uses (clients/security/detect — the in-binary port of
+// hanzoai/guard's redaction concept) BEFORE it is stored, and a hit is REFUSED
+// with 422 naming the rule, the line and a masked preview. Loudly, not silently:
+// a redacted transcript hides that a secret was pasted at all, and the secret is
+// still live in the log the agent read from. Secrets live in KMS and are
+// referenced BY NAME, so a truthful transcript has nothing to redact.
+
+import (
+	"context"
+	"encoding/json"
+	"net/http"
+	"strconv"
+	"strings"
+	"time"
+
+	"github.com/hanzoai/cloud/sdk/text"
+
+	"github.com/hanzoai/cloud/apps/projects"
+	"github.com/hanzoai/cloud/apps/security/detect"
+	"github.com/hanzoai/cloud/sdk"
+	"github.com/hanzoai/cloud/sdk/mint"
+	"github.com/zap-proto/zip"
+)
+
+// Trailer keys. The SAME two keys are read from a commit message trailer and
+// from a refs/notes/hanzo-provenance note body — a note is just trailer lines
+// attached out-of-band — so one parser covers both and there is exactly one
+// spelling of the binding anywhere in the system.
+const (
+	TrailerSession = "Hanzo-Session"
+	TrailerTurn    = "Hanzo-Turn"
+
+	// NotesRef is where a link is recorded for a commit that already exists.
+	// Rewriting history to add a trailer would change every downstream sha and
+	// break every URL already pointing at it; a note attaches the same fact
+	// without touching the commit.
+	NotesRef = "refs/notes/hanzo-provenance"
+
+	// ProvenanceLogFormat is the EXACT `git log --format=` a client uses to emit
+	// what ParseLinks reads. Published as a constant so the producer (the CLI
+	// that ingests a transcript) and the verifier (anyone auditing our claims)
+	// run the same command, and so the parser can never quietly drift from the
+	// format it parses. Records are NUL-separated; within a record the first line
+	// is the sha and the rest is the message body plus any note.
+	ProvenanceLogFormat = "%x00%H%n%B%n%N"
+)
+
+// Link is one commit⇄turn binding as GIT states it. It is derived, never
+// stored: ParseLinks is a pure function of `git log` output.
+type Link struct {
+	Commit  string `json:"commit"`
+	Session string `json:"session"`
+	Turn    int64  `json:"turn"`
+}
+
+// ParseLinks reads `git log --format=ProvenanceLogFormat` output and returns one
+// Link per commit that carries BOTH keys. A commit with neither (ordinary work),
+// with only one (a half-written trailer), or with an unparseable turn is skipped
+// — a link asserts a specific turn produced a specific commit, and a partial
+// record cannot assert that. Pure: no exec, no I/O, safe to call concurrently.
+func ParseLinks(gitLog string) []Link {
+	var out []Link
+	for rec := range strings.SplitSeq(gitLog, "\x00") {
+		rec = strings.TrimLeft(rec, "\r\n")
+		if rec == "" {
+			continue
+		}
+		sha, body := rec, ""
+		if head, rest, split := strings.Cut(rec, "\n"); split {
+			sha, body = head, rest
+		}
+		sha = strings.TrimSpace(sha)
+		if !isHex(sha) {
+			continue
+		}
+		sess, turn, ok := scanTrailers(body)
+		if !ok {
+			continue
+		}
+		out = append(out, Link{Commit: sha, Session: sess, Turn: turn})
+	}
+	return out
+}
+
+// scanTrailers pulls the two keys out of a message body (or note body). The LAST
+// occurrence wins, matching git's own trailer semantics: an amended commit
+// appends the corrected trailer rather than editing the earlier line.
+func scanTrailers(body string) (session string, turn int64, ok bool) {
+	haveTurn := false
+	for line := range strings.SplitSeq(body, "\n") {
+		k, v, found := strings.Cut(strings.TrimSpace(line), ":")
+		if !found {
+			continue
+		}
+		v = strings.TrimSpace(v)
+		switch strings.TrimSpace(k) {
+		case TrailerSession:
+			if v != "" && len(v) <= maxSessionID {
+				session = v
+			}
+		case TrailerTurn:
+			n, err := strconv.ParseInt(v, 10, 64)
+			if err == nil && n > 0 {
+				turn, haveTurn = n, true
+			}
+		}
+	}
+	return session, turn, session != "" && haveTurn
+}
+
+func isHex(s string) bool {
+	if len(s) < 7 || len(s) > 64 {
+		return false
+	}
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		if (c < '0' || c > '9') && (c < 'a' || c > 'f') && (c < 'A' || c > 'F') {
+			return false
+		}
+	}
+	return true
+}
+
+// ---- the guard gate ----
+
+// maxProject bounds the project tag; it holds an org-scoped project slug, which
+// clients/projects caps well under this.
+const maxProject = 128
+
+// leakFinding is one refused secret, reported back to whoever tried to store it.
+// It carries WHERE and WHICH RULE and a masked preview — never the secret. The
+// fingerprint is the same SHA-256 the security findings store uses, so a caller
+// can confirm they rotated the right value without ever echoing it.
+type leakFinding struct {
+	Rule        string `json:"rule"`
+	Severity    string `json:"severity"`
+	Line        int    `json:"line"`
+	Preview     string `json:"preview"`
+	Fingerprint string `json:"fingerprint"`
+}
+
+// guardEvent scans an event body for credentials and returns what it found —
+// nil when the body is clean. Callers REFUSE on a non-nil result (422); nothing
+// here rewrites the payload.
+//
+// FAIL LOUDLY, DO NOT REDACT. Silent redaction stores a transcript that reads as
+// clean while the underlying secret is still live and still in whatever log the
+// agent copied it from; the author never learns to rotate it. A refusal is the
+// only outcome that reaches the human. Refusing also keeps the invariant that
+// makes publishing safe at all: a stored transcript has never held a secret, so
+// making one public later cannot leak one.
+func guardEvent(payload string) []leakFinding {
+	f := detect.ScanContent("transcript", payload)
+	if len(f) == 0 {
+		return nil
+	}
+	out := make([]leakFinding, 0, len(f))
+	for _, x := range f {
+		out = append(out, leakFinding{
+			Rule: x.RuleID, Severity: x.Severity, Line: x.Line,
+			Preview: x.Preview, Fingerprint: x.Fingerprint,
+		})
+	}
+	return out
+}
+
+// ---- the public read ----
+
+// buildTurn is one readable turn: what was said or done, and the commit that
+// turn produced (empty when the turn changed nothing). Commit is echoed from the
+// event body, which the ingesting client derived from git via ParseLinks; the
+// commit itself carries the trailer/note, so the claim is checkable at source.
+type buildTurn struct {
+	// Seq is this turn's POSITION in the session's log — monotonic from 1, per
+	// session — and it is what a commit's `Hanzo-Turn:` trailer names. It is not a
+	// count of anything: the count is `turns` on the summary beside it.
+	Seq int64 `json:"turn"`
+	// Kind is what the turn was, from the log's closed six: message, tool-call,
+	// spawn, log, status, control. A deploy arrives as a `status` turn.
+	Kind string `json:"kind"`
+	// Actor is who took the turn. A deploy turn's actor is the literal "deploy",
+	// because nobody took it.
+	Actor string `json:"actor,omitempty"`
+	// Body is the readable text of the turn, taken from the stored event's `text`.
+	// Empty when the event carried a payload of some other shape — this route reads
+	// transcripts and does not invent prose for turns that are not one.
+	Body string `json:"body"`
+	// Commit is the full sha this turn produced, empty when the turn changed
+	// nothing. It is ECHOED from the transcript, and the authority is the commit
+	// itself: it carries the `Hanzo-Session:`/`Hanzo-Turn:` trailer, or a note under
+	// refs/notes/hanzo-provenance saying the same, so the claim is checkable at
+	// source with the command in `verify`.
+	Commit string `json:"commit,omitempty"`
+	// Subject is that commit's subject line, from the same transcript, so a reader
+	// sees what the commit says without fetching the repository.
+	Subject string `json:"subject,omitempty"`
+	// At is when the turn was recorded, RFC 3339 in UTC to the second.
+	At string `json:"at"`
+}
+
+// buildView is the whole readable build of one project.
+type buildView struct {
+	// Org is the org that published this build, echoed from the URL. It is part of
+	// the build's public ADDRESS and not a tenant key — this route is anonymous, and
+	// the only rows it can reach are ones an author explicitly published.
+	Org string `json:"org"`
+	// Project is the product's slug, the other half of that address.
+	Project string `json:"project"`
+	// Session is the id of the agent session this story IS — the same value a
+	// produced commit carries in its `Hanzo-Session:` trailer, which is what ties
+	// the repository's history to this page.
+	Session string `json:"session"`
+	// Title is the human line the session was opened or renamed with. Empty when
+	// nobody gave it one.
+	Title string `json:"title,omitempty"`
+	// Agent is the label the surface that did the work calls itself by.
+	Agent string `json:"agent"`
+	// Status is the session's own: running, paused, done or error. A build can be
+	// read while it is still being written, so this is not always terminal — and an
+	// `error` build is still a readable story, not a missing page.
+	Status string `json:"status"`
+	// Repo is the repository the work was done in, as the session reported it.
+	Repo string `json:"repo,omitempty"`
+	// Model is the model that did the work, taken from the FIRST turn whose body
+	// names one — a transcript states it, this route does not resolve it. Empty when
+	// no turn said.
+	Model string `json:"model,omitempty"`
+	// StartedAt is when the session opened, RFC 3339 in UTC.
+	StartedAt string `json:"startedAt"`
+	// EndedAt is when it finished, same format. Empty means it has not — the build
+	// is still going.
+	EndedAt string `json:"endedAt,omitempty"`
+	// Turns is the whole transcript, oldest first, capped at 1000: a published build
+	// is a story to read down, not an archive to page.
+	Turns []buildTurn `json:"turns"`
+	// Verify is the exact command that re-derives every commit binding below
+	// straight from git, so nothing here has to be taken on trust.
+	Verify string `json:"verify"`
+}
+
+// buildEventBody is the shape a transcript turn is stored in. Body is the human
+// -readable text; Commit/Subject are the git facts the ingesting client read out
+// of the trailer or note. Unknown fields are ignored, so a richer producer is
+// forward-compatible with this reader.
+type buildEventBody struct {
+	Text    string `json:"text"`
+	Commit  string `json:"commit,omitempty"`
+	Subject string `json:"subject,omitempty"`
+	Model   string `json:"model,omitempty"`
+}
+
+// buildsCap bounds one build read. A published build is a story, not an archive.
+const buildsCap = 1000
+
+// buildRef addresses one published build by the (org, project) pair in the URL.
+//
+// THIS IS NOT A TENANT KEY, and it is the one route in this package where an org
+// arrives as an In field. The route is PUBLIC by construction: the only rows it
+// can reach are ones an author explicitly published, so the org here is part of
+// the build's public ADDRESS (the same pair a visitor reads in the URL bar), not
+// an assertion of who is asking. Every org-scoped read in this package takes its
+// tenant from principal.OrgFrom instead, because a tenant key read off the wire
+// is a cross-tenant read the caller asserted for itself.
+type buildRef struct {
+	// Org is the org that published the build, from the path.
+	Org string `json:"org"`
+	// Project is the product's slug, from the path.
+	Project string `json:"project"`
+}
+
+// ReadBuild returns the readable build of one product: the agent session that
+// produced it, turn by turn — the prompts, the reasoning, the commits each turn
+// produced — plus the exact `git log` that re-derives every commit binding from
+// git itself, so nothing here has to be taken on trust.
+//
+// PUBLIC, no tenancy: it answers only for a session its author explicitly
+// published, which is what makes it safe to be anonymous. An unpublished session
+// is invisible here no matter who asks; its owner reads it through the org-scoped
+// /v1/agent/sessions routes, which need a validated principal.
+//
+// Example: {"org": "hanzo", "project": "landing"}
+func (o sessionOps) build(ctx context.Context, in *buildRef) (*buildView, error) {
+	s := o.s
+	org := strings.TrimSpace(in.Org)
+	project := strings.TrimSpace(in.Project)
+	if org == "" || project == "" || len(project) > maxProject {
+		return nil, zip.ErrNotFound("build not found")
+	}
+	// PUBLIC: org comes off the wire, so this resolves the org's file only if it
+	// already exists — a stranger can read a published build, never mint a store.
+	sto, ok := s.State.storeForPublic(org)
+	if !ok {
+		return nil, zip.ErrNotFound("no published build for " + org + "/" + project)
+	}
+	rows, err := sto.ListSessions(ctx, org,
+		SessionFilter{Project: project, Published: true, Limit: 1})
+	if err != nil {
+		return nil, zip.Errorf(http.StatusInternalServerError, "builds: %v", err)
+	}
+	if len(rows) == 0 {
+		return nil, zip.ErrNotFound("no published build for " + org + "/" + project)
+	}
+	x := rows[0]
+	evs, err := sto.ListEvents(ctx, org, x.ID, 0, buildsCap)
+	if err != nil {
+		return nil, zip.Errorf(http.StatusInternalServerError, "turns: %v", err)
+	}
+	v := buildView{
+		Org: org, Project: project, Session: x.ID, Title: x.Title, Agent: x.Agent,
+		Status: x.Status, Repo: x.Repo,
+		StartedAt: text.Unix(x.StartedAt), EndedAt: text.Unix(x.EndedAt),
+		Turns:  make([]buildTurn, 0, len(evs)),
+		Verify: "git log --format='" + ProvenanceLogFormat + "' --notes=" + NotesRef,
+	}
+	for _, e := range evs {
+		var b buildEventBody
+		if e.Payload != "" {
+			_ = json.Unmarshal([]byte(e.Payload), &b)
+		}
+		if v.Model == "" {
+			v.Model = b.Model
+		}
+		v.Turns = append(v.Turns, buildTurn{
+			Seq: e.Seq, Kind: e.Kind, Actor: e.Actor, Body: b.Text,
+			Commit: b.Commit, Subject: b.Subject, At: text.Unix(e.CreatedAt),
+		})
+	}
+	return &v, nil
+}
+
+// ---- the deploy, as the build's last turn ----
+
+// deployWriter fills the client clients/projects left open (projects/observer.go):
+// when a site goes live, the build session that produced it gets ONE more turn
+// saying so, with the URL. That is what closes the story a visitor reads —
+// prompt, reasoning, diffs, DEPLOY — and it is why the client exists: projects
+// still knows nothing about sessions, it only calls an interface.
+//
+// The write is best-effort and silent on failure. A deploy is the user's
+// outcome; it must never fail because its narration could not be recorded.
+type deployWriter struct{ s *cloud.Service[state] }
+
+// mountProvenance registers the deploy client. Called once from Mount; the wiring
+// lives HERE, next to the writer it installs, so the provenance lane is one file
+// you can read end to end and agents.go stays a router.
+func mountProvenance(s *cloud.Service[state]) { projects.SetDeployObserver(deployWriter{s: s}) }
+
+// OnDeploy appends the "site is live" turn to the newest PUBLISHED session tagged
+// with this project: the story its author opened to the world. A coding run is
+// tagged with the project it was started on too, and it is that person's run, so
+// the deploy line is never written into it. No published session ⇒ nothing to
+// narrate ⇒ no-op (a script-deployed site has no build story, and inventing one
+// would be a lie).
+func (w deployWriter) OnDeploy(ctx context.Context, org, slug, url, deploymentID string) {
+	if w.s == nil || org == "" || slug == "" {
+		return
+	}
+	sto, err := w.s.State.storeFor(org)
+	if err != nil {
+		return
+	}
+	rows, err := sto.ListSessions(ctx, org, SessionFilter{Project: slug, Published: true, Limit: 1})
+	if err != nil || len(rows) == 0 {
+		return
+	}
+	body, err := json.Marshal(buildEventBody{
+		Text: "Deployed. " + slug + " is live at " + url + " (deployment " + deploymentID + ").",
+	})
+	if err != nil {
+		return
+	}
+	id := mint.ID("evt")
+	e, err := sto.AppendEvent(ctx, Event{
+		ID: id, SessionID: rows[0].ID, Org: org, Kind: KindStatus, Actor: "deploy",
+		Payload: string(body), CreatedAt: time.Now().Unix(),
+	})
+	if err != nil {
+		return
+	}
+	publishEvent(w.s, rows[0], e)
+}
+
+// buildsQuery pages the public build index.
+type buildsQuery struct {
+	// Limit caps the page. Absent, zero or over 500 reads as 100.
+	Limit int `json:"limit"`
+}
+
+// buildSummary is one published build as the index lists it: enough to render a
+// gallery card and link to the full story. Every field is always present —
+// including the empty ones — because that is what this route has always sent.
+type buildSummary struct {
+	// Org and Project are the build's public ADDRESS — the pair the full story is
+	// read at, and the pair a visitor sees in the URL bar. Not a tenant key: this
+	// index is anonymous and lists only what authors published.
+	Org string `json:"org"`
+	// Project is the product's slug, the second half of that address.
+	Project string `json:"project"`
+	// Session is the agent session behind the build, and the value its commits name
+	// in their `Hanzo-Session:` trailer.
+	Session string `json:"session"`
+	// Title is the human line for the card. Sent even when empty, like every field
+	// here, because that is what this route has always sent.
+	Title string `json:"title"`
+	// Agent is the label the surface that did the work calls itself by.
+	Agent string `json:"agent"`
+	// Status is the session's own: running, paused, done or error — so a card can
+	// show a build still being written.
+	Status string `json:"status"`
+	// Repo is the repository the work was done in, as the session reported it.
+	Repo string `json:"repo"`
+	// Turns is HOW MANY turns the transcript holds — a COUNT, unlike the `turn` on
+	// each turn of the full story, which is that turn's position. The full read
+	// returns at most 1000 of them; this number is not capped.
+	Turns int `json:"turns"`
+	// StartedAt is when the session opened, RFC 3339 in UTC.
+	StartedAt string `json:"startedAt"`
+	// EndedAt is when it finished, same format. Empty means it is still going.
+	EndedAt string `json:"endedAt"`
+}
+
+// buildList is the public index of published builds.
+type buildList struct {
+	// Builds is every published build, most recently updated first.
+	Builds []buildSummary `json:"builds"`
+}
+
+// ListBuilds returns the public index of every published build, most recently
+// updated first, so a gallery can link straight to the story behind each product.
+// PUBLIC, no tenancy: publishing is the author's act, and only published root
+// sessions appear here.
+func (o sessionOps) builds(ctx context.Context, in *buildsQuery) (*buildList, error) {
+	s := o.s
+	rows, err := s.State.allPublishedBuilds(ctx, in.Limit)
+	if err != nil {
+		return nil, zip.Errorf(http.StatusInternalServerError, "builds: %v", err)
+	}
+	out := make([]buildSummary, 0, len(rows))
+	for _, b := range rows {
+		x := b.Session
+		// The store the build came from is the one holding its events; counting
+		// through it costs no second resolution and cannot reach another org's.
+		n, _ := b.Store.CountEvents(ctx, x.Org, x.ID)
+		out = append(out, buildSummary{
+			Org: x.Org, Project: x.Project, Session: x.ID, Title: x.Title,
+			Agent: x.Agent, Status: x.Status, Repo: x.Repo, Turns: n,
+			StartedAt: text.Unix(x.StartedAt), EndedAt: text.Unix(x.EndedAt),
+		})
+	}
+	return &buildList{Builds: out}, nil
+}

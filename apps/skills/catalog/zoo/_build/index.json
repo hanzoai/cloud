@@ -1,0 +1,32 @@
+{
+  "$schema": "https://schemas.agentskills.io/discovery/0.2.0/schema.json",
+  "base_url": "https://api.zoo.ngo",
+  "brand": "zoo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://zoolabs.id",
+  "mcp": {
+    "description": "Model Context Protocol over JSON-RPC 2.0 — one POST per message, stateless, protocol revision 2026-07-28. tools/list answers without a credential with one tool per subsystem (its operations in the \"op\" enum) plus \"describe\", which returns one operation's input schema. tools/call names a subsystem tool and carries {\"op\": <operation>, \"input\": <its arguments>}; it takes the same bearer the REST API does, and a call that carries none is answered 401 with a WWW-Authenticate header naming the resource metadata at /.well-known/oauth-protected-resource, which names the authorization server to sign in at. The tool surface is the public contract: the operator's admin product is not offered, and a name that would disclose a secret or mutate an identity is withheld — the list says how many, under _meta.",
+    "method": "POST",
+    "url": "https://api.zoo.ngo/v1/mcp"
+  },
+  "skill_count": 2,
+  "skills": [
+    {
+      "description": "Read build build: Answers one build: its status, and for a failed build the reason..",
+      "digest": "sha256:081215fea4323ce45fa79936d0cc8266d31bfc4aeff9dce57ed2b45267c9f244",
+      "name": "build_build",
+      "service": "build",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/build_build/SKILL.md"
+    },
+    {
+      "description": "Read build logs: Answers one build's BuildKit output: the log of each Job that ran it, every container in the order it ran them, so a failed step's real error is readable rather than cut off at the RUN line that failed..",
+      "digest": "sha256:c44142cd84c82e54abeb4a59086adf2a38f6947d709e049ae7d424b50a0ba7c6",
+      "name": "build_logs",
+      "service": "build",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/build_logs/SKILL.md"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

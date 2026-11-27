@@ -1,0 +1,48 @@
+{
+  "$schema": "https://schemas.agentskills.io/discovery/0.2.0/schema.json",
+  "base_url": "https://api.hanzo.ai",
+  "brand": "hanzo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://hanzo.id",
+  "mcp": {
+    "description": "Model Context Protocol over JSON-RPC 2.0 — one POST per message, stateless, protocol revision 2026-07-28. tools/list answers without a credential with one tool per subsystem (its operations in the \"op\" enum) plus \"describe\", which returns one operation's input schema. tools/call names a subsystem tool and carries {\"op\": <operation>, \"input\": <its arguments>}; it takes the same bearer the REST API does, and a call that carries none is answered 401 with a WWW-Authenticate header naming the resource metadata at /.well-known/oauth-protected-resource, which names the authorization server to sign in at. The tool surface is the public contract: the operator's admin product is not offered, and a name that would disclose a secret or mutate an identity is withheld — the list says how many, under _meta.",
+    "method": "POST",
+    "url": "https://api.hanzo.ai/v1/mcp"
+  },
+  "skill_count": 4,
+  "skills": [
+    {
+      "description": "Read tel calls: Lists the calls this org has placed or received, newest first..",
+      "digest": "sha256:af63d8d1464e42431afb6ba236c0be28c22e90586812d667a579cb883c76da55",
+      "name": "tel_calls",
+      "service": "tel",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/tel_calls/SKILL.md"
+    },
+    {
+      "description": "Read tel messages: Lists the messages this org has sent or received, newest first..",
+      "digest": "sha256:dc1bbe6117c999f854287d2472078dd15776678718c83a3f8aa7e7485a94d5ae",
+      "name": "tel_messages",
+      "service": "tel",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/tel_messages/SKILL.md"
+    },
+    {
+      "description": "Read tel numbers: Lists the phone numbers this org HOLDS — the ones it has bought and not released., Asks the carrier what is available to buy..",
+      "digest": "sha256:119a494514d46f142bc10088a45491895602af621ad6792a56a797374bd99dc1",
+      "name": "tel_numbers",
+      "service": "tel",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/tel_numbers/SKILL.md"
+    },
+    {
+      "description": "Read tel summary: Counts what this org holds on the telephony plane: its numbers, its calls and its messages..",
+      "digest": "sha256:657615a5b0dcc3d419e0451523a3ace21e797fc69a0b15fca7c4477d1f49c9fa",
+      "name": "tel_summary",
+      "service": "tel",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/tel_summary/SKILL.md"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

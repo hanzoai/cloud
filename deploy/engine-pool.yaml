@@ -1,0 +1,51 @@
+# Private native Rust inference pool behind cloud's authenticated, metered relay.
+# Spark serves via SGLang; EVO via llama.cpp. Placement remains Rust.
+# Deployment config maps their model IDs onto the shared zen-coder pool.
+# Weights are initial operator estimates, NOT benchmark results.
+max_inflight: 8
+models:
+  default:
+    - id: spark
+      url: http://spark.local:30000
+      max_context: 1000000
+      capacity: 4
+      weight: 300
+      roles: [main, implementation, reasoning]
+      upstream_model: RadixArk/Qwen3.8-27B-NVFP4-BF16-LMHead
+    - id: evo
+      url: http://evo.local:8080
+      max_context: 262144
+      capacity: 2
+      weight: 100
+      roles: [subagent, reviewer, explorer, background]
+      upstream_model: Qwen3.8-27B-Q6_K.gguf
+  zen6:
+    - id: spark
+      url: http://spark.local:30000
+      max_context: 1000000
+      capacity: 6
+      weight: 350
+      roles: [main, implementation, reasoning, architect]
+      upstream_model: RadixArk/Qwen3.8-27B-NVFP4-BF16-LMHead
+    - id: evo
+      url: http://evo.local:8080
+      max_context: 262144
+      capacity: 2
+      weight: 100
+      roles: [subagent, reviewer, explorer, background]
+      upstream_model: Qwen3.8-27B-Q6_K.gguf
+  zen-coder:
+    - id: spark
+      url: http://spark.local:30000
+      max_context: 1000000
+      capacity: 6
+      weight: 350
+      roles: [main, implementation, reasoning]
+      upstream_model: RadixArk/Qwen3.8-27B-NVFP4-BF16-LMHead
+    - id: evo
+      url: http://evo.local:8080
+      max_context: 262144
+      capacity: 2
+      weight: 100
+      roles: [subagent, reviewer, explorer, background]
+      upstream_model: Qwen3.8-27B-Q6_K.gguf

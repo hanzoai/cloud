@@ -1,0 +1,45 @@
+package host
+
+import "sync/atomic"
+
+// Platform switches, read from the edge.
+//
+// clients/flags owns evaluation and imports THIS package (cloud.Deps, Handle,
+// OrgStore, …). serve.go mounts the edge middleware and therefore imports
+// routers. So the root package can never import flags, and without a client no
+// filter mounted from serve.go could read a switch at all — a switch the cockpit
+// shows but the gate cannot see is worse than no switch.
+//
+// The client inverts at the direction the dependency already runs: flags calls
+// SetSwitchReader on mount, the root package calls Switch. One function in, one
+// function out, no new import in either direction.
+
+// SwitchPaywallEnforced gates the subscription paywall. The key lives here so the
+// registry entry (apps/entitlement), the evaluator (apps/flags) and the reader
+// (SpendGate) all name the same string — a switch whose readers disagree about its
+// key is worse than no switch.
+const SwitchPaywallEnforced = "paywall_enforced"
+
+// switchReader is the flag engine's Bool, installed by clients/flags.Use.
+// atomic because Mount runs during boot while requests may already be served.
+var switchReader atomic.Pointer[func(string) bool]
+
+// SetSwitchReader installs the platform-switch evaluator. clients/flags calls it
+// once on mount; passing nil detaches it (used by tests).
+func SetSwitchReader(f func(string) bool) {
+	if f == nil {
+		switchReader.Store(nil)
+		return
+	}
+	switchReader.Store(&f)
+}
+
+// Switch reports a platform switch's live value. It returns false before the flag
+// engine mounts and when no engine is present (!cgo), which is the same dark
+// default the engine itself falls back to — so an unmounted switch never enforces.
+func Switch(key string) bool {
+	if p := switchReader.Load(); p != nil {
+		return (*p)(key)
+	}
+	return false
+}

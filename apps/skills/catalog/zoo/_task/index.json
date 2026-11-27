@@ -1,0 +1,55 @@
+{
+  "$schema": "https://schemas.agentskills.io/discovery/0.2.0/schema.json",
+  "base_url": "https://api.zoo.ngo",
+  "brand": "zoo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://zoolabs.id",
+  "mcp": {
+    "description": "Model Context Protocol over JSON-RPC 2.0 — one POST per message, stateless, protocol revision 2026-07-28. tools/list answers without a credential with one tool per subsystem (its operations in the \"op\" enum) plus \"describe\", which returns one operation's input schema. tools/call names a subsystem tool and carries {\"op\": <operation>, \"input\": <its arguments>}; it takes the same bearer the REST API does, and a call that carries none is answered 401 with a WWW-Authenticate header naming the resource metadata at /.well-known/oauth-protected-resource, which names the authorization server to sign in at. The tool surface is the public contract: the operator's admin product is not offered, and a name that would disclose a secret or mutate an identity is withheld — the list says how many, under _meta.",
+    "method": "POST",
+    "url": "https://api.zoo.ngo/v1/mcp"
+  },
+  "skill_count": 4,
+  "skills": [
+    {
+      "description": "Read task board: Returns a board's issues — work items with their column, priority, assignee, labels and schedule..",
+      "digest": "sha256:1d95af13c045a3f3b1f2f4f8e1336aef1871106e45b65cb29d8b7a2ac0504ec9",
+      "name": "task_board",
+      "service": "task",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/task_board/SKILL.md",
+      "works": [
+        "operations",
+        "product"
+      ]
+    },
+    {
+      "description": "Read task channels: Summarises one channel's work..",
+      "digest": "sha256:5071fcf2cc28305686abd700b4c1c565222983a7dea82406fa9e2ff1054b6473",
+      "name": "task_channels",
+      "service": "task",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/task_channels/SKILL.md"
+    },
+    {
+      "description": "Read task issues: Answers across every project in the org..",
+      "digest": "sha256:96ee246d02f64319730b1b399c3aa4937b46e7e2933baddf942ef9dbeeb02469",
+      "name": "task_issues",
+      "service": "task",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/task_issues/SKILL.md",
+      "works": [
+        "product"
+      ]
+    },
+    {
+      "description": "Read task projects: Returns the boards of your org — the places your work actually is., Returns one board of your org by its key — the repository name., Returns a board's issues — work items with their column, priority, assignee, labels and schedule..",
+      "digest": "sha256:8746ee824d6271c5b03e25e381ecaf75bb67ef499131839177a47dd7c06d0646",
+      "name": "task_projects",
+      "service": "task",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/task_projects/SKILL.md"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

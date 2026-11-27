@@ -37,8 +37,10 @@ func aiTracer() trace.Tracer { return otel.Tracer("hanzo.ai/cloud") }
 // time to first token, in milliseconds: from the moment the model was asked to the
 // first delta of content it sent back.
 //
-// The two are separate facts on separate spans; a turn's latency is their sum
-// only for a reader who adds them.
+// It is measured inside the model call and nowhere else, so nothing that happened
+// before the call — a session's sandbox coming back from a park, a pod moved off
+// a lost node (sdk/activation) — can be inside it. The two are separate facts on
+// separate spans; a turn's latency is their sum only for a reader who adds them.
 //
 // A completion that is not streamed has no first token to see and carries no
 // such attribute, rather than its whole duration under this name.
@@ -446,10 +448,14 @@ func (a *httpAI) chatOnce(ctx context.Context, req *ChatRequest, model string) (
 			FinishReason:     "tool_calls",
 		}, nil
 	}
+	toolCalls := readToolCalls(choice.Message.ToolCalls)
 	if marker := unparsed(choice.Message.Content); marker != "" {
-		span.SetAttributes(attribute.String("hanzo.ai.unparsed", marker))
-		span.SetStatus(codes.Error, "unparsed tool call")
-		return nil, fmt.Errorf("cloud: chat completion (model %q): upstream returned a tool call it had not parsed: %w", model, ErrUpstreamBusy)
+		if len(toolCalls) == 0 {
+			span.SetAttributes(attribute.String("hanzo.ai.unparsed", marker))
+			span.SetStatus(codes.Error, "unparsed tool call")
+			return nil, fmt.Errorf("cloud: chat completion (model %q): upstream returned a tool call it had not parsed: %w", model, ErrUpstreamBusy)
+		}
+		choice.Message.Content = stripUnparsedTail(choice.Message.Content)
 	}
 	visible, reasoning := stripReasoning(choice.Message.Content)
 	if reasoning != "" {
@@ -461,7 +467,7 @@ func (a *httpAI) chatOnce(ctx context.Context, req *ChatRequest, model string) (
 		PromptTokens:     resp.Usage.PromptTokens,
 		CompletionTokens: resp.Usage.CompletionTokens,
 		TotalTokens:      resp.Usage.TotalTokens,
-		ToolCalls:        readToolCalls(choice.Message.ToolCalls),
+		ToolCalls:        toolCalls,
 		FinishReason:     string(choice.FinishReason),
 	}, nil
 }
@@ -552,35 +558,6 @@ func openaiTools(defs []ToolDef) []openai.Tool {
 		})
 	}
 	return out
-}
-
-var mistralUnparsedMarker = string([]byte{91, 84, 79, 79, 76, 95, 67, 65, 76, 76, 83, 93})
-
-// unparsed names the tool-call markup a completion's CONTENT carries, or "" for
-// content that carries none.
-//
-// These strings are SPECIAL TOKENS. A model emits them so the stack serving it
-// The set is the families this gateway routes to, each token taken from that
-// family's own chat template.
-// mistralUnparsedMarker is the mistral tool-call fence (opening bracket, TOOL,
-// underscore, CALLS, closing bracket). Kept as bytes so editors cannot rewrite
-// a marker literal in source.
-
-func unparsed(content string) string {
-	for _, marker := range []string{
-		"<｜DSML｜tool_calls>",   // U+FF5C — deepseek's agentic markup
-		"<｜tool▁call▁begin｜>",  // U+FF5C, U+2581 — deepseek's fenced form
-		"<｜tool▁calls▁begin｜>", //   …and its plural opener
-		"<tool_call>",          // qwen / hermes
-		mistralUnparsedMarker,  // mistral
-		"<|python_tag|>",       // llama
-		"<|tool_call>",         // gemma
-	} {
-		if strings.Contains(content, marker) {
-			return marker
-		}
-	}
-	return ""
 }
 
 // channelRE matches the channel/thought markup a reasoning model wraps its
@@ -811,6 +788,9 @@ func (a *httpAI) streamOnce(ctx context.Context, req *ChatRequest, model string,
 		// nobody is named for.
 		User:          req.Actor,
 		StreamOptions: &openai.StreamOptions{IncludeUsage: true},
+		// The same tools ChatCompletion offers: a stream that dropped them answered a
+		// tool-using loop with prose, and its calls never arrived.
+		Tools: openaiTools(req.Tools),
 	})
 	if err != nil {
 		if cause := context.Cause(ctx); errors.Is(cause, errStreamIdle) {
@@ -833,6 +813,9 @@ func (a *httpAI) streamOnce(ctx context.Context, req *ChatRequest, model string,
 	// Falling back to the requested model is honest: a gateway that never names
 	// one has not told us it served something else.
 	streamModel := model
+	// A structured tool call arrives in pieces, each delta naming the call it adds
+	// to by index: its id and name once, its arguments a slice at a time.
+	var calls []openai.ToolCall
 	for {
 		frame, err := stream.Recv()
 		idle.Reset(streamIdle)
@@ -867,6 +850,24 @@ func (a *httpAI) streamOnce(ctx context.Context, req *ChatRequest, model string,
 		if fr := strings.TrimSpace(string(frame.Choices[0].FinishReason)); fr != "" {
 			out.FinishReason = fr
 		}
+		for _, tc := range frame.Choices[0].Delta.ToolCalls {
+			i := len(calls)
+			if tc.Index != nil {
+				i = *tc.Index
+			}
+			for len(calls) <= i {
+				calls = append(calls, openai.ToolCall{})
+			}
+			c := &calls[i]
+			if tc.ID != "" {
+				c.ID = tc.ID
+			}
+			if tc.Type != "" {
+				c.Type = tc.Type
+			}
+			c.Function.Name += tc.Function.Name
+			c.Function.Arguments += tc.Function.Arguments
+		}
 		delta := frame.Choices[0].Delta.Content
 		if delta == "" {
 			continue
@@ -880,6 +881,7 @@ func (a *httpAI) streamOnce(ctx context.Context, req *ChatRequest, model string,
 			continue
 		}
 		visSoFar, _ := stripReasoning(rawSoFar)
+		visSoFar = streamPrefix(visSoFar)
 		if len(visSoFar) > emittedVis {
 			chunkVis := visSoFar[emittedVis:]
 			emittedVis = len(visSoFar)
@@ -899,8 +901,9 @@ func (a *httpAI) streamOnce(ctx context.Context, req *ChatRequest, model string,
 	// The visible answer and separated reasoning are assigned once.
 	raw := content.String()
 	out.Content, out.Reasoning = stripReasoning(raw)
+	out.ToolCalls = readToolCalls(calls)
 
-	if strings.TrimSpace(out.Content) == "" {
+	if strings.TrimSpace(out.Content) == "" && len(out.ToolCalls) == 0 {
 		// No content at all is the gateway's "overloaded, no capacity" shape —
 		// transient, so tag it busy for retry/failover, matching ChatCompletion.
 		span.SetStatus(codes.Error, "no content")
@@ -909,22 +912,25 @@ func (a *httpAI) streamOnce(ctx context.Context, req *ChatRequest, model string,
 	// Parse tool calls the upstream did not emit as structured calls (DSML,
 	// Begin Patch). A parsed call is executed by the coding loop; it is not
 	// the end of the turn.
-	if parsed := parseToolCallsFromContent(out.Content); len(parsed) > 0 {
+	// Structured calls are the answer, and any text beside them is the model's words:
+	// neither the inline parse nor the unparsed-call refusal reads them.
+	if parsed := parseToolCallsFromContent(out.Content); len(out.ToolCalls) == 0 && len(parsed) > 0 {
 		span.SetAttributes(attribute.String("hanzo.ai.parsed_inline", "true"))
 		out.ToolCalls = parsed
 		out.Content = ""
 		out.FinishReason = "tool_calls"
 		return out, nil
 	}
-	// The same refusal as ChatCompletion, at the other exit of the same boundary:
-	// streaming is a delivery property, so a completion that is internals rather
-	// than an answer is one here too. The deltas have already been emitted, which
-	// is the honest limit of a net placed after the fact — returning the error
-	// still stops this text from being stored and replayed as the run's answer.
 	if marker := unparsed(out.Content); marker != "" {
-		span.SetAttributes(attribute.String("hanzo.ai.unparsed", marker))
-		span.SetStatus(codes.Error, "unparsed tool call")
-		return nil, fmt.Errorf("cloud: chat stream (model %q): upstream returned a tool call it had not parsed: %w", model, ErrUpstreamBusy)
+		if len(out.ToolCalls) == 0 {
+			span.SetAttributes(attribute.String("hanzo.ai.unparsed", marker))
+			span.SetStatus(codes.Error, "unparsed tool call")
+			return nil, fmt.Errorf("cloud: chat stream (model %q): upstream returned a tool call it had not parsed: %w", model, ErrUpstreamBusy)
+		}
+		out.Content = stripUnparsedTail(out.Content)
+	}
+	if emit != nil && len(out.Content) > emittedVis {
+		_ = emit(out.Content[emittedVis:])
 	}
 	span.SetAttributes(
 		attribute.Int("gen_ai.usage.input_tokens", out.PromptTokens),

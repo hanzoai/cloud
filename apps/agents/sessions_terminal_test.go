@@ -1,0 +1,139 @@
+package agents
+
+import (
+	"context"
+	"testing"
+
+	"github.com/hanzoai/cloud/internal/sqltest"
+)
+
+// A published terminal URL survives the round trip. It is execution context like
+// host and cwd, so it stores and reads back the same way — the point of the field
+// is that a console can find the terminal again later, not just at register time.
+func TestTerminalRoundTripsThroughTheStore(t *testing.T) {
+	sqltest.Engines(t, func(t *testing.T, _ sqltest.Open) {
+		s := testSessionStore(t)
+		ctx := context.Background()
+
+		x := mkSession("hanzo", "sess_t", "", "sess_t")
+		x.Terminal = "https://share-abc.hanzo.app"
+		if err := s.CreateSession(ctx, x); err != nil {
+			t.Fatalf("CreateSession: %v", err)
+		}
+
+		got, err := s.GetSession(ctx, "hanzo", "sess_t")
+		if err != nil {
+			t.Fatalf("GetSession: %v", err)
+		}
+		if got.Terminal != x.Terminal {
+			t.Fatalf("terminal = %q, want %q", got.Terminal, x.Terminal)
+		}
+
+	})
+}
+
+// The console FRAMES this value, so a scheme it would not open must be refused at
+// the edge rather than rendered on a signed-in page.
+func TestSessionTerminalRefusesNonHTTPS(t *testing.T) {
+	for _, bad := range []string{
+		"javascript:alert(1)",
+		"file:///etc/passwd",
+		"http://plain.example.com",
+		"//protocol-relative.example.com",
+	} {
+		if _, err := sessionTerminal(bad); err == nil {
+			t.Errorf("sessionTerminal(%q) was accepted; want refused", bad)
+		}
+	}
+}
+
+// Empty is not an error: a session that publishes no terminal is still a session,
+// it simply cannot be watched.
+func TestSessionTerminalAllowsEmpty(t *testing.T) {
+	got, err := sessionTerminal("  ")
+	if err != nil {
+		t.Fatalf("sessionTerminal(empty): %v", err)
+	}
+	if got != "" {
+		t.Fatalf("got %q, want empty", got)
+	}
+}
+
+func TestSessionTerminalAcceptsHTTPS(t *testing.T) {
+	got, err := sessionTerminal(" https://share-abc.hanzo.app ")
+	if err != nil {
+		t.Fatalf("sessionTerminal(https): %v", err)
+	}
+	if got != "https://share-abc.hanzo.app" {
+		t.Fatalf("got %q, want the trimmed url", got)
+	}
+}
+
+// A URL long enough to be a payload rather than an address is refused.
+func TestSessionTerminalIsBounded(t *testing.T) {
+	long := "https://" + string(make([]byte, maxTerminal))
+	if _, err := sessionTerminal(long); err == nil {
+		t.Fatal("an over-long terminal url was accepted")
+	}
+}
+
+// A published terminal must survive an UPDATE, not just an INSERT. The column was
+// added to the insert and the scan but not to UpdateSession, so PATCH accepted the
+// value, echoed it back, and dropped it — the session read as if it had never been
+// published.
+func TestTerminalSurvivesUpdate(t *testing.T) {
+	sqltest.Engines(t, func(t *testing.T, _ sqltest.Open) {
+		s := testSessionStore(t)
+		ctx := context.Background()
+
+		x := mkSession("hanzo", "sess_u", "", "sess_u")
+		if err := s.CreateSession(ctx, x); err != nil {
+			t.Fatalf("CreateSession: %v", err)
+		}
+		x.Terminal = "https://share-abc.hanzo.app"
+		if err := s.UpdateSession(ctx, x); err != nil {
+			t.Fatalf("UpdateSession: %v", err)
+		}
+		got, err := s.GetSession(ctx, "hanzo", "sess_u")
+		if err != nil {
+			t.Fatalf("GetSession: %v", err)
+		}
+		if got.Terminal != x.Terminal {
+			t.Fatalf("terminal = %q after update, want %q", got.Terminal, x.Terminal)
+		}
+
+	})
+}
+
+// A linked shell MOVES. `cwd` was write-once — set at register, absent from both
+// the patch input and UpdateSession — so the console showed the directory `hanzo
+// link` happened to start in and kept showing it after the shell had walked away.
+// The field answered "which work is this" with an answer that was true once.
+//
+// Same shape as the terminal column above, and the same reason it is worth its own
+// test: a field the patch accepts but the UPDATE forgets returns 200 with the new
+// value in the body and persists nothing.
+func TestCwdSurvivesUpdate(t *testing.T) {
+	sqltest.Engines(t, func(t *testing.T, _ sqltest.Open) {
+		s := testSessionStore(t)
+		ctx := context.Background()
+
+		x := mkSession("hanzo", "sess_cwd", "", "sess_cwd")
+		x.Cwd = "/Users/z"
+		if err := s.CreateSession(ctx, x); err != nil {
+			t.Fatalf("CreateSession: %v", err)
+		}
+		x.Cwd = "/Users/z/work/hanzo/cli"
+		if err := s.UpdateSession(ctx, x); err != nil {
+			t.Fatalf("UpdateSession: %v", err)
+		}
+		got, err := s.GetSession(ctx, "hanzo", "sess_cwd")
+		if err != nil {
+			t.Fatalf("GetSession: %v", err)
+		}
+		if got.Cwd != x.Cwd {
+			t.Fatalf("cwd = %q after update, want %q", got.Cwd, x.Cwd)
+		}
+
+	})
+}

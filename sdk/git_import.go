@@ -17,7 +17,9 @@ import (
 // token flows THROUGH as a field — minted per call, never stored, never logged
 // (values, not places).
 //
-// The forge holds them now; the client did not move, only what is behind it.
+// It used to be the embedded git object plane that answered these, against bare
+// repositories on this fleet's own disks. The forge holds them now; the client did
+// not move, only what is behind it.
 
 // GitImportReq imports one external repo onto the forge: create the repo if
 // absent, then advance every ref from CloneURL onto it — FAST-FORWARD ONLY —
@@ -116,7 +118,11 @@ func InboundGitSync(ctx context.Context, req GitInboundReq) (GitSyncResult, erro
 
 // GitRepoStatuses returns the per-repo import + sync status for names (org-scoped).
 //
-// Absent co-residency it asks the sync app, like the two calls above.
+// Absent co-residency it asks the sync app, like the two calls above. It used to
+// return ErrGitImporterUnavailable here, which was honest about this process and
+// wrong about the world: the statuses exist, in the sibling process, and the
+// console repo list rendered every repo as never-imported because the app that
+// draws the list is not the app that answers for the sync.
 //
 // A name with nothing to say is simply MISSING from the reply, and stays missing
 // from the map — the same answer the in-process importer gives, so the two legs

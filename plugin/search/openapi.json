@@ -1,0 +1,443 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Hanzo Cloud API",
+    "description": "Package search is one ranked result set over everything your org has stored.",
+    "version": "v1"
+  },
+  "servers": [
+    {
+      "url": "https://api.hanzo.ai"
+    }
+  ],
+  "security": [
+    {
+      "bearer": []
+    }
+  ],
+  "tags": [
+    {
+      "name": "admin"
+    },
+    {
+      "name": "search"
+    }
+  ],
+  "paths": {
+    "/v1/admin/search/indexes": {
+      "get": {
+        "operationId": "get_admin_search_indexes",
+        "summary": "Lists the search indexes with their document counts and timestamps.",
+        "description": "Lists the search indexes with their document counts and timestamps.\n\nIt reads the in-cluster Meilisearch service and reshapes its /stats and\n/indexes replies into the rows the console's Search panel renders. The read is\ndegrade-friendly by design: an unreachable Meilisearch answers 200 with an\nEMPTY list, so the panel shows an honest empty state instead of an error.\ncreatedAt falls back to now and lastIndexedAt to null when the index list is\nunavailable.",
+        "tags": [
+          "admin"
+        ],
+        "parameters": [
+          {
+            "name": "Authorization",
+            "in": "header",
+            "required": false,
+            "description": "Authorization carries the surface's bearer key (`Bearer \u003ckey\u003e`); the bare\nkey is accepted too. It is not `validate:\"required\"` on purpose: requireKey\nanswers absence itself, so an unconfigured surface 503s and a missing bearer\n401s — a validation refusal would rewrite both statuses.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/search.searchIndexList"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-tool": true
+      }
+    },
+    "/v1/admin/search/stats": {
+      "get": {
+        "operationId": "get_admin_search_stats",
+        "summary": "Totals the documents across every search index.",
+        "description": "Totals the documents across every search index.\n\ntotalDocuments is summed from Meilisearch's own per-index counts. The other\nthree fields are structurally zero rather than estimated: Meilisearch keeps no\nquery-history counters, so searches, sessions and the per-day series are not\nderivable from the index and this surface reports the honest zero instead of a\nfabricated number. An unreachable Meilisearch answers 200 with all zeros.",
+        "tags": [
+          "admin"
+        ],
+        "parameters": [
+          {
+            "name": "Authorization",
+            "in": "header",
+            "required": false,
+            "description": "Authorization carries the surface's bearer key (`Bearer \u003ckey\u003e`); the bare\nkey is accepted too. It is not `validate:\"required\"` on purpose: requireKey\nanswers absence itself, so an unconfigured surface 503s and a missing bearer\n401s — a validation refusal would rewrite both statuses.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/search.searchStats"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-tool": true
+      }
+    },
+    "/v1/search": {
+      "post": {
+        "operationId": "search",
+        "summary": "Hybrid search over the org's own corpora",
+        "description": "Is the typed op behind POST /v1/search. It does exactly two things the\nin-process entry point must not do: resolve the tenant from the validated\nprincipal, and refuse when there is none. Everything else is ForOrg.",
+        "tags": [
+          "search"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/search.Request"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/search.Fusion"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "problem-details": {
+        "description": "An RFC 9457 problem document.",
+        "properties": {
+          "code": {
+            "description": "A stable token a client can branch on, when the refusal names one.",
+            "type": "string"
+          },
+          "detail": {
+            "description": "What was refused, for a person to read.",
+            "type": "string"
+          },
+          "status": {
+            "description": "The HTTP status.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "title": {
+            "description": "The status's reason phrase.",
+            "type": "string"
+          },
+          "type": {
+            "description": "about:blank",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "status",
+          "detail"
+        ],
+        "type": "object"
+      },
+      "search.BackendStatus": {
+        "properties": {
+          "capped": {
+            "description": "Capped is true when the leg answered from only PART of its corpus because it\nstopped at its scan cap — the code leg compares a query with at most 50000\nstored vectors — so a match past the cap was never seen. The status is still\nok: what it returned is right, it is just not the whole. Absent otherwise.",
+            "type": "boolean"
+          },
+          "error": {
+            "description": "Error is the failure text from a leg whose status is degraded — the reason a\nconfigured backend could not answer. Absent otherwise.",
+            "type": "string"
+          },
+          "hits": {
+            "description": "Hits is how many results this leg returned, counted BEFORE fusion, so it is\nnot the number that survived into Fusion.Hits — fusion merges what both\nlegs found and the caller's limit and offset then page it. 0 for a leg that\ndid not run.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "name": {
+            "description": "Name is which leg this reports: \"index\", the lexical store, \"vector\", the\nsemantic one, \"code\", the org's own repositories, or \"rerank\", the\nrelevance pass over the fused window. Match.Backend uses the same names.",
+            "type": "string"
+          },
+          "status": {
+            "description": "Status is one of ok, degraded, disabled, skipped — four distinct operational\nfacts that are never collapsed. It ran and answered; it is configured and\nFAILED (Error says how, and only this one is a fault); this deployment never\nprovisioned it; or the request's mode excluded it.",
+            "type": "string"
+          },
+          "took_ms": {
+            "description": "TookMS is how long this leg took, in milliseconds, timed around its own call\nand excluding fusion. 0 for a leg that was skipped or is disabled, since\nnothing was called.",
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "search.Fusion": {
+        "properties": {
+          "backends": {
+            "description": "Backends is the per-leg report. Always populated.",
+            "items": {
+              "$ref": "#/components/schemas/search.BackendStatus"
+            },
+            "type": "array"
+          },
+          "hits": {
+            "description": "Hits is the fused, ranked result set.",
+            "items": {
+              "$ref": "#/components/schemas/search.Hit"
+            },
+            "type": "array"
+          },
+          "mode": {
+            "description": "Mode is the mode actually used after `auto` resolution.",
+            "type": "string"
+          },
+          "status": {
+            "description": "Status is the query's overall honesty signal:\n  ok          every consulted leg answered.\n  partial     at least one leg failed; Hits holds the survivors' results.\n  unavailable every consulted leg failed; Hits is empty AND that is stated.",
+            "type": "string"
+          },
+          "took_ms": {
+            "description": "TookMS is the whole query's wall time in milliseconds — every leg it\nconsulted, plus fusion and paging. Each leg's own share is in\nBackends[].TookMS; the legs run in sequence, so this is at least their sum.",
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "search.Hit": {
+        "properties": {
+          "corpus": {
+            "description": "Corpus is which store the document lives in: \"kb\" for a document either\nknowledge leg returned, \"code\" for a span out of one of the org's own\nrepositories, \"files\" for a passage of one of the org's workspace files\n(ID is then the file's id and Title its citation). It is PROVENANCE — read it to say where a hit came from, not\nto branch on: the fused ranking is what decides order, and a caller that\nfilters by corpus wants the backend's own endpoint instead.",
+            "type": "string"
+          },
+          "doctype": {
+            "description": "DocType is the knowledge doctype: kb.page, kb.memory or kb.source from the\nsemantic leg, and a lexical row's own doctype/type field otherwise. Absent\nwhen the row carried neither.",
+            "type": "string"
+          },
+          "id": {
+            "description": "ID is the document's identity inside its corpus — the KB document name from\nthe semantic leg, or a lexical row's own name/id/_id (falling back to\n\"row-\u003cn\u003e\" when the row carries none). It is unique with DocType, not alone:\nthe pair is the key the two legs are fused on.",
+            "type": "string"
+          },
+          "matched": {
+            "description": "Matched is one entry per leg that returned this document, with that leg's\nrank and native score. More than one entry means the legs AGREED, which is\nexactly why the hit outranks one a single leg found. Never empty on a\nreturned hit.",
+            "items": {
+              "$ref": "#/components/schemas/search.Provenance"
+            },
+            "type": "array"
+          },
+          "passage": {
+            "description": "Passage is the matching passage, for a hit from the files corpus: the span\nof the file's section that matched, about 2000 bytes. Absent for every\nother corpus, whose hits name a document rather than a span of one.",
+            "type": "string"
+          },
+          "project": {
+            "description": "Project is the project scope the document was indexed under. Absent for a\ndocument saved with none; Request.Project filters the semantic leg on it.",
+            "type": "string"
+          },
+          "score": {
+            "description": "Score is the FUSED score, not a relevance or a similarity: Reciprocal Rank\nFusion sums 1/(60+rank) over each leg that returned the document, so it is\nbounded by roughly 1/61 per leg (about 0.033 for a document two legs put\nfirst) and hits are ordered by it, descending. Being built from ranks, it is\ncomparable only WITHIN one response — never across queries, and never against\na backend's own score, which stays in Matched.",
+            "format": "double",
+            "type": "number"
+          },
+          "title": {
+            "description": "Title is the document's display title — the indexed title from the semantic\nleg, the row's title (falling back to its name) from the lexical one. Absent\nwhen the document has none.",
+            "type": "string"
+          },
+          "url": {
+            "description": "URL is where the document can be opened, carried from the indexed payload —\nthe link back to the app a connector ingested it from. Absent for anything\nwritten in the product, which has no external address.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "search.Provenance": {
+        "properties": {
+          "backend": {
+            "description": "Backend is the leg that contributed this match: \"index\" (lexical), \"vector\"\n(semantic), \"code\" (the org's repositories) or \"rerank\" (the cross-encoder\npass, whose Score is the relevance it assigned). It is the same name that\nleg reports itself under in Fusion.Backends, so a hit can be traced to a\nstatus.",
+            "type": "string"
+          },
+          "rank": {
+            "description": "Rank is this document's 1-based position in THAT leg's own result list,\nbefore fusion — 1 is the leg's best hit. It is the only input to the fused\nscore: RRF adds 1/(60+rank) per leg, which is why a document two legs ranked\nsecond beats one a single leg ranked first.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "score": {
+            "description": "Score is the leg's NATIVE score, on that leg's own scale, reported for\nexplanation and never used in ranking — the scales are incomparable (a cosine\nsimilarity against a term-match count), which is why fusion works on ranks.\nThe vector leg reports the cosine similarity of the document's best-matching\npassage; the lexical leg exposes no per-row score and reports 0, meaning\n\"unscored\", not \"scored zero\".",
+            "format": "double",
+            "type": "number"
+          }
+        },
+        "type": "object"
+      },
+      "search.Request": {
+        "properties": {
+          "doctypes": {
+            "description": "DocTypes restricts the semantic leg to a subset of indexed knowledge types.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "index": {
+            "description": "Index names the lexical index to query. Defaults to \"kb\".",
+            "type": "string"
+          },
+          "limit": {
+            "description": "Limit bounds the FUSED result set (default 10, max 50).",
+            "format": "int64",
+            "type": "integer"
+          },
+          "mode": {
+            "description": "Mode selects the legs: auto (default) | text | semantic | hybrid.",
+            "type": "string"
+          },
+          "offset": {
+            "description": "Offset pages the fused result set.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "project": {
+            "description": "Project narrows to one project scope within the org.",
+            "type": "string"
+          },
+          "query": {
+            "description": "Query is the natural-language or keyword query. Required.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "search.dayCount": {
+        "properties": {
+          "count": {
+            "description": "Count is that day's total.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "date": {
+            "description": "Date is the day, YYYY-MM-DD.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "search.searchIndex": {
+        "properties": {
+          "createdAt": {
+            "description": "CreatedAt is the index's creation time (RFC 3339); it falls back to now when\nthe index list could not be read.",
+            "type": "string"
+          },
+          "docCount": {
+            "description": "DocCount is how many documents the index currently holds.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "lastIndexedAt": {
+            "description": "LastIndexedAt is the index's last update time (RFC 3339), null when the\nindex list could not be read.",
+            "type": "string"
+          },
+          "name": {
+            "description": "Name is the index uid.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "search.searchIndexList": {
+        "properties": {
+          "indexes": {
+            "description": "Indexes is one row per Meilisearch index, sorted by name. Empty — never\nabsent — when the search service cannot be reached.",
+            "items": {
+              "$ref": "#/components/schemas/search.searchIndex"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "search.searchStats": {
+        "properties": {
+          "searchesPerDay": {
+            "description": "SearchesPerDay is always empty, for the same reason as totalSearches.",
+            "items": {
+              "$ref": "#/components/schemas/search.dayCount"
+            },
+            "type": "array"
+          },
+          "totalDocuments": {
+            "description": "TotalDocuments is the sum of every index's document count.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "totalSearches": {
+            "description": "TotalSearches is always 0: Meilisearch keeps no query-history counter, so\nthis surface reports the honest zero rather than an estimate.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "totalSessions": {
+            "description": "TotalSessions is always 0, for the same reason as totalSearches.",
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      }
+    },
+    "securitySchemes": {
+      "bearer": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "The caller's credential, sent as `Authorization: Bearer \u003ctoken\u003e`. It is either an access token minted by Hanzo IAM or an API key (pk-/sk-). X-Authorization, and HTTP Basic carrying the token as the password, are accepted spellings of the same header for clients that cannot set Authorization; a browser presents the session cookie instead. Every operation requires it unless it says `security: []`."
+      }
+    }
+  }
+}

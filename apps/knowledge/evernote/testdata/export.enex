@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE en-export SYSTEM "http://xml.evernote.com/pub/evernote-export4.dtd">
+<en-export export-date="20260101T000000Z" application="Evernote" version="10.0">
+  <note>
+    <title>Meeting Notes</title>
+    <content><![CDATA[<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE en-note SYSTEM "http://xml.evernote.com/pub/enml2.dtd"><en-note><div>Discussed the [[Roadmap]] and the next steps.</div><div><br/></div><div>Action items:</div><ul><li>Ship the connector</li><li>Write the docs</li></ul></en-note>]]></content>
+    <created>20260101T000000Z</created>
+    <updated>20260102T000000Z</updated>
+  </note>
+  <note>
+    <title>Ideas</title>
+    <content><![CDATA[<en-note><div>Brainstorm list for next quarter.</div></en-note>]]></content>
+  </note>
+</en-export>

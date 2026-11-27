@@ -1,0 +1,258 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Hanzo Cloud API",
+    "description": "Package ask is a plain-language question about your business, answered with real numbers.",
+    "version": "v1"
+  },
+  "servers": [
+    {
+      "url": "https://api.hanzo.ai"
+    }
+  ],
+  "security": [
+    {
+      "bearer": []
+    }
+  ],
+  "tags": [
+    {
+      "name": "ask"
+    }
+  ],
+  "paths": {
+    "/v1/ask": {
+      "post": {
+        "operationId": "post_ask",
+        "summary": "Ask a grounded question about your own org",
+        "description": "Answers a natural-language question about the CALLER'S OWN org, from real figures rather than from the model's memory.\n\nThe question is classified to a grounded domain, that domain's read runs IN-PROCESS under the caller's own credentials, and only then is the result narrated. So the figures and their sources are the domain's, resolved before any model call and never altered by one — a wrong answer is a wrong query, never an invention.\n\nDomains: books (the org's ledger), projects (what is built and what of it is deployed), git (the org's repositories and what changed in them), and web (search, news, research, deep). A validated principal is required; the answer is scoped to that principal's org and nothing else.",
+        "tags": [
+          "ask"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/askRequest"
+              }
+            }
+          }
+        },
+        "x-public": true
+      }
+    },
+    "/v1/ask/web": {
+      "post": {
+        "operationId": "research_web",
+        "summary": "Research a question on the live web and answer it with sources cited",
+        "description": "Researches a question on the live web and answers it with its\nsources cited.\n\nThis is the DEEP one. It plans the question into topics, runs several web\nsearches, FETCHES AND READS the pages it finds, ranks them, and writes a\ngrounded answer with inline markdown citations. Use it for anything that needs\nevidence, comparison or current fact — \"what changed in X\", \"compare A and B\",\n\"is this claim true\". For a plain list of links, use search_web instead; for\none page you already have the URL of, use read_page.\n\n`mode` buys depth: `search` is a single fast pass, `news` biases to recency,\n`research` plans and iterates, `deep` surveys widest. `sources` narrows the\nevidence to `web`, `news`, `academic`, `github`, `reddit` or `x` — each becomes\na site-scoped search, which is how this reaches X/Twitter posts.\n\nEVERY CITATION IS A PAGE THIS CALL FETCHED. That is a property of the text and\nnot an instruction to the model: each source is fenced with a per-request nonce\nso a crawled page cannot print itself a source number, and every markdown link\nin the answer is checked against the gathered set before it is returned. So a\nlink in `answer` always appears in `sources`, and a page that was not read\ncannot be cited.\n\nIt is BOUNDED and it degrades rather than failing: a mode's rounds, wall clock\nand token ceiling all cap it, and a search that finds little or a page that\nwill not load yields a thinner answer, never an error. A validated principal is\nrequired, and the answer is billed once to that principal's org.",
+        "tags": [
+          "ask"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ask.webQuestion"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ask.Report"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "ask.Report": {
+        "properties": {
+          "answer": {
+            "description": "Answer is the grounded prose, with inline markdown citations. Every link in\nit points at a page in Sources: the citation check runs on the text before\nit leaves the engine, so a cited URL is one THIS call fetched.",
+            "type": "string"
+          },
+          "follow_ups": {
+            "description": "FollowUps are the questions worth asking next. Best-effort — an empty list\nis a normal outcome, not a fault.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "mode": {
+            "description": "Mode is the profile that ran: search, news, research or deep.",
+            "type": "string"
+          },
+          "model": {
+            "description": "Model is the model that synthesized the answer.",
+            "type": "string"
+          },
+          "sources": {
+            "description": "Sources are the pages the answer was written from, deduplicated and ranked.\nAlways an array, never null.",
+            "items": {
+              "$ref": "#/components/schemas/ask.Source"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "ask.Source": {
+        "properties": {
+          "engine": {
+            "description": "Engine is the search backend the hit came from: bing, ddg, mojeek or brave.\nOmitted when the backend did not name itself. Results are merged across\nbackends, so two sources in one answer can carry different engines.",
+            "type": "string"
+          },
+          "favicon": {
+            "description": "Favicon is a 64px icon URL derived from the host for the client to render\nbeside the citation. It is Google's s2 service, not something we host or\nfetched — an empty host yields the empty string.",
+            "type": "string"
+          },
+          "snippet": {
+            "description": "Snippet is the engine's summary of the page, clipped to 600 runes. THIS IS\nWHAT THE CLIENT SHOWS. What the model reads is the fetched page, which is\nfar larger and deliberately never on the wire.",
+            "type": "string"
+          },
+          "title": {
+            "description": "Title is the page title the engine reported, stripped of the bracketed\nfurniture engines staple on (\"[PDF]\", \"(Official Site)\"). It falls back to\nthe www-stripped host when the engine gave none, so it is never empty and\nis safe to use as link text.",
+            "type": "string"
+          },
+          "url": {
+            "description": "URL is the page, absolute, exactly as the engine gave it. It is also the\ndedupe key — one source per URL, and at most hostCap per host — and what a\nmarkdown citation in the answer is checked against, so a link in the prose\nalways matches a URL here.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "ask.webQuestion": {
+        "properties": {
+          "language": {
+            "description": "Language narrows the search to a locale, BCP-47-ish (\"en\", \"ja\"). Empty\nmeans no narrowing.",
+            "type": "string"
+          },
+          "max_sources": {
+            "description": "MaxSources caps how many pages are read. Empty means the mode's own budget.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "mode": {
+            "description": "Mode is how much work to do: `search` (fast, one pass), `news` (recency\nbiased), `research` (a plan and several rounds) or `deep` (the widest\nsurvey). Empty means research.",
+            "type": "string"
+          },
+          "q": {
+            "description": "Q is the question, in plain language. Required.",
+            "type": "string"
+          },
+          "sources": {
+            "description": "Sources narrows where the evidence comes from: any of `web`, `news`,\n`academic`, `github`, `reddit`, `x`. Each becomes a site-scoped search, so\n`[\"x\"]` researches X/Twitter posts rather than the open web.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "askRequest": {
+        "type": "object",
+        "properties": {
+          "followUps": {
+            "type": "boolean"
+          },
+          "language": {
+            "type": "string"
+          },
+          "maxQueries": {
+            "type": "integer"
+          },
+          "maxSources": {
+            "type": "integer"
+          },
+          "mode": {
+            "type": "string"
+          },
+          "model": {
+            "type": "string"
+          },
+          "q": {
+            "type": "string"
+          },
+          "question": {
+            "type": "string"
+          },
+          "sources": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "stream": {
+            "type": "boolean"
+          },
+          "system": {
+            "type": "string"
+          }
+        }
+      },
+      "problem-details": {
+        "description": "An RFC 9457 problem document.",
+        "properties": {
+          "code": {
+            "description": "A stable token a client can branch on, when the refusal names one.",
+            "type": "string"
+          },
+          "detail": {
+            "description": "What was refused, for a person to read.",
+            "type": "string"
+          },
+          "status": {
+            "description": "The HTTP status.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "title": {
+            "description": "The status's reason phrase.",
+            "type": "string"
+          },
+          "type": {
+            "description": "about:blank",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "status",
+          "detail"
+        ],
+        "type": "object"
+      }
+    },
+    "securitySchemes": {
+      "bearer": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "The caller's credential, sent as `Authorization: Bearer \u003ctoken\u003e`. It is either an access token minted by Hanzo IAM or an API key (pk-/sk-). X-Authorization, and HTTP Basic carrying the token as the password, are accepted spellings of the same header for clients that cannot set Authorization; a browser presents the session cookie instead. Every operation requires it unless it says `security: []`."
+      }
+    }
+  }
+}

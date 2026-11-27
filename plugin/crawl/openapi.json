@@ -1,0 +1,388 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Hanzo Cloud API",
+    "description": "Package crawl is any web page turned into clean markdown a model can read.",
+    "version": "v1"
+  },
+  "servers": [
+    {
+      "url": "https://api.hanzo.ai"
+    }
+  ],
+  "security": [
+    {
+      "bearer": []
+    }
+  ],
+  "tags": [
+    {
+      "name": "crawl"
+    }
+  ],
+  "paths": {
+    "/.well-known/http-message-signatures-directory": {
+      "get": {
+        "operationId": "get_.well-known_http-message-signatures-directory",
+        "summary": "The keys this deployment's agents sign their web requests with",
+        "description": "The Web Bot Auth key directory (HTTP Message Signatures directory): a JWK Set of the Ed25519 public keys whose signatures a Hanzo agent's requests carry in `Signature`, `Signature-Input` and `Signature-Agent` (RFC 9421, tag `web-bot-auth`). A site reads it to verify that a request claiming to be a Hanzo agent is one.\n\nEach key is `kty` OKP, `crv` Ed25519, `x`, and `kid` its JWK thumbprint, which is the `keyid` a signature names. The response is signed too, once per key over `(\"@authority\";req)` with tag `http-message-signatures-directory`, so it proves this server holds every key it publishes. Answers `application/http-message-signatures-directory+json` with `Cache-Control: public, max-age=3600`; during a rotation it lists both keys.\n\nPublic: no bearer, no tenant scope. 404 when this deployment signs nothing, 503 when its keys cannot be read; never an empty set.",
+        "security": []
+      }
+    },
+    "/v1/crawl": {
+      "post": {
+        "operationId": "read_page",
+        "summary": "Fetch one URL and read it back as markdown",
+        "description": "Reads one URL and answers with the page as markdown.\n\nIt fetches a single URL from inside the cluster and answers with the address it\nactually landed on, the document's title, its content rendered to MARKDOWN, and\nwhatever the page said about itself. One URL per call: batching would make the\nanswer a partial-failure envelope every caller then has to unpack.\n\nA PAGE THAT COULD NOT BE FETCHED IS A NORMAL ANSWER, not a fault. An\nunreachable host, a refused address and a content type that is not a document\nall answer 200 with `success:false` and the reason in `error`, because the\ncaller sent a well-formed ask and gets a well-formed answer. Non-2xx is reserved\nfor a caller problem — 400 with the same body when there is no url, 401 for a\nbad key, 503 when the surface is unconfigured — so error handling can trust the\nstatus. Check `success` before reading `data`.\n\nAdmission is either a validated principal or the shared service key, presented\nas X-API-Key or a Bearer; neither is refused, and an unset key fails closed\nrather than opening the fetcher to the private network. Pages are archived under\nthe scope of the VERIFIED principal and NEVER a scope named in the body, so a\nURL already read under that scope is answered from the archive without touching\nthe network; a service caller has no org and its pages land in the shared\ncorpus.\n\nThe URL is caller-supplied and dialled from INSIDE the cluster, which makes this\na request-forgery primitive by construction. Only http and https are accepted,\nand every address actually dialled must be public unicast — loopback,\nlink-local, private and multicast are refused. The check lives in the DIALER\nrather than on the hostname, because resolving a name to validate it and then\nletting the transport resolve it again is a gap DNS rebinding walks straight\nthrough; redirects re-enter the same dialer.",
+        "tags": [
+          "crawl"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/crawl.crawlRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/crawl.crawlResult"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/crawl.crawlResult"
+                }
+              }
+            },
+            "description": "bad request"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/crawl/render": {
+      "post": {
+        "operationId": "render_page",
+        "summary": "Draw one URL in a browser and read back its screenshot, DOM, text and links",
+        "description": "Answers one URL as a browser draws it: its screenshot, its DOM, its text\nand its links.\n\nIt is the second half of read_page. read_page fetches and answers markdown,\nescalating to a browser only for a page too thin to read; this always draws,\nand costs a render each time (CRAWL_FEE_CENTS), debited only when the browser\nanswered with a picture.\n\nA PAGE THAT COULD NOT BE DRAWN IS A NORMAL ANSWER, as it is there. A refused\naddress, an unreachable host, a browser that could not draw it and a caller who\ncannot cover the render all answer 200 with `success:false` and the reason in\n`error`. Non-2xx is reserved for a caller problem: 400 with the same body when\nthere is no url, 401 when the caller has no validated principal. Check\n`success` before reading `data`.\n\nThe URL is caller-supplied and reached from INSIDE the cluster, so the\nprotections are read_page's: only http and https, every address the guarded\nclient dials public unicast and every redirect hop judged, the first host judged\nagain before the browser is asked, and the browser's pod bounded by its egress\npolicy. Nothing is kept: a drawn page is not archived.",
+        "tags": [
+          "crawl"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/crawl.renderRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/crawl.renderResult"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/crawl.renderResult"
+                }
+              }
+            },
+            "description": "bad request"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/crawl/sign": {
+      "post": {
+        "operationId": "sign_agent_request",
+        "summary": "Sign a request a Hanzo agent service sends itself",
+        "description": "Answers the Signature-Agent, Signature-Input and Signature headers for\none request to the named authority, good for five minutes; a redirect is a new\nrequest. 403 for any caller not on the list, 400 for an authority that is not a\nhost and optional port, 503 when no signing key can be read.",
+        "tags": [
+          "crawl"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/crawl.agentSignRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/crawl.agentSignature"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "crawl.agentSignRequest": {
+        "properties": {
+          "authority": {
+            "description": "Authority is where the request goes: its host and, optionally, its port\n(RFC 9421 @authority), e.g. `example.com` or `example.com:8443`. No scheme,\npath or userinfo: nothing of the request but its host reaches this op.",
+            "type": "string"
+          },
+          "scheme": {
+            "description": "Scheme is the request's scheme, `https` (the default) or `http`. It says\nwhich port is the default, so `example.com:443` over https is signed as\n`example.com`, the authority a verifier reads.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "crawl.agentSignature": {
+        "properties": {
+          "expires": {
+            "description": "Expires is when the signature stops verifying, in Unix seconds. One\nsignature is for one request: ask again for the next, a redirect included.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "signature": {
+            "description": "Signature is the Signature header.",
+            "type": "string"
+          },
+          "signatureAgent": {
+            "description": "SignatureAgent is the Signature-Agent header: the URL of the key directory\na verifier reads, as a structured-field string.",
+            "type": "string"
+          },
+          "signatureInput": {
+            "description": "SignatureInput is the Signature-Input header.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "crawl.crawlDocument": {
+        "properties": {
+          "markdown": {
+            "description": "Markdown is the page's content, extracted and rendered to markdown. This is\nthe field to read.",
+            "type": "string"
+          },
+          "metadata": {
+            "description": "Metadata is whatever the document said about itself — description, og:*,\nlanguage — plus the response status, the final URL and the content type. It\nis an OPEN key space, so it is carried as raw JSON: `map[string]any`\npublishes `additionalProperties:{\"type\":\"object\"}`, which the integer\n`status` inside it refutes, while raw JSON publishes `{}` — \"any JSON\",\nwhich is true. The bytes are identical either way (encoding/json writes a\nmap's keys sorted, and this IS that marshalling)."
+          },
+          "title": {
+            "description": "Title is the document's title, when it carried one.",
+            "type": "string"
+          },
+          "url": {
+            "description": "URL is the address actually read, after redirects.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "crawl.crawlRequest": {
+        "properties": {
+          "url": {
+            "description": "URL is the page to read, absolute and http or https — no other scheme is\ndialled. It is resolved from inside the cluster, so an address that turns out\nto be loopback, link-local, private or multicast is refused at the dialer,\nredirects included. Empty is not an error status: the answer comes back with\nsuccess false and the reason in error.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "crawl.crawlResult": {
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/crawl.crawlDocument",
+            "description": "Data is the page, present exactly when Success."
+          },
+          "error": {
+            "description": "Error says what stopped the fetch: the host was refused, unreachable, or\nserved something that is not a document.",
+            "type": "string"
+          },
+          "success": {
+            "description": "Success is whether the page was fetched and read. FALSE with an Error is a\ncomplete answer, not a fault — check this before reading Data.",
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
+      "crawl.renderDocument": {
+        "properties": {
+          "cut": {
+            "description": "Cut is true when the DOM was cut at that size.",
+            "type": "boolean"
+          },
+          "dom": {
+            "description": "DOM is the page's HTML after its scripts ran, with scripts and styles\nremoved and cut at 256 KiB. It is how the page is put together.",
+            "type": "string"
+          },
+          "links": {
+            "description": "Links are the page's anchors, internal ones first, at most 100.",
+            "items": {
+              "$ref": "#/components/schemas/crawl.renderLink"
+            },
+            "type": "array"
+          },
+          "markdown": {
+            "description": "Markdown is the page's text, as read_page reads it.",
+            "type": "string"
+          },
+          "metadata": {
+            "description": "Metadata is whatever the document said about itself, as read_page carries it."
+          },
+          "screenshot": {
+            "contentEncoding": "base64",
+            "description": "Screenshot is the first screen of the page as a PNG, base64 on the wire.",
+            "type": "string"
+          },
+          "title": {
+            "description": "Title is the document's title, when it carried one.",
+            "type": "string"
+          },
+          "url": {
+            "description": "URL is the address the browser landed on, after redirects.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "crawl.renderLink": {
+        "properties": {
+          "href": {
+            "description": "Href is where it points, as the page wrote it.",
+            "type": "string"
+          },
+          "text": {
+            "description": "Text is what it says.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "crawl.renderRequest": {
+        "properties": {
+          "url": {
+            "description": "URL is the page to draw, absolute and http or https, judged exactly as\nread_page judges it. Empty is a 400 with success false.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "crawl.renderResult": {
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/crawl.renderDocument",
+            "description": "Data is the page, present exactly when Success."
+          },
+          "error": {
+            "description": "Error says what stopped the render: the host was refused, unreachable, the\nbrowser could not draw it, or the caller cannot cover the fee.",
+            "type": "string"
+          },
+          "success": {
+            "description": "Success is whether the page was drawn. FALSE with an Error is a complete\nanswer, not a fault — check this before reading Data.",
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
+      "problem-details": {
+        "description": "An RFC 9457 problem document.",
+        "properties": {
+          "code": {
+            "description": "A stable token a client can branch on, when the refusal names one.",
+            "type": "string"
+          },
+          "detail": {
+            "description": "What was refused, for a person to read.",
+            "type": "string"
+          },
+          "status": {
+            "description": "The HTTP status.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "title": {
+            "description": "The status's reason phrase.",
+            "type": "string"
+          },
+          "type": {
+            "description": "about:blank",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "status",
+          "detail"
+        ],
+        "type": "object"
+      }
+    },
+    "securitySchemes": {
+      "bearer": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "The caller's credential, sent as `Authorization: Bearer \u003ctoken\u003e`. It is either an access token minted by Hanzo IAM or an API key (pk-/sk-). X-Authorization, and HTTP Basic carrying the token as the password, are accepted spellings of the same header for clients that cannot set Authorization; a browser presents the session cookie instead. Every operation requires it unless it says `security: []`."
+      }
+    }
+  }
+}

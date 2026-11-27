@@ -33,13 +33,16 @@ type Route struct {
 // HEAD for every GET by COPYING the route — same path, same handler stack
 // (fiber/router.go:793) — and the `autoHead` flag marking it is unexported, so
 // an auto-generated HEAD is indistinguishable from a hand-registered one through
-// the public API. Including HEAD would make the projection depend on lifecycle
-// stage — the CI exec path (never listens) and the live endpoint (has listened)
-// would emit different documents, which is exactly the drift this package exists
-// to prevent. Excluding it makes the projection total and stable. TRACE and
-// OPTIONS are excluded for the reason CONNECT and HEAD are: All() binds them
-// mechanically, nobody DECLARED them, and a published operation is a promise.
-// They are transport, not product.
+// the public API. Worse, that generation runs in startupProcess() (Listen/Test),
+// NOT at registration: the same app yields a different HEAD set before and after
+// boot (measured: 25 explicit HEAD routes from All() pre-boot, ~469 post-boot
+// once every GET is mirrored). Including HEAD would make the projection depend
+// on lifecycle stage — the CI exec path (never listens) and the live endpoint
+// (has listened) would emit different documents, which is exactly the drift this
+// package exists to prevent. Excluding it makes the projection total and stable.
+// TRACE and OPTIONS are excluded for the reason CONNECT and HEAD are: All()
+// binds them mechanically, nobody DECLARED them, and a published operation is a
+// promise. They are transport, not product.
 //
 // TRACE echoes the request back. It is a debugging verb, it is the Cross-Site
 // Tracing vector, and it should not be reachable on a public API at all — so
@@ -298,11 +301,14 @@ type Operation struct {
 	// declared one through [Register]; both describe a shape the child's registry
 	// has never heard of, so both leave this false.
 	//
-	// It exists because the fleet's agent MCP server reads a CATALOG built from
-	// these documents, and a document carries every ROUTE. Marking the dispatchable
-	// subset here lets the catalog carry what a child ANSWERS TO rather than what
-	// it describes, which is what Op's own doc comment in client/catalog.go has
-	// always claimed it holds.
+	// It exists because the fleet's agent MCP server reads a CATALOG built from these
+	// documents, and a document carries every ROUTE. Advertising the difference
+	// is not a cosmetic over-count: a caller that picks one of those names gets
+	// `unknown tool` from the child that published it — measured on the live server,
+	// `storage`/`list_s3_buckets`, and 157 operations across ten apps behind it.
+	// Marking the dispatchable subset here lets the catalog carry what a child
+	// ANSWERS TO rather than what it describes, which is what Op's own doc comment
+	// in client/catalog.go has always claimed it holds.
 	//
 	// An extension rather than a tag: the tag axis means PRODUCT, and a generator
 	// ignores an unknown `x-`. It is derived on every regeneration and never

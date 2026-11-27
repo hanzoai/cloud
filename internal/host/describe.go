@@ -1,0 +1,322 @@
+package host
+
+// `<binary> describe <dir>` — any cloud binary projects itself instead of serving.
+//
+// This is the ONE producer of a per-app artifact. An app's projections are not
+// sliced out of the fleet's by prefix (that would make the fleet the source and
+// the app a derivative, exactly backwards); they are generated from the app's OWN
+// live router by the SAME openapi.FleetSpec the whole fleet is generated from,
+// over an app with only that subsystem mounted.
+// Compose upward, never carve downward — see openapi/compose.go for the other half.
+//
+// ONE projection, from ONE mount of ONE registry: openapi.json, what the app's
+// addresses are.
+//
+// It used to write mcp.json beside it — the same registry projected as MCP tools
+// — and argued that writing them together made them agree. They did agree, and
+// they were BOTH WRONG BY THE SAME 353 OPS: coupling two derived files to each
+// other makes neither true, because nothing in that coupling forces either back
+// to the registry. The tool catalogue is not generated any more; the host asks
+// the child for it (package fleet), so a tool list cannot be stale because there
+// is no tool list. This document survives only because the fleet compose needs the
+// app's SOURCE synopsis, which no running process can hand back.
+//
+// It lives on Serve because Serve is the single entry every app binary shares:
+// plugin/<app>/main.go is generated as one cloud.Listen call, so putting the mode
+// here gives every one of them the target at a cost of zero per-app code. A binary
+// that mounts its own app (plugin/o11y) calls Describe directly.
+
+import (
+	"crypto/rand"
+	"encoding/base64"
+	"encoding/json"
+	"fmt"
+	"github.com/hanzoai/cloud/sdk"
+	"os"
+	"path/filepath"
+
+	"github.com/hanzoai/cloud/sdk/brand"
+	"github.com/hanzoai/cloud/sdk/env"
+
+	luxlog "github.com/luxfi/log"
+
+	"github.com/hanzoai/cloud/manifest"
+	"github.com/hanzoai/cloud/openapi"
+	"github.com/hanzoai/cloud/sdk/spec"
+	"github.com/zap-proto/zip"
+)
+
+// describeArg is the argv word that switches a binary from serving to describing.
+const describeArg = "describe"
+
+// SpecFile is the artifact a describe run writes into the app's own plugin/<app>
+// directory. Named here because the host EMBEDS it (plugin/embed.go) and the
+// compose READS it — one name, so a rename cannot leave a reader looking for a file
+// no writer produces.
+const SpecFile = "openapi.json"
+
+// ZAPFile is the app's ZAP schema: the same ops, written as the IDL a peer
+// needs in order to speak the binary wire without holding a copy of these Go
+// types. It sits beside the OpenAPI document because they are two projections
+// of one registry, produced in the same walk, and a reader comparing them is
+// comparing two renderings rather than two sources.
+const ZAPFile = "app.zap"
+
+// DescribeRequested reports whether argv asks this binary to describe itself, and
+// the DIRECTORY it named: `<binary> describe <dir>`. Read before any flag parsing
+// — the mode is a mode, not an option.
+//
+// A DIRECTORY and not stdout, and the argument is required. A subsystem's own
+// dependencies write to stdout at mount (hanzoai/commerce prints a sqlite-vec
+// warning and GORM debug lines), which a `> file` redirect splices into the front
+// of the document and turns into 71KB of invalid JSON. A writer whose output an
+// unrelated library can corrupt is not a writer.
+func DescribeRequested() (string, bool) {
+	if len(os.Args) > 1 && os.Args[1] == describeArg {
+		if len(os.Args) > 2 {
+			return os.Args[2], true
+		}
+		return "", true
+	}
+	return "", false
+}
+
+// SpecConfig is the deployment the PUBLISHED artifacts describe, and the whole
+// of it — zero values everywhere else, on purpose. The returned func removes the
+// throwaway data dir.
+//
+// A published spec must be a function of the code alone. Config decides routes:
+// clients/kms registers its secret routes only when a master key resolved, and
+// several subsystems gate on brand. If this read the environment, the artifacts
+// two developers generated from one commit would differ by whichever CLOUD_*
+// variables their shells carried, and the golden would flap in CI for a reason
+// no diff could explain. So it reads nothing.
+//
+// The data dir is a throwaway and is created HERE rather than taken as an
+// argument, because mounting opens real stores: the default is /var/lib/cloud,
+// and a caller that forgot to override it would either migrate a live store or
+// (as cmd/o11y did) fail on it.
+func SpecConfig() (*cloud.Config, func(), error) {
+	dir, err := os.MkdirTemp("", "openapi-spec-*")
+	if err != nil {
+		return nil, nil, err
+	}
+	// The dir is stated in the ENVIRONMENT, not just on the Config, because that is
+	// where the subsystems read it: cloud.DataDir is the one resolver, and a field
+	// carrying a second answer is a second answer. The cleanup restores whatever was
+	// there, so a caller with its own root keeps it.
+	prev, had := os.LookupEnv(env.DataDirKey)
+	_ = os.Setenv(env.DataDirKey, dir)
+	return &cloud.Config{Brand: brand.Default, Domain: "api.hanzo.ai", DataDir: dir},
+		func() {
+			if had {
+				_ = os.Setenv(env.DataDirKey, prev)
+			} else {
+				_ = os.Unsetenv(env.DataDirKey)
+			}
+			os.RemoveAll(dir)
+		}, nil
+}
+
+// Describe writes app's projection into dir: the OpenAPI document, from the one
+// live router.
+//
+// JSON, because JSON is what it IS — the same bytes served at /v1/openapi.json
+// and dropped into hanzoai/openapi. Encoding to YAML would put a yaml library in
+// the graph of every app binary to write a file only the compose reads. Indented so
+// a subset reviews as a diff.
+//
+// It is rendered whole before the file is touched, so a projection failure leaves
+// the previous one intact rather than truncating it into an app that appears to
+// serve nothing.
+func Describe(dir string, app *zip.App) error {
+	if dir == "" {
+		return fmt.Errorf("usage: %s %s <dir>", filepath.Base(os.Args[0]), describeArg)
+	}
+	doc, err := openapi.FleetSpec(app)
+	if err != nil {
+		return fmt.Errorf("openapi: %w", err)
+	}
+	// An address the fleet delivers to a SIBLING is not this app's to publish.
+	//
+	// ai is the case: its module registers real routes now (apps/ai composes the
+	// whole app rather than a wildcard relay), so mounted alone it carries
+	// /v1/crawl and /v1/metrics — addresses the manifest routes to the apps that
+	// own those prefixes, where this binary's handler never answers. The relay's
+	// Yields used to subtract exactly this at the relay; a real route is the
+	// host's own registration and wins its address, so the relay never sees it
+	// and the subtraction has to live at the one producer instead. It asks the
+	// same routing table the host reads, so a dropped address is the fleet's
+	// answer, not a judgment call — and the owner's own subset still carries the
+	// operation, which is what the compose requires: one address, one app. The dir
+	// names the app because the describe contract writes into plugin/<app>.
+	self := filepath.Base(filepath.Clean(dir))
+	for path := range doc.Paths {
+		if owner := manifest.OwnerOf(path); owner != "" && owner != self {
+			delete(doc.Paths, path)
+		}
+	}
+	// The gap is refused HERE, at the one producer, and nowhere downstream.
+	//
+	// This is the file that mints the artifact eight SDKs, the MCP tool list, the
+	// CLI and docs.hanzo.ai are all projections of, so an operation that says
+	// nothing about itself becomes a call nobody can explain in every one of them
+	// at once — and each of those consumers is a place where the sentence cannot
+	// be written. A projection that copes (a placeholder, or the route printed
+	// where the description belongs) does not report the gap, it disguises it. So
+	// the document is simply not written: the failure names the app, the route and
+	// the remedy, in the repo that holds the handler.
+	//
+	// Refused at the artifact, not in [openapi.Spec], because the two have opposite
+	// duties. A deployment's own /v1/openapi.json must answer with what it serves
+	// even if a subsystem it mounts is behind on its prose; a COMMITTED artifact is
+	// the fleet's contract and has no such excuse.
+	//
+	// manifest.OwnerOf is handed in because "whose address is this?" is a ROUTING
+	// question, and the manifest is the routing table the host itself reads. Asking
+	// it here means the gate attributes a declaration exactly as the fleet delivers
+	// the request — the two cannot drift, and openapi stays a projection that owes
+	// nothing to the fleet's shape.
+	if err := spec.Complete(doc, manifest.OwnerOf); err != nil {
+		return fmt.Errorf("%s: %w", filepath.Base(dir), err)
+	}
+	// A subset describes ONE app, so it says what that app is — the synopsis of
+	// the package its binary mounts, read from the source the app is built from
+	// (openapi.Synopsis). The fleet identity FleetSpec carries is the fallback and
+	// stays exactly that: an app whose package has no doc comment publishes the
+	// fleet's sentence, unchanged, rather than a sentence invented for it here.
+	//
+	// This is the ONE place the synopsis is computed. The compose reads it back off
+	// the subsets to describe the product tags, so the mapping from app to prose
+	// exists once and travels with the artifact.
+	if s := openapi.Synopsis(dir); s != "" {
+		doc.Info.Description = s
+	}
+	spec, err := json.MarshalIndent(doc, "", "  ")
+	if err != nil {
+		return err
+	}
+	// PUBLISHED BY RENAME, because a reader of this file runs at the same time.
+	//
+	// The fleet sweep describes and builds in parallel, and these documents are
+	// go:embed inputs — so while one app rewrites its subset, another app's build
+	// is reading it. A plain write truncates first and fills after, which leaves a
+	// window where that reader sees a SHORTER file and the compiler refuses it:
+	//
+	//   plugin/embed.go: copy plugin/admin/openapi.json: unexpected length 104448 != 203762
+	//
+	// It fails at whichever app the scheduler happened to pair with the writer, so
+	// it reads as a flaky build in an app that has nothing wrong with it. A rename
+	// within the same directory is atomic, so a concurrent reader gets the whole
+	// old document or the whole new one and never half of either.
+	if err := publish(dir, SpecFile, append(spec, '\n')); err != nil {
+		return err
+	}
+	// The ZAP schema, from the same app, in the same walk.
+	//
+	// It is written HERE rather than by a command of its own because a second
+	// producer needs its own list of apps to mount, and a hand-kept copy of an
+	// authored list is the drift this program exists to end. One mount, one
+	// registry, one ownership filter, one moment.
+	//
+	// It does not gate the way openapi.Complete does. A ZAP schema is allowed to
+	// be incomplete, because incompleteness is its ANSWER: ZAP has no way to
+	// write down a map or an untyped value, so an op holding one is named in the
+	// file's own gap list rather than quietly dropped. Refusing to write would
+	// only hide the work list.
+	return writeZAP(dir, app)
+}
+
+// writeZAP publishes the app's ZAP schema by the same atomic rename the
+// document uses, for the same reason: the fleet describes in parallel and these
+// files are read while they are written.
+func writeZAP(dir string, app *zip.App) error {
+	self := filepath.Base(filepath.Clean(dir))
+	return publish(dir, ZAPFile, []byte(zip.ZAPSchema(self, app).String()))
+}
+
+// publish writes one projection by atomic rename, because a reader of the file
+// runs at the same time.
+//
+// The fleet sweep describes and builds in parallel, and these files are go:embed
+// inputs — so while one app rewrites its projection, another app's build is
+// reading it. A plain write truncates first and fills after, which leaves a
+// window where that reader sees a SHORTER file and the compiler refuses it:
+//
+//	plugin/embed.go: copy plugin/admin/openapi.json: unexpected length 104448 != 203762
+//
+// It fails at whichever app the scheduler happened to pair with the writer, so it
+// reads as a flaky build in an app that has nothing wrong with it. A rename within
+// the same directory is atomic, so a concurrent reader gets the whole old file or
+// the whole new one and never half of either.
+//
+// 0o644 before the swap: 0o600 is CreateTemp's mode, the committed artifact is
+// world-readable like every other file in the tree, and the chmod happens first so
+// it is never briefly published under the wrong one.
+func publish(dir, name string, body []byte) error {
+	tmp, err := os.CreateTemp(dir, "."+name+".*")
+	if err != nil {
+		return err
+	}
+	if _, err := tmp.Write(body); err != nil {
+		tmp.Close()
+		os.Remove(tmp.Name())
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		os.Remove(tmp.Name())
+		return err
+	}
+	if err := os.Chmod(tmp.Name(), 0o644); err != nil {
+		os.Remove(tmp.Name())
+		return err
+	}
+	if err := os.Rename(tmp.Name(), filepath.Join(dir, name)); err != nil {
+		os.Remove(tmp.Name())
+		return err
+	}
+	return nil
+}
+
+// SpecDeps are the deps of a described program: BuildDeps, and a master minted for the run.
+//
+// A store that seals a column refuses to open without a master, and mounting a program to
+// describe it opens its stores. They are throwaway (SpecConfig's data dir is removed when the
+// run ends), so the master that seals them is too: random, and gone with the process. It is
+// not Config.KMSMasterKeyRef, which kms reads to decide which routes it registers, and a
+// described program must be a function of the code alone.
+//
+// It is set on cfg BEFORE BuildDeps, because BuildDeps opens stores itself (installFinance
+// publishes the books with the master it derived), so a master patched onto the Deps it
+// returned reached only the callers handed that copy.
+func SpecDeps(cfg *cloud.Config) cloud.Deps {
+	if masterKeyBytes(cfg) == nil {
+		master := make([]byte, 32)
+		_, _ = rand.Read(master)
+		cfg.KMSMasterKeyRef = base64.StdEncoding.EncodeToString(master)
+	}
+	return buildDeps(cfg)
+}
+
+// describe mounts specs into a throwaway app and writes its projections.
+//
+// Enablement is cfg's default, NOT the forced single-service list Serve applies:
+// this is the fleet's document, and a STAGED subsystem (config.go's
+// a deployment does not name) is linked but inert until it does. Describing
+// one here would publish routes api.hanzo.ai does not serve, and would make the
+// composed document disagree with the fully-mounted golden — which is the equality
+// the composition proof rests on.
+func describe(specs []cloud.Plugin, dir string) error {
+	cfg, done, err := SpecConfig()
+	if err != nil {
+		return err
+	}
+	defer done()
+
+	deps := SpecDeps(cfg)
+	app := zip.New(zip.Config{Logger: luxlog.Default(), DisableStartupMessage: true})
+	if err := cloud.UseAll(app, specs, cfg, deps); err != nil {
+		return err
+	}
+	return Describe(dir, app)
+}

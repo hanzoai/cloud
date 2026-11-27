@@ -1,0 +1,317 @@
+package platform
+
+// projects_canonical_test.go — the canonical project read, over the peer plane.
+//
+// What this replaced was an HTTP client with a per-org minted credential, and its
+// tests were mostly ABOUT that credential: that it was resolved once, that a nil
+// identity provider failed closed, that no request reached IAM unauthenticated.
+// None of those questions exist any more. The org rides the call, so there is no
+// credential to cache, to fail closed on, or to forget — which is the point, and
+// is why deleting those tests is the change rather than a gap in it.
+//
+// What remains is what still can be wrong: the selector, the wire, and honesty
+// about a peer that is not there. Nothing on the path is stubbed — a real unix
+// socket, real ZAP frames, the real generated client, the real Ask.
+
+import (
+	"context"
+	"errors"
+	"io"
+	"net"
+	"os"
+	"path/filepath"
+	"unsafe"
+
+	"testing"
+	"time"
+
+	"github.com/hanzoai/cloud/client"
+	"github.com/hanzoai/cloud/sdk"
+	"github.com/hanzoai/cloud/sdk/plane"
+
+	"github.com/hanzoai/cloud/sdk/kit"
+	"github.com/zap-proto/zip"
+)
+
+// servePeer stands the iam peer up on a real socket with the rows it should
+// answer, and returns a stop.
+//
+// The handler here is a stand-in for apps/iam's, deliberately: this file is the
+// CALLER's half, so the callee asserts nothing and simply answers. What is real
+// is everything between them — the socket, the frames, the op name, the types.
+func servePeer(t *testing.T, rows []client.Project) func() error {
+	t.Helper()
+	cloud.ResetPlane()
+	cloud.Plane().Post("/iam/projects",
+		func(ctx context.Context, _ *struct{}) (*client.Projects, error) {
+			if cloud.Who(ctx).Org == "" {
+				return nil, zip.ErrUnauthorized("projects: no org on the call")
+			}
+			return &client.Projects{Projects: rows}, nil
+		},
+		zip.WithOperationID(client.IAMProjects))
+	stop, err := cloud.ServePlane("iam", nil)
+	if err != nil {
+		t.Fatalf("ServePlane(iam): %v", err)
+	}
+	// ServePlane FREEZES the plane app: a later Mount registering an op on it
+	// panics ("plane was frozen ... it appears in a built generation"). A process
+	// serves once, so that is right in production and wrong for a test binary,
+	// which mounts many times. Dropping it here is what ResetPlane is for.
+	t.Cleanup(cloud.ResetPlane)
+	for range 200 {
+		if c, derr := net.Dial("unix", zip.SocketPath("iam")); derr == nil {
+			_ = c.Close()
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	return stop
+}
+
+// TestNewProjectStoreSelector pins the ONE selector: a deployment that names a
+// separate IAM reads it as a peer; its absence means this binary IS the IAM and
+// the embedded store stays. Neither branch takes an address or a credential, so
+// the selector is the whole of the decision.
+func TestNewProjectStoreSelector(t *testing.T) {
+	t.Setenv("IAM_URL", "")
+	if _, ok := newProjectStore().(iamProjects); !ok {
+		t.Fatal("no IAM_URL: the embedded store is the canonical one")
+	}
+	t.Setenv("IAM_URL", "http://iam.hanzo.svc")
+	if _, ok := newProjectStore().(canonicalProjects); !ok {
+		t.Fatal("IAM_URL set: the iam peer must be selected")
+	}
+}
+
+// TestCanonicalProjectsRoundTrip drives the real thing: a real socket, a real ZAP
+// frame, the real generated client, and IAM's model rebuilt from the contract on
+// the far side.
+func TestCanonicalProjectsRoundTrip(t *testing.T) {
+	t.Setenv("ZIP_RUNTIME_DIR", kit.Sockets(t))
+	plane.Unbind()
+	stop := servePeer(t, []client.Project{
+		{Owner: "acme", Name: "web", DisplayName: "Web", Description: "the site", CreatedTime: "2026-08-01T00:00:00Z"},
+		{Owner: "acme", Name: "api"},
+	})
+	t.Cleanup(func() { _ = stop() })
+
+	c := canonicalProjects{}
+	rows, err := c.List(context.Background(), "acme")
+	if err != nil {
+		t.Fatalf("List: %v", err)
+	}
+	if len(rows) != 2 {
+		t.Fatalf("List returned %d rows, want 2", len(rows))
+	}
+	// Every field of the projection has to survive the wire. ZAP's layout is
+	// POSITIONAL — a field is its offset — so a reordered contract scrambles values
+	// across fields rather than failing to decode, and only checking each one
+	// catches that.
+	got := rows[0]
+	if got.Owner != "acme" || got.Name != "web" || got.DisplayName != "Web" ||
+		got.Description != "the site" || got.CreatedTime != "2026-08-01T00:00:00Z" {
+		t.Fatalf("a field was lost or scrambled crossing the plane: %+v", got)
+	}
+
+	// Get and Exists are derived from the same read.
+	p, err := c.Get(context.Background(), "acme", "api")
+	if err != nil || p == nil || p.Name != "api" {
+		t.Fatalf("Get(api) = %+v, %v", p, err)
+	}
+	if p, err := c.Get(context.Background(), "acme", "nope"); err != nil || p != nil {
+		t.Fatalf("an absent project must be (nil, nil), got %+v, %v", p, err)
+	}
+	if ok, err := c.Exists(context.Background(), "acme", "web"); err != nil || !ok {
+		t.Fatalf("Exists(web) = %v, %v", ok, err)
+	}
+}
+
+// TestCanonicalProjectsCarriesNoScope is the structural half. The op's input is the
+// empty struct: there is no field an org could be named in, so a caller cannot ask
+// about another tenant even by mistake. The HTTP client this replaced put the org
+// in the QUERY STRING and had to mint a credential to stop it mattering.
+func TestCanonicalProjectsCarriesNoScope(t *testing.T) {
+	t.Setenv("ZIP_RUNTIME_DIR", kit.Sockets(t))
+	plane.Unbind()
+	var sawOrg string
+	cloud.ResetPlane()
+	cloud.Plane().Post("/iam/projects",
+		func(ctx context.Context, _ *struct{}) (*client.Projects, error) {
+			sawOrg = cloud.Who(ctx).Org
+			return &client.Projects{}, nil
+		},
+		zip.WithOperationID(client.IAMProjects))
+	stop, err := cloud.ServePlane("iam", nil)
+	if err != nil {
+		t.Fatalf("ServePlane(iam): %v", err)
+	}
+	t.Cleanup(func() { _ = stop(); cloud.ResetPlane() })
+	for range 200 {
+		if c, derr := net.Dial("unix", zip.SocketPath("iam")); derr == nil {
+			_ = c.Close()
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+
+	if _, err := (canonicalProjects{}).List(context.Background(), "acme"); err != nil {
+		t.Fatalf("List: %v", err)
+	}
+	if sawOrg != "acme" {
+		t.Fatalf("the callee read org %q; the tenant must ride the call", sawOrg)
+	}
+}
+
+// TestCanonicalProjectsNoPeerIsAnError: an iam that is not running must be an
+// error, never an empty list. "This org has no projects" and "I could not ask" are
+// different facts, and the PaaS acts on the first by offering to create one that
+// already exists.
+func TestCanonicalProjectsNoPeerIsAnError(t *testing.T) {
+	t.Setenv("ZIP_RUNTIME_DIR", kit.Sockets(t))
+	plane.Unbind()
+	cloud.ResetPlane() // nothing listening
+
+	rows, err := (canonicalProjects{}).List(context.Background(), "acme")
+	if err == nil {
+		t.Fatalf("an absent iam ANSWERED with %d rows; it must be an error", len(rows))
+	}
+	if !errors.Is(err, cloud.ErrNoPeer) {
+		t.Fatalf("an absent peer must report ErrNoPeer, got: %v", err)
+	}
+	if _, err := (canonicalProjects{}).Exists(context.Background(), "acme", "web"); err == nil {
+		t.Fatal("Exists against an absent iam must error")
+	}
+}
+
+// TestCanonicalProjectsCoresidentSkipsTheWire pins the half of Ask that is NOT a
+// transport. When the peer is THIS process — a fused binary where iam and
+// platform are both mounted — plane.Call finds it with zip.Serving and runs the op
+// through zip.Here, the same opByName and invoke the socket plane uses, with
+// nothing encoded and no kernel in the middle.
+//
+// So the socket is not load-bearing here, and asserting that it is would be
+// asserting the wrong thing: unlinking it changes nothing because nothing was
+// going to touch it.
+func TestCanonicalProjectsCoresidentSkipsTheWire(t *testing.T) {
+	t.Setenv("ZIP_RUNTIME_DIR", kit.Sockets(t))
+	plane.Unbind()
+	stop := servePeer(t, []client.Project{{Owner: "acme", Name: "web"}})
+	t.Cleanup(func() { _ = stop() })
+
+	if zip.Serving("iam") == nil {
+		t.Fatal("iam is served by this process; zip.Serving must find it")
+	}
+	c := canonicalProjects{}
+	if _, err := c.List(context.Background(), "acme"); err != nil {
+		t.Fatalf("co-resident List: %v", err)
+	}
+	// The socket is gone and the call still works, because it never used the socket.
+	if err := os.Remove(zip.SocketPath("iam")); err != nil {
+		t.Fatalf("unlink: %v", err)
+	}
+	rows, err := c.List(context.Background(), "acme")
+	if err != nil {
+		t.Fatalf("a co-resident call must not depend on the socket: %v", err)
+	}
+	if len(rows) != 1 || rows[0].Name != "web" {
+		t.Fatalf("co-resident List returned %+v", rows)
+	}
+}
+
+// TestCanonicalProjectsSocketIsLoadBearing is the other half: when the peer is
+// NOT this process, the socket is the whole dependency.
+//
+// "Not this process" is arranged the way zip.Serving actually decides it — it
+// keys on SocketPath(name), so a caller resolving iam.sock in a DIFFERENT runtime
+// directory misses the local registration and dials for real. That is the same
+// arrangement planewire_probe_test.go uses to capture the frames, and the bytes it
+// captured are the evidence that this path is a wire at all.
+//
+// The mutation is the point: the call succeeds, the socket is unlinked with the
+// peer still alive and it fails, the peer rebinds and it succeeds again. A
+// transport that never carries a byte looks exactly like one that does from every
+// angle except this one.
+func TestCanonicalProjectsSocketIsLoadBearing(t *testing.T) {
+	front, back := kit.Sockets(t), kit.Sockets(t)
+
+	t.Setenv("ZIP_RUNTIME_DIR", back)
+	plane.Unbind()
+	stop := servePeer(t, []client.Project{{Owner: "acme", Name: "web"}})
+	t.Cleanup(func() { _ = stop() })
+	peer := filepath.Join(back, "iam.sock")
+
+	// front is where the caller dials; it forwards to the peer's real socket.
+	relayTo(t, filepath.Join(front, "iam.sock"), peer)
+	t.Setenv("ZIP_RUNTIME_DIR", front)
+	plane.Unbind()
+	if zip.Serving("iam") != nil {
+		t.Fatal("the caller must NOT find iam locally, or this proves nothing about a wire")
+	}
+
+	c := canonicalProjects{}
+	if _, err := c.List(context.Background(), "acme"); err != nil {
+		t.Fatalf("with the socket reachable, List must succeed: %v", err)
+	}
+
+	// The peer is alive; only the socket the caller uses is gone.
+	if err := os.Remove(filepath.Join(front, "iam.sock")); err != nil {
+		t.Fatalf("unlink: %v", err)
+	}
+	if _, err := c.List(context.Background(), "acme"); err == nil {
+		t.Fatal("the socket was unlinked and the call SUCCEEDED — nothing is crossing it")
+	}
+
+	// Rebind the caller's socket and it works again.
+	relayTo(t, filepath.Join(front, "iam.sock"), peer)
+	rows, err := c.List(context.Background(), "acme")
+	if err != nil {
+		t.Fatalf("after rebinding, List must succeed again: %v", err)
+	}
+	if len(rows) != 1 || rows[0].Name != "web" {
+		t.Fatalf("after rebinding, List returned %+v", rows)
+	}
+}
+
+// relayTo binds at and forwards every connection to peer, so a caller in one
+// runtime directory reaches a peer serving in another over a real socket.
+func relayTo(t *testing.T, at, peer string) {
+	t.Helper()
+	ln, err := net.Listen("unix", at)
+	if err != nil {
+		t.Fatalf("listen %s: %v", at, err)
+	}
+	t.Cleanup(func() { _ = ln.Close() })
+	go func() {
+		for {
+			c, aerr := ln.Accept()
+			if aerr != nil {
+				return
+			}
+			go func() {
+				defer func() { _ = c.Close() }()
+				up, derr := net.Dial("unix", peer)
+				if derr != nil {
+					return
+				}
+				defer func() { _ = up.Close() }()
+				done := make(chan struct{})
+				go func() { _, _ = io.Copy(up, c); _ = up.(*net.UnixConn).CloseWrite(); close(done) }()
+				_, _ = io.Copy(c, up)
+				<-done
+			}()
+		}
+	}()
+}
+
+// TestCanonicalProjectsHoldsNoAddress is the knob check. A peer is addressed by
+// NAME, so the store has nothing to hold: no base URL, no http.Client, no
+// credential, no cache. unsafe.Sizeof is the whole assertion — it is zero exactly
+// while the struct stays empty, and a reviewer who adds a field has to come here
+// and say why this deployment needs one.
+func TestCanonicalProjectsHoldsNoAddress(t *testing.T) {
+	if sz := unsafe.Sizeof(canonicalProjects{}); sz != 0 {
+		t.Fatalf("canonicalProjects grew to %d bytes; a peer is addressed by NAME, so "+
+			"there is no address, credential or cache for it to hold", sz)
+	}
+}

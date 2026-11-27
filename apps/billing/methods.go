@@ -1,0 +1,257 @@
+package billing
+
+// methods.go serves the saved-card family of /v1/billing — the cards and
+// accounts a customer has on file, at the two addresses that answer for them.
+//
+// TWO ADDRESSES, ONE ANSWER. /v1/billing/methods is the customer's own; the
+// portal spelling is the same list under the name a hosted checkout addresses it
+// by. Both reach one core in the process that owns the rows, so a card added on
+// one cannot be missing from the other — which is the whole reason the second
+// spelling is a route here rather than a second implementation.
+//
+// The wire is RENDERED rather than typed, and that is deliberate: a saved method
+// carries five kinds of processor detail plus a billing address, all of them the
+// store's own models, so a mirror in this package would be sixty fields whose
+// only job is to agree with something else. The bytes the store produced cross
+// whole. A value the endpoint DECIDES is typed; a document it forwards is bytes.
+
+import (
+	"context"
+	"net/http"
+	"strings"
+
+	"github.com/hanzoai/cloud/client"
+	commercepeer "github.com/hanzoai/cloud/client/commerce"
+	iampeer "github.com/hanzoai/cloud/client/iam"
+	"github.com/hanzoai/cloud/sdk"
+	"github.com/hanzoai/cloud/sdk/principal"
+	"github.com/hanzoai/cloud/sdk/spec"
+	luxlog "github.com/luxfi/log"
+	"github.com/zap-proto/zip"
+)
+
+// mountMethods registers the saved-card family at both of its addresses. Called
+// from routes.
+func mountMethods(app cloud.Router, o ops) {
+	// The two READS and the SAVE are byte relays — they answer the document
+	// commerce rendered, verbatim — so they stay raw and declare their prose
+	// beside the routes (init, below). The DETACH answers a value, so it is a
+	// typed op; it is registered TWICE explicitly rather than from the loop
+	// because cmd/zipdoc refuses a computed path, and a route it cannot place is
+	// prose silently dropped from the document and the MCP tool.
+	for _, at := range []string{"/v1/billing/methods", "/v1/billing/portal/methods"} {
+		app.Raw(http.MethodGet, at, cloud.Handle(o.s, listMethods))
+		app.Raw(http.MethodPost, at, cloud.Handle(o.s, saveMethod))
+		app.Raw(http.MethodPatch, at+"/:id", cloud.Handle(o.s, updateMethod))
+		app.Raw(http.MethodPost, at+"/:id/default", cloud.Handle(o.s, defaultMethod))
+	}
+	g := app.Group("/v1/billing")
+	g.Delete("/methods/:id", o.detachMethod)
+	g.Delete("/portal/methods/:id", o.detachPortalMethod)
+}
+
+// The family is RAW at both addresses because its answer is a rendered document
+// rather than a value this endpoint decides, so its prose is declared beside the
+// routes. Declared through the same registry Register uses, so each renders only
+// while the router actually serves it.
+func init() {
+	const saved = "A saved method is a card or account VAULTED at the processor: what is " +
+		"stored here is the processor's token for it plus the last four digits and the " +
+		"expiry a customer recognises it by, never a card number.\n\n" +
+		"The list is the caller's OWN — the wallet this request bills from, resolved " +
+		"server-side — so a query cannot widen it to another customer of the same org.\n\n" +
+		"`/v1/billing/portal/methods` answers the same list under the name a hosted " +
+		"checkout addresses it by. One set of rows, two spellings; a card added at " +
+		"either is present at both."
+
+	for _, at := range []string{"/v1/billing/methods", "/v1/billing/portal/methods"} {
+		spec.Describe(at, http.MethodGet,
+			"Cards and accounts on file for the caller",
+			"Answers every payment method the caller has saved, newest first.\n\n"+saved+"\n\n"+
+				"A store that cannot be read answers an EMPTY LIST rather than a failure: the "+
+				"saved-cards panel renders empty instead of breaking the page around it.")
+		spec.Describe(at, http.MethodPost,
+			"Save a card or account for the caller",
+			"Vaults the instrument at the processor and stores the row.\n\n"+saved+"\n\n"+
+				"Saving a card ALREADY on file answers with the row that already holds it "+
+				"rather than stacking a duplicate — 200 for that, 201 for a genuinely new "+
+				"row, so a client can tell which happened. A card the processor declines is "+
+				"402 and nothing is stored.\n\n"+
+				"The org's cards are an admin's to add: a member billed from the org's "+
+				"account is refused 403 with a sentence naming who to ask. A member billed "+
+				"from a wallet of their own saves cards to that wallet.")
+		spec.Describe(at+"/:id", http.MethodPatch,
+			"Update billing details on a saved card or account",
+			"Updates the billing address or caller-supplied metadata on one saved payment method.\n\n"+saved)
+		spec.Describe(at+"/:id/default", http.MethodPost,
+			"Set one saved card or account as default",
+			"Marks one saved payment method as the default instrument for renewals and auto-reload.\n\n"+saved)
+		spec.Describe(at+"/:id", http.MethodDelete,
+			"Remove one saved card or account",
+			"Detaches the method at the processor and drops the row.\n\n"+
+				"A method the caller does not own is NOT FOUND rather than refused — the same "+
+				"answer whether the id names nothing or names somebody else's card — so an id "+
+				"cannot be probed for existence.\n\n"+
+				"A platform operator may act on any subject inside the org; everyone else "+
+				"may only remove their own. The org's cards are an admin's to remove: a "+
+				"member billed from the org's account is refused 403 with a sentence "+
+				"naming who to ask.")
+	}
+}
+
+// listMethods answers the caller's saved methods.
+//
+// Raw rather than typed, for the reason the file header gives: the body is the
+// store's rendered document and is forwarded whole.
+func listMethods(s *cloud.Service[state], c *zip.Ctx) error {
+	org, subject, err := payerOf(c)
+	if err != nil {
+		return err
+	}
+	out, aerr := ask(c.Forward(), org, "methods", func(ctx context.Context) (*client.Rendered, error) {
+		return commercepeer.BillingMethods(ctx, &client.MethodsIn{Subject: subject, Kind: c.Query("type")})
+	})
+	if aerr != nil {
+		return aerr
+	}
+	return document(c, http.StatusOK, out.Body)
+}
+
+// saveMethod vaults an instrument and stores the row.
+//
+// The body crosses VERBATIM: the vaulting path has to see what the browser
+// produced, and re-shaping it here would be this endpoint deciding which
+// processor details are worth keeping.
+func saveMethod(s *cloud.Service[state], c *zip.Ctx) error {
+	if err := cloud.CSRF(c.Context()); err != nil {
+		return err
+	}
+	// A card saved to the org's account can become the card its renewals and
+	// auto-reload charge, so it is its admins' to add (steward).
+	st, err := steward(c, cardsAct)
+	if err != nil {
+		return err
+	}
+	org, subject := st.org, st.subject
+	out, aerr := ask(c.Forward(), org, "save method", func(ctx context.Context) (*client.Rendered, error) {
+		return commercepeer.BillingMethodSave(ctx, &client.MethodSaveIn{
+			Subject: subject,
+			// The caller's OWN address, off its credential: it names the
+			// processor's customer profile, and the store must never read an
+			// identity it was not handed.
+			Email: callerEmail(c),
+			Name:  callerName(c),
+			Body:  c.Body(),
+		})
+	})
+	if aerr != nil {
+		return aerr
+	}
+	// 201 only for a row that did not exist. A duplicate save answers with the
+	// row that already holds the card, and 200 states "nothing new" honestly.
+	status := http.StatusOK
+	if out.Created {
+		status = http.StatusCreated
+	}
+	return document(c, status, out.Body)
+}
+
+// updateMethod updates billing details on one saved payment method.
+func updateMethod(s *cloud.Service[state], c *zip.Ctx) error {
+	if err := cloud.CSRF(c.Context()); err != nil {
+		return err
+	}
+	st, err := steward(c, cardsAct)
+	if err != nil {
+		return err
+	}
+	org, subject := st.org, st.subject
+	out, aerr := ask(c.Forward(), org, "update method", func(ctx context.Context) (*client.Rendered, error) {
+		return commercepeer.BillingMethodUpdate(ctx, &client.MethodUpdateIn{
+			ID:         c.Param("id"),
+			Subject:    subject,
+			Privileged: principal.Super(c),
+			Body:       c.Body(),
+		})
+	})
+	if aerr != nil {
+		return aerr
+	}
+	return document(c, http.StatusOK, out.Body)
+}
+
+// defaultMethod marks one saved payment method as default for the caller's wallet.
+func defaultMethod(s *cloud.Service[state], c *zip.Ctx) error {
+	if err := cloud.CSRF(c.Context()); err != nil {
+		return err
+	}
+	st, err := steward(c, cardsAct)
+	if err != nil {
+		return err
+	}
+	org, subject := st.org, st.subject
+	out, aerr := ask(c.Forward(), org, "default method", func(ctx context.Context) (*client.Rendered, error) {
+		return commercepeer.BillingMethodDefault(ctx, &client.MethodRef{
+			ID:         c.Param("id"),
+			Subject:    subject,
+			Privileged: principal.Super(c),
+		})
+	})
+	if aerr != nil {
+		return aerr
+	}
+	return document(c, http.StatusOK, out.Body)
+}
+
+// callerEmail is the caller's OWN address, off the identity the edge minted.
+//
+// It names the processor's customer profile, so it is read here and handed over
+// rather than resolved in the store: a store that read an identity it was not
+// given would be vaulting a card against a profile nobody proved. Empty is
+// legitimate — a machine credential has no mailbox — and the processor names the
+// profile some other way. It is read off the request (c.Forward()): a raw route's
+// own context carries no caller, so read there it was always empty.
+func callerEmail(c *zip.Ctx) string { return cloud.Who(c.Forward()).Email }
+
+// callerName is the caller's OWN name, off the user record IAM holds for them: the
+// display name, else nothing. It names the processor's customer, which the card's
+// issuer reads, so it is never the body's and never the billing key (the org slug).
+// IAM is asked for the caller itself; a machine credential or an IAM that cannot answer
+// has no name to give, and the customer is then made without one rather than named
+// for the slug.
+func callerName(c *zip.Ctx) string {
+	e, err := iampeer.IAMEmail(c.Forward())
+	name, why := nameOf(e, err)
+	if name == "" {
+		// Said once per payment, with the reason, because "the customer has no name" is
+		// otherwise a silent fact about a user record: the identity headers carry the
+		// username and the email and no display name, so this lookup is the only source.
+		luxlog.Default().Warn("billing: no payer name", "subject", cloud.Who(c.Forward()).User, "why", why)
+	}
+	return name
+}
+
+// nameOf is the display name IAM holds, or "" and the reason there is none: IAM
+// could not answer (a machine credential, no user row for the subject) or the user
+// row states no display name.
+func nameOf(e *client.Email, err error) (name, why string) {
+	switch {
+	case err != nil:
+		return "", "IAM did not answer: " + err.Error()
+	case e == nil:
+		return "", "IAM answered nothing"
+	case strings.TrimSpace(e.Name) == "":
+		return "", "the user record states no display name"
+	}
+	return strings.TrimSpace(e.Name), ""
+}
+
+// document writes a rendered answer back as the store produced it.
+//
+// It is one function so the four raw endpoints in this package cannot come to
+// disagree about the header, and it writes the bytes untouched — re-marshalling
+// them would make this endpoint a second renderer of somebody else's document.
+func document(c *zip.Ctx, status int, body []byte) error {
+	c.SetHeader("Content-Type", "application/json")
+	return c.Bytes(status, body)
+}

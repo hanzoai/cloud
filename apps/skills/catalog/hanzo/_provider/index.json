@@ -1,0 +1,112 @@
+{
+  "$schema": "https://schemas.agentskills.io/discovery/0.2.0/schema.json",
+  "base_url": "https://api.hanzo.ai",
+  "brand": "hanzo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://hanzo.id",
+  "mcp": {
+    "description": "Model Context Protocol over JSON-RPC 2.0 — one POST per message, stateless, protocol revision 2026-07-28. tools/list answers without a credential with one tool per subsystem (its operations in the \"op\" enum) plus \"describe\", which returns one operation's input schema. tools/call names a subsystem tool and carries {\"op\": <operation>, \"input\": <its arguments>}; it takes the same bearer the REST API does, and a call that carries none is answered 401 with a WWW-Authenticate header naming the resource metadata at /.well-known/oauth-protected-resource, which names the authorization server to sign in at. The tool surface is the public contract: the operator's admin product is not offered, and a name that would disclose a secret or mutate an identity is withheld — the list says how many, under _meta.",
+    "method": "POST",
+    "url": "https://api.hanzo.ai/v1/mcp"
+  },
+  "skill_count": 12,
+  "skills": [
+    {
+      "description": "Read provider callback: OAuth return for any connector.",
+      "digest": "sha256:e3ffcb39cf05071509b70b0d756b6c45abee3a3c6bdfebf96f7f1b42ff207abe",
+      "name": "provider_callback",
+      "service": "provider",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/provider_callback/SKILL.md"
+    },
+    {
+      "description": "Read provider discord: Begin linking a Hanzo account from Discord, Complete the Discord account link, Discord sign-in return leg.",
+      "digest": "sha256:04c0d1a6c5b08103f778d02d9b6bd91b70bf7e50846f6c87758736095717f16f",
+      "name": "provider_discord",
+      "service": "provider",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/provider_discord/SKILL.md"
+    },
+    {
+      "description": "Read provider github: Lists the GitHub accounts the caller may see the App installed on, each confirmed against the App's own list, plus where to add another., Lists the GitHub repositories the caller may work on, most recently pushed first, searched and paged on the server., Lis",
+      "digest": "sha256:19c32ef7d825d2270c2928dfbef8c62708708da554e8cb0bdcce5f47ba63be79",
+      "name": "provider_github",
+      "service": "provider",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/provider_github/SKILL.md"
+    },
+    {
+      "description": "Read provider gitlab: Lists the projects the org's GitLab connection can reach — membership projects, most recently active first..",
+      "digest": "sha256:f5c05ee75b6600692350dfde0be4f5379a58e8c31d71ba39d36e49ed32abbead",
+      "name": "provider_gitlab",
+      "service": "provider",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/provider_gitlab/SKILL.md"
+    },
+    {
+      "description": "Read provider google: Reports whether the caller has connected their own Google account in the org they act in, and as whom., Is where Google returns the person..",
+      "digest": "sha256:4fefdf623bd6c0e1380530dff74d8ff0621a20512b2762a8fc82d6122377d439",
+      "name": "provider_google",
+      "service": "provider",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/provider_google/SKILL.md"
+    },
+    {
+      "description": "Read provider logo: Serves a connector's logo from the catalog..",
+      "digest": "sha256:5002bbf652635319aab4ef818cc7ef32225f17a367dfb738f06e5a63d08dc2fc",
+      "name": "provider_logo",
+      "service": "provider",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/provider_logo/SKILL.md"
+    },
+    {
+      "description": "Read provider provider: Returns every registered integration provider together with THIS org's connection status for it — the catalog the console's Integrations page renders., Returns ONE provider with this org's connection status — the same view list carries, for a single id..",
+      "digest": "sha256:c84b19f93779d57cce5429b7c45c99e9ffcc559a40e4209f098e2fd36a06b1d6",
+      "name": "provider_provider",
+      "service": "provider",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/provider_provider/SKILL.md"
+    },
+    {
+      "description": "Read provider slack: Lists Slack conversations for the caller's connected workspace., Read one Slack file's bytes., Install the Hanzo app into a Slack workspace.",
+      "digest": "sha256:c20a11ed1f9668b4b253ed172f5d89718ba1337c855a603306276fd1f0c07af1",
+      "name": "provider_slack",
+      "service": "provider",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/provider_slack/SKILL.md"
+    },
+    {
+      "description": "Read provider teams: Begin linking a Hanzo account from Teams, Microsoft sign-in return leg, Complete the Teams account link.",
+      "digest": "sha256:9b288c48854b3a1c81b5b3fe56f729cec04059ecca859653d4fb2edf6d7ebd70",
+      "name": "provider_teams",
+      "service": "provider",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/provider_teams/SKILL.md"
+    },
+    {
+      "description": "Read provider telegram: Begin linking a Hanzo account from Telegram, Telegram Login Widget return leg, Complete the Telegram account link.",
+      "digest": "sha256:0c11f0f99e1d26305fa2c04efb7cb8aecb719aee2c9366a532969bc7509449ed",
+      "name": "provider_telegram",
+      "service": "provider",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/provider_telegram/SKILL.md"
+    },
+    {
+      "description": "Read provider twitter: Completes an X consent that arrived on the twitter spelling of the callback..",
+      "digest": "sha256:cd6103259c49c0dbc06240edfc8a570ea87fc2eb0e2bf9a05e78ed9792954d92",
+      "name": "provider_twitter",
+      "service": "provider",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/provider_twitter/SKILL.md"
+    },
+    {
+      "description": "Read provider whatsapp: Reads the invite link of a group this org's number owns., WhatsApp Cloud API subscription challenge.",
+      "digest": "sha256:ae4590841d32bb219ebef9b892f007385938a196575adc46cf31dc09f94ae19e",
+      "name": "provider_whatsapp",
+      "service": "provider",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/provider_whatsapp/SKILL.md"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

@@ -1,0 +1,112 @@
+{
+  "$schema": "https://schemas.agentskills.io/discovery/0.2.0/schema.json",
+  "base_url": "https://api.hanzo.ai",
+  "brand": "hanzo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://hanzo.id",
+  "mcp": {
+    "description": "Model Context Protocol over JSON-RPC 2.0 — one POST per message, stateless, protocol revision 2026-07-28. tools/list answers without a credential with one tool per subsystem (its operations in the \"op\" enum) plus \"describe\", which returns one operation's input schema. tools/call names a subsystem tool and carries {\"op\": <operation>, \"input\": <its arguments>}; it takes the same bearer the REST API does, and a call that carries none is answered 401 with a WWW-Authenticate header naming the resource metadata at /.well-known/oauth-protected-resource, which names the authorization server to sign in at. The tool surface is the public contract: the operator's admin product is not offered, and a name that would disclose a secret or mutate an identity is withheld — the list says how many, under _meta.",
+    "method": "POST",
+    "url": "https://api.hanzo.ai/v1/mcp"
+  },
+  "skill_count": 12,
+  "skills": [
+    {
+      "description": "Read patrol camera: Lists the cameras a caller may OPEN., Mints a short-lived way in to one camera., Redeems a minted ticket for what opens the camera..",
+      "digest": "sha256:4e6a4bb8453025d7d48a18f5c392a22938ac8409fd21e1960be253a9385f1065",
+      "name": "patrol_camera",
+      "service": "patrol",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/patrol_camera/SKILL.md"
+    },
+    {
+      "description": "Read patrol event: Lists the feed, newest first..",
+      "digest": "sha256:e3e8b51bc55e646f7c7a72a8a519d4c108cc45a4b040d8248331d922463d6d0c",
+      "name": "patrol_event",
+      "service": "patrol",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/patrol_event/SKILL.md"
+    },
+    {
+      "description": "Read patrol feed: Watch the live feed.",
+      "digest": "sha256:79f706ccd654a00c5f30088c50c8a5b12751a326d9805378891173e121338dc4",
+      "name": "patrol_feed",
+      "service": "patrol",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/patrol_feed/SKILL.md"
+    },
+    {
+      "description": "Read patrol incident: Lists responses., Returns one response whole: the incident, every act performed on it, and the SLA clocks those acts settled..",
+      "digest": "sha256:8aadc90d6aa921d9597837c27f0b9adcebda95438a25a0bbac7773ed7932058e",
+      "name": "patrol_incident",
+      "service": "patrol",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/patrol_incident/SKILL.md"
+    },
+    {
+      "description": "Read patrol key: Lists the key register., Returns one key set from the register..",
+      "digest": "sha256:3b57cf331f8bba3f8ba50d8cc6b3b76909228ef882cbaa451f0838f8e6046489",
+      "name": "patrol_key",
+      "service": "patrol",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/patrol_key/SKILL.md"
+    },
+    {
+      "description": "Read patrol note: Lists internal remarks..",
+      "digest": "sha256:01f0a4b9d4fced01bc105c6c2641f248aaf354f6eb31a2d2f51bb43a90b5ebbd",
+      "name": "patrol_note",
+      "service": "patrol",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/patrol_note/SKILL.md"
+    },
+    {
+      "description": "Read patrol report: Download a filed report.",
+      "digest": "sha256:5ae7ccc7c1d292bac73e570ca055e0c595e61c0f375bb89a83a4c47bfd4b492d",
+      "name": "patrol_report",
+      "service": "patrol",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/patrol_report/SKILL.md"
+    },
+    {
+      "description": "Read patrol site: Lists the estate., Returns one site whole: the register row plus the panel's zones and the standing hazards, which ride inside the document..",
+      "digest": "sha256:f7ad61410f12fca6fc6f857fe159c77e7fb0fc7731327c7a42558726fe0c9f24",
+      "name": "patrol_site",
+      "service": "patrol",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/patrol_site/SKILL.md"
+    },
+    {
+      "description": "Read patrol snapshot: Returns the whole picture in one read: sites, units with their position trails, today's tours and checkpoints, the key register, the recent feed and the open incident..",
+      "digest": "sha256:4bed784ec0cb86ec3f72da3eb681847dc9a4fa79a423ebb35a66c9bf9ec9f0ed",
+      "name": "patrol_snapshot",
+      "service": "patrol",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/patrol_snapshot/SKILL.md"
+    },
+    {
+      "description": "Read patrol tenant: Returns one org's public face — brand, company, operations, features and terminology..",
+      "digest": "sha256:f02047101e9ef6e522a9ebd1ee87fd2a475e65f40d13b9cbb61617b5424eb467",
+      "name": "patrol_tenant",
+      "service": "patrol",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/patrol_tenant/SKILL.md"
+    },
+    {
+      "description": "Read patrol tour: Lists patrol rounds with their checkpoints — the proof-of-presence record..",
+      "digest": "sha256:32fe1b06b1353eaf60a1c4948a9fbcf95a95e53b295c112e06000f53773ffef5",
+      "name": "patrol_tour",
+      "service": "patrol",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/patrol_tour/SKILL.md"
+    },
+    {
+      "description": "Read patrol unit: Lists the fleet with each unit's position trail, which is what the map draws., Answers which units can reach a site soonest..",
+      "digest": "sha256:d8dd612c4f75ea574fdeb5ef141789055b588947870ea2bcf046286b889f1cba",
+      "name": "patrol_unit",
+      "service": "patrol",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/patrol_unit/SKILL.md"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

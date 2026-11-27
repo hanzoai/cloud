@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Desktop</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #000; overflow: hidden; user-select: none; }
+  #d { position: absolute; inset: 0; }
+  #d.watch, #d.watch canvas { cursor: default !important; }
+  #s {
+    position: absolute; inset: 0; display: flex; align-items: center;
+    justify-content: center; gap: 14px; flex-direction: column;
+    background: #000; color: #ededed;
+    font: 500 15px/1.4 -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", sans-serif;
+    letter-spacing: -0.01em;
+  }
+  #s[hidden] { display: none; }
+  .dots { display: inline-flex; align-items: center; gap: 6px; height: 10px; }
+  .dots i {
+    display: block; width: 5px; height: 5px; border-radius: 999px;
+    background: #888; opacity: 0.35;
+    animation: pulse 1.2s ease-in-out infinite;
+  }
+  .dots i:nth-child(2) { animation-delay: 0.2s; }
+  .dots i:nth-child(3) { animation-delay: 0.4s; }
+  #s.stopped .dots { display: none; }
+  #s.stopped { color: #9a9a9a; font-size: 13px; }
+  @keyframes pulse {
+    0%, 80%, 100% { opacity: 0.28; transform: scale(0.9); }
+    40% { opacity: 1; transform: scale(1.15); background: #fff; }
+  }
+  #s button {
+    font: 500 12px/1.4 inherit; color: #ececec; background: #161616;
+    border: 1px solid #2e2e2e; border-radius: 999px; padding: 6px 14px; cursor: pointer;
+  }
+  #s button:hover { border-color: #525252; background: #1f1f1f; }
+</style>
+</head>
+<body>
+<div id="d"></div>
+<div id="s">
+  <span id="m">Starting desktop</span>
+  <span class="dots" aria-hidden="true"><i></i><i></i><i></i></span>
+</div>
+<script type="module">
+__RFB__
+
+// The page knows its own address, so nothing here is templated. The socket is
+// this document's path plus /ws, carrying this document's query string
+// unchanged — which is where the ticket already is. A page with no
+// substitutions has no injection surface and can be served as a constant.
+const stage = document.getElementById('d')
+const status = document.getElementById('s')
+const message = document.getElementById('m')
+const params = new URLSearchParams(location.search)
+const initialWatch = params.get('viewOnly') === '1' || params.get('watch') === '1'
+
+function stopped(why) {
+  status.hidden = false
+  status.classList.add('stopped')
+  message.textContent = why
+  if (window.parent !== window) {
+    window.parent.postMessage({ source: 'hanzo-screen', ready: false, reason: why }, '*')
+  }
+  if (document.getElementById('r')) return
+  const again = document.createElement('button')
+  again.id = 'r'
+  again.textContent = 'Reconnect'
+  again.onclick = () => location.reload()
+  status.appendChild(again)
+}
+
+const socket = location.origin.replace(/^http/, 'ws') +
+  location.pathname.replace(/\/+$/, '') + '/ws' + location.search
+
+message.textContent = 'Connecting'
+const screen = new window.RFB(stage, socket, { shared: true })
+
+// SCALED, NOT RESIZED. The screen is whatever size the X server was started
+// with, and asking the session to follow the pane would ask a server with no
+// RandR to do something it cannot — so the pixels are fitted to the pane here
+// instead, where a failure is a slightly soft image rather than no image.
+screen.scaleViewport = true
+screen.resizeSession = false
+
+function applyControl(viewOnly) {
+  const watch = Boolean(viewOnly)
+  screen.viewOnly = watch
+  screen.focusOnClick = !watch
+  stage.classList.toggle('watch', watch)
+  if (!watch) screen.focus()
+}
+
+applyControl(initialWatch)
+
+screen.addEventListener('connect', () => {
+  status.hidden = true
+  status.classList.remove('stopped')
+  if (!screen.viewOnly) screen.focus()
+  if (window.parent !== window) {
+    window.parent.postMessage({ source: 'hanzo-screen', ready: true, viewOnly: screen.viewOnly }, '*')
+  }
+})
+
+screen.addEventListener('clipboard', (e) => {
+  const text = e.detail && typeof e.detail.text === 'string' ? e.detail.text : ''
+  if (text && window.parent !== window) {
+    window.parent.postMessage({ source: 'hanzo-screen', clipboard: text }, '*')
+  }
+})
+
+screen.addEventListener('disconnect', (e) => {
+  stopped(e.detail && e.detail.clean ? 'The desktop closed.' : 'The connection failed.')
+})
+screen.addEventListener('securityfailure', (e) => {
+  stopped((e.detail && e.detail.reason) || 'The desktop refused the connection.')
+})
+
+window.addEventListener('message', (e) => {
+  const d = e && e.data
+  if (!d || typeof d !== 'object') return
+  if (d.type === 'hanzo-screen-control') {
+    applyControl(d.viewOnly)
+    if (window.parent !== window) {
+      window.parent.postMessage({ source: 'hanzo-screen', ready: status.hidden, viewOnly: screen.viewOnly }, '*')
+    }
+  } else if (d.type === 'hanzo-screen-clipboard' && typeof d.text === 'string') {
+    screen.clipboardPasteFrom(d.text)
+  }
+})
+
+window.addEventListener('focus', () => {
+  if (!screen.viewOnly) screen.focus()
+})
+</script>
+</body>
+</html>

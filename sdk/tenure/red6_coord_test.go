@@ -178,6 +178,8 @@ type r6stats struct {
 	lastA, firstB       time.Duration
 }
 
+// A pod cut from the KV AND the object store must stop acting before its peer
+// claims its  Measured on the real Coord.Live, not a stub.
 func TestRed6PartitionStopsBeforePeerClaims(t *testing.T) {
 	t.Parallel()
 	kv := coord.NewMemory().Backend()

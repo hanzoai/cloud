@@ -9,14 +9,17 @@ package meter
 // Subject the key within that ledger. A deposit credits that address, the gate
 // reads it, a usage debit spends it. One address, one answer, every caller."
 //
-// It is ONE function because the alternative is a gate keyed on the ORG POOL while the
-// debit spends a PERSON's wallet:
+// It is ONE function because the alternative has already shipped twice, and both
+// times the same way — a gate keyed on the ORG POOL while the debit spent a
+// PERSON's wallet:
 //
-//   - Keying both hooks on the org collapses every member onto the tenant's pool wallet:
-//     a brand-new $0 account would read the pool's balance and sail through the gate.
-//   - A gate that checks the pool's balance while the debit is taken from the person's
-//     wallet green-lights a request whose usage drains an empty personal wallet, and
-//     refuses a funded person when the pool is empty.
+//   - build.go installFinance: "Keying both hooks on the org collapsed every member
+//     onto the tenant's pool wallet: every new signup lives in 'hanzo', so a
+//     brand-new $0 account read HANZO's balance and sailed through the gate."
+//   - middleware_billing.go identityFromCtx: "this gate checked the pool's balance
+//     while ai debited the person's, so a funded pool green-lit a request whose
+//     usage drained an empty personal wallet, and an empty pool 402'd a funded
+//     person."
 //
 // So any NEW money gate resolves its address here rather than re-deriving it. The
 // rule itself is not implemented here either: it is account.Payer, the pure leaf
@@ -26,14 +29,19 @@ import (
 	"context"
 	"strings"
 
-	"github.com/hanzoai/account"
 	"github.com/hanzoai/cloud/sdk/principal"
+	"github.com/hanzoai/account"
 	"github.com/zap-proto/zip"
 )
 
-// THE ADDRESS IS ONE VALUE, AND IT IS account.Account. So nothing here flattens:
-// these functions return the resolved account, and a caller that needs a string
-// asks it for the half it means at the moment it needs one.
+// THE ADDRESS IS ONE VALUE, AND IT IS account.Account. There used to be a Wallet
+// struct here holding two strings, Ledger and Account, and it was a lossy copy of a
+// value that already exists: an account.Account answers Org() for the books and
+// Subject() for the key within them, and cannot be built with the halves swapped.
+// Splitting it into a pair is what let a gate read one half while a debit spent the
+// other — twice, in the incidents recorded above. So nothing here flattens: these
+// functions return the resolved account, and a caller that needs a string asks it
+// for the half it means at the moment it needs one.
 
 // Payer is the money address this request spends from — the resolved account, and
 // the zero Account when the request may not touch money at all: no validated
@@ -41,15 +49,16 @@ import (
 // anonymous caller could probe and drain a victim org's balance), or no resolvable
 // org.
 //
-// For a tenant org that is the same value account.Payer returns, so nothing
-// looked wrong; in the SHARED SIGNUP ORG it is not, and that is exactly where a
-// self-serve stranger lives. There, the balance the customer is shown, the edge
-// gate, and the paywall all read <org>/<username> while every metered product
-// debited the bare <org> — the platform's own pool. A stranger's top-up was
-// therefore unspendable, and their usage landed on Hanzo's books. spend.go names
-// this premise ("prepaid billing is per-org") as false in so many words; this is
-// the accessor that lets the meter stop assuming it, and Gate now takes the
-// account so no surface can pass the other one by mistake.
+// It exists because the in-handler meter (cloud.Meter) used to address money
+// with ONE string, and the string it was handed was the LEDGER — the org. For a
+// tenant org that is the same value account.Payer returns, so nothing looked wrong;
+// in the SHARED SIGNUP ORG it is not, and that is exactly where a self-serve stranger
+// lives. There, the balance the customer is shown, the edge gate, and the paywall all
+// read <org>/<username> while every metered product debited the bare <org> — the
+// platform's own pool. A stranger's top-up was therefore unspendable, and their usage
+// landed on Hanzo's books. spend.go names this premise ("prepaid billing is per-org")
+// as false in so many words; this is the accessor that lets the meter stop assuming
+// it, and Gate now takes the account so no surface can pass the other one by mistake.
 //
 // The ledger half is the SELECTED org (BillingOrg) — the org the caller switched
 // into, which the trust boundary already proved they belong to; a masquerading
@@ -171,10 +180,11 @@ func nameOf(id string) string {
 // request. It is the Org/OrgFrom pair again: one fact, one rule, read from either
 // side.
 //
-// Every metered surface resolved its payer from the request alone, so on a
-// transport with no request the wallet came back empty — and empty means "nobody
-// to bill", which every meter correctly treats as no gate and no debit. The
-// result was that an identified caller who reached a paid operation over the
+// THE HOLE IT CLOSES. Every metered surface resolved its payer from the request
+// alone, so on a transport with no request the wallet came back empty — and empty
+// means "nobody to bill", which every meter correctly treats as no gate and no
+// debit.
+// The result was that an identified caller who reached a paid operation over the
 // agent plane got it free and unrecorded: a carrier number ordered on a zero
 // balance, with the platform paying. The caller was never anonymous; only the
 // TRANSPORT was different, and money must not be a property of the transport.

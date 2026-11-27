@@ -1,0 +1,56 @@
+{
+  "$schema": "https://schemas.agentskills.io/discovery/0.2.0/schema.json",
+  "base_url": "https://api.zoo.ngo",
+  "brand": "zoo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://zoolabs.id",
+  "mcp": {
+    "description": "Model Context Protocol over JSON-RPC 2.0 — one POST per message, stateless, protocol revision 2026-07-28. tools/list answers without a credential with one tool per subsystem (its operations in the \"op\" enum) plus \"describe\", which returns one operation's input schema. tools/call names a subsystem tool and carries {\"op\": <operation>, \"input\": <its arguments>}; it takes the same bearer the REST API does, and a call that carries none is answered 401 with a WWW-Authenticate header naming the resource metadata at /.well-known/oauth-protected-resource, which names the authorization server to sign in at. The tool surface is the public contract: the operator's admin product is not offered, and a name that would disclose a secret or mutate an identity is withheld — the list says how many, under _meta.",
+    "method": "POST",
+    "url": "https://api.zoo.ngo/v1/mcp"
+  },
+  "skill_count": 5,
+  "skills": [
+    {
+      "description": "Read index health: Reports whether the search plane can serve..",
+      "digest": "sha256:d02defc563ff33af00957452caa69b9b3674284e263bf31af856f715badad231",
+      "name": "index_health",
+      "service": "index",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/index_health/SKILL.md"
+    },
+    {
+      "description": "Read index indexes: Lists the indexes your org holds., Reads one index's definition., Pages through the documents in an index..",
+      "digest": "sha256:cd10d8545ba7b468d4306dc2ba4c411c1fee0afbfbf241440f7256e3c3e88d61",
+      "name": "index_indexes",
+      "service": "index",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/index_indexes/SKILL.md"
+    },
+    {
+      "description": "Read index stats: Counts the documents in each of your indexes..",
+      "digest": "sha256:6a00a725c706b8c9db8c1669674e2d597766e767c3a2dc0d75d895f9eccfcda7",
+      "name": "index_stats",
+      "service": "index",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/index_stats/SKILL.md"
+    },
+    {
+      "description": "Read index tasks: Checks a write task, which has already finished..",
+      "digest": "sha256:834d7084814a16f43c72560a36808e18fc121dcf64251af02249bc1a3da0326e",
+      "name": "index_tasks",
+      "service": "index",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/index_tasks/SKILL.md"
+    },
+    {
+      "description": "Read index version: Identifies the search implementation answering..",
+      "digest": "sha256:dc47fec150b0471c918fa3faea4e35c87ea0cfdb57d2cad7673a679650ed0801",
+      "name": "index_version",
+      "service": "index",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/index_version/SKILL.md"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

@@ -1,0 +1,102 @@
+{
+  "director": [
+    "finance_metrics",
+    "finance_pnl",
+    "finance_position",
+    "captable_summary",
+    "dataroom_documents",
+    "guide_suggest",
+    "team_members",
+    "billing_usage"
+  ],
+  "engineering": [
+    "git_repos",
+    "git_runs",
+    "code_ask",
+    "code_search",
+    "deploy_applications",
+    "ci_runs",
+    "project_deployments",
+    "sandbox_sandbox"
+  ],
+  "data": [
+    "dataset_dataset",
+    "dataset_lineage",
+    "eval_runs",
+    "eval_scores",
+    "knowledge_graph",
+    "metrics_query",
+    "experiment_experiment",
+    "research_runs"
+  ],
+  "design": [
+    "studio_documents",
+    "studio_templates",
+    "studio_brands",
+    "studio_flows",
+    "studio_runs",
+    "content_board",
+    "videos_content",
+    "library_library"
+  ],
+  "product": [
+    "project_project",
+    "task_board",
+    "task_issues",
+    "experiment_experiment",
+    "flag_defs",
+    "form_forms",
+    "guide_strategies",
+    "research_studies"
+  ],
+  "research": [
+    "research_papers",
+    "research_studies",
+    "research_evidence",
+    "research_experiments",
+    "research_compare",
+    "benchmark_compare",
+    "knowledge_files",
+    "websearch_search"
+  ],
+  "writing": [
+    "content_board",
+    "content_channels",
+    "content_lifecycle",
+    "translate_memory",
+    "library_library",
+    "team_docs",
+    "seo_rates",
+    "websearch_search"
+  ],
+  "education": [
+    "knowledge_files",
+    "knowledge_graph",
+    "library_library",
+    "meet_session",
+    "form_forms",
+    "content_board",
+    "translate_memory",
+    "team_docs"
+  ],
+  "operations": [
+    "task_board",
+    "team_members",
+    "finance_inbox",
+    "tax_filings",
+    "compliance_status",
+    "billing_invoices",
+    "treasury_accounts",
+    "team_inbox"
+  ],
+  "marketing": [
+    "marketing_summary",
+    "marketing_campaigns",
+    "marketing_audiences",
+    "marketing_broadcasts",
+    "marketing_sequences",
+    "campaign_metrics",
+    "social_posts",
+    "ad_summary"
+  ]
+}

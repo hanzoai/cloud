@@ -1,0 +1,718 @@
+// release.go — how content GETS to a site's serving prefix.
+//
+// The agentic builder produces build output INSIDE our object store (its code
+// execution writes there). Pushing those bytes back out through an HTTP upload
+// API and in again would be pure waste, so publishing is a SERVER-SIDE PROMOTE:
+// no bytes traverse the API, and no client ever holds an S3 credential.
+//
+// The model is values plus a pointer (HIP-0014, "Static Sites: Releases and
+// Pointers"): a build output is promoted into a Release, and the site's pointer
+// is flipped to it.
+//
+//   - A Release is a VALUE: an immutable prefix whose id is a digest of the
+//     object manifest it was built from. Identical bytes ⇒ identical id, so
+//     re-publishing the same build is idempotent by construction rather than by
+//     a remembered request key. Different bytes can never reuse an id.
+//   - The pointer is projects.current_release. Serving reads THROUGH it
+//     (siteResolver.Resolve), so activation is one atomic UPDATE and rollback is
+//     the same flip aimed at an older release — free, because releases are
+//     immutable and retained.
+//   - Retained to a BOUND, not forever: each publish reclaims what fell past
+//     keepReleases (pruneReleases), and the live release is never a candidate.
+//     Because bytes can now be reclaimed, activation stats them before it flips
+//     — the row alone stopped being proof that a release can serve.
+//
+// TENANT ISOLATION — the make-or-break property, and the reason the source is
+// NOT an S3 URL. A caller names a path RELATIVE to their own org's storage
+// space; the org segment is prepended server-side from the VALIDATED principal
+// (org(c), the one org rule this package already uses for every site prefix),
+// and the bucket is server-owned and never appears in the request at all. So the
+// worst a hostile source string can address is something the caller's own org
+// already owns — "copy an arbitrary prefix" is not a reachable state, and the
+// server-side copy is therefore not an exfiltration primitive. Traversal is
+// killed by safeRel, the SAME rooted-clean rule the artifact walker uses.
+
+package projects
+
+import (
+	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"errors"
+	"fmt"
+	"github.com/hanzoai/cloud/sdk/object"
+	"net/http"
+	"regexp"
+	"slices"
+	"sort"
+	"strconv"
+	"strings"
+	"time"
+
+	"github.com/hanzoai/cloud/apps/sites"
+	"github.com/hanzoai/cloud/sdk"
+	"github.com/zap-proto/zip"
+)
+
+// Release guards. The object-count and total-byte caps are the SAME budget the
+// artifact deploy path enforces (maxFiles / maxTotalBytes in blob.go) — one
+// "how big is a site" policy for every way content arrives, not a second set of
+// numbers to drift. They are enforced WHILE listing, so a hostile prefix with
+// millions of objects aborts early instead of being enumerated.
+const (
+	// maxSourceLen bounds the caller-supplied source path before any parsing.
+	maxSourceLen = 512
+	// maxReleaseList bounds the rollback menu one request can ask for.
+	maxReleaseList = 200
+	// keepReleases is the retention depth: how many SUPERSEDED releases of a site
+	// survive, on top of the live one, which is never counted and never pruned.
+	// It is the rollback depth expressed as a number — deep enough that "roll back
+	// to last week's build" is always there, shallow enough that a site publishing
+	// on every commit does not accumulate its whole history in the object store
+	// forever.
+	keepReleases = 10
+)
+
+// releaseIDRE is the release-id grammar: "rel_" + 128 bits of the manifest
+// digest in lowercase hex. It is the traversal guard for the id, which is BOTH a
+// URL path segment and an S3 key segment. It is applied on the way in (the route
+// param) AND on the way out (serving, in siteResolver.Resolve), so an id can
+// never widen a prefix even if a row were somehow poisoned.
+var releaseIDRE = regexp.MustCompile(`^rel_[0-9a-f]{32}$`)
+
+var (
+	errBadSource     = errors.New("projects: source must be a relative path inside your org's storage")
+	errEmptySource   = errors.New("projects: source prefix contains no objects")
+	errUnsafeKey     = errors.New("projects: source contains an unsafe object key")
+	errNoIndex       = errors.New("projects: source has no index.html at its root")
+	errTooManyFiles  = errors.New("projects: source exceeds the release object limit")
+	errTooLarge      = errors.New("projects: source exceeds the release size limit")
+	errSourceChanged = errors.New("projects: source changed while publishing; retry")
+	errReleaseGone   = errors.New("projects: release bytes are no longer in the store")
+)
+
+// releaseSpace holds every release of every site kept under a namespace
+// (namespace.go). It is a SIBLING of the live site prefixes, never a child of one:
+// `<namespace>/.releases/<slug>/<id>/`. Two properties follow, and both matter.
+//
+//   - A full-artifact deploy purges `<namespace>/<slug>/` (blob.uploadSite) and a
+//     project delete purges the same. Releases sit outside that subtree, so
+//     neither can shred a release the pointer still names.
+//   - `.releases` can never collide with a site: slugRE forbids '.', so no
+//     project slug can ever be the string ".releases".
+//
+// The site's own URL space therefore never exposes the release store either —
+// requests are served from the ONE prefix the resolver returns, not by walking.
+func releaseSpace(namespace string) string { return namespace + "/.releases" }
+
+// releasePrefix is the immutable S3 prefix of one release. Every segment is
+// server-owned: the namespace and slug from the tenant-scoped project row, the
+// id from releaseIDRE-shaped digest.
+func releasePrefix(namespace, slug, id string) string {
+	return releaseSpace(namespace) + "/" + slug + "/" + id
+}
+
+// releaseObject is one entry of a release manifest: the site-relative key plus
+// the store's own content identity for it (size + ETag). The manifest — not the
+// bytes — is what gets digested into the release id.
+type releaseObject struct {
+	rel  string
+	size int64
+	etag string
+}
+
+// sourcePrefix resolves a caller-supplied source into an absolute S3 prefix
+// INSIDE the caller's own org space. This is the isolation boundary for the
+// server-side copy, and it holds structurally rather than by inspection:
+//
+//  1. org is prepended by the SERVER from the validated principal. The caller
+//     cannot express an org segment — there is no syntax for it, because the
+//     value they supply is always interpreted relative to their own root.
+//  2. safeRel (the same rooted-clean rule the artifact walker applies to every
+//     archive entry) rejects absolute paths and any "..'" that escapes, so the
+//     result provably stays under `<org>/`.
+//  3. A scheme or an empty/root path is refused outright: a build output is a
+//     specific directory, never a URL and never the caller's whole tenant.
+//
+// The bucket is NOT derived from the request at any point — it is the process's
+// own projects bucket — so there is no cross-bucket reach either.
+func sourcePrefix(org, raw string) (string, error) {
+	s := strings.TrimSpace(raw)
+	if s == "" || len(s) > maxSourceLen {
+		return "", errBadSource
+	}
+	if strings.Contains(s, "://") {
+		return "", errBadSource // a source is a path in your own space, never a URL
+	}
+	if strings.ContainsFunc(s, func(r rune) bool { return r < 0x20 || r == 0x7f }) {
+		return "", errBadSource
+	}
+	rel, ok := safeRel(s)
+	if !ok || rel == "" {
+		return "", errBadSource // absolute, escaping, or the whole-org root
+	}
+	return org + "/" + rel, nil
+}
+
+// scanSource lists the source prefix and builds the release manifest, enforcing
+// every guard as it goes. It returns the manifest sorted by key (so the digest
+// is independent of the backend's listing order) and the total byte count.
+//
+// Bounded by construction: it stops at the first object past the cap (most
+// objects, biggest bytes) instead of enumerating an arbitrarily large prefix,
+// and it only ever holds the manifest (keys + sizes + etags), never object
+// bodies — a release of any size costs the same memory here.
+func scanSource(ctx context.Context, cli object.Store, bucket, src string, most int, biggest int64) ([]releaseObject, int64, error) {
+	var (
+		objs  []releaseObject
+		total int64
+	)
+	// A trailing slash makes this a strict directory listing: `<src>/` can never
+	// match a sibling prefix that merely shares a name stem (e.g. "build" must not
+	// pull in "build-old").
+	for obj, err := range cli.List(ctx, bucket, object.List{Prefix: src + "/"}) {
+		if err != nil {
+			return nil, 0, fmt.Errorf("list source: %w", err)
+		}
+		rel := strings.TrimPrefix(obj.Key, src+"/")
+		if rel == "" || strings.HasSuffix(rel, "/") {
+			continue // the prefix placeholder / a directory marker carries no bytes
+		}
+		// S3 is a flat keyspace, so a key MAY literally contain a ".." segment. We
+		// refuse the release rather than rewriting the key: silently normalizing
+		// could collapse two distinct source keys onto one destination.
+		clean, ok := safeRel(rel)
+		if !ok || clean != rel {
+			return nil, 0, errUnsafeKey
+		}
+		if len(objs) >= most {
+			return nil, 0, errTooManyFiles
+		}
+		total += obj.Size
+		if total > biggest {
+			return nil, 0, errTooLarge
+		}
+		objs = append(objs, releaseObject{rel: rel, size: obj.Size, etag: obj.ETag})
+	}
+	if len(objs) == 0 {
+		return nil, 0, errEmptySource
+	}
+	sort.Slice(objs, func(i, j int) bool { return objs[i].rel < objs[j].rel })
+	// The same contract the artifact path enforces (finalizeSite): a site is a
+	// thing with an index. One deploy contract, however the content arrived.
+	if !hasIndex(objs) {
+		return nil, 0, errNoIndex
+	}
+	return objs, total, nil
+}
+
+func hasIndex(objs []releaseObject) bool {
+	return slices.ContainsFunc(objs, func(o releaseObject) bool { return o.rel == "index.html" })
+}
+
+// releaseID is the content address: SHA-256 over the sorted manifest of
+// (key, size, etag) triples, truncated to 128 bits and hex-encoded.
+//
+// Including the per-object ETag is what makes this a CONTENT address rather than
+// a name address: two builds that differ only in bytes produce different ETags,
+// hence a different release, so a publish can never be deduplicated onto a
+// release holding different content. The fields are NUL-separated and newline-
+// terminated so no combination of key and size can be re-parsed as another.
+//
+// The ETag is the store's content identity (MD5 for a single-part PUT), so this
+// is an idempotency key, not a security boundary — and it does not need to be
+// one: the source always lies inside the caller's own org, where they may
+// already write whatever they like.
+func releaseID(objs []releaseObject) string {
+	h := sha256.New()
+	for _, o := range objs {
+		_, _ = h.Write([]byte(o.rel))
+		_, _ = h.Write([]byte{0})
+		_, _ = h.Write([]byte(strconv.FormatInt(o.size, 10)))
+		_, _ = h.Write([]byte{0})
+		_, _ = h.Write([]byte(o.etag))
+		_, _ = h.Write([]byte{'\n'})
+	}
+	return "rel_" + hex.EncodeToString(h.Sum(nil)[:16])
+}
+
+// copyRelease server-side-copies every manifest object from the source prefix to
+// the release prefix. No object body ever enters this process — the store moves
+// the bytes itself.
+//
+// Each copy is CONDITIONAL on the exact ETag the manifest was digested from
+// (x-amz-copy-source-if-match). That closes the window between listing and
+// copying: if a concurrent writer mutates the build output mid-publish, the copy
+// fails and the whole release is abandoned, so a release's bytes always match
+// the digest that names it. The destination's returned ETag is verified too, so
+// the guarantee survives a backend that ignores the conditional header.
+//
+// Metadata is REPLACED on the destination with the same content-type and cache
+// policy the artifact upload path writes (sites.CacheControlFor), so a promoted
+// site and an uploaded one serve identically.
+func copyRelease(ctx context.Context, cli object.Store, bucket, src, dst, htmlOverride string, objs []releaseObject) error {
+	for _, o := range objs {
+		ct := sites.ContentType(o.rel)
+		if ct == "" {
+			ct = "application/octet-stream"
+		}
+		info, err := cli.Copy(ctx,
+			object.Ref{Bucket: bucket, Key: dst + "/" + o.rel},
+			object.Ref{Bucket: bucket, Key: src + "/" + o.rel},
+			object.Copy{
+				Replace:      true,
+				ContentType:  ct,
+				CacheControl: sites.CacheControlFor(o.rel, htmlOverride),
+				IfMatch:      o.etag,
+			})
+		if err != nil {
+			// A precondition failure means the source moved under us; anything else is
+			// a real store error. Both abandon the release — nothing is ever activated.
+			if object.Conflict(err) {
+				return errSourceChanged
+			}
+			return fmt.Errorf("copy %q: %w", o.rel, err)
+		}
+		if got := info.ETag; got != "" && got != o.etag {
+			return errSourceChanged
+		}
+	}
+	return nil
+}
+
+// promote is the ONE release-creation core: validate the source inside the
+// caller's org, scan it into a manifest, content-address it, copy it into a NEW
+// immutable prefix, and only then record the release row.
+//
+// Ordering is the atomicity argument. The row is written LAST, so:
+//   - a partially-copied prefix has no row, and ActivateRelease cannot flip to a
+//     release with no row — a partial copy is unreachable, not merely unlikely;
+//   - a crash mid-copy leaves orphan objects that nothing points at, and the
+//     retry recomputes the SAME id (same bytes ⇒ same digest), re-copies over
+//     them, and converges. The failure mode is wasted space, never a bad serve.
+//
+// Re-publishing an unchanged source short-circuits on the existing row: same
+// digest, same id, no copy at all.
+func promote(s *cloud.Service[state], ctx context.Context, org string, p Project, source string) (Release, error) {
+	src, err := sourcePrefix(org, source)
+	if err != nil {
+		return Release{}, err
+	}
+	// `<org>/` can also hold sites ANOTHER org keeps under a GitHub namespace of
+	// the same name (namespace.go). Their bytes are not this org's to promote.
+	lodged, err := s.State.store.Lodged(ctx, org)
+	if err != nil {
+		return Release{}, err
+	}
+	rel := strings.TrimPrefix(strings.TrimPrefix(src, org+"/"), ".releases/")
+	if first, _, _ := strings.Cut(rel, "/"); lodged[first] {
+		return Release{}, errBadSource
+	}
+	cli := s.State.blob.store
+	if err := s.State.blob.ensureBucket(ctx); err != nil {
+		return Release{}, err
+	}
+	objs, total, err := scanSource(ctx, cli, s.State.blob.bucket, src, maxFiles, maxTotalBytes)
+	if err != nil {
+		return Release{}, err
+	}
+	id := releaseID(objs)
+
+	// Idempotent re-publish: this exact content is already a complete release for
+	// this site. The row's existence is the promise the copy finished.
+	if existing, gErr := s.State.store.GetRelease(ctx, org, p.Slug, id); gErr == nil {
+		return existing, nil
+	} else if !errors.Is(gErr, errNotFound) {
+		return Release{}, gErr
+	}
+
+	dst := releasePrefix(p.Namespace, p.Slug, id)
+	if err := copyRelease(ctx, cli, s.State.blob.bucket, src, dst, p.CacheControl, objs); err != nil {
+		return Release{}, err
+	}
+
+	r := Release{
+		ID: id, Org: org, Slug: p.Slug, Prefix: dst, Source: strings.TrimSpace(source),
+		Objects: len(objs), Bytes: total, CreatedAt: time.Now().Unix(),
+	}
+	if err := s.State.store.PutRelease(ctx, r); err != nil {
+		return Release{}, err
+	}
+	pruneReleases(s, ctx, cli, org, p.Slug, keepReleases)
+	// The copy added bytes and retention may have reclaimed some; either way the
+	// org holds something new, and the storage gate reads what it holds.
+	refresh(s, org)
+	return r, nil
+}
+
+// pruneReleases enforces retention at the ONE event that grows the set: a
+// publish. Every promote that mints a new release immediately reclaims the
+// oldest superseded ones, so a site's release space is bounded by keepReleases
+// (+1 for the live release) at all times, with no sweeper, no schedule, and no
+// second notion of "which releases exist" to drift from the rows.
+//
+// Best-effort by construction: the release the caller asked for is already
+// complete and recorded, so a retention failure MUST NOT fail the publish. It is
+// logged and retried by the next publish, which recomputes the same victims.
+//
+// Rows first, then bytes — never the reverse. PruneReleases returns only rows it
+// really deleted (it refuses to delete the live one), so this can only ever
+// address prefixes that no row, and therefore no serving pointer, names. A purge
+// that fails after its row is gone leaks that prefix until the project is
+// deleted (del purges the whole release space); that is wasted bytes, logged
+// with the exact prefix, and never a site serving 404s.
+func pruneReleases(s *cloud.Service[state], ctx context.Context, cli object.Store, org, slug string, keep int) {
+	pruned, err := s.State.store.PruneReleases(ctx, org, slug, keep)
+	if err != nil {
+		s.Log.Warn("release retention: prune failed", "org", org, "slug", slug, "err", err)
+	}
+	for _, r := range pruned {
+		if pErr := purgePrefix(ctx, cli, s.State.blob.bucket, r.Prefix); pErr != nil {
+			s.Log.Warn("release retention: prefix purge failed (bytes leaked)",
+				"org", org, "slug", slug, "release", r.ID, "prefix", r.Prefix, "err", pErr)
+		}
+	}
+}
+
+// releaseServable reports that a release's BYTES are still in the store, by
+// stating the one object that decides whether the site answers at all: its
+// index.html. Every release has one (scanSource refuses a source without it), so
+// its absence means the prefix was reclaimed, not that the build was odd.
+//
+// This check exists because retention broke an invariant activation used to get
+// for free. Before it, a release row could only be created after its bytes
+// landed and nothing ever removed bytes, so "row exists" implied "bytes exist"
+// and ActivateRelease's `WHERE EXISTS (release row)` was the whole guard. Now
+// bytes CAN go away — pruned, purged by an operator, expired by a bucket
+// lifecycle rule — and flipping the pointer at a reclaimed prefix would take a
+// live site down to 404s with no way to tell from the row that it happened.
+// Verify BEFORE the flip: a failed check leaves the site serving whatever it
+// already serves.
+//
+// The prefix comes from the ROW, not from recomputing releasePrefix: the row is
+// where the bytes were actually written, so the probe can never disagree with
+// the copy about which prefix a release is.
+func releaseServable(s *cloud.Service[state], ctx context.Context, r Release) error {
+	_, err := s.State.blob.store.Stat(ctx, s.State.blob.bucket, r.Prefix+"/index.html")
+	switch {
+	case err == nil:
+		return nil
+	case object.Absent(err):
+		return errReleaseGone
+	default:
+		return fmt.Errorf("stat release: %w", err)
+	}
+}
+
+// activate points the site at a release and runs the go-live side effects.
+//
+// The flip is the store's single atomic statement and NOTHING here writes the
+// pointer again: the follow-up only refreshes denormalized display fields
+// (MarkLive), so two concurrent activations can never leave the pointer
+// disagreeing with whichever flip won. Everything after the flip is best-effort
+// — the site is already serving the new release, so no edge-hygiene failure may
+// turn a completed activation into an error.
+//
+// Two conditions, in the order that gives each its own honest answer: the ROW
+// says whether this release exists for this tenant at all (errNotFound → 404,
+// with no signal about a foreign id), and only then do the BYTES say whether it
+// can still serve (errReleaseGone → 410). Both run on EVERY activation,
+// including the one that follows a fresh promote, so there is exactly one answer
+// to "may this release serve" and the one-shot publish path cannot drift from
+// the staged one. Returning the row also means the caller never re-reads it.
+//
+// Racing a prune is safe from either side: a prune drops the row before the
+// bytes, so a row that vanishes after the read makes the atomic flip itself miss
+// (404), and bytes that vanish after the probe were already rowless — the flip
+// misses too. No interleaving flips the pointer at a reclaimed prefix.
+func activate(s *cloud.Service[state], ctx context.Context, org string, p Project, id string) (Release, error) {
+	r, err := s.State.store.GetRelease(ctx, org, p.Slug, id)
+	if err != nil {
+		return Release{}, err
+	}
+	if err := releaseServable(s, ctx, r); err != nil {
+		return Release{}, err
+	}
+	if err := s.State.store.ActivateRelease(ctx, org, p.Slug, id, time.Now().Unix()); err != nil {
+		return Release{}, err
+	}
+	// Claim the public host + purge the edge, exactly as a deploy does — a release
+	// that is live must be reachable and must not serve a cached predecessor. The
+	// URL it goes live at is the one the bind proves we own, never the one the slug
+	// suggests: the bare-slug namespace is global, so a slug we lost belongs to
+	// another tenant and advertising it would point this tenant's customers there.
+	live, _ := onPublish(s, ctx, org, &p)
+	if err := s.State.store.MarkLive(ctx, org, p.Slug, live,
+		s.State.blob.bucket, p.LastPurgeAt, time.Now().Unix()); err != nil {
+		s.Log.Warn("release activated but project metadata update failed",
+			"org", org, "slug", p.Slug, "release", id, "err", err)
+	}
+	return r, nil
+}
+
+// ---- HTTP ----
+
+// projectsRelease is the published shape of a release, used by every release route
+// so create, activate, and list describe the resource identically.
+type projectsRelease struct {
+	// ReleaseID is derived from a DIGEST of the release's own manifest, so identical
+	// content is the same release and a release can never be confused with another
+	// one. Activating an older id IS the rollback.
+	ReleaseID string `json:"releaseId"`
+	// Slug is the site this release belongs to.
+	Slug string `json:"slug"`
+	// Objects is how many files the release holds.
+	Objects int `json:"objects"`
+	// Bytes is their total size in bytes.
+	Bytes int64 `json:"bytes"`
+	// Source is what the release was cut from — the build output or upload it was
+	// promoted out of.
+	Source string `json:"source,omitempty"`
+	// Active is whether this is the release the site is SERVING right now. Exactly
+	// one release of a site is active; the others are kept so they can be activated
+	// again, until retention reclaims them.
+	Active bool `json:"active"`
+	// URL is where the site serves. Present only on the ACTIVE release, since an
+	// inactive one is not answering anywhere.
+	URL string `json:"url,omitempty"`
+	// CreatedAt is when the release was cut, as Unix seconds — not when it was last
+	// activated.
+	CreatedAt int64 `json:"createdAt"`
+}
+
+func toRelease(s *cloud.Service[state], r Release, active bool) projectsRelease {
+	v := projectsRelease{
+		ReleaseID: r.ID, Slug: r.Slug, Objects: r.Objects, Bytes: r.Bytes,
+		Source: r.Source, Active: active, CreatedAt: r.CreatedAt,
+	}
+	if active {
+		v.URL = siteURL(s, r.Org, r.Slug)
+	}
+	return v
+}
+
+// projectsPublish is the body of a publish/promote: which build output to
+// promote into a release.
+type projectsPublish struct {
+	// Slug is the site to publish, from the path.
+	Slug string `json:"slug"`
+	// Source is the build output to promote, as a path RELATIVE to your org's own
+	// storage space — never a URL and never a bucket. The org segment is prepended
+	// server-side from the validated principal, so the worst a hostile source can
+	// address is something your own org already owns.
+	Source string `json:"source"`
+}
+
+// projectsReleases is a site's rollback menu, newest first. A defined slice
+// type, so the list has a NAME in the document and a generated SDK returns a
+// list of the same Release it returns singly.
+type projectsReleases []projectsRelease
+
+// releaseSite resolves the target site for a release op: the tenant from the
+// validated principal, then the project keyed by (org, slug).
+//
+// Cross-tenant reach dies here, once, for every release route. The org is never
+// read from the request, and the project lookup is keyed by it — so a foreign
+// slug misses exactly like a nonexistent one and both render the same 404. There
+// is no branch that can tell a caller "this site exists, but not for you".
+//
+// A reserved label is refused with that same 404 before any lookup. It is
+// belt-and-braces (createProject already refuses to mint a reserved slug, so no
+// row can exist) but it means the guarantee does not rest on create-time history.
+func (o ops) releaseSite(ctx context.Context, slug string) (*zip.Ctx, string, Project, error) {
+	c, org, err := o.callerOf(ctx)
+	if err != nil {
+		return nil, "", Project{}, err
+	}
+	slug = slugOf(slug)
+	if slug == "" || !slugRE.MatchString(slug) || sites.IsReserved(slug) {
+		return nil, "", Project{}, zip.ErrNotFound("site not found")
+	}
+	p, err := o.s.State.store.GetProject(ctx, org, slug)
+	if errors.Is(err, errNotFound) {
+		return nil, "", Project{}, zip.ErrNotFound("site not found")
+	}
+	if err != nil {
+		return nil, "", Project{}, zip.Errorf(http.StatusInternalServerError, "get: %v", err)
+	}
+	return c, org, p, nil
+}
+
+// releaseErr maps a promote failure to its honest status. Guard rejections are
+// the caller's fault (400/413), a moved source is a conflict (409), and anything
+// else is ours (502 — the store failed, not the request).
+func releaseErr(err error) error {
+	switch {
+	case errors.Is(err, errBadSource), errors.Is(err, errEmptySource),
+		errors.Is(err, errUnsafeKey), errors.Is(err, errNoIndex):
+		return zip.ErrBadRequest(strings.TrimPrefix(err.Error(), "projects: "))
+	case errors.Is(err, errTooManyFiles), errors.Is(err, errTooLarge):
+		return zip.Errorf(http.StatusRequestEntityTooLarge, "%s", strings.TrimPrefix(err.Error(), "projects: "))
+	case errors.Is(err, errSourceChanged):
+		return zip.ErrConflict(strings.TrimPrefix(err.Error(), "projects: "))
+	default:
+		return zip.Errorf(http.StatusBadGateway, "publish failed: %v", err)
+	}
+}
+
+// activateErr maps an activation failure to its honest status, for BOTH the
+// staged flip and the one-shot publish. A release nobody can name and a release
+// whose row is gone are the same 404; a release whose row is still listed but
+// whose bytes were reclaimed is 410 GONE — a distinct answer, because the fix is
+// distinct: that rollback target is not coming back, publish again.
+func activateErr(err error) error {
+	switch {
+	case errors.Is(err, errNotFound):
+		return zip.ErrNotFound("release not found")
+	case errors.Is(err, errReleaseGone):
+		return zip.Errorf(http.StatusGone, "release bytes were reclaimed by retention; publish again")
+	default:
+		return zip.Errorf(http.StatusInternalServerError, "activate: %v", err)
+	}
+}
+
+// CreateRelease promotes a build output into a new immutable release WITHOUT
+// serving it — the staged half of publishing, for when you want to check a
+// release before it goes live. Answers 201.
+//
+// `source` is a path RELATIVE to your org's own storage space: the org segment
+// is prepended server-side from the validated principal and the bucket is never
+// in the request at all, so a server-side copy can only ever reach bytes your
+// org already owns. The prefix is listed, content-addressed (SHA-256 over the
+// sorted manifest of key/size/etag), and copied into an immutable
+// `<org>/.releases/<slug>/<id>/` prefix; the row is written LAST, so a partial
+// copy is unreachable rather than merely unlikely. Re-publishing an unchanged
+// source is idempotent BY CONSTRUCTION — same bytes, same id, no copy at all.
+//
+// The source must contain index.html at its root and stay under the same file
+// and byte caps an artifact deploy does (413 past them); a source that changes
+// mid-copy is a 409 and the release is abandoned. Each publish also reclaims
+// releases past the retention depth, so a site's release space stays bounded.
+// Creating a release is free. A retained release is stored bytes, so it counts
+// toward the org's storage until retention reclaims it; the storage gate runs
+// before any copy, refusing (402) an org past the free tier that cannot pay a
+// month of what it holds.
+//
+// Scope: a validated principal is required (401 without one) and the site is
+// resolved within that principal's org, so another tenant's slug is a 404.
+func (o ops) createRelease(ctx context.Context, in *projectsPublish) (*projectsRelease, error) {
+	c, org, p, err := o.releaseSite(ctx, in.Slug)
+	if err != nil {
+		return nil, err
+	}
+	s := o.s
+	if !s.State.blob.configured() {
+		return nil, zip.Errorf(http.StatusServiceUnavailable, "object storage not configured (set S3_ADMIN_*)")
+	}
+	if err := requireBody(c); err != nil {
+		return nil, err
+	}
+	// The same storage gate as a deploy, BEFORE any copy: a copy adds bytes the
+	// org stores, so an org past the free tier must be able to pay for them.
+	if gErr := gateHosting(s, c, org); gErr != nil {
+		return nil, cloud.Denied(gErr)
+	}
+	r, err := promote(s, ctx, org, p, in.Source)
+	if err != nil {
+		return nil, releaseErr(err)
+	}
+	out := toRelease(s, r, p.CurrentRelease == r.ID)
+	return &out, nil
+}
+
+// ActivateRelease points the site at an existing release — the go-live, and
+// equally the ROLLBACK.
+//
+// Aim it at an older release and the site serves that one again: releases are
+// immutable and retained to the retention depth, so nothing is rebuilt or
+// re-copied and the flip is one atomic statement. Before the flip, two
+// conditions run in the order that gives each its own honest answer — the ROW
+// says whether this release exists for this tenant at all (404, with no signal
+// about a foreign id), and only then do the BYTES say whether it can still serve
+// (410 GONE when retention has reclaimed them; that rollback target is not
+// coming back, so publish again). Going live also claims the public host and
+// purges the edge, so the release is reachable and no cached predecessor is
+// served. NOT billed: no new content is produced, only a pointer moved.
+//
+// Scope: a validated principal is required (401 without one) and the site is
+// resolved within that principal's org, so another tenant's slug is a 404.
+func (o ops) activateRelease(ctx context.Context, in *projectsReleaseRef) (*projectsRelease, error) {
+	_, org, p, err := o.releaseSite(ctx, in.Slug)
+	if err != nil {
+		return nil, err
+	}
+	id := strings.TrimSpace(in.Release)
+	if !releaseIDRE.MatchString(id) {
+		return nil, zip.ErrNotFound("release not found")
+	}
+	r, err := activate(o.s, ctx, org, p, id)
+	if err != nil {
+		return nil, activateErr(err)
+	}
+	out := toRelease(o.s, r, true)
+	return &out, nil
+}
+
+// PublishSite promotes a build output into a new release AND goes live with it —
+// create+activate in one call, which is the 99% path.
+//
+// It is exactly the two halves in sequence with no extra semantics, so the
+// staged flow and the one-shot flow can never drift apart: `source` is promoted
+// under the same org-relative rule and the same guards CreateRelease applies,
+// then the site's pointer is flipped to it, the public host is claimed and the
+// edge is purged. Idempotent on unchanged bytes — same manifest, same release id,
+// no copy, and so nothing more stored. Free, behind the same storage gate.
+//
+// Scope: a validated principal is required (401 without one) and the site is
+// resolved within that principal's org, so another tenant's slug is a 404.
+func (o ops) publishSiteRelease(ctx context.Context, in *projectsPublish) (*projectsRelease, error) {
+	c, org, p, err := o.releaseSite(ctx, in.Slug)
+	if err != nil {
+		return nil, err
+	}
+	s := o.s
+	if !s.State.blob.configured() {
+		return nil, zip.Errorf(http.StatusServiceUnavailable, "object storage not configured (set S3_ADMIN_*)")
+	}
+	if err := requireBody(c); err != nil {
+		return nil, err
+	}
+	if gErr := gateHosting(s, c, org); gErr != nil {
+		return nil, cloud.Denied(gErr)
+	}
+	r, err := promote(s, ctx, org, p, in.Source)
+	if err != nil {
+		return nil, releaseErr(err)
+	}
+	if _, err := activate(s, ctx, org, p, r.ID); err != nil {
+		return nil, activateErr(err)
+	}
+	out := toRelease(s, r, true)
+	return &out, nil
+}
+
+// ListReleases returns a site's releases newest-first, marking the active one —
+// the rollback menu.
+//
+// Each row carries the release id to activate, the source it was promoted from,
+// its object and byte counts, and the URL if it is the one serving. Retention
+// bounds the list, so it is the set that can actually still be rolled back to,
+// not a full history.
+//
+// Scope: a validated principal is required (401 without one) and the site is
+// resolved within that principal's org, so another tenant's slug is a 404.
+func (o ops) listReleases(ctx context.Context, in *projectsRef) (*projectsReleases, error) {
+	_, org, p, err := o.releaseSite(ctx, in.Slug)
+	if err != nil {
+		return nil, err
+	}
+	rows, err := o.s.State.store.ListReleases(ctx, org, p.Slug, maxReleaseList)
+	if err != nil {
+		return nil, zip.Errorf(http.StatusInternalServerError, "list releases: %v", err)
+	}
+	out := make(projectsReleases, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, toRelease(o.s, r, r.ID == p.CurrentRelease))
+	}
+	return &out, nil
+}

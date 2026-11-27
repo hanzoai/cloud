@@ -1,0 +1,40 @@
+{
+  "$schema": "https://schemas.agentskills.io/discovery/0.2.0/schema.json",
+  "base_url": "https://api.hanzo.ai",
+  "brand": "hanzo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://hanzo.id",
+  "mcp": {
+    "description": "Model Context Protocol over JSON-RPC 2.0 — one POST per message, stateless, protocol revision 2026-07-28. tools/list answers without a credential with one tool per subsystem (its operations in the \"op\" enum) plus \"describe\", which returns one operation's input schema. tools/call names a subsystem tool and carries {\"op\": <operation>, \"input\": <its arguments>}; it takes the same bearer the REST API does, and a call that carries none is answered 401 with a WWW-Authenticate header naming the resource metadata at /.well-known/oauth-protected-resource, which names the authorization server to sign in at. The tool surface is the public contract: the operator's admin product is not offered, and a name that would disclose a secret or mutate an identity is withheld — the list says how many, under _meta.",
+    "method": "POST",
+    "url": "https://api.hanzo.ai/v1/mcp"
+  },
+  "skill_count": 3,
+  "skills": [
+    {
+      "description": "Read space drives: Lists a space's drives., Lists one folder level of a drive., Mints a URL the caller downloads the file from DIRECTLY..",
+      "digest": "sha256:27a7c94ba667f5825115562bd02e61882af5d3f139f81cec6d01997ae2dca6f4",
+      "name": "space_drives",
+      "service": "space",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/space_drives/SKILL.md"
+    },
+    {
+      "description": "Read space health: Reports whether this deployment can serve spaces, drives and files..",
+      "digest": "sha256:f49d6993c4ade8aee2f6f887a37fccd85391a271dfe05a17e97a80da27380f1e",
+      "name": "space_health",
+      "service": "space",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/space_health/SKILL.md"
+    },
+    {
+      "description": "Read space spaces: Lists the caller org's own spaces..",
+      "digest": "sha256:f8e76d45f1c855f4cdfbf38ef43fe31cafac1dced6be0ea27a6fbdd3cec09fd2",
+      "name": "space_spaces",
+      "service": "space",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/space_spaces/SKILL.md"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

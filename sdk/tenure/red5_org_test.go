@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	s3driver "github.com/hanzoai/cloud/sdk/driver/s3"
+	s3driver "github.com/hanzoai/cloud/internal/driver/s3"
 	"github.com/hanzoai/vfs/replica"
 )
 

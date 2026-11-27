@@ -1,0 +1,32 @@
+{
+  "$schema": "https://schemas.agentskills.io/discovery/0.2.0/schema.json",
+  "base_url": "https://api.hanzo.ai",
+  "brand": "hanzo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://hanzo.id",
+  "mcp": {
+    "description": "Model Context Protocol over JSON-RPC 2.0 — one POST per message, stateless, protocol revision 2026-07-28. tools/list answers without a credential with one tool per subsystem (its operations in the \"op\" enum) plus \"describe\", which returns one operation's input schema. tools/call names a subsystem tool and carries {\"op\": <operation>, \"input\": <its arguments>}; it takes the same bearer the REST API does, and a call that carries none is answered 401 with a WWW-Authenticate header naming the resource metadata at /.well-known/oauth-protected-resource, which names the authorization server to sign in at. The tool surface is the public contract: the operator's admin product is not offered, and a name that would disclose a secret or mutate an identity is withheld — the list says how many, under _meta.",
+    "method": "POST",
+    "url": "https://api.hanzo.ai/v1/mcp"
+  },
+  "skill_count": 2,
+  "skills": [
+    {
+      "description": "Read s3 buckets: Lists the caller org's own buckets., Read one object's bytes, Lists one folder level of a bucket..",
+      "digest": "sha256:0dedd8f09533158b677d184ac83e2e0bc09b2400e9a8c537472c845511f9d6ec",
+      "name": "s3_buckets",
+      "service": "s3",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/s3_buckets/SKILL.md"
+    },
+    {
+      "description": "Read s3 health: Reports whether this deployment can serve object storage..",
+      "digest": "sha256:c99f1359cdc2c6d10083abb162f6e2acad0764ea3b68281440399fb1f30fc971",
+      "name": "s3_health",
+      "service": "s3",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/s3_health/SKILL.md"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

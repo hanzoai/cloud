@@ -54,11 +54,15 @@ const prefix = "audit"
 // or an unnamed process) keeps the canonical "audit" chain; a plugin child holding
 // it — admin — writes "audit-<app>". Every other process writes no chain at all.
 //
-// ONE CHAIN, ONE WRITER. audit_log.seq is a gapless chain position and each
-// row's prev_hash seals the one before it, so the chain is only meaningful while
-// a single process appends to it. Observed on v1.801.313 as "audit: persist:
-// UNIQUE constraint failed: audit_log.seq" at ~94/minute, and because the audit
-// gate fails CLOSED (correctly), every POST in the fleet was refused.
+// ONE CHAIN, ONE WRITER. audit_log.seq is a gapless chain position and each row's
+// prev_hash seals the one before it, so the chain is only meaningful while a single
+// process appends to it. Every process used to open the same file, which was
+// harmless while cloud was one binary and became a total write outage the moment
+// subsystems became plugin CHILD PROCESSES: each recovers its own in-memory nextSeq
+// from the shared file, then they all race for one PRIMARY KEY. Observed on
+// v1.801.313 as "audit: persist: UNIQUE constraint failed: audit_log.seq" at
+// ~94/minute, and because the audit gate fails CLOSED (correctly), every POST in
+// the fleet was refused.
 func Name(proc string) string {
 	if proc == "" || proc == "cloud" {
 		return prefix
@@ -245,9 +249,12 @@ func (r *Recorder) family() ([]string, error) {
 			}
 		}
 	}
-	// It is walked through the handle, so it joins the family by name here; without
-	// this the trail reports every sibling and silently omits the one chain this
-	// process is responsible for.
+	// The LIVE chain has no sealed file until Close writes the envelope, so the
+	// glob can never see this process's own — measured: a recorder that has
+	// appended all day leaves nothing on disk under its own name. It is walked
+	// through the handle, so it joins the family by name here; without this the
+	// trail reports every sibling and silently omits the one chain this process is
+	// responsible for.
 	if !slices.Contains(names, r.name) {
 		names = append(names, r.name)
 	}

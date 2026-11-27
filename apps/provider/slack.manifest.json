@@ -1,0 +1,170 @@
+{
+  "display_information": {
+    "name": "Hanzo",
+    "description": "The Hanzo agent, in your workspace.",
+    "background_color": "#000000"
+  },
+  "features": {
+    "app_home": {
+      "home_tab_enabled": true,
+      "messages_tab_enabled": true,
+      "messages_tab_read_only_enabled": false
+    },
+    "bot_user": {
+      "display_name": "Hanzo",
+      "always_online": true
+    },
+    "assistant_view": {
+      "assistant_description": "Ask Hanzo anything in a DM, or @mention it in a channel."
+    },
+    "slash_commands": [
+      {
+        "command": "/hanzo",
+        "url": "https://api.hanzo.ai/v1/provider/slack/commands",
+        "description": "Ask Hanzo, or run a Hanzo command",
+        "usage_hint": "[question, or: service operation ...]",
+        "should_escape": false
+      }
+    ]
+  },
+  "oauth_config": {
+    "redirect_urls": [
+      "https://api.hanzo.ai/v1/provider/slack/callback",
+      "https://api.hanzo.ai/v1/provider/slack/link/slack"
+    ],
+    "scopes": {
+      "bot": [
+        "app_mentions:read",
+        "assistant:write",
+        "bookmarks:read",
+        "bookmarks:write",
+        "calls:read",
+        "calls:write",
+        "canvases:read",
+        "canvases:write",
+        "channels:history",
+        "channels:join",
+        "channels:manage",
+        "channels:read",
+        "channels:write.invites",
+        "channels:write.topic",
+        "chat:write",
+        "chat:write.customize",
+        "chat:write.public",
+        "commands",
+        "conversations.connect:manage",
+        "conversations.connect:read",
+        "conversations.connect:write",
+        "dnd:read",
+        "emoji:read",
+        "files:read",
+        "files:write",
+        "groups:history",
+        "groups:read",
+        "groups:write",
+        "groups:write.invites",
+        "groups:write.topic",
+        "im:history",
+        "im:read",
+        "im:write",
+        "im:write.topic",
+        "links.embed:write",
+        "links:read",
+        "links:write",
+        "mcp:connect",
+        "metadata.message:read",
+        "mpim:history",
+        "mpim:read",
+        "mpim:write",
+        "mpim:write.topic",
+        "pins:read",
+        "pins:write",
+        "reactions:read",
+        "reactions:write",
+        "reminders:read",
+        "reminders:write",
+        "remote_files:read",
+        "remote_files:share",
+        "remote_files:write",
+        "search:read.files",
+        "search:read.im",
+        "search:read.mpim",
+        "search:read.private",
+        "search:read.public",
+        "search:read.users",
+        "team.billing:read",
+        "team.preferences:read",
+        "team:read",
+        "triggers:read",
+        "triggers:write",
+        "usergroups:read",
+        "usergroups:write",
+        "users.profile:read",
+        "users:read",
+        "users:read.email",
+        "users:write",
+        "workflow.steps:execute",
+        "workflows.templates:read",
+        "workflows.templates:write"
+      ],
+      "user": [
+        "canvases:read",
+        "canvases:write",
+        "channels:history",
+        "channels:read",
+        "channels:write",
+        "chat:write",
+        "emoji:read",
+        "files:read",
+        "files:write",
+        "groups:history",
+        "groups:read",
+        "groups:write",
+        "im:history",
+        "im:read",
+        "im:write",
+        "lists:read",
+        "lists:write",
+        "mpim:history",
+        "mpim:read",
+        "mpim:write",
+        "openid",
+        "reactions:read",
+        "reactions:write",
+        "search:read.files",
+        "search:read.im",
+        "search:read.mpim",
+        "search:read.private",
+        "search:read.public",
+        "search:read.users",
+        "users:read",
+        "users:read.email"
+      ]
+    }
+  },
+  "settings": {
+    "event_subscriptions": {
+      "request_url": "https://api.hanzo.ai/v1/provider/slack/events",
+      "bot_events": [
+        "app_home_opened",
+        "app_mention",
+        "app_uninstalled",
+        "assistant_thread_context_changed",
+        "assistant_thread_started",
+        "member_joined_channel",
+        "message.channels",
+        "message.groups",
+        "message.im",
+        "message.mpim",
+        "tokens_revoked"
+      ]
+    },
+    "interactivity": {
+      "is_enabled": true,
+      "request_url": "https://api.hanzo.ai/v1/provider/slack/events"
+    },
+    "org_deploy_enabled": false,
+    "socket_mode_enabled": false,
+    "token_rotation_enabled": false
+  }
+}

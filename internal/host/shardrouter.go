@@ -1,0 +1,364 @@
+package host
+
+// Shard router — the horizontal-scale writer partition for the unified binary.
+//
+// THE ONE INVARIANT. No two pods may EVER write the same tenant's SQLite file.
+// cloud persists per-org SQLite (KMS orgs/<org>/kms.db, finance orgs/<org>/finance.db,
+// and every org-keyed store) via cloud.OrgDB. SQLite WAL does not coordinate across
+// pods, so two writers on one file corrupt it. This router is the mechanism that
+// makes the invariant hold under replicas>1 WITHOUT any shared RWX volume:
+//
+//   - each pod is a StatefulSet ordinal (cloud-N) with its OWN RWO PVC (per-pod
+//     volumeClaimTemplates), so two pods never share a physical data dir; and
+//   - each org is pinned to EXACTLY ONE owner pod by rendezvous (HRW) hashing —
+//     ha.Owner(orgSlug, peers) — so every request that touches org X's files is
+//     served on X's owner pod and nowhere else.
+//
+// Two independent guarantees compose: even if routing had a bug, a non-owner pod
+// physically cannot open the owner's file (it is on the owner's PVC, unmounted
+// here); even if PVCs were shared, routing sends all of an org's writes to one pod.
+//
+// WHY IN-BINARY, NOT AT THE GATEWAY. The org is only known AFTER the identity trust
+// boundary (SanitizeIdentity) validates the IAM JWT and mints X-Org-Id from the
+// `owner` claim. The ingress/gateway in front of cloud does NOT validate the JWT, so
+// it cannot hash on the validated org — only a raw, forgeable client header. This
+// middleware runs immediately AFTER SanitizeIdentity, so it hashes the VALIDATED,
+// server-minted org (never a client value), and everything downstream — audit,
+// per-org rate limit, billing, and every subsystem store — runs ONLY on the owner.
+//
+// THE HOP IS MUTUAL TLS. A forwarded request carries its caller's credentials, so
+// it goes only to a listener the deployment's authority certified (the peer
+// listener every pod's root serves, coord.PeerListenEnv), presenting this pod's own
+// certificate from the same authority. A member's address comes from a live set
+// only pods holding the master key can sign, and the handshake proves the
+// listener at that address is one of them. A pod with no master key forwards
+// nothing.
+//
+// The forward reuses the transparent-reverse-proxy posture of the reader edge
+// (reader_proxy.go): it preserves method/path/query/Host/headers/body, streams the
+// response (SSE/chat pass through, never buffered — a per-org billing debit rides
+// even a streaming chat, so streams route too), and retries ONLY a never-delivered
+// dial across the owner's brief roll gap, so a peer restart surfaces as latency, not
+// a 502. A rescheduled ordinal reattaches its SAME PVC → its SAME shard, so failover
+// is safe by construction (its files move with it, and no peer ever owned them).
+//
+// Membership is STATIC (CLOUD_PEERS), identical on every pod, so all pods compute the
+// SAME owner for an org — which structurally rules out (a) two pods both believing
+// they own an org (dual-writer) and (b) a routing loop (the owner recomputes
+// owner==self and serves). N is pinned; changing it remaps some orgs to a new owner
+// whose PVC lacks their files — a tenant-file move, the documented follow-up (see the
+// package report), never a live rebalance this router pretends to do.
+
+import (
+	"cmp"
+	"crypto/tls"
+	"errors"
+	"github.com/hanzoai/cloud/sdk"
+	"net"
+	"os"
+	"strings"
+	"sync"
+	"syscall"
+	"time"
+
+	"github.com/hanzoai/cloud/sdk/coord"
+	"github.com/hanzoai/ha"
+	"github.com/hanzoai/namespace"
+	luxlog "github.com/luxfi/log"
+	"github.com/valyala/fasthttp"
+	"github.com/zap-proto/zip"
+)
+
+// shardHopHeader marks a request that a peer already forwarded once. If an owner
+// mismatch is seen WITH this header present, membership has diverged (impossible
+// under the static, identical CLOUD_PEERS set) — the router fails CLOSED (421)
+// rather than loop or serve another shard's data. It carries the forwarding pod's
+// id for trace/debug.
+const shardHopHeader = "X-Hanzo-Shard-Hop"
+
+// shardForwardTimeout bounds the dial-retry window across an owner's roll gap. It
+// caps only the time spent trying to ESTABLISH the connection (a never-delivered
+// dial is the only thing retried); once bytes flow, the stream is unbounded.
+const shardForwardTimeout = 25 * time.Second
+
+// shardRouter pins each org to its rendezvous-hash owner pod and forwards a request
+// whose org this pod does not own. nil ⇒ sharding disabled (single-pod deployment),
+// in which case Middleware is a pass-through — byte-identical to today.
+type shardRouter struct {
+	self  string      // this pod's stable id (StatefulSet ordinal name, e.g. cloud-1)
+	peers []ha.Member // static writer set (CLOUD_PEERS) — the fallback + the boot log label
+
+	// members is the LIVE writer set the durable plane supplies (the SAME election
+	// snapshot the fencer uses). Non-nil ⇒ route on it, so a draining/dead pod's orgs go
+	// to the ready successor that hydrates them (M3). nil ⇒ static peers only: without the
+	// durable plane a peer cannot serve another pod's local-only files, so ownership stays
+	// pinned to the ordinal (which reattaches its PVC on restart).
+	members func() []ha.Member
+
+	log luxlog.Logger
+
+	// tls is how this pod proves itself to a peer and checks the peer: nil when it
+	// holds no master key to derive the authority from, and then it forwards nothing.
+	tls *tls.Config
+
+	mu      sync.Mutex
+	clients map[string]*fasthttp.HostClient // addr → pooled streaming client, lazily built
+}
+
+// newShardRouter builds the router, or returns nil when routing is off (single pod) so the
+// caller wires no middleware. Two activation paths: LIVE membership (live != nil — the
+// durable plane is on and tracks the live set) activates routing on any stable
+// self id; otherwise the STATIC contract — CLOUD_PEERS names >1 pod AND self is one of
+// them (Config.Validate enforced this) — as before. self is the pod name (CLOUD_POD_NAME /
+// hostname), matching the id the live membership source assigns each pod.
+func newShardRouter(cfg *cloud.Config, log luxlog.Logger, live func() []ha.Member) *shardRouter {
+	peers := parsePeers(cfg.ShardPeers)
+	self := cmp.Or(strings.TrimSpace(cfg.ShardSelf), hostnameOr(""))
+	var r *shardRouter
+	switch {
+	case live != nil:
+		if self == "" {
+			return nil // no stable id ⇒ cannot decide "do I own this org"; single-pod path.
+		}
+		r = &shardRouter{self: self, peers: peers, members: live, log: log, clients: map[string]*fasthttp.HostClient{}}
+	case len(peers) < 2 || self == "" || !peersContain(peers, self):
+		return nil
+	default:
+		r = &shardRouter{self: self, peers: peers, log: log, clients: map[string]*fasthttp.HostClient{}}
+	}
+	t, err := coord.Default().ClientTLS()
+	if err != nil {
+		log.Error("shard router: this pod cannot prove itself to its peers; it serves the orgs it owns and forwards nothing", "err", err)
+	}
+	r.tls = t
+	return r
+}
+
+// set is the writer set to elect over: the LIVE membership when the durable plane provides
+// it (a rolling upgrade's current pods — draining/dead ones already dropped), else the
+// static CLOUD_PEERS set. A momentarily-empty live snapshot (a refresh blip) falls back to
+// peers so no org is ever stranded with no owner.
+func (r *shardRouter) set() []ha.Member {
+	if r.members != nil {
+		if m := r.members(); len(m) > 0 {
+			return m
+		}
+	}
+	return r.peers
+}
+
+// peerIDs returns the member ids for logging.
+func (r *shardRouter) peerIDs() []string {
+	ids := make([]string, len(r.peers))
+	for i, m := range r.peers {
+		ids[i] = m.ID
+	}
+	return ids
+}
+
+// Middleware returns the routing handler. It runs after SanitizeIdentity, so
+// X-Org-Id is the VALIDATED, server-minted org — never a raw client header.
+//
+//   - No validated org (anonymous / org-less): served locally. Such a request
+//     carries no principal and the F1 data-plane gate refuses any per-org store
+//     access anyway, so it can never write a tenant file wherever it lands.
+//   - Owned here: served locally (this pod is the org's single writer).
+//   - Owned by a peer: the WHOLE request is forwarded there, so the peer — the org's
+//     sole writer — performs every store touch, audit append, and billing debit.
+func (r *shardRouter) Middleware() zip.Handler {
+	return func(c *zip.Ctx) error {
+		// Hash on the SAME injective slug the on-disk path uses (cloud.OrgDB folds
+		// every org file through namespace.Sanitize). Routing key ≡ file-shard key, so "the
+		// pod that owns slug S writes exactly orgs/S/*" — the tightest binding to the
+		// invariant. An org namespace.Sanitize refuses (→ "") cannot open a file at all; it
+		// is served locally and fails closed at the store layer, never misrouted.
+		slug := namespace.Sanitize(strings.TrimSpace(c.Header("X-Org-Id")))
+		if slug == "" {
+			return c.Continue()
+		}
+		owner, ok := ha.Owner(slug, r.set())
+		if !ok || owner.ID == r.self {
+			return c.Continue()
+		}
+		return r.forward(c, owner, slug)
+	}
+}
+
+// forward proxies the in-flight request to the org's owner pod and streams the
+// response back. It returns nil after writing the peer's response (or a fail-closed
+// error response) into fiber's own buffers — the request never runs the local
+// downstream chain, so no local per-org store is opened for an org this pod does not
+// own.
+func (r *shardRouter) forward(c *zip.Ctx, owner ha.Member, slug string) error {
+	fc := c.Fiber()
+	req := fc.Request()
+	resp := fc.Response()
+
+	// Loop guard / divergence fail-closed. On the static peer set this is unreachable
+	// (the owner always recomputes owner==self). Under LIVE membership two pods can briefly
+	// hold divergent views mid-refresh, so an already-forwarded request may reach a pod that
+	// no longer owns the org; rather than loop or serve another shard's files, we refuse
+	// (421) — a retryable, fail-closed signal that self-heals the instant views converge
+	// (bounded by the 2s refresh). A forged header only 421s the client's OWN cross-shard
+	// request — never another tenant, never others' availability.
+	if len(req.Header.Peek(shardHopHeader)) > 0 {
+		r.log.Error("shard loop guard tripped — membership divergence", "org_slug", slug, "owner", owner.ID, "self", r.self)
+		resp.Reset()
+		resp.SetStatusCode(fasthttp.StatusMisdirectedRequest) // 421
+		resp.Header.SetContentType("application/json")
+		resp.SetBodyString(`{"error":{"code":"shard_misrouted","message":"shard ownership divergence; retry"}}`)
+		return nil
+	}
+	if r.tls == nil {
+		resp.Reset()
+		resp.SetStatusCode(fasthttp.StatusServiceUnavailable)
+		resp.Header.SetContentType("application/json")
+		resp.SetBodyString(`{"error":{"code":"shard_owner_unreachable","message":"this pod holds no key to reach the org's owner"}}`)
+		return nil
+	}
+	req.Header.Set(shardHopHeader, r.self)
+	// The hop is TLS whatever the caller's leg was, and the client refuses a request
+	// whose scheme disagrees with its connection.
+	req.URI().SetScheme("https")
+
+	hc := r.hostClient(owner.Addr)
+	deadline := time.Now().Add(shardForwardTimeout)
+	backoff := 100 * time.Millisecond
+	resp.Reset()
+	for {
+		err := hc.Do(req, resp)
+		if err == nil {
+			return nil // resp (status + headers + streaming body) is fiber's; it flushes it
+		}
+		// Only a never-delivered dial is retried (the request cannot have executed on
+		// the peer, so a retried non-idempotent POST is safe). Anything else — or the
+		// budget exhausted — fails closed with a 502; a shard owner that is down is an
+		// honest upstream error, never a silent local (wrong-shard) fallback.
+		if !isPeerDialError(err) || time.Now().After(deadline) {
+			r.log.Warn("shard forward failed", "org_slug", slug, "owner", owner.ID, "addr", owner.Addr, "err", err)
+			resp.Reset()
+			resp.SetStatusCode(fasthttp.StatusBadGateway)
+			resp.Header.SetContentType("application/json")
+			resp.SetBodyString(`{"error":{"code":"shard_owner_unavailable","message":"shard owner unavailable"}}`)
+			return nil
+		}
+		select {
+		case <-c.Context().Done():
+			return c.Context().Err()
+		case <-time.After(backoff):
+		}
+		if backoff < 2*time.Second {
+			backoff *= 2
+		}
+		resp.Reset()
+	}
+}
+
+// hostClient returns the pooled streaming client for a peer addr, building it once.
+// StreamResponseBody keeps SSE/chat streams flowing token-by-token (never buffered);
+// no ReadTimeout so a long-lived stream is not cut. The client dials addr directly
+// (headless per-pod DNS cloud-N.<svc>:8000), forwarding the request — including its
+// original Host — verbatim.
+func (r *shardRouter) hostClient(addr string) *fasthttp.HostClient {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if hc, ok := r.clients[addr]; ok {
+		return hc
+	}
+	hc := &fasthttp.HostClient{
+		Addr:                     addr,
+		IsTLS:                    true,
+		TLSConfig:                r.tls,
+		StreamResponseBody:       true,
+		MaxConns:                 1024,
+		WriteTimeout:             30 * time.Second,
+		MaxIdleConnDuration:      90 * time.Second,
+		DisablePathNormalizing:   true,
+		NoDefaultUserAgentHeader: true,
+	}
+	r.clients[addr] = hc
+	return hc
+}
+
+// isPeerDialError reports whether err means the connection to the owner was never
+// established — connection refused / no free conn / dial timeout / no such host —
+// the class that occurs during an owner's rolling restart. Only these are retried,
+// because the request provably never reached the peer, so a replay cannot
+// double-execute it. A delivered-then-failed response is NOT retried (ambiguous).
+func isPeerDialError(err error) bool {
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, syscall.ECONNREFUSED) ||
+		errors.Is(err, fasthttp.ErrDialTimeout) ||
+		errors.Is(err, fasthttp.ErrNoFreeConns) {
+		return true
+	}
+	if op, ok := errors.AsType[*net.OpError](err); ok {
+		return op.Op == "dial"
+	}
+	s := err.Error()
+	return strings.Contains(s, "connection refused") ||
+		strings.Contains(s, "no such host") ||
+		strings.Contains(s, "dialing to the given TCP address timed out")
+}
+
+// Members is the writer set this process believes in: the LIVE set when the
+// durable plane elects one, else the static CLOUD_PEERS set the router falls
+// back to. Empty means a single-pod deployment, where this process is the whole
+// fleet.
+//
+// Exported because the plugin control plane fans out over the membership — and
+// it must be the SAME membership the shard router routes on. Two fleet views
+// that could disagree would be worse than one that is occasionally stale: an
+// operator would roll a version onto a set of hosts that is not the set serving
+// traffic.
+func Members(deps cloud.Deps) []ha.Member {
+	if deps.LiveMembers != nil {
+		if m := deps.LiveMembers(); len(m) > 0 {
+			return m
+		}
+	}
+	return parsePeers(os.Getenv("CLOUD_PEERS"))
+}
+
+// parsePeers parses a CLOUD_PEERS value ("id@addr,id2@addr2", or bare "id" with
+// addr==id) into the HRW membership set. Whitespace-only entries are dropped; an
+// entry with no '@' uses the id as its own addr (dev/local). This is the shard
+// twin of sdk/tenure.parseReplicasEnv, kept local so the router has no dependency
+// on the replica package (the two share the ha.Member value type, not code).
+func parsePeers(v string) []ha.Member {
+	v = strings.TrimSpace(v)
+	if v == "" {
+		return nil
+	}
+	var out []ha.Member
+	for part := range strings.SplitSeq(v, ",") {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			continue
+		}
+		id, addr, ok := strings.Cut(part, "@")
+		if !ok {
+			id, addr = part, part
+		}
+		id, addr = strings.TrimSpace(id), strings.TrimSpace(addr)
+		if id == "" || addr == "" {
+			continue
+		}
+		out = append(out, ha.Member{ID: id, Addr: addr})
+	}
+	return out
+}
+
+// peersContain reports whether id is one of the members — the "am I in my own ring?"
+// boot check (Config.Validate) that keeps a misconfigured ordinal from black-holing
+// every request by forwarding it away with no shard of its own.
+func peersContain(peers []ha.Member, id string) bool {
+	for _, m := range peers {
+		if m.ID == id {
+			return true
+		}
+	}
+	return false
+}

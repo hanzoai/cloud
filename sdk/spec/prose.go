@@ -63,13 +63,16 @@ func Reserved(path string) bool {
 // # Why the producer refuses instead of a consumer coping
 //
 // A projection cannot repair its source, and every branch that handles "the
-// source didn't say" hides the defect at the one place it could be fixed. Nobody
-// filed a bug, because a mechanical line reads exactly like a deliberate one —
-// the fallback did not report the gap, it DISGUISED it, for as long as it
-// existed. The CLI has since deleted the fallback and refuses to emit an
-// undescribed command; this is the same refusal one step upstream, where the
-// sentence can actually be written. Between them there is no place left for a
-// route to stand in for prose.
+// source didn't say" hides the defect at the one place it could be fixed. That is
+// not a design argument, it is a post-mortem: hanzoai/cli's generated tree used to
+// fall back to the operation's own HTTP ROUTE when it had no sentence, so `hanzo
+// platform health` shipped "GET /v1/platform/health" as its help. Nobody filed a
+// bug, because a mechanical line reads exactly like a deliberate one — the
+// fallback did not report the gap, it DISGUISED it, for as long as it existed.
+// The CLI has since deleted the fallback and refuses to emit an undescribed
+// command; this is the same refusal one step upstream, where the sentence can
+// actually be written. Between them there is no place left for a route to stand
+// in for prose.
 //
 // And there is no placeholder here either. A visible "TODO: describe this
 // operation" is the same fallback with better manners: it would travel into eight

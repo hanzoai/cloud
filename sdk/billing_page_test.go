@@ -4,8 +4,9 @@ package cloud
 // checkout (hanzo.ai/pay/amount/card) for a refusal money clears, the console's
 // page for a spend cap, and the console page of a brand with no checkout.
 //
-// A body that says what to do has to say where, and the where has to be the
-// caller's.
+// Every 402 used to say "Add credits at console.hanzo.ai": the console's front door
+// rather than its billing page, and Hanzo's front door on a Lux or Zoo host. A body
+// that says what to do has to say where, and the where has to be the caller's.
 
 import (
 	"encoding/json"

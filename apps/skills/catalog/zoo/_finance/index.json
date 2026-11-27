@@ -1,0 +1,132 @@
+{
+  "$schema": "https://schemas.agentskills.io/discovery/0.2.0/schema.json",
+  "base_url": "https://api.zoo.ngo",
+  "brand": "zoo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://zoolabs.id",
+  "mcp": {
+    "description": "Model Context Protocol over JSON-RPC 2.0 — one POST per message, stateless, protocol revision 2026-07-28. tools/list answers without a credential with one tool per subsystem (its operations in the \"op\" enum) plus \"describe\", which returns one operation's input schema. tools/call names a subsystem tool and carries {\"op\": <operation>, \"input\": <its arguments>}; it takes the same bearer the REST API does, and a call that carries none is answered 401 with a WWW-Authenticate header naming the resource metadata at /.well-known/oauth-protected-resource, which names the authorization server to sign in at. The tool surface is the public contract: the operator's admin product is not offered, and a name that would disclose a secret or mutate an identity is withheld — the list says how many, under _meta.",
+    "method": "POST",
+    "url": "https://api.zoo.ngo/v1/mcp"
+  },
+  "skill_count": 13,
+  "skills": [
+    {
+      "description": "Read finance accounts: Returns the org's chart of accounts — the seeded fixed chart every posting key in the ledger refers to..",
+      "digest": "sha256:368830b952c85e42fdd002063ae4219092b9bb62dfa6011661ef6c0f65375a76",
+      "name": "finance_accounts",
+      "service": "finance",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/finance_accounts/SKILL.md"
+    },
+    {
+      "description": "Read finance bank: Returns the org's normalized bank transactions, newest first — every row the import and connector paths have ingested, with its amount in exact cents, its direction, and whether it has been matched to a voucher yet., Returns the org's unmatched bank inflows and",
+      "digest": "sha256:46a2e1a0cda0297fa679aa89e2d84273aba8aeb77f2e040d9b17b8570884c535",
+      "name": "finance_bank",
+      "service": "finance",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/finance_bank/SKILL.md"
+    },
+    {
+      "description": "Read finance export: Returns the complete financial package for the caller's org over (from, to]: the trial balance, the P&L, the balance sheet, and the GL detail behind them — the four statements a tax preparer or an investor asks for, assembled from the one ledger in a single r",
+      "digest": "sha256:e5abf8437d408905b2b19f920dc4da443b74a887273b3c5ae390e1ce029e0e9b",
+      "name": "finance_export",
+      "service": "finance",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/finance_export/SKILL.md"
+    },
+    {
+      "description": "Read finance gl: Returns the org's most recent GL Entry rows, newest first..",
+      "digest": "sha256:55c1422bffce369bac3a4a5e9fe4c69bb45641889644dc74f7286222f0e6a810",
+      "name": "finance_gl",
+      "service": "finance",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/finance_gl/SKILL.md"
+    },
+    {
+      "description": "Read finance inbox: Returns the org's open document queue — everything uploaded but not yet booked, newest first, each with its extracted summary and the confidence the scanner resolved its category at..",
+      "digest": "sha256:fb3a61664e838213b31426d67fe234ce90de6186bf68bbc0f7f2ffcf68840643",
+      "name": "finance_inbox",
+      "service": "finance",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/finance_inbox/SKILL.md",
+      "works": [
+        "operations"
+      ]
+    },
+    {
+      "description": "Read finance metrics: Returns the org's deterministic SaaS-metrics snapshot over an optional (from, to] window — MRR, ARR, revenue, COGS, burn, gross margin, net income, cash, deferred revenue, monthly burn and runway — as raw int64-cent figures AND the same figures already forma",
+      "digest": "sha256:8d51331f5e6359c8177c6a46b3436345dee18e7112d6ce80fa71b60cbe881b24",
+      "name": "finance_metrics",
+      "service": "finance",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/finance_metrics/SKILL.md",
+      "works": [
+        "director"
+      ]
+    },
+    {
+      "description": "Read finance pnl: Returns the org's accrual-basis Profit & Loss over an optional (from, to] window of RFC3339 posting times: recognized revenue, matched cost, and the net..",
+      "digest": "sha256:a2ab8614a8955a0b6296ead4891eb2a85b731d8100f5eeb362a8cf04fb02cfd3",
+      "name": "finance_pnl",
+      "service": "finance",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/finance_pnl/SKILL.md",
+      "works": [
+        "director"
+      ]
+    },
+    {
+      "description": "Read finance position: Returns the org's Balance Sheet as of `to` (empty = all time), with the Assets == Liabilities + Equity equation proof..",
+      "digest": "sha256:6917711803721b12fe07de9db9eb85ca446932efb60ffa9384ac5a7c3a7687c4",
+      "name": "finance_position",
+      "service": "finance",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/finance_position/SKILL.md",
+      "works": [
+        "director"
+      ]
+    },
+    {
+      "description": "Read finance questions: Returns the clarifying questions the caller's own recent GL raises — the unusual postings a founder should look at (outliers, reversals, round-offs, uncosted revenue, an overdrawn wallet), sharpest first..",
+      "digest": "sha256:a92fd32f0e6a1f11887188d8cc30f9cd748ada25fe6bd2b3c391f0a9a2a437d0",
+      "name": "finance_questions",
+      "service": "finance",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/finance_questions/SKILL.md"
+    },
+    {
+      "description": "Read finance rules: Returns the org's auto-categorization rules, highest priority first..",
+      "digest": "sha256:63223582b5c793d6aef2907fdf66256f902ce3c21b3fbdc1d607324232b18f48",
+      "name": "finance_rules",
+      "service": "finance",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/finance_rules/SKILL.md"
+    },
+    {
+      "description": "Read finance transactions: Returns the org's booked ledger as a single-line register, newest first: one row per voucher, with its date, description, vendor, category, source and amount in exact cents..",
+      "digest": "sha256:72754104d1d0ac99751f76dd4bbec28bd215b0350922f9a495bf6afe252e961b",
+      "name": "finance_transactions",
+      "service": "finance",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/finance_transactions/SKILL.md"
+    },
+    {
+      "description": "Read finance trial: Returns the org's trial balance over an optional [from, to] window of RFC3339 posting times, including the opening/closing columns and the TotalDebit == TotalCredit proof that the books balance..",
+      "digest": "sha256:349be4f950e675f930fd67e55e7258a19208959f4f2e1a99ad130999598861a7",
+      "name": "finance_trial",
+      "service": "finance",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/finance_trial/SKILL.md"
+    },
+    {
+      "description": "Read finance vendors: Returns the org's vendor book: each canonical vendor, the alias spellings a receipt may print it under, and the expense account new bills from it default to..",
+      "digest": "sha256:1360bb94caa2b2b6c7df0c2d27b637b06cb7fccbc9226305959ab361936eed24",
+      "name": "finance_vendors",
+      "service": "finance",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/finance_vendors/SKILL.md"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

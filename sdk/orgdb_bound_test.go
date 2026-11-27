@@ -3,11 +3,12 @@ package cloud
 // orgdb_bound_test.go — THE OPEN BOUND IS THE DEPLOYMENT'S, AND SAYING IT IS OVER
 // IS ONE LINE.
 //
-// When the admin directory reads every org's wallet on a cycle equal to StoreIdleAfter,
-// reclaim evicts exactly the ledgers about to be read again, so a bound below the org
-// count turns every cycle into fenced ships and re-hydrates. The bound is therefore the
-// deployment's own, and a store count over it is reported once, naming the setting that
-// moves it.
+// Production ran 379 orgs against a bound of 256, and the admin directory reads
+// every org's wallet every five minutes — exactly StoreIdleAfter. Reclaim takes only
+// a store idle that long, so each pass evicted the ledgers it was about to read
+// again: 371 fenced ships and re-hydrates in one minute, every five minutes. Right
+// after a restart nothing is idle yet, so the warning fired on every For — hundreds
+// of identical lines naming a constant nobody could change.
 
 import (
 	"bytes"

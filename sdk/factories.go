@@ -50,9 +50,11 @@ func RegisterCommerceClientFactory(f func(cfg *Config, log luxlog.Logger) Commer
 // S3 is the object store, built where it is needed. (The name is the old one for
 // deps.VFS; the store is sdk/object's: local disk, or the S3 driver when configured.)
 //
-// Six do; the rest carried it. Worse, resolving it centrally meant resolving it
-// EARLY — the constructor dialled, so every process in the fleet waited on an
-// object store to find out whether the six would ever want one.
+// It used to be a field on Deps, resolved once at boot and copied into every
+// subsystem whether or not that subsystem stores a byte. Six do; the rest carried
+// it. Worse, resolving it centrally meant resolving it EARLY — the constructor
+// dialled, so every process in the fleet waited on an object store to find out
+// whether the six would ever want one.
 //
 // Constructing it is now free (object.NewBlobs touches no network), so the app
 // that needs a store builds a store and nothing is threaded through anything.

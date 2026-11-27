@@ -24,8 +24,8 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
-	"github.com/hanzoai/authz"
 	"github.com/hanzoai/cloud/sdk/principal"
+	"github.com/hanzoai/authz"
 	"github.com/zap-proto/zip"
 )
 

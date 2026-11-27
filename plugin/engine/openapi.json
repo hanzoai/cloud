@@ -1,0 +1,375 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Hanzo Cloud API",
+    "description": "Package engine is Hanzo Engine: which models the serving runtime has loaded, and the GPUs under it.",
+    "version": "v1"
+  },
+  "servers": [
+    {
+      "url": "https://api.hanzo.ai"
+    }
+  ],
+  "security": [
+    {
+      "bearer": []
+    }
+  ],
+  "tags": [
+    {
+      "name": "engine"
+    }
+  ],
+  "paths": {
+    "/v1/engine/model": {
+      "get": {
+        "operationId": "engineModel",
+        "summary": "Read one model's load state on the serving runtime",
+        "description": "Reads one model's load state — loaded, unloading, or not_found, as\nthe engine itself reports it.",
+        "tags": [
+          "engine"
+        ],
+        "parameters": [
+          {
+            "name": "model",
+            "in": "query",
+            "required": false,
+            "description": "Model is the model id to inspect, exactly as the model list reports it.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "Qwen/Qwen3-4B"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/engine/models": {
+      "get": {
+        "operationId": "engineModels",
+        "summary": "List the models the serving runtime holds, with each one's load state",
+        "description": "Lists the models the engine serves, each with its load state — the\nserver's own model table (its standard list envelope, load status\nincluded), relayed verbatim.",
+        "tags": [
+          "engine"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/engine/replicas": {
+      "get": {
+        "operationId": "engineReplicas",
+        "summary": "Read shared AI worker placement and health (SuperAdmin)",
+        "description": "Reads the private native router's configured model pools, worker\nhealth, concurrency, role preferences and observed time to first byte.\nThis shared infrastructure inventory is restricted to platform SuperAdmins.",
+        "tags": [
+          "engine"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "items": {
+                      "$ref": "#/components/schemas/engine.engineReplica"
+                    },
+                    "type": "array"
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      },
+      "put": {
+        "operationId": "engineUpdateReplica",
+        "summary": "Save shared AI worker capacity and role preferences (SuperAdmin)",
+        "description": "Saves capacity, weight and preferred agent roles in the native\nrouter's pool file and applies them without dropping running streams or pins.\nOnly platform SuperAdmins can retune shared workers. The Rust runtime owns\nvalidation, durable storage and activation; cloud only carries the operation.",
+        "tags": [
+          "engine"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/engine.engineReplicaUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "items": {
+                      "$ref": "#/components/schemas/engine.engineReplica"
+                    },
+                    "type": "array"
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/engine/status": {
+      "get": {
+        "operationId": "engineStatus",
+        "summary": "Whether the serving runtime is reachable, and which build it runs",
+        "description": "Reports whether the engine deployment is reachable and which build\nrevision it runs — an honest lens for \"is the serving runtime up\", never a\nfabricated ok.",
+        "tags": [
+          "engine"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/engine.engineStatus"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/engine/system": {
+      "get": {
+        "operationId": "engineSystem",
+        "summary": "The serving host's own inventory: devices, memory and build capabilities",
+        "description": "Reads the engine host's inventory: OS, CPU, memory, every accelerator\ndevice with its VRAM and compute capability, and the build's capabilities\n(CUDA/Metal/flash-attention) — the real hardware under the serving runtime,\nrelayed verbatim.",
+        "tags": [
+          "engine"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "engine.engineReplica": {
+        "properties": {
+          "capacity": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "healthy": {
+            "type": "boolean"
+          },
+          "id": {
+            "type": "string"
+          },
+          "inflight": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "roles": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "ttft_ewma_ms": {
+            "format": "double",
+            "type": "number"
+          },
+          "upstream_model": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          },
+          "weight": {
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "engine.engineReplicaUpdate": {
+        "properties": {
+          "capacity": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "id": {
+            "type": "string"
+          },
+          "model": {
+            "type": "string"
+          },
+          "roles": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "weight": {
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "engine.engineStatus": {
+        "properties": {
+          "reachable": {
+            "description": "Reachable is true when the engine answered its health probe.",
+            "type": "boolean"
+          },
+          "revision": {
+            "description": "Revision is the engine build's git revision, present only when\nreachable (the server's own build identity — it publishes no semver).",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "problem-details": {
+        "description": "An RFC 9457 problem document.",
+        "properties": {
+          "code": {
+            "description": "A stable token a client can branch on, when the refusal names one.",
+            "type": "string"
+          },
+          "detail": {
+            "description": "What was refused, for a person to read.",
+            "type": "string"
+          },
+          "status": {
+            "description": "The HTTP status.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "title": {
+            "description": "The status's reason phrase.",
+            "type": "string"
+          },
+          "type": {
+            "description": "about:blank",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "status",
+          "detail"
+        ],
+        "type": "object"
+      }
+    },
+    "securitySchemes": {
+      "bearer": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "The caller's credential, sent as `Authorization: Bearer \u003ctoken\u003e`. It is either an access token minted by Hanzo IAM or an API key (pk-/sk-). X-Authorization, and HTTP Basic carrying the token as the password, are accepted spellings of the same header for clients that cannot set Authorization; a browser presents the session cookie instead. Every operation requires it unless it says `security: []`."
+      }
+    }
+  }
+}

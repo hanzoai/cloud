@@ -39,8 +39,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/hanzoai/account"
 	"github.com/hanzoai/cloud/sdk/meter"
+	"github.com/hanzoai/account"
 	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
 )
@@ -109,15 +109,17 @@ func NewMeter(deps Deps, provider string) *Meter {
 // short-circuit). The balance check honors ctx (a client disconnect/timeout
 // cancels it).
 //
-// payer IS THE ADDRESS, both halves of it. That parse asserted "the wallet IS
-// the org", which is true of a pooled tenant and false in the shared signup org,
-// where every self-serve stranger lives and account.Payer resolves a person to
-// <org>/<username>. So whether a surface billed the person or the platform's own
-// pool came down to which helper its author happened to reach for, and the two
-// were indistinguishable at the call site because both are strings. An
-// [account.Account] answers both questions itself, so the question cannot be
-// answered two ways: Org() names the books, Subject() names the wallet. A
-// surface that genuinely means the org pool says so — account.Org(slug).
+// payer IS THE ADDRESS, both halves of it. A debit needs two things — which
+// ledger file holds the money, and which account inside it — and this meter used
+// to be handed ONE string and parse the second out of the first. That parse
+// asserted "the wallet IS the org", which is true of a pooled tenant and false in
+// the shared signup org, where every self-serve stranger lives and account.Payer
+// resolves a person to <org>/<username>. So whether a surface billed the person
+// or the platform's own pool came down to which helper its author happened to
+// reach for, and the two were indistinguishable at the call site because both are
+// strings. An [account.Account] answers both questions itself, so the question
+// cannot be answered two ways: Org() names the books, Subject() names the wallet.
+// A surface that genuinely means the org pool says so — account.Org(slug).
 //
 // costCents is forwarded as AuthInput.AmountCents so the gate enforces
 // available >= costCents, not merely available > 0 — otherwise a 1-cent balance

@@ -1,0 +1,245 @@
+{
+ "runs": [
+  {
+   "id": "locomo-all-context-k20-enso-flash",
+   "benchmark": "locomo",
+   "split": "",
+   "system": "context",
+   "embedder": "",
+   "reader": "enso-flash",
+   "k": 20,
+   "temperature": 0,
+   "max_tokens": 64,
+   "prompt": "prompts/reader-locomo.txt",
+   "prompt_digest": "afa0a591ae62c574",
+   "dataset_digest": "79fa87e90f040813",
+   "store_digest": "688cea6b889e484c",
+   "facts_digest": "cc680d252a3538b9",
+   "commit": "9eab30f73493a28244d1cd00b3fa53b83fdfba3c",
+   "questions": 282,
+   "answered": 282,
+   "when": "2026-09-10T01:19:00.084Z",
+   "ended": "2026-09-10T21:24:01.507Z",
+   "study": "memory-retrieval",
+   "notes": "",
+   "measures": [
+    {
+     "category": "all",
+     "metric": "answered",
+     "value": 0.475177304964539,
+     "lo": null,
+     "hi": null,
+     "n": 282,
+     "of": 1536
+    },
+    {
+     "category": "all",
+     "metric": "em",
+     "value": 0.13829787234042554,
+     "lo": 0.09929078014184398,
+     "hi": 0.18085106382978725,
+     "n": 282,
+     "of": 1536
+    },
+    {
+     "category": "all",
+     "metric": "exact",
+     "value": 0.8794326241134752,
+     "lo": null,
+     "hi": null,
+     "n": 282,
+     "of": 1536
+    },
+    {
+     "category": "all",
+     "metric": "f1",
+     "value": 0.45132705699486847,
+     "lo": 0.4116788544913449,
+     "hi": 0.49065341163812487,
+     "n": 282,
+     "of": 1536
+    },
+    {
+     "category": "all",
+     "metric": "p50_ms",
+     "value": 5048,
+     "lo": null,
+     "hi": null,
+     "n": 282,
+     "of": 1536
+    },
+    {
+     "category": "all",
+     "metric": "p95_ms",
+     "value": 25064,
+     "lo": null,
+     "hi": null,
+     "n": 282,
+     "of": 1536
+    },
+    {
+     "category": "all",
+     "metric": "supported",
+     "value": 0.1347517730496454,
+     "lo": null,
+     "hi": null,
+     "n": 282,
+     "of": 1536
+    },
+    {
+     "category": "all",
+     "metric": "tokens",
+     "value": 971.4893617021277,
+     "lo": null,
+     "hi": null,
+     "n": 282,
+     "of": 1536
+    },
+    {
+     "category": "dev",
+     "metric": "answered",
+     "value": 0.5540540540540541,
+     "lo": null,
+     "hi": null,
+     "n": 74,
+     "of": 383
+    },
+    {
+     "category": "dev",
+     "metric": "em",
+     "value": 0.14864864864864866,
+     "lo": 0.06756756756756757,
+     "hi": 0.22972972972972974,
+     "n": 74,
+     "of": 383
+    },
+    {
+     "category": "dev",
+     "metric": "exact",
+     "value": 0.8783783783783784,
+     "lo": null,
+     "hi": null,
+     "n": 74,
+     "of": 383
+    },
+    {
+     "category": "dev",
+     "metric": "f1",
+     "value": 0.5089346344145105,
+     "lo": 0.4275865640726322,
+     "hi": 0.5863709363709363,
+     "n": 74,
+     "of": 383
+    },
+    {
+     "category": "dev",
+     "metric": "p50_ms",
+     "value": 4516,
+     "lo": null,
+     "hi": null,
+     "n": 74,
+     "of": 383
+    },
+    {
+     "category": "dev",
+     "metric": "p95_ms",
+     "value": 13074,
+     "lo": null,
+     "hi": null,
+     "n": 74,
+     "of": 383
+    },
+    {
+     "category": "dev",
+     "metric": "supported",
+     "value": 0.13513513513513514,
+     "lo": null,
+     "hi": null,
+     "n": 74,
+     "of": 383
+    },
+    {
+     "category": "dev",
+     "metric": "tokens",
+     "value": 983.7162162162163,
+     "lo": null,
+     "hi": null,
+     "n": 74,
+     "of": 383
+    },
+    {
+     "category": "test",
+     "metric": "answered",
+     "value": 0.44711538461538464,
+     "lo": null,
+     "hi": null,
+     "n": 208,
+     "of": 1153
+    },
+    {
+     "category": "test",
+     "metric": "em",
+     "value": 0.1346153846153846,
+     "lo": 0.09134615384615384,
+     "hi": 0.18269230769230768,
+     "n": 208,
+     "of": 1153
+    },
+    {
+     "category": "test",
+     "metric": "exact",
+     "value": 0.8798076923076923,
+     "lo": null,
+     "hi": null,
+     "n": 208,
+     "of": 1153
+    },
+    {
+     "category": "test",
+     "metric": "f1",
+     "value": 0.4308320534898031,
+     "lo": 0.3785297202138698,
+     "hi": 0.47480667072337407,
+     "n": 208,
+     "of": 1153
+    },
+    {
+     "category": "test",
+     "metric": "p50_ms",
+     "value": 5627,
+     "lo": null,
+     "hi": null,
+     "n": 208,
+     "of": 1153
+    },
+    {
+     "category": "test",
+     "metric": "p95_ms",
+     "value": 31554,
+     "lo": null,
+     "hi": null,
+     "n": 208,
+     "of": 1153
+    },
+    {
+     "category": "test",
+     "metric": "supported",
+     "value": 0.1346153846153846,
+     "lo": null,
+     "hi": null,
+     "n": 208,
+     "of": 1153
+    },
+    {
+     "category": "test",
+     "metric": "tokens",
+     "value": 967.1394230769231,
+     "lo": null,
+     "hi": null,
+     "n": 208,
+     "of": 1153
+    }
+   ]
+  }
+ ]
+}

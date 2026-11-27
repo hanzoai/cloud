@@ -3,12 +3,14 @@
 package x402
 
 import (
+	"encoding/json"
+
 	"github.com/zap-proto/zip"
 )
 
 func init() {
 	zip.Describe("github.com/hanzoai/cloud/apps/x402 GET /v1/x402/prices", zip.Doc{
-		Description: "Lists every priced route with the exact terms for paying it, so a client\ncan sign before it is refused: the price in whole units, and for each asset the\nnetwork, token, payee, amount in atomic units and the token's signing domain. A\npayment is made on the route itself, in the PAYMENT-SIGNATURE header, and the\nreceipt comes back in PAYMENT-RESPONSE; nothing is paid here. It needs no\ncredential, so a client can price a route before it has an account.",
+		Description: "Lists the flat fees this deployment sells per request over x402: one\nfunction invoke, one agent run, one provisioned resource of each kind. Each row\nis the route's own fee knob, paid into the platform's wallet, and carries the\nexact terms that route's 402 challenge states, so a client can sign before it\nis refused.\n\nA payment is made on the route itself: the client calls it with the signed\nPAYMENT-SIGNATURE header, is served once, and reads the receipt on\nPAYMENT-RESPONSE. The payer must be signed in, and the payment is drawn from\nits Hanzo wallet, which must cover the fee. The payment is settled only once the\ncall is done and billable, so a call that fails costs nothing. A fee whose knob\nis zero is free and is not listed; with no platform wallet configured the table\nis empty.",
 		Fields: map[string]string{
 			"Extra.assetTransferMethod":             "AssetTransferMethod is how the token moves: \"eip3009\", its own\ntransferWithAuthorization. Absent means eip3009.",
 			"Extra.name":                            "Name is the token's EIP-712 domain name, e.g. \"USD Coin\".",
@@ -20,11 +22,143 @@ func init() {
 			"PaymentRequirements.network":           "Network is the CAIP-2 identifier of the chain, e.g. \"eip155:8453\".",
 			"PaymentRequirements.payTo":             "PayTo is the recipient address.",
 			"PaymentRequirements.scheme":            "Scheme is how the payment is made: \"exact\", the buyer authorizing exactly\nAmount. It is the only scheme implemented.",
-			"Row.accepts":                           "Accepts is how the resource may be paid for: one requirement per asset.",
-			"Row.price":                             "Price is the price in whole units of every asset, exactly as configured.",
-			"Row.resource":                          "Resource is the name the resource is priced under.",
-			"priceTable.prices":                     "Prices is one row per priced route, ordered by key; never null.",
+			"priceRow.accepts":                      "Accepts is how the fee may be paid, as the route's challenge states it.",
+			"priceRow.method":                       "Method is the method of the route the fee buys one call of.",
+			"priceRow.path":                         "Path is that route. A payment is sent there, on PAYMENT-SIGNATURE, never\nhere.",
+			"priceRow.price":                        "Price is the fee in US dollars, exactly.",
+			"priceRow.product":                      "Product names the fee: function.invoke, agent.run, provision.<kind>.",
+			"priceRow.resource":                     "Resource is the fee's x402 resource: what a challenge names and a payment\nis settled for.",
+			"priceRow.summary":                      "Summary says what one payment buys.",
+			"priceTable.prices":                     "Prices is one row per fee for sale; a fee that is free or not sold here is\nabsent.",
 			"priceTable.x402Version":                "X402Version is the protocol version the terms are stated in.",
+		},
+	})
+	zip.Describe("github.com/hanzoai/cloud/apps/x402 GET /v1/x402/prices/:product", zip.Doc{
+		Description: "Answers one fee's x402 challenge: always 402, with the PAYMENT-REQUIRED\nheader the fee's route sends an unfunded caller, and the same row the price\ntable lists as the body.\n\nIt sells nothing itself. A payment sent here is never settled; it is made on\nthe route the row names, where it buys one call. An unknown product, or one\nnot sold here, is 404.",
+		Fields: map[string]string{
+			"Extra.assetTransferMethod":             "AssetTransferMethod is how the token moves: \"eip3009\", its own\ntransferWithAuthorization. Absent means eip3009.",
+			"Extra.name":                            "Name is the token's EIP-712 domain name, e.g. \"USD Coin\".",
+			"Extra.version":                         "Version is the token's EIP-712 domain version, e.g. \"2\".",
+			"PaymentRequirements.amount":            "Amount is the price in atomic units of Asset, as a decimal string.",
+			"PaymentRequirements.asset":             "Asset is the token contract address, which must implement EIP-3009.",
+			"PaymentRequirements.extra":             "Extra is the token's EIP-712 domain the authorization is signed over.",
+			"PaymentRequirements.maxTimeoutSeconds": "MaxTimeoutSeconds is how long the client has to complete the payment.",
+			"PaymentRequirements.network":           "Network is the CAIP-2 identifier of the chain, e.g. \"eip155:8453\".",
+			"PaymentRequirements.payTo":             "PayTo is the recipient address.",
+			"PaymentRequirements.scheme":            "Scheme is how the payment is made: \"exact\", the buyer authorizing exactly\nAmount. It is the only scheme implemented.",
+			"priceRow.accepts":                      "Accepts is how the fee may be paid, as the route's challenge states it.",
+			"priceRow.method":                       "Method is the method of the route the fee buys one call of.",
+			"priceRow.path":                         "Path is that route. A payment is sent there, on PAYMENT-SIGNATURE, never\nhere.",
+			"priceRow.price":                        "Price is the fee in US dollars, exactly.",
+			"priceRow.product":                      "Product names the fee: function.invoke, agent.run, provision.<kind>.",
+			"priceRow.resource":                     "Resource is the fee's x402 resource: what a challenge names and a payment\nis settled for.",
+			"priceRow.summary":                      "Summary says what one payment buys.",
+			"productRef.product":                    "Product is the fee's product name, e.g. function.invoke or provision.sql.",
+			"quoted.error":                          "Error says the fee is paid on its route, and how.",
+			"quoted.fee":                            "Fee is the fee's row, as the price table lists it.",
+		},
+	})
+	zip.Describe("github.com/hanzoai/cloud/apps/x402 GET /v1/x402/settlements", zip.Doc{
+		Description: "Lists the caller's x402 receipts, newest first: as payer, what its\nwallet paid; as payee, what its org was paid — each settled payment with what it\nbought, both parties, the exact amount and when. A payer is the caller's own\naccount, which for a SuperAdmin inspecting another org is still its own and for\na member of the signup org is their own wallet, never the org's; a payee is the\ncaller's own org. An unsettled claim is not a receipt and is never listed.",
+		Fields: map[string]string{
+			"Receipt.amount":             "Amount is what actually moved, as an exact 18-decimal-place USD string. It\nis NOT the atomic-unit figure the client signed: the challenge quotes the\nasset's own units (USDC's 6 dp) and truncates to fit them, while the ledger\nmoves this exact value.",
+			"Receipt.category":           "Category is what the payment was for — service, goods, transfer or royalty\n— as the price table said it: a tool call is a service, a job is what its\nparties agreed.",
+			"Receipt.from":               "From is the payer's EVM address: the account that signed the EIP-3009\nauthorization, recovered from the signature rather than taken on trust.",
+			"Receipt.id":                 "ID is the settle-once key: \"x402_\" + keccak(from|nonce) in hex. It is\nDERIVED, not minted, so a client that re-submits the same authorization\naddresses the same settlement and is served again for free rather than\ncharged twice. It is also the id GET /v1/x402/settlements/:id takes.",
+			"Receipt.network":            "Network is the CAIP-2 identifier the payment was settled under, e.g.\n\"eip155:36963\". Its eip155 reference is the chain id in the EIP-712 domain\nthe payer signed, so it is not a label — changing it invalidates the\nsignature.",
+			"Receipt.nonce":              "Nonce is the client-chosen nonce from the authorization, hex — up to 32\nbytes, left-padded to the contract's bytes32. It is the replay anchor: the\ntoken contract refuses a second on-chain transfer for one (from, nonce), and\nthis rail refuses a second settlement for the same pair, so a ledger\nsettlement inherits the identical guarantee.",
+			"Receipt.payee":              "Payee is the recipient's EVM address — the `payTo` the challenge advertised\nand the authorization named. A payment to any other address never settles.",
+			"Receipt.payeeOrg":           "PayeeOrg is the tenant that owns the recipient wallet, resolved at\nsettlement. It is who got PAID, as Payer is who paid.",
+			"Receipt.payer":              "Payer is the payer ORG — the tenant whose ledger was debited — and not an\naddress. It is the org the request was authenticated as, so it answers who\nis billed, which the payer address alone cannot.",
+			"Receipt.resource":           "Resource is what was paid for, in the same spelling the price table and the\nchallenge used: the request path for a priced route, \"tool:<id>\" for a\npriced tool.",
+			"Receipt.settledAt":          "SettledAt is when this settlement was CLAIMED, in unix seconds — the moment\nthe authorization was accepted, which is also the moment the time window it\ncarried stopped applying. A settlement finished later by reconciliation\nkeeps this instant.",
+			"Receipt.settledVia":         "SettledVia is which rail moved the money: \"ledger\", the live default, or\n\"chain\" when the authorization is broadcast. Those two values and no others.",
+			"Receipt.txHash":             "TxHash is the chain transaction hash, present only for a \"chain\"\nsettlement. Empty on a ledger settlement — that is the normal case today,\nand it means the money moved without a chain, not that it failed. The\nwire's PAYMENT-RESPONSE `transaction` falls back to ID when this is empty.",
+			"settlementList.settlements": "Settlements is at most 1000 receipts.",
+			"settlementsQuery.role":      "Role is payer — what the caller's org paid — or payee — what it was paid.\nPayer when empty.",
+			"settlementsQuery.year":      "Year keeps the calendar year (UTC) the payments settled in. Zero keeps\nevery year.",
+		},
+		Example: json.RawMessage(`{"role":"payee","year":2026}`),
+	})
+	zip.Describe("github.com/hanzoai/cloud/apps/x402 GET /v1/x402/settlements/:id", zip.Doc{
+		Description: "Reads one x402 payment receipt by id.\n\nIt is scoped to the caller's own account — the wallet that was drawn, in the\nbooks that hold it — so one tenant can never read another's settlement, nor one\nmember of the signup org another's, and an id that exists but belongs to\nsomebody else is a 404 exactly like one that does not exist. A caller with no\nbillable identity is refused outright.",
+		Fields: map[string]string{
+			"Receipt.amount":     "Amount is what actually moved, as an exact 18-decimal-place USD string. It\nis NOT the atomic-unit figure the client signed: the challenge quotes the\nasset's own units (USDC's 6 dp) and truncates to fit them, while the ledger\nmoves this exact value.",
+			"Receipt.category":   "Category is what the payment was for — service, goods, transfer or royalty\n— as the price table said it: a tool call is a service, a job is what its\nparties agreed.",
+			"Receipt.from":       "From is the payer's EVM address: the account that signed the EIP-3009\nauthorization, recovered from the signature rather than taken on trust.",
+			"Receipt.id":         "ID is the settle-once key: \"x402_\" + keccak(from|nonce) in hex. It is\nDERIVED, not minted, so a client that re-submits the same authorization\naddresses the same settlement and is served again for free rather than\ncharged twice. It is also the id GET /v1/x402/settlements/:id takes.",
+			"Receipt.network":    "Network is the CAIP-2 identifier the payment was settled under, e.g.\n\"eip155:36963\". Its eip155 reference is the chain id in the EIP-712 domain\nthe payer signed, so it is not a label — changing it invalidates the\nsignature.",
+			"Receipt.nonce":      "Nonce is the client-chosen nonce from the authorization, hex — up to 32\nbytes, left-padded to the contract's bytes32. It is the replay anchor: the\ntoken contract refuses a second on-chain transfer for one (from, nonce), and\nthis rail refuses a second settlement for the same pair, so a ledger\nsettlement inherits the identical guarantee.",
+			"Receipt.payee":      "Payee is the recipient's EVM address — the `payTo` the challenge advertised\nand the authorization named. A payment to any other address never settles.",
+			"Receipt.payeeOrg":   "PayeeOrg is the tenant that owns the recipient wallet, resolved at\nsettlement. It is who got PAID, as Payer is who paid.",
+			"Receipt.payer":      "Payer is the payer ORG — the tenant whose ledger was debited — and not an\naddress. It is the org the request was authenticated as, so it answers who\nis billed, which the payer address alone cannot.",
+			"Receipt.resource":   "Resource is what was paid for, in the same spelling the price table and the\nchallenge used: the request path for a priced route, \"tool:<id>\" for a\npriced tool.",
+			"Receipt.settledAt":  "SettledAt is when this settlement was CLAIMED, in unix seconds — the moment\nthe authorization was accepted, which is also the moment the time window it\ncarried stopped applying. A settlement finished later by reconciliation\nkeeps this instant.",
+			"Receipt.settledVia": "SettledVia is which rail moved the money: \"ledger\", the live default, or\n\"chain\" when the authorization is broadcast. Those two values and no others.",
+			"Receipt.txHash":     "TxHash is the chain transaction hash, present only for a \"chain\"\nsettlement. Empty on a ledger settlement — that is the normal case today,\nand it means the money moved without a chain, not that it failed. The\nwire's PAYMENT-RESPONSE `transaction` falls back to ID when this is empty.",
+			"settlementRef.id":   "ID is the settlement id from the URL — the deterministic keccak(from|nonce)\nkey an x402 receipt is issued under (the `id` field of a Receipt, and the\n`transaction` of the SettlementResponse on the PAYMENT-RESPONSE header a paid\nrequest answers with).",
+		},
+	})
+	zip.Describe("github.com/hanzoai/cloud/apps/x402 POST /x402/authorize", zip.Doc{
+		Description: "Checks one payment authorization for a priced resource on behalf of the calling\ntenant, and settles nothing: the same terms Settle would challenge with, the same\nverification, and the time window asked at two moments — now, and Until, the\nlatest the holder of the authorization may settle it.\n\nIt exists for a payment that is AGREED before it is MADE. A job's buyer signs\nwhen the work begins and the money moves when the work is released, so the\nmarketplace keeps the signed authorization and asks here, before the seller\nstarts, whether it will settle: that it names this job's exact terms, that it\nwas signed by the address it claims, that its nonce has not been spent, and that\nit is still acceptable when the review window closes. With hold, the nonce is\nthen reserved for this resource, so the payment the seller works for cannot be\nspent on anything else first, and the amount is set aside in the payer's wallet,\nso the payment is there when the work is released: a wallet that cannot cover\nit is refused (402, insufficient_funds), and the same balance can never be\npromised twice. Nothing is claimed, so a payment checked here is settled once,\nby x402_settle, exactly as any other — from the amount set aside — or given up\nby x402_void, which returns it.\n\nWith no payment it answers the challenge — the terms to sign — and nothing else.\nA resource that is not priced answers 409: there is nothing to authorize.",
+		Fields: map[string]string{
+			"Authorization.asset":       "Asset is the token contract the authorization transfers.",
+			"Authorization.challenge":   "Challenge is the PAYMENT-REQUIRED value (base64): the terms to sign.",
+			"Authorization.from":        "From is the address that signed, when a payment was presented.",
+			"Authorization.network":     "Network is the CAIP-2 network the terms are stated on.",
+			"Authorization.ok":          "OK is true when the payment verifies against the resource's terms and is\nacceptable now and at Until. Nothing is paid; asked to hold, the amount is\nset aside in the payer's wallet.",
+			"Authorization.payTo":       "PayTo is the payee's address.",
+			"Authorization.spent":       "Spent is true when the authorization was already presented for settlement:\nits money moved, or is moving. A payment agreed for a job that reads spent\nwas paid, whatever the job says.",
+			"Authorization.status":      "Status is the refusal's status: 402 for a payment that does not verify, 409\nfor a resource that is not for sale, 503 when the rail cannot state terms.",
+			"Authorization.validBefore": "ValidBefore is when the authorization stops being acceptable, unix seconds.",
+			"AuthorizationIn.hold":      "Hold reserves the authorization's nonce for Resource once it verifies: from\nthen on it settles Resource or nothing, so a payment agreed for one job\ncannot be spent on anything else first. And it sets the amount aside in the\npayer's wallet, refused (402, insufficient_funds) when the wallet cannot\ncover it, so the payment agreed is one the payer can make.",
+			"AuthorizationIn.payment":   "Payment is the signed PaymentPayload, the PAYMENT-SIGNATURE value (base64).\nEmpty asks for the challenge alone.",
+			"AuthorizationIn.resource":  "Resource is the priced resource, e.g. JobResource(id).",
+			"AuthorizationIn.until":     "Until is the unix time the authorization must still be acceptable at: the\nlatest moment it may be settled. Zero checks only that it is valid now.",
+		},
+	})
+	zip.Describe("github.com/hanzoai/cloud/apps/x402 POST /x402/economic", zip.Doc{
+		Description: "Answers what one completed settlement records, as the economic event the plane\nstates — to the org that paid, which is who this rail states it for, and only\nonce its money has moved. The answer is the whole record whoever the plane is\nstating it for; which party's copy leaves out what is the plane's to decide.",
+		Fields: map[string]string{
+			"EconomicEvent.agent":         "Agent is the principal that acted for the buyer, as IAM names it. Only the\nbuyer's copy carries it: it may name a person, and who inside the buyer\nacted is none of the seller's records.",
+			"EconomicEvent.at":            "At is when the payment was made, unix seconds, as the rail recorded it.",
+			"EconomicEvent.buyer":         "Buyer is the org that paid.",
+			"EconomicEvent.category":      "Category is what the payment was for — service, goods, transfer, refund or\nroyalty — as the rail recorded the parties agreeing it. Empty on an event\nstated before version 2, and on a rail that records no purpose.",
+			"EconomicEvent.chain":         "Chain is the CAIP-2 network an on-chain payment moved on.",
+			"EconomicEvent.corrects":      "Corrects is the id of the event this one restates, when it is a correction.",
+			"EconomicEvent.currency":      "Currency is what the amounts are in: an ISO 4217 code or an asset symbol.",
+			"EconomicEvent.fee":           "Fee is what the rail kept of Gross, an exact decimal in Currency.",
+			"EconomicEvent.fmv":           "FMV is Gross's fair market value in U.S. dollars when it was paid, an exact\ndecimal.",
+			"EconomicEvent.gross":         "Gross is what the buyer paid, an exact decimal in Currency.",
+			"EconomicEvent.id":            "ID is the event's identity, derived from its rail and proof.",
+			"EconomicEvent.jurisdictions": "Jurisdictions are the ISO 3166 codes the payment is subject to, when the\nrail knows them.",
+			"EconomicEvent.parent":        "Parent is the agent that spawned Agent, when one did. Only the buyer's copy\ncarries it, for Agent's reason.",
+			"EconomicEvent.proof":         "Proof is the rail's own reference for the payment: a settlement id, a chain\ntransaction hash or a processor reference.",
+			"EconomicEvent.rail":          "Rail is how the money moved: x402, ledger, chain, ach, wire, card, network\nor other.",
+			"EconomicEvent.seller":        "Seller is the org that was paid.",
+			"EconomicEvent.service":       "Service is what was bought, in the rail's own words.",
+			"EconomicEvent.tax":           "Tax is the tax collected within Gross, an exact decimal in Currency.",
+			"EconomicEvent.tx":            "Tx is the on-chain transaction hash of an on-chain payment.",
+			"EconomicEvent.v":             "V is the schema version the event was stated in.",
+			"EconomicNotice.proof":        "Proof is the rail's own reference for it.",
+			"EconomicNotice.rail":         "Rail is the rail that moved the payment.",
+		},
+	})
+	zip.Describe("github.com/hanzoai/cloud/apps/x402 POST /x402/settle", zip.Doc{
+		Description: "Settle enforces payment for one priced resource on behalf of the calling tenant,\nand answers what happened.\n\nFREE FIRST: the price table is asked before anything is required of the world,\nbecause the tool plane offers EVERY dispatch to this client and an unpriced call must\nnot need a payer, a proof or a wallet. A price that cannot be looked up is NOT\nfree — that is a refusal, and the caller must serve nothing.\n\nPAID: the client's signed authorization arrives on the request as proof, the\nsignature is verified against exactly the terms it was challenged with, and the\nsettlement runs ONCE — keyed on keccak(payer address | nonce), so a retried\nauthorization moves money at most once and answers with the same receipt.\n\nUNPAID: the challenge comes back as data, not as an error. A 402 carries the\namount, the payee address and the chain the client must sign over, and an error\nbody has no room for them — so the caller reads the refusal off the reply and puts\nthe challenge on the response it is writing.\n\nThe PAYER is the caller's own account, resolved from the caller delegated on the\ncall. It is not a field: a caller that could name the payer could spend another\ntenant's ledger.",
+		Fields: map[string]string{
+			"Settled.challenge": "the PAYMENT-REQUIRED header value",
+			"Settled.response":  "the PAYMENT-RESPONSE header value",
+			"Settled.status":    "the refusal's status: 402, 403 or 503",
+		},
+	})
+	zip.Describe("github.com/hanzoai/cloud/apps/x402 POST /x402/void", zip.Doc{
+		Description: "Gives up one held authorization on behalf of the calling tenant: the payment it\nagreed will never be made — the job it was for ended unpaid — so the amount set\naside in the payer's wallet is returned, and answered. The nonce stays held for\nits resource: an authorization given up is spent on nothing else.\n\nThe void is decided the moment it is asked. The ledger records the return —\nof whatever is set aside, or of nothing, when the hold has not reached it yet —\nand then the authorization is marked given up, so a hold of it delivered after\nis refused wherever it lands: here, or at the ledger, where a hold this rail\nstopped waiting for may still be on its way. A void asked again returns\nwhatever is still set aside. A payment presented and never held here is given\nup the same way when it is one — signed by the address it names, over this\nresource's terms — so a void spends no nonce but one its caller signed; any\nother holds nothing and is given up nowhere. A payment the rail cannot check\nnow — its payee does not resolve — is an outage, answered as one, for the\ncaller to ask again, until its authorization expires: then nothing can hold\nit, and it is given up nowhere.\n\nAn authorization already presented for settlement is NOT voided: its money\nmoved, or is moving, and the answer says spent, so the caller finishes it as the\npayment it was. The payer is the caller's own account, as for every op here, so a\nvoid can return only the caller's own money to the caller's own wallet.",
+		Fields: map[string]string{
+			"VoidIn.payment":  "Payment is the signed PaymentPayload that was held, the PAYMENT-SIGNATURE\nvalue (base64).",
+			"VoidIn.resource": "Resource is the priced resource the authorization is held for.",
+			"Voided.returned": "Returned is what went back to the payer's wallet: zero when nothing was\nstill set aside.",
+			"Voided.spent":    "Spent is true when the authorization was already presented for\nsettlement: its money moved, or is moving, and nothing was returned.",
 		},
 	})
 }

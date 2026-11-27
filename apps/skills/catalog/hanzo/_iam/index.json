@@ -1,0 +1,264 @@
+{
+  "$schema": "https://schemas.agentskills.io/discovery/0.2.0/schema.json",
+  "base_url": "https://api.hanzo.ai",
+  "brand": "hanzo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://hanzo.id",
+  "mcp": {
+    "description": "Model Context Protocol over JSON-RPC 2.0 — one POST per message, stateless, protocol revision 2026-07-28. tools/list answers without a credential with one tool per subsystem (its operations in the \"op\" enum) plus \"describe\", which returns one operation's input schema. tools/call names a subsystem tool and carries {\"op\": <operation>, \"input\": <its arguments>}; it takes the same bearer the REST API does, and a call that carries none is answered 401 with a WWW-Authenticate header naming the resource metadata at /.well-known/oauth-protected-resource, which names the authorization server to sign in at. The tool surface is the public contract: the operator's admin product is not offered, and a name that would disclose a secret or mutate an identity is withheld — the list says how many, under _meta.",
+    "method": "POST",
+    "url": "https://api.hanzo.ai/v1/mcp"
+  },
+  "skill_count": 31,
+  "skills": [
+    {
+      "description": "Read iam account: Returns the signed-in person's own account and the organization they belong to — what a console reads to draw the account menu..",
+      "digest": "sha256:61aa9050905270798e8f85ae245458eecdc9e697cc090ba333d788cd50d087d6",
+      "name": "iam_account",
+      "service": "iam",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/iam_account/SKILL.md"
+    },
+    {
+      "description": "Read iam accounts: Returns the people signed in on this browser, the most recent sign-in first — what the sign-in page lists when an application asks the person to choose an account..",
+      "digest": "sha256:777ba8cfda06d1d4156ba9f78599f69d98f4072e2032c1d6904704f4d595ba89",
+      "name": "iam_accounts",
+      "service": "iam",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/iam_accounts/SKILL.md"
+    },
+    {
+      "description": "Read iam applications: Returns the applications in one organization, newest first — each product or site your people sign in to, with the sign-in methods and redirect URIs it allows., Returns one application: its sign-in methods, its allowed redirect URIs and the client credentia",
+      "digest": "sha256:dd82de882029481956d3aed3c4060f9df87de417590643166292cdf6b403503a",
+      "name": "iam_applications",
+      "service": "iam",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/iam_applications/SKILL.md"
+    },
+    {
+      "description": "Read iam audit logs: Returns your organization's audit trail, newest first — who did what, when, and from where., Returns one audit entry in full: the action, the person or key behind it, and the request it came in on..",
+      "digest": "sha256:59f5861ce79fd96d1a741e5618aa7f5ad0d4b2839ad048999cc410d04c116d48",
+      "name": "iam_audit-logs",
+      "service": "iam",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/iam_audit-logs/SKILL.md"
+    },
+    {
+      "description": "Read iam auth: Returns everything a login screen needs to draw itself for one application: its branding, and each sign-in method it offers with the provider details that method needs., Returns the sign-in methods one application actually has switched on, so a login screen can ren",
+      "digest": "sha256:4161c0aa5bacc66b4f8ebd0d844a4ac4b0a5a4f23d1c52830bd4fa78b86cec7f",
+      "name": "iam_auth",
+      "service": "iam",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/iam_auth/SKILL.md"
+    },
+    {
+      "description": "Read iam certs: Returns your organization's signing certificates, newest first — the keys the tokens your applications verify are signed with., Returns one signing certificate — its algorithm, its validity window and its public half..",
+      "digest": "sha256:bf00bb8e3c91f5530d2d7d83630bbc6768b0855b2300bcf2d3ffe982de96ab16",
+      "name": "iam_certs",
+      "service": "iam",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/iam_certs/SKILL.md"
+    },
+    {
+      "description": "Read iam consent: Returns the calling person's own privacy and communication choices..",
+      "digest": "sha256:cddc597e74d1106f3215aa7cda430a812aa451eb8a17e14c02e29fe8af9af83d",
+      "name": "iam_consent",
+      "service": "iam",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/iam_consent/SKILL.md"
+    },
+    {
+      "description": "Read iam invitations: Returns your organization's invitations, newest first — who has been asked to join, on what terms, and how many seats each invitation still has left., Returns one invitation: who it is for, what it grants on acceptance, and when it expires..",
+      "digest": "sha256:2531285cfefc091177a84775a99da0ffda0cc9b0c2b82e9493b3ac08d543e6cf",
+      "name": "iam_invitations",
+      "service": "iam",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/iam_invitations/SKILL.md"
+    },
+    {
+      "description": "Read iam keys: Returns the API keys of an organization that you may see, newest first — what each is called, what it may reach, its publishable half, and when it was last used., Resolve a PUBLISHABLE key to the organization that owns it, Resolve a SECRET key to the principal it a",
+      "digest": "sha256:f61f3f008cb56b8317cb6d9b5ef5f0aea73f3b9b0d966a5c17aa0a69b1f3807d",
+      "name": "iam_keys",
+      "service": "iam",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/iam_keys/SKILL.md"
+    },
+    {
+      "description": "Read iam link: Continues a link in the browser of the person it is for: the browser opens the address POST /v1/iam/link answered, as a top-level navigation, signed in here as that person, and is sent on to the provider..",
+      "digest": "sha256:854aa140210bbfb22cb62adaf63d2e5020b756d260aad5fcac50ebf60bbaf192",
+      "name": "iam_link",
+      "service": "iam",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/iam_link/SKILL.md"
+    },
+    {
+      "description": "Read iam linked accounts: Returns the sign-in identities linked to the calling person's account — every provider they can currently sign in with..",
+      "digest": "sha256:2eafc22c717a0e362f80b6355abd75fe603ae9a4cd2f9e3860e4a7528ebb9b82",
+      "name": "iam_linked-accounts",
+      "service": "iam",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/iam_linked-accounts/SKILL.md"
+    },
+    {
+      "description": "Read iam memberships: Answers either question about who belongs where: which organizations one person can act in, or who can act in one organization..",
+      "digest": "sha256:75a40cf2ceb0df54171f53edd459d021c2987a25c5d939e50637d956005dd042",
+      "name": "iam_memberships",
+      "service": "iam",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/iam_memberships/SKILL.md"
+    },
+    {
+      "description": "Read iam oauth: Starts a sign-in — the address you send a browser to, and the beginning of every OAuth and OpenID Connect flow., Completes the round-trip: it resolves and burns the single-use transaction (checking expiry + browser binding), exchanges and verifies the IdP response",
+      "digest": "sha256:615cd2fd860748a1487c82dc347298ea1ea8afd8bd98b94f83408fa48ad1b11a",
+      "name": "iam_oauth",
+      "service": "iam",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/iam_oauth/SKILL.md"
+    },
+    {
+      "description": "Read iam organizations: Returns the organizations you can act in, the ones you belong to first and the rest after, newest first, narrowed by an optional query against the name or the display name., Returns what holds a deleted organization's name: when it was deleted and who foun",
+      "digest": "sha256:74955f936b8aaf504fbb6825779c0638d2920dfd6c75e4b21f357ac1a8b000c6",
+      "name": "iam_organizations",
+      "service": "iam",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/iam_organizations/SKILL.md"
+    },
+    {
+      "description": "Read iam permissions: Returns the permissions in one organization, newest first — each one a grant saying which people or roles may do what, and to which resources., Returns one permission: who it grants to, what it allows, and the resources it covers..",
+      "digest": "sha256:25d481a69637a1fadb0cb30a9169d90e3b0bc186e27f328380ec21b58c9833b3",
+      "name": "iam_permissions",
+      "service": "iam",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/iam_permissions/SKILL.md"
+    },
+    {
+      "description": "Read iam projects: Returns your organization's projects, newest first — the scope people pick between when their work is separated by product or client rather than by team., Returns one project: what it is called and how it is set up..",
+      "digest": "sha256:933ad53bbda9a5a09f1550a759fb3d9e1b9c6a01a3f8adf6298ca6401642f872",
+      "name": "iam_projects",
+      "service": "iam",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/iam_projects/SKILL.md"
+    },
+    {
+      "description": "Read iam providers: Returns your organization's providers, newest first — the identity providers your people sign in with, and the senders and connectors your applications go through., Returns one provider: what it connects to and how it is configured..",
+      "digest": "sha256:651a7f111f40ea6a0ab24fb8b5820fcc2d1e852ef10ab9923be429442be3ff27",
+      "name": "iam_providers",
+      "service": "iam",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/iam_providers/SKILL.md"
+    },
+    {
+      "description": "Read iam registry: Publishes the public key your registry uses to verify the tokens issued above — the one URL to configure so the registry trusts logins without holding any secret of its own., Signs a container client in to your registry..",
+      "digest": "sha256:1a3e241072ed8a116f908a7995c80b06c92c5500f9ae2a3e463834dd3766bda2",
+      "name": "iam_registry",
+      "service": "iam",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/iam_registry/SKILL.md"
+    },
+    {
+      "description": "Read iam roles: Returns your organization's roles, newest first — each a named group of people that permissions are granted to., Returns one role: who is in it, and the roles it includes..",
+      "digest": "sha256:11b590008c4df2c0154488be87d0d6edac6f08b08755cee213c8b6d48af2e45d",
+      "name": "iam_roles",
+      "service": "iam",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/iam_roles/SKILL.md"
+    },
+    {
+      "description": "Read iam scim: Returns the kinds of record this directory provisions and the address of each, so your identity provider discovers them rather than having them configured by hand., Returns one provisionable record kind in full., Returns the attribute definitions this directory und",
+      "digest": "sha256:ef532027f4a9a94e03db02974af90b5f3b31c26ca8220a579ed6f61c28803a6a",
+      "name": "iam_scim",
+      "service": "iam",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/iam_scim/SKILL.md"
+    },
+    {
+      "description": "Read iam service accounts: Returns your organization's service accounts — what each is called and when it was created..",
+      "digest": "sha256:ca7dde10aafc4cfa34fe54a335474a97962d8c64cc11bd9fbc8ae2d5accb6979",
+      "name": "iam_service-accounts",
+      "service": "iam",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/iam_service-accounts/SKILL.md"
+    },
+    {
+      "description": "Read iam sessions: Returns who is currently signed in to an organization, newest first, and can be narrowed to one person or one application., Returns one person's session in one application — when it began and which browsers or devices are still carrying it..",
+      "digest": "sha256:0d5552880055f282c147d21d1b3c114febf9584e9f4fc0f92ff0ace57f705849",
+      "name": "iam_sessions",
+      "service": "iam",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/iam_sessions/SKILL.md"
+    },
+    {
+      "description": "Read iam teams: Returns your organization's teams, newest first — each a named set of people that roles and permissions are granted to., Returns one team: who is in it..",
+      "digest": "sha256:39928681d285d6b7f1d390cb6036ef1a6ab5e8f9a2e4a40b566c0bca366e72b8",
+      "name": "iam_teams",
+      "service": "iam",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/iam_teams/SKILL.md"
+    },
+    {
+      "description": "Read iam tokens: Returns the access tokens issued in your organization, newest first, and can be narrowed to one organization., Returns one access token: who and what it was issued to, and when it expires..",
+      "digest": "sha256:1b2e9a5dc3edabcd3c8172877e62ee686495348dfa2d0864da5a91c1f70193f7",
+      "name": "iam_tokens",
+      "service": "iam",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/iam_tokens/SKILL.md"
+    },
+    {
+      "description": "Read iam users: Returns a page of the people in an organization, with the total so you can page through the rest., Returns one person in your organization, addressed by their username or by their email address..",
+      "digest": "sha256:99fe4e46a50701f99c3232d107ce0a738f9829633a0f247d40623299ac8309b2",
+      "name": "iam_users",
+      "service": "iam",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/iam_users/SKILL.md"
+    },
+    {
+      "description": "Read iam web3: Starts a wallet sign-in: it returns a one-time challenge for the wallet to sign..",
+      "digest": "sha256:9006ef0d5fa04bf1a91e63bd8c49e687f35c4a5385e36f8297a33eda37a172a5",
+      "name": "iam_web3",
+      "service": "iam",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/iam_web3/SKILL.md"
+    },
+    {
+      "description": "Read iam webauthn: Starts a passkey sign-in: it returns the challenge the person's authenticator signs., Starts enrolling a passkey for the signed-in person: it returns the options their browser hands to the authenticator..",
+      "digest": "sha256:c9b3a6be6f4acc589338601f811448914fb9577d45bd278c7757ed7f59e01cd5",
+      "name": "iam_webauthn",
+      "service": "iam",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/iam_webauthn/SKILL.md"
+    },
+    {
+      "description": "Read iam webauthn credentials: Returns the passkeys and security keys registered to one person, newest first — which device each lives on and when it was registered., Returns one passkey or security key: whose it is, what device it lives on, and when it was registered..",
+      "digest": "sha256:2be7cba441d590a7ae7f128a3b7c4610d7ce316b0e285ce72f0b5f6ff1659394",
+      "name": "iam_webauthn-credentials",
+      "service": "iam",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/iam_webauthn-credentials/SKILL.md"
+    },
+    {
+      "description": "Read iam well known: Publishes the public keys that verify the tokens issued here — the one URL you point a service at so it can check a token itself, offline, without calling back and without holding any secret of ours., Returns the OpenID Connect discovery document — the one UR",
+      "digest": "sha256:2bfbbb3940bd958130bcc72ad4e05b6765063d5de783a7abfaf77721f9ae0d23",
+      "name": "iam_well-known",
+      "service": "iam",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/iam_well-known/SKILL.md"
+    },
+    {
+      "description": "Read iam whoami: Tells you who the current caller is — the lightweight check a page makes on load to decide whether to render signed-in or signed-out..",
+      "digest": "sha256:1edd58fafd7db8f340b069cdd1e788ffd91d3e43cef67675b0f34e30a322feaf",
+      "name": "iam_whoami",
+      "service": "iam",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/iam_whoami/SKILL.md"
+    },
+    {
+      "description": "Read iam workspaces: Returns your organization's workspaces, newest first — the scope a team works in, alongside projects rather than instead of them., Returns one workspace: what it is called and how it is set up..",
+      "digest": "sha256:b6463f0f0fbdcd050f9264d00133ed61614b9788250924dd393ee92d491c3449",
+      "name": "iam_workspaces",
+      "service": "iam",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/iam_workspaces/SKILL.md"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

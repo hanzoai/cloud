@@ -1,0 +1,9 @@
+{
+ "commit": "885a21a63c32",
+ "embedding": "all-minilm",
+ "facts": "locomo",
+ "k": 10,
+ "split": "all",
+ "store": "688cea6b889e484c",
+ "when": "2026-09-09T10:03:57.003Z"
+}

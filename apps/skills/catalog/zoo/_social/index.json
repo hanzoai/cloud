@@ -1,0 +1,59 @@
+{
+  "$schema": "https://schemas.agentskills.io/discovery/0.2.0/schema.json",
+  "base_url": "https://api.zoo.ngo",
+  "brand": "zoo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://zoolabs.id",
+  "mcp": {
+    "description": "Model Context Protocol over JSON-RPC 2.0 — one POST per message, stateless, protocol revision 2026-07-28. tools/list answers without a credential with one tool per subsystem (its operations in the \"op\" enum) plus \"describe\", which returns one operation's input schema. tools/call names a subsystem tool and carries {\"op\": <operation>, \"input\": <its arguments>}; it takes the same bearer the REST API does, and a call that carries none is answered 401 with a WWW-Authenticate header naming the resource metadata at /.well-known/oauth-protected-resource, which names the authorization server to sign in at. The tool surface is the public contract: the operator's admin product is not offered, and a name that would disclose a secret or mutate an identity is withheld — the list says how many, under _meta.",
+    "method": "POST",
+    "url": "https://api.zoo.ngo/v1/mcp"
+  },
+  "skill_count": 5,
+  "skills": [
+    {
+      "description": "Read social accounts: Returns the org's connected accounts — each one's id, network, handle, status and timestamps, most-recently-updated first., Returns one of the org's connected accounts by id — its network, handle, status and timestamps — or 404..",
+      "digest": "sha256:2376d2f42a8617e060ce1ac3519da8dfa253d34fad064502440a05389aa4a440",
+      "name": "social_accounts",
+      "service": "social",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/social_accounts/SKILL.md"
+    },
+    {
+      "description": "Read social credentials: Lists the apps this org has sealed..",
+      "digest": "sha256:6649284f9eba5cfcdbc736611d8fc93f89a777ebfa05f2387433500f5a683920",
+      "name": "social_credentials",
+      "service": "social",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/social_credentials/SKILL.md"
+    },
+    {
+      "description": "Read social posts: Returns the org's posts — content, channel, status, scheduled time, media and timestamps — most-recently-updated first., Returns one of the org's posts by id, with its current status, scheduled time, media and — once it has published — the account and external ",
+      "digest": "sha256:efdb2107f258072b4861d34dbf78fab94f257e00e8bce57a9edac301e2e7b4c7",
+      "name": "social_posts",
+      "service": "social",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/social_posts/SKILL.md",
+      "works": [
+        "marketing"
+      ]
+    },
+    {
+      "description": "Read social providers: Reports each supported network's publish-readiness: whether this deployment holds the OAuth application credentials for it and, when it does not, exactly which environment variables are missing..",
+      "digest": "sha256:31618522e1ac2027c539e6f55b65dcf8a46af707539959c67ba0d5d137bb6852",
+      "name": "social_providers",
+      "service": "social",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/social_providers/SKILL.md"
+    },
+    {
+      "description": "Read social summary: Returns four counts for the caller's org: total posts, how many are scheduled, how many have published, and how many accounts are connected..",
+      "digest": "sha256:dd58955c14e57b494e715fb6a3e0c521f64b5ce50d70088b6ee89253ca07e20e",
+      "name": "social_summary",
+      "service": "social",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/social_summary/SKILL.md"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

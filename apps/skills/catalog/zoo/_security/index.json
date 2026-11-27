@@ -1,0 +1,48 @@
+{
+  "$schema": "https://schemas.agentskills.io/discovery/0.2.0/schema.json",
+  "base_url": "https://api.zoo.ngo",
+  "brand": "zoo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://zoolabs.id",
+  "mcp": {
+    "description": "Model Context Protocol over JSON-RPC 2.0 — one POST per message, stateless, protocol revision 2026-07-28. tools/list answers without a credential with one tool per subsystem (its operations in the \"op\" enum) plus \"describe\", which returns one operation's input schema. tools/call names a subsystem tool and carries {\"op\": <operation>, \"input\": <its arguments>}; it takes the same bearer the REST API does, and a call that carries none is answered 401 with a WWW-Authenticate header naming the resource metadata at /.well-known/oauth-protected-resource, which names the authorization server to sign in at. The tool surface is the public contract: the operator's admin product is not offered, and a name that would disclose a secret or mutate an identity is withheld — the list says how many, under _meta.",
+    "method": "POST",
+    "url": "https://api.zoo.ngo/v1/mcp"
+  },
+  "skill_count": 4,
+  "skills": [
+    {
+      "description": "Read security findings: Is the org's findings — rule, severity, path, line, masked preview and fingerprint — newest first, across scans or within one., Returns a single finding: which rule fired, where (path and line), the masked preview and the SHA-256 fingerprint of the secret ",
+      "digest": "sha256:97ec9b4aaf6e88f9e96dc9de5b08b15d82afa8d6bcde3452614c32a5c0bc4d7b",
+      "name": "security_findings",
+      "service": "security",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/security_findings/SKILL.md"
+    },
+    {
+      "description": "Read security health: Reports that the scanning subsystem is serving and how many secret-detection rules the engine holds..",
+      "digest": "sha256:dc0983df364def0253a5e1192b3c5dc164021f3783b0f2076e3ae61576d73744",
+      "name": "security_health",
+      "service": "security",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/security_health/SKILL.md"
+    },
+    {
+      "description": "Read security rules: Is the secret-detection catalog the engine scans with..",
+      "digest": "sha256:d896494a78b0d273cd706f3e337260059234c2cf04197a7ec60d62863d19e999",
+      "name": "security_rules",
+      "service": "security",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/security_rules/SKILL.md"
+    },
+    {
+      "description": "Read security scans: Is the org's scan history, newest first, each as the same summary the submission answered — files read, findings fired, tally by severity., Returns one scan together with every finding on it, so the detail view is one round-trip rather than a list call per sc",
+      "digest": "sha256:5af06e76a4457cc12d0b8034e28fe8e8675a5469b06ba38d3de8a5f6129b63e7",
+      "name": "security_scans",
+      "service": "security",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/security_scans/SKILL.md"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

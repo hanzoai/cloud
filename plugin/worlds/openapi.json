@@ -1,0 +1,566 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Hanzo Cloud API",
+    "description": "Package worlds exposes the private Sekai alpha runtime through Cloud identity.",
+    "version": "v1"
+  },
+  "servers": [
+    {
+      "url": "https://api.hanzo.ai"
+    }
+  ],
+  "security": [
+    {
+      "bearer": []
+    }
+  ],
+  "tags": [
+    {
+      "name": "worlds"
+    }
+  ],
+  "paths": {
+    "/v1/worlds": {
+      "post": {
+        "operationId": "post_worlds",
+        "summary": "Starts a simulation with the proprietary alpha model; other domains fail closed.",
+        "description": "Starts a simulation with the proprietary alpha model; other domains fail closed.",
+        "tags": [
+          "worlds"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/worlds.Create"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "no content"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/worlds/models": {
+      "get": {
+        "operationId": "get_worlds_models",
+        "summary": "Lists alpha aliases only after the private runtime confirms readiness.",
+        "description": "Lists alpha aliases only after the private runtime confirms readiness.",
+        "tags": [
+          "worlds"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/worlds.Models"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/worlds/{id}": {
+      "get": {
+        "operationId": "get_worlds_by_id",
+        "summary": "Reads a world in the authenticated tenant and project.",
+        "description": "Reads a world in the authenticated tenant and project.",
+        "tags": [
+          "worlds"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "no content"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/worlds/{id}/beliefs/{entity}": {
+      "get": {
+        "operationId": "get_worlds_by_id_beliefs_by_entity",
+        "summary": "Reads an entity's local belief without sharing model artifacts.",
+        "description": "Reads an entity's local belief without sharing model artifacts.",
+        "tags": [
+          "worlds"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "entity",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "no content"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/worlds/{id}/events": {
+      "post": {
+        "operationId": "post_worlds_by_id_events",
+        "summary": "Updates a local belief from an API feature vector.",
+        "description": "Updates a local belief from an API feature vector.",
+        "tags": [
+          "worlds"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/worlds.Event"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "no content"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/worlds/{id}/inference": {
+      "post": {
+        "operationId": "post_worlds_by_id_inference",
+        "summary": "Runs finite-state Bayesian belief filtering and expected free-energy policy inference under host-owned model and admissibility constraints.",
+        "description": "Runs finite-state Bayesian belief filtering and expected free-energy\npolicy inference under host-owned model and admissibility constraints.\nResults strictly separate inference, advisory recommendation and execution\nauthorization, which is invariantly false.",
+        "tags": [
+          "worlds"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/worlds.Inference"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "no content"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/worlds/{id}/plans": {
+      "post": {
+        "operationId": "post_worlds_by_id_plans",
+        "summary": "Compares proposed actions without authorizing external execution.",
+        "description": "Compares proposed actions without authorizing external execution.",
+        "tags": [
+          "worlds"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/worlds.Plan"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "no content"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/worlds/{id}/rollouts": {
+      "post": {
+        "operationId": "post_worlds_by_id_rollouts",
+        "summary": "Predicts latent outcomes for a proposed action sequence.",
+        "description": "Predicts latent outcomes for a proposed action sequence.",
+        "tags": [
+          "worlds"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/worlds.Rollout"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "no content"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "problem-details": {
+        "description": "An RFC 9457 problem document.",
+        "properties": {
+          "code": {
+            "description": "A stable token a client can branch on, when the refusal names one.",
+            "type": "string"
+          },
+          "detail": {
+            "description": "What was refused, for a person to read.",
+            "type": "string"
+          },
+          "status": {
+            "description": "The HTTP status.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "title": {
+            "description": "The status's reason phrase.",
+            "type": "string"
+          },
+          "type": {
+            "description": "about:blank",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "status",
+          "detail"
+        ],
+        "type": "object"
+      },
+      "worlds.Candidate": {
+        "properties": {
+          "actions": {
+            "items": {
+              "items": {
+                "format": "double",
+                "type": "number"
+              },
+              "type": "array"
+            },
+            "type": "array"
+          },
+          "cost": {
+            "format": "double",
+            "type": "number"
+          },
+          "id": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "worlds.Create": {
+        "properties": {
+          "domain": {
+            "type": "string"
+          },
+          "model": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "worlds.Event": {
+        "properties": {
+          "entity_id": {
+            "type": "string"
+          },
+          "event_id": {
+            "type": "string"
+          },
+          "features": {
+            "items": {
+              "format": "double",
+              "type": "number"
+            },
+            "type": "array"
+          },
+          "modality": {
+            "type": "string"
+          },
+          "neighbors": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "timestamp": {
+            "format": "double",
+            "type": "number"
+          }
+        },
+        "type": "object"
+      },
+      "worlds.Inference": {
+        "properties": {
+          "belief": {
+            "items": {
+              "format": "double",
+              "type": "number"
+            },
+            "type": "array"
+          },
+          "observation": {
+            "items": {
+              "format": "int64",
+              "type": "integer"
+            },
+            "type": "array"
+          },
+          "policies": {
+            "items": {
+              "items": {
+                "format": "int64",
+                "type": "integer"
+              },
+              "type": "array"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "worlds.Model": {
+        "properties": {
+          "domain": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "release_stage": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "worlds.Models": {
+        "properties": {
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/worlds.Model"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "worlds.Plan": {
+        "properties": {
+          "candidates": {
+            "items": {
+              "$ref": "#/components/schemas/worlds.Candidate"
+            },
+            "type": "array"
+          },
+          "entity_id": {
+            "type": "string"
+          },
+          "target": {
+            "items": {
+              "format": "double",
+              "type": "number"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "worlds.Rollout": {
+        "properties": {
+          "actions": {
+            "items": {
+              "items": {
+                "format": "double",
+                "type": "number"
+              },
+              "type": "array"
+            },
+            "type": "array"
+          },
+          "entity_id": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      }
+    },
+    "securitySchemes": {
+      "bearer": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "The caller's credential, sent as `Authorization: Bearer \u003ctoken\u003e`. It is either an access token minted by Hanzo IAM or an API key (pk-/sk-). X-Authorization, and HTTP Basic carrying the token as the password, are accepted spellings of the same header for clients that cannot set Authorization; a browser presents the session cookie instead. Every operation requires it unless it says `security: []`."
+      }
+    }
+  }
+}

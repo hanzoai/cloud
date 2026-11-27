@@ -67,6 +67,7 @@ type Discovery struct {
 	fetchedAt  time.Time
 	attemptAt  time.Time
 	refreshing bool
+	inFlight   chan struct{}
 }
 
 // issuerOf is the issuer a discovery URL implies (OpenID Connect Discovery 1.0
@@ -139,35 +140,51 @@ func (d *Discovery) Issuer() string { return d.issuer }
 // every retryEvery. A copy older than the TTL is served as it is while one refresh
 // runs behind it.
 func (d *Discovery) Document() (Document, error) {
-	d.mu.Lock()
-	if d.good {
-		doc, stale := d.doc, d.now().Sub(d.fetchedAt) >= d.ttl
-		if stale && !d.refreshing && d.now().Sub(d.attemptAt) >= retryEvery {
-			d.refreshing, d.attemptAt = true, d.now()
-			go d.refresh()
+	for {
+		d.mu.Lock()
+		if d.good {
+			doc, stale := d.doc, d.now().Sub(d.fetchedAt) >= d.ttl
+			if stale && !d.refreshing && d.now().Sub(d.attemptAt) >= retryEvery {
+				d.refreshing, d.attemptAt = true, d.now()
+				go d.refresh()
+			}
+			d.mu.Unlock()
+			return doc, nil
 		}
+		// A cold-start fetch is already running: wait for it instead of failing
+		// concurrent first-arrival callers closed with ErrNoDiscovery.
+		if ch := d.inFlight; ch != nil {
+			d.mu.Unlock()
+			<-ch
+			continue
+		}
+		if d.now().Sub(d.attemptAt) < retryEvery && !d.attemptAt.IsZero() {
+			d.mu.Unlock()
+			return Document{}, ErrNoDiscovery
+		}
+		ch := make(chan struct{})
+		d.inFlight = ch
+		d.attemptAt = d.now()
 		d.mu.Unlock()
+
+		doc, err := d.fetch(context.Background())
+		d.mu.Lock()
+		d.inFlight = nil
+		if err != nil {
+			good, kept := d.good, d.doc
+			d.mu.Unlock()
+			close(ch)
+			if good {
+				return kept, nil
+			}
+			luxlog.Default().Warn("oidc discovery: no good document", "url", d.url, "err", err)
+			return Document{}, ErrNoDiscovery
+		}
+		d.doc, d.good, d.fetchedAt = doc, true, d.now()
+		d.mu.Unlock()
+		close(ch)
 		return doc, nil
 	}
-	if d.now().Sub(d.attemptAt) < retryEvery && !d.attemptAt.IsZero() {
-		d.mu.Unlock()
-		return Document{}, ErrNoDiscovery
-	}
-	d.attemptAt = d.now()
-	d.mu.Unlock()
-
-	doc, err := d.fetch(context.Background())
-	d.mu.Lock()
-	defer d.mu.Unlock()
-	if err != nil {
-		if d.good {
-			return d.doc, nil
-		}
-		luxlog.Default().Warn("oidc discovery: no good document", "url", d.url, "err", err)
-		return Document{}, ErrNoDiscovery
-	}
-	d.doc, d.good, d.fetchedAt = doc, true, d.now()
-	return doc, nil
 }
 
 // refresh replaces the held document, or keeps it and says so.

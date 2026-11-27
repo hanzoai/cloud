@@ -1,0 +1,344 @@
+{
+  "$schema": "https://schemas.agentskills.io/discovery/0.2.0/schema.json",
+  "base_url": "https://api.zoo.ngo",
+  "brand": "zoo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://zoolabs.id",
+  "mcp": {
+    "description": "Model Context Protocol over JSON-RPC 2.0 — one POST per message, stateless, protocol revision 2026-07-28. tools/list answers without a credential with one tool per subsystem (its operations in the \"op\" enum) plus \"describe\", which returns one operation's input schema. tools/call names a subsystem tool and carries {\"op\": <operation>, \"input\": <its arguments>}; it takes the same bearer the REST API does, and a call that carries none is answered 401 with a WWW-Authenticate header naming the resource metadata at /.well-known/oauth-protected-resource, which names the authorization server to sign in at. The tool surface is the public contract: the operator's admin product is not offered, and a name that would disclose a secret or mutate an identity is withheld — the list says how many, under _meta.",
+    "method": "POST",
+    "url": "https://api.zoo.ngo/v1/mcp"
+  },
+  "skill_count": 41,
+  "skills": [
+    {
+      "description": "Read ai account: Account.",
+      "digest": "sha256:08166c1cb5ab9249474daaf90511f4e98cbfff1e3b1ef805fd72c1ed55d78e8a",
+      "name": "ai_account",
+      "service": "ai",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/ai_account/SKILL.md"
+    },
+    {
+      "description": "Read ai activities: List activities.",
+      "digest": "sha256:81693ec55ab67c1f0f72234640e850e3abec672fb0491b9aad03f64fb7403500",
+      "name": "ai_activities",
+      "service": "ai",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/ai_activities/SKILL.md"
+    },
+    {
+      "description": "Read ai answer: Answer.",
+      "digest": "sha256:60520dfc7937bc45da7b662031fbad55bb64da13ca2ba091379f050c88c19eb8",
+      "name": "ai_answer",
+      "service": "ai",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/ai_answer/SKILL.md"
+    },
+    {
+      "description": "Read ai articles: List articles, List articles across tenants, Retrieve a article.",
+      "digest": "sha256:623974cce253b41cae1c79fb8c6f89970d5ab4d1e79df792a951c51182d6f3d9",
+      "name": "ai_articles",
+      "service": "ai",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/ai_articles/SKILL.md"
+    },
+    {
+      "description": "Read ai assets: List assets, Retrieve a asset.",
+      "digest": "sha256:f90da3570d8e4ca687ab57a3ee9a862642bd7afd54a2970eccc5de33ce294368",
+      "name": "ai_assets",
+      "service": "ai",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/ai_assets/SKILL.md"
+    },
+    {
+      "description": "Read ai chats: List chats, List chats across tenants, Retrieve a chat.",
+      "digest": "sha256:21912aab72cb8f3759de01fe3ce449ce0f21ac4e554b19dbfb47bc98fff9cfb8",
+      "name": "ai_chats",
+      "service": "ai",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/ai_chats/SKILL.md"
+    },
+    {
+      "description": "Read ai connections: Lists the org's connectable AI accounts and whether each is currently connected., Begins an OAuth connection for the caller's org: it binds the org into a signed state and sends the caller to the provider's authorize URL., Completes OAuth: the org is recovere",
+      "digest": "sha256:5ca89e7b9b2f8dfde9ad0de3fd7375bf9e74bda93e8ffef1a2a12f745d5a9127",
+      "name": "ai_connections",
+      "service": "ai",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/ai_connections/SKILL.md"
+    },
+    {
+      "description": "Read ai dashboards: Dashboards Agents, Dashboards Vm.",
+      "digest": "sha256:70fe4baa3688c9aa64126f10a34aec3f3c23a9f4f10288d9f66665a4ac5037db",
+      "name": "ai_dashboards",
+      "service": "ai",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/ai_dashboards/SKILL.md"
+    },
+    {
+      "description": "Read ai deployments: List deployments, Retrieve a application.",
+      "digest": "sha256:7e3babe660b9ce9d4455709a515de8c61d9d15579ce1375487a876ebc8f51f56",
+      "name": "ai_deployments",
+      "service": "ai",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/ai_deployments/SKILL.md"
+    },
+    {
+      "description": "Read ai files: List files, Active (file), List files across tenants.",
+      "digest": "sha256:ba33b8e651e12ca5b41c1c0bb096f4ab6475c5b9b1a97a8082db84d7b7635132",
+      "name": "ai_files",
+      "service": "ai",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/ai_files/SKILL.md"
+    },
+    {
+      "description": "Read ai finetune: Proxies a HuggingFace dataset search (dataset picker)., Proxies a HuggingFace model search (base-model picker)., Returns a repo's detail (files, gated/private state)..",
+      "digest": "sha256:32dbe9b613e63c7a5f9ac9428c3abb34587b59d726511c1b2f726d7b114f8f38",
+      "name": "ai_finetune",
+      "service": "ai",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/ai_finetune/SKILL.md"
+    },
+    {
+      "description": "Read ai forms: List forms, Data (form), List forms across tenants.",
+      "digest": "sha256:febf048391895910689f6c3fa23ec8aef0780c4244e18390edf0ebc50a69defb",
+      "name": "ai_forms",
+      "service": "ai",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/ai_forms/SKILL.md"
+    },
+    {
+      "description": "Read ai graphs: List graphs, List graphs across tenants, Retrieve a graph.",
+      "digest": "sha256:3b9492deab2edf5a493fa6de2d9c155d4b29e9de6abadb8f33778a2db2542dfc",
+      "name": "ai_graphs",
+      "service": "ai",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/ai_graphs/SKILL.md"
+    },
+    {
+      "description": "Read ai k8s status: K8s Status.",
+      "digest": "sha256:0cfde1c703121239cae7886a50f2d8113bd00eb94a10cb62a11401e384cd9500",
+      "name": "ai_k8s-status",
+      "service": "ai",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/ai_k8s-status/SKILL.md"
+    },
+    {
+      "description": "Read ai limits: Reads the caller's plan usage: for each class of model the plan includes, the share used of the billing period and of its short window, who pays for the next request, and whether the caller is in limited mode and why; the share used of the session and the day; and",
+      "digest": "sha256:46d44792567350fe06f20eb26a64f79cb11e4639c4fa07aa1e041110e71b01c8",
+      "name": "ai_limits",
+      "service": "ai",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/ai_limits/SKILL.md"
+    },
+    {
+      "description": "Read ai mcp: Searches the model catalog — the one GET /v1/models lists, every OpenRouter model among it as last synced — by text, class, family, capability or free, and answers each match with its class, family, whether it is free, its list price (per token and per million; varia",
+      "digest": "sha256:6235a636003cf9a47f0813366dac54afb7cc035392197af35379adfab7a3b994",
+      "name": "ai_mcp",
+      "service": "ai",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/ai_mcp/SKILL.md"
+    },
+    {
+      "description": "Read ai memory: List the authenticated user's stored facts, List the authenticated user's memories, newest first, Recall recent/relevant memories for context injection; with q it.",
+      "digest": "sha256:748caea6bfdd6f08695cd099e06ed650266b8b27c8b2147d6daf51927a9049f8",
+      "name": "ai_memory",
+      "service": "ai",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/ai_memory/SKILL.md"
+    },
+    {
+      "description": "Read ai messages: List messages, Retrieve a message, Answer (message).",
+      "digest": "sha256:9afcf3ca199e9e149a1a5367b68aecd1a6cf9fdafe12d67c183d8725bfac89d1",
+      "name": "ai_messages",
+      "service": "ai",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/ai_messages/SKILL.md"
+    },
+    {
+      "description": "Read ai nodes: List nodes, Retrieve a node, Tunnel (node).",
+      "digest": "sha256:2da1ed9ef26562f09ed262890ac2616f21ec4f13ca5d19a56b51eb57583794d7",
+      "name": "ai_nodes",
+      "service": "ai",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/ai_nodes/SKILL.md"
+    },
+    {
+      "description": "Read ai org: The HTTP transport binding for the RESTful router-config nouns (/v1/ai/router/{policy,defaults,ledger,rewards,artifact-meta} and /v1/ai/org/settings[/list])., The HTTP transport binding for the RESTful router-config nouns (/v1/ai/router/{policy,defaults,ledger,reward",
+      "digest": "sha256:67e39d7248d71e7d53453a541cec705f44d837e43f7ee054a74d3d85378abd03",
+      "name": "ai_org",
+      "service": "ai",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/ai_org/SKILL.md"
+    },
+    {
+      "description": "Read ai prometheus: Prometheus.",
+      "digest": "sha256:5eb9570bbee3155f154eb640a1cbf5913fad2c7c28e41fe9f2d7e55f6f310813",
+      "name": "ai_prometheus",
+      "service": "ai",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/ai_prometheus/SKILL.md"
+    },
+    {
+      "description": "Read ai providers: List providers, List providers across tenants, Retrieve a provider.",
+      "digest": "sha256:9c1ee5df3806709617d28e5ea09e82a188a3668b20ac02ca45970f3c0c29fb0f",
+      "name": "ai_providers",
+      "service": "ai",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/ai_providers/SKILL.md"
+    },
+    {
+      "description": "Read ai rag: Return every stored chunk of one file_id (full document context)..",
+      "digest": "sha256:770b92c6b20211150eae51de371729d1c976e5e0845cb144336526ea667267cb",
+      "name": "ai_rag",
+      "service": "ai",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/ai_rag/SKILL.md"
+    },
+    {
+      "description": "Read ai records: List records, Query (record), Query Second (record).",
+      "digest": "sha256:60c70ee9d1c33da311c1515e6e5ddfa15276aa30010cea005a7ccd62c8901f6e",
+      "name": "ai_records",
+      "service": "ai",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/ai_records/SKILL.md"
+    },
+    {
+      "description": "Read ai remote connections: List remote-connections, Retrieve a connection.",
+      "digest": "sha256:4e7c87f477b482ab9ecb28b76035eb89b49af865c2ce1899c92931301b7ead69",
+      "name": "ai_remote-connections",
+      "service": "ai",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/ai_remote-connections/SKILL.md"
+    },
+    {
+      "description": "Read ai router: The HTTP transport binding for the RESTful router-config nouns (/v1/ai/router/{policy,defaults,ledger,rewards,artifact-meta} and /v1/ai/org/settings[/list])., Lists the Zen and Enso routing catalogs: what each serves, its accounts and model health, and its version",
+      "digest": "sha256:f4beacb72fcbbf3bca156cb1c6595943a8c2353370c25b952bf931068b36f0d3",
+      "name": "ai_router",
+      "service": "ai",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/ai_router/SKILL.md"
+    },
+    {
+      "description": "Read ai routes: List routes, Retrieve a model-route.",
+      "digest": "sha256:419de8784aab7047c0f3acb81cd124aa15ad451ff68ff924b247ebae541c4e1b",
+      "name": "ai_routes",
+      "service": "ai",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/ai_routes/SKILL.md"
+    },
+    {
+      "description": "Read ai scales: List scales, List scales across tenants, Public (scale).",
+      "digest": "sha256:877a6b8153b543170533ba4e70badf1824cc4e86f40060c4ca48d00fb9191a33",
+      "name": "ai_scales",
+      "service": "ai",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/ai_scales/SKILL.md"
+    },
+    {
+      "description": "Read ai scans: List scans, Retrieve a scan.",
+      "digest": "sha256:f323d208a3ec2d8a107aeac49ab6d17d8436f4049b907c3b87232aaf79b07e73",
+      "name": "ai_scans",
+      "service": "ai",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/ai_scans/SKILL.md"
+    },
+    {
+      "description": "Read ai signin sessions: List signin-sessions, Duplicated (session), Retrieve a session.",
+      "digest": "sha256:9d7b138988ed9c84d241039263e22d36bc1f2eb28f58bf8a9272362483360cc3",
+      "name": "ai_signin-sessions",
+      "service": "ai",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/ai_signin-sessions/SKILL.md"
+    },
+    {
+      "description": "Read ai stores: List stores, List stores across tenants, Names (store).",
+      "digest": "sha256:3085d47eaa79f05403db792a3aa45d8a559e7f09bf28c222651cd35ebea0582c",
+      "name": "ai_stores",
+      "service": "ai",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/ai_stores/SKILL.md"
+    },
+    {
+      "description": "Read ai system: System.",
+      "digest": "sha256:87a6d5db796143b26d0ab24c52279c883205e9e3039d92c744e6a07e8e0e6d4f",
+      "name": "ai_system",
+      "service": "ai",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/ai_system/SKILL.md"
+    },
+    {
+      "description": "Read ai tasks: List tasks, List tasks across tenants, Retrieve a task.",
+      "digest": "sha256:574a52596e93bc982de9a0c82dbf225aa8112908312b4590254f85bdc7eb3b2e",
+      "name": "ai_tasks",
+      "service": "ai",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/ai_tasks/SKILL.md"
+    },
+    {
+      "description": "Read ai templates: List templates, Retrieve a template.",
+      "digest": "sha256:576783527f2f026dba6bdd2cb0038aab045aa872ffd1d14378d9e92854524561",
+      "name": "ai_templates",
+      "service": "ai",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/ai_templates/SKILL.md"
+    },
+    {
+      "description": "Read ai traffic: Returns the PUBLIC live request-geo aggregate for the world.zoo.ngo \"Zoo mode\" globe: WHERE requests to api.zoo.ngo are coming from, as country/region points with per-service-class counts, plus headline throughput rates..",
+      "digest": "sha256:193d5f633ee86270801f15bd5736af9379285b41a252d910cb53c3d2dadc7e0a",
+      "name": "ai_traffic",
+      "service": "ai",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/ai_traffic/SKILL.md"
+    },
+    {
+      "description": "Read ai training contribution: Training Contribution.",
+      "digest": "sha256:369920d0d0ecf429e19e90bb0ddc340f1b8d7e7ca310b8385519fed2a1084035",
+      "name": "ai_training-contribution",
+      "service": "ai",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/ai_training-contribution/SKILL.md"
+    },
+    {
+      "description": "Read ai usages: List usages, By User (usage), Cloud (usage).",
+      "digest": "sha256:c9e599043905eacbd88132412eb28dabd7479c36300b8512f96cebd8203a3ced",
+      "name": "ai_usages",
+      "service": "ai",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/ai_usages/SKILL.md"
+    },
+    {
+      "description": "Read ai vectors: List vectors, List vectors across tenants, Retrieve a vector.",
+      "digest": "sha256:1fcc9e1325d035a540139e51f1c2fdc1190f89864d14b19b2d33fe208a43502a",
+      "name": "ai_vectors",
+      "service": "ai",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/ai_vectors/SKILL.md"
+    },
+    {
+      "description": "Read ai version: Version.",
+      "digest": "sha256:40f25d76d081d7f347e3031a4ebbabcb8665717a3144f602cc376292feb2e0da",
+      "name": "ai_version",
+      "service": "ai",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/ai_version/SKILL.md"
+    },
+    {
+      "description": "Read ai videos: List videos, List videos across tenants, Retrieve a video.",
+      "digest": "sha256:2119b3c7649f57288bd44d2498e75143ee12c6cc0275f2dd4f586487665932d9",
+      "name": "ai_videos",
+      "service": "ai",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/ai_videos/SKILL.md"
+    },
+    {
+      "description": "Read ai workflows: List workflows, List workflows across tenants, Retrieve a workflow.",
+      "digest": "sha256:b206a326d5d2f9d16f55d01a43d1ebccc951e6e6eb0aec71f15296ae639b87c5",
+      "name": "ai_workflows",
+      "service": "ai",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/ai_workflows/SKILL.md"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

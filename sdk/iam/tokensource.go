@@ -2,11 +2,12 @@ package iam
 
 // tokensource.go — the token this deployment's own IAM identity is read through.
 //
-// Every caller needing the token while it was refreshed queued behind that lock,
-// and one after another each made the call again when the first failed: a token
-// endpoint that hung held every coding run's first delegation and every renewal
-// for as many times thirty seconds as there were runs, and none of them could
-// give up sooner, because Token() takes no context.
+// It used to be oauth2's reuse source, which holds ONE lock across the HTTP call that refreshes
+// the token, and that call can last the whole 30s a call to IAM is allowed. Every caller needing
+// the token while it was refreshed queued behind that lock, and one after another each made the
+// call again when the first failed: a token endpoint that hung held every coding run's first
+// delegation and every renewal for as many times thirty seconds as there were runs, and none of
+// them could give up sooner, because Token() takes no context.
 //
 // Two things replace it. The token is kept fresh BEFORE it is needed: a timer, not a poll, asks for
 // the next one when half of this one's life has passed, so a refresh is rarely on any caller's path.

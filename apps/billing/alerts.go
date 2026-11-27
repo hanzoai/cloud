@@ -1,0 +1,202 @@
+package billing
+
+// alerts.go serves the spend-cap family of /v1/billing — the customer's own
+// budgets, and the verdict the metering edge measures a request against.
+//
+// TWO AUDIENCES, ONE ROW SET, and that is why the family is not one chain. The
+// CRUD is a customer editing their own budget and is gated to an org admin: a
+// cap is a financial safety control, so a compromised member key must not be
+// able to delete the org's ceiling (unbounded spend) or set a one-cent enforcing
+// one (an org-wide 402). The verdict is a SERVICE reading it on every priced
+// call, as the platform with no user, and a verdict it cannot read refuses the
+// call — so a refusal there takes paid traffic down rather than lifting a ceiling.
+//
+// Both reach the same rows through the same core in the process that owns them,
+// which is what keeps a budget and the ceiling it imposes from being two
+// derivations of one number.
+
+import (
+	"context"
+	"net/http"
+
+	"github.com/hanzoai/cloud/client"
+	commercepeer "github.com/hanzoai/cloud/client/commerce"
+	"github.com/hanzoai/cloud/sdk"
+	"github.com/hanzoai/cloud/sdk/spec"
+	"github.com/zap-proto/zip"
+)
+
+// mountAlerts registers the cap family. Called from routes.
+func mountAlerts(app cloud.Router, o ops) {
+	g := app.Group("/v1/billing")
+	g.Get("/alerts", o.alerts)
+	g.Get("/alerts/authorize", o.capAuthorize)
+	g.Post("/alerts", o.raiseAlert,
+		zip.WithStatus(http.StatusCreated))
+	g.Patch("/alerts/:id", o.amendAlert)
+	// Registered on the app rather than beside its siblings because it answers
+	// commerce's own 204: a typed op declaring `*cloud.Unit` writes the empty body
+	// this address has always written, and the prose the document carries for it
+	// is declared below rather than lifted off the handler.
+	g.Delete("/alerts/:id", o.dropAlert)
+}
+
+// The delete's prose is declared beside the route rather than lifted off the
+// handler, through the same registry Register uses, so it renders only while the
+// router actually serves the route.
+func init() {
+	spec.Describe("/v1/billing/alerts/:id", http.MethodDelete,
+		"Remove one spend cap",
+		"Deletes a budget the caller's org owns and answers 204.\n\n"+
+			"Removing a cap REMOVES A CEILING, so it takes the same bar as setting "+
+			"one: a validated org admin or the platform SuperAdmin. A member who "+
+			"could delete the org's cap would "+
+			"have unbounded spend.\n\n"+
+			"A cap this org does not own is NOT FOUND rather than refused — the same "+
+			"answer whether the id is unknown or belongs to another customer — so an "+
+			"id cannot be probed for existence by trying to delete it.")
+}
+
+// caps is the org's spend caps — a bare array, which is the wire this address
+// has always had.
+type caps []client.Alert
+
+// Lists this org's spend caps: the ceiling, its scope, whether it enforces, and
+// how much of it has been spent this period.
+//
+// `periodSpentCents`, `over` and `warn` are ABSENT rather than zero when the
+// spend could not be read, because "nothing spent" and "spend unknown" are
+// different answers and a customer acting on the first when the second is true
+// would be reading a ceiling that is not there. The policy row is reported
+// either way.
+//
+// The period is the UTC calendar month and `resetsAt` is when the count starts
+// again, so a surface can say "resets on" without a second call.
+//
+// A named handler, not a closure, so zipdoc can lift this prose into the registry.
+func (o ops) alerts(ctx context.Context, _ *cloud.Unit) (*caps, error) {
+	org, subject, err := payer(ctx)
+	if err != nil {
+		return nil, err
+	}
+	out, err := ask(ctx, org, "alerts", func(ctx context.Context) (*client.Alerts, error) {
+		return commercepeer.BillingAlerts(ctx, &client.SubjectIn{Subject: subject})
+	})
+	if err != nil {
+		return nil, err
+	}
+	rows := caps(out.Rows)
+	if rows == nil {
+		rows = caps{}
+	}
+	return &rows, nil
+}
+
+// Opens a spend cap on the caller's own org.
+//
+// At least one limit must mean something: a threshold above zero (a spend cap)
+// or a requests-per-minute above zero (a rate limit). A row that bounds neither
+// is refused rather than stored, because a ceiling nothing measures against is a
+// ceiling a customer believes in and does not have.
+//
+// The cap is keyed on the caller's own billing subject, resolved server-side —
+// the SAME key the verdict looks it up under, which is what makes enforcement
+// bind rather than merely record.
+//
+// A named handler, not a closure, so zipdoc can lift this prose into the registry.
+func (o ops) raiseAlert(ctx context.Context, in *client.AlertSpec) (*client.Alert, error) {
+	if err := cloud.CSRF(ctx); err != nil {
+		return nil, err
+	}
+	if err := orgAdmin(ctx, capsAct); err != nil {
+		return nil, err
+	}
+	org, subject, err := payer(ctx)
+	if err != nil {
+		return nil, err
+	}
+	spec := *in
+	spec.Subject = subject
+	return ask(ctx, org, "raise cap", func(ctx context.Context) (*client.Alert, error) {
+		return commercepeer.BillingAlertRaise(ctx, &spec)
+	})
+}
+
+// Changes one spend cap: raise or lower the ceiling, flip enforcement, retune
+// the rate limit.
+//
+// Only the fields the body carries move. Every mutable field is optional, and an
+// absent one is PRESERVED rather than reset — so a change that flips enforcement
+// cannot silently wipe the threshold it enforces.
+//
+// A cap belonging to another org is a 404, not a 403: a guessed id must not
+// become an oracle for what anyone else holds.
+//
+// A named handler, not a closure, so zipdoc can lift this prose into the registry.
+func (o ops) amendAlert(ctx context.Context, in *client.AlertPatch) (*client.Alert, error) {
+	if err := cloud.CSRF(ctx); err != nil {
+		return nil, err
+	}
+	if err := orgAdmin(ctx, capsAct); err != nil {
+		return nil, err
+	}
+	org, subject, err := payer(ctx)
+	if err != nil {
+		return nil, err
+	}
+	patch := *in
+	patch.Subject = subject
+	return ask(ctx, org, "amend cap", func(ctx context.Context) (*client.Alert, error) {
+		return commercepeer.BillingAlertAmend(ctx, &patch)
+	})
+}
+
+// dropAlert removes one spend cap, lifting that ceiling entirely.
+//
+// Raw rather than typed, for its body alone: the address answers 204 carrying
+// `null`, which is neither a value nor an empty 204, so a typed op could not
+// reproduce it. A cap belonging to another org is a 404, for the reason the
+// amend is.
+
+// Answers whether one proposed spend fits inside this org's caps.
+//
+// It is the per-request verdict the metering edge consumes before every priced
+// call, and its caller is a SERVICE rather than a person: the platform, stating
+// the org over the plane, with no user behind it. So this admits that principal
+// where the CRUD beside it does not.
+//
+// Every covering row is evaluated, most-restrictive-wins, and the tightest one
+// is what `capCents`, `spentCents` and `reason` describe. Soft rows never deny;
+// nor does a project-scoped enforcing row whose project axis the caller could
+// not establish — `pv=1` is how a caller states that it did, and an unproven
+// claim must not be able to refuse traffic.
+//
+// A named handler, not a closure, so zipdoc can lift this prose into the registry.
+func (o ops) capAuthorize(ctx context.Context, in *capQuery) (*client.CapVerdict, error) {
+	org, err := serviceOrg(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return ask(ctx, org, "cap authorize", func(ctx context.Context) (*client.CapVerdict, error) {
+		return commercepeer.BillingCapAuthorize(ctx, &client.CapIn{
+			Project:          in.Project,
+			Service:          in.Service,
+			Amount:           atoiOr64(in.Amount, 0),
+			ProjectValidated: in.PV == "1",
+		})
+	})
+}
+
+// capQuery is what the metering edge asks about: which scope, how much, and
+// whether it could prove the project.
+type capQuery struct {
+	// Project narrows the verdict to one project's caps. Empty is the org-wide row.
+	Project string `json:"project,omitempty"`
+	// Service narrows it to one service's caps. Empty is every service.
+	Service string `json:"service,omitempty"`
+	// Amount is the proposed spend in cents.
+	Amount string `json:"amount,omitempty"`
+	// PV is "1" when the caller ESTABLISHED the project rather than merely
+	// carrying a claim of one. An unproven project may not deny traffic.
+	PV string `json:"pv,omitempty"`
+}

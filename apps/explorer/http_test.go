@@ -1,0 +1,357 @@
+package explorer
+
+import (
+	"encoding/json"
+	"io"
+	"net/http"
+	"net/http/httptest"
+	"testing"
+	"time"
+
+	"github.com/hanzoai/cloud/sdk"
+	luxlog "github.com/luxfi/log"
+	"github.com/zap-proto/zip"
+)
+
+// fakeChain is a stand-in for BOTH Lux chain-data upstreams behind one server: the
+// luxfi/indexer explorer REST (/health, /v1/explorer/blocks) and the luxfi/graph
+// GraphQL (/v1/explorer/graphql). A test points INDEXER_URL and GRAPH_URL at it to
+// prove cloud reads REAL upstream state, gates on the validated principal, and never
+// fabricates.
+type fakeChain struct {
+	healthy    bool
+	chainName  string
+	chainID    int
+	blocks     []map[string]any // newest-first; blocks[0] is the latest
+	priceFeeds []map[string]any
+	gqlError   string // when set, the graph answers a {errors} envelope
+
+	lastQuery string
+}
+
+func (f *fakeChain) server(t *testing.T) *httptest.Server {
+	t.Helper()
+	mux := http.NewServeMux()
+
+	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, map[string]any{
+			"healthy": f.healthy, "chain_id": f.chainID, "chain_name": f.chainName,
+		})
+	})
+	mux.HandleFunc("/v1/explorer/blocks", func(w http.ResponseWriter, r *http.Request) {
+		items := f.blocks
+		if items == nil {
+			items = []map[string]any{}
+		}
+		writeJSON(w, map[string]any{"items": items, "next_page_params": nil})
+	})
+	mux.HandleFunc("/v1/explorer/graphql", func(w http.ResponseWriter, r *http.Request) {
+		var req struct {
+			Query string `json:"query"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&req)
+		f.lastQuery = req.Query
+		if f.gqlError != "" {
+			writeJSON(w, map[string]any{"errors": []map[string]any{{"message": f.gqlError}}})
+			return
+		}
+		writeJSON(w, map[string]any{"data": map[string]any{"priceFeeds": f.priceFeeds}})
+	})
+
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+	return srv
+}
+
+func writeJSON(w http.ResponseWriter, v any) {
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(v)
+}
+
+// unreachable is a base URL nothing can ever answer: port 0 is not a listenable
+// port, so the kernel refuses the connection locally and immediately. It makes a
+// down upstream a fact of the test rather than a name the host resolver has to
+// fail to resolve — no lookup, no wait, no dependence on the machine's DNS.
+const unreachable = "http://127.0.0.1:0"
+
+// compose installs what a HOST installs. A subsystem never installs cloud.Bridge
+// (routes() says why): the program's composer does, once at the root. In a test
+// the test IS the composer, so it owes the same install — skipping it does not
+// test a stricter program, it tests one where every org-scoped op answers 403
+// for a reason production could never produce.
+func compose(app *zip.App) { app.Use(cloud.Bridge()) }
+
+// mountApp mounts the graph surface against the fake upstream at base.
+func mountApp(t *testing.T, base string) *zip.App {
+	t.Helper()
+	t.Setenv("INDEXER_URL", base)
+	t.Setenv("GRAPH_URL", base)
+	t.Setenv("CHAIN_DATA_TOKEN", "")
+	app := zip.New(zip.Config{Logger: luxlog.New("test")})
+	compose(app)
+	t.Setenv("CLOUD_BRAND", "lux")
+	t.Setenv("CLOUD_ENV", "mainnet")
+	if err := Use(app, cloud.Deps{}); err != nil {
+		t.Fatalf("Use:  %v", err)
+	}
+	return app
+}
+
+func do(t *testing.T, app *zip.App, method, path, org string) (int, []byte) {
+	t.Helper()
+	req := httptest.NewRequest(method, path, nil)
+	if org != "" {
+		req.Header.Set("X-Org-Id", org)
+		// A validated principal: principal.Org requires a non-empty X-User-Id,
+		// which the gateway sets ONLY from a verified credential. Inject it directly
+		// (empty org → no user → the 401 path).
+		req.Header.Set("X-User-Id", "u-"+org)
+	}
+	resp, err := app.Test(req, zip.TestConfig{Timeout: 30 * time.Second, FailOnTimeout: true})
+	if err != nil {
+		t.Fatalf("Test %s %s: %v", method, path, err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	b, _ := io.ReadAll(resp.Body)
+	return resp.StatusCode, b
+}
+
+func TestIndexersGatedAndShape(t *testing.T) {
+	f := &fakeChain{
+		healthy: true, chainName: "Lux C-Chain", chainID: 96369,
+		blocks: []map[string]any{{"height": 12345, "timestamp": 1711929600}},
+	}
+	app := mountApp(t, f.server(t).URL)
+
+	// No validated principal → 401, and the request never reaches the indexer.
+	if code, _ := do(t, app, http.MethodGet, "/v1/explorer/indexers", ""); code != http.StatusUnauthorized {
+		t.Fatalf("no-org indexers want 401, got %d", code)
+	}
+
+	code, body := do(t, app, http.MethodGet, "/v1/explorer/indexers", "acme")
+	if code != http.StatusOK {
+		t.Fatalf("indexers want 200, got %d (%s)", code, body)
+	}
+	var listed struct {
+		Indexers []indexerView `json:"indexers"`
+	}
+	if err := json.Unmarshal(body, &listed); err != nil {
+		t.Fatalf("shape: %v (%s)", err, body)
+	}
+	if len(listed.Indexers) != 1 {
+		t.Fatalf("want 1 indexer, got %d", len(listed.Indexers))
+	}
+	iv := listed.Indexers[0]
+	if iv.Chain != "Lux C-Chain" || iv.Network != "mainnet" || iv.Height != "12345" ||
+		iv.Status != "active" || iv.UpdatedAt != "2024-04-01T00:00:00Z" {
+		t.Fatalf("indexer view mismatch: %+v", iv)
+	}
+	// lag is honestly omitted (not derivable from the indexer REST).
+	if iv.Lag != "" {
+		t.Fatalf("lag must be omitted (never fabricated), got %q", iv.Lag)
+	}
+}
+
+func TestIndexerUnhealthyDegraded(t *testing.T) {
+	f := &fakeChain{healthy: false, chainName: "Lux C-Chain", blocks: []map[string]any{}}
+	app := mountApp(t, f.server(t).URL)
+
+	code, body := do(t, app, http.MethodGet, "/v1/explorer/indexers", "acme")
+	if code != http.StatusOK {
+		t.Fatalf("indexers want 200, got %d (%s)", code, body)
+	}
+	var listed struct {
+		Indexers []indexerView `json:"indexers"`
+	}
+	_ = json.Unmarshal(body, &listed)
+	if len(listed.Indexers) != 1 || listed.Indexers[0].Status != "degraded" {
+		t.Fatalf("unhealthy indexer must be degraded, got %+v", listed.Indexers)
+	}
+	// No blocks indexed yet → honest empty height (never a fabricated 0).
+	if listed.Indexers[0].Height != "" {
+		t.Fatalf("height must be empty when no blocks indexed, got %q", listed.Indexers[0].Height)
+	}
+}
+
+func TestIndexerUnreachableHonestEmpty(t *testing.T) {
+	app := mountApp(t, unreachable)
+
+	// Unreachable indexer degrades to an honest-EMPTY list (200), not a console-error
+	// 502 — and never a fabricated row.
+	code, body := do(t, app, http.MethodGet, "/v1/explorer/indexers", "acme")
+	if code != http.StatusOK {
+		t.Fatalf("unreachable indexer want 200 (honest-empty), got %d (%s)", code, body)
+	}
+	var listed struct {
+		Indexers []indexerView `json:"indexers"`
+	}
+	if err := json.Unmarshal(body, &listed); err != nil {
+		t.Fatalf("shape: %v (%s)", err, body)
+	}
+	if len(listed.Indexers) != 0 {
+		t.Fatalf("unreachable indexer must return honest-empty list, got %+v", listed.Indexers)
+	}
+}
+
+func TestOraclesGatedShapeAndEmpty(t *testing.T) {
+	f := &fakeChain{priceFeeds: []map[string]any{
+		{"id": "LUX-USD", "pair": "LUX/USD", "price": "2.50", "timestamp": 1711929600},
+		{"id": "ZOO-USD", "pair": "ZOO/USD", "price": "0.08", "timestamp": 1711929600},
+	}}
+	app := mountApp(t, f.server(t).URL)
+
+	// No validated principal → 401.
+	if code, _ := do(t, app, http.MethodGet, "/v1/explorer/oracles", ""); code != http.StatusUnauthorized {
+		t.Fatalf("no-org oracles want 401, got %d", code)
+	}
+
+	code, body := do(t, app, http.MethodGet, "/v1/explorer/oracles", "acme")
+	if code != http.StatusOK {
+		t.Fatalf("oracles want 200, got %d (%s)", code, body)
+	}
+	var listed struct {
+		Oracles []oracleView `json:"oracles"`
+	}
+	if err := json.Unmarshal(body, &listed); err != nil {
+		t.Fatalf("shape: %v (%s)", err, body)
+	}
+	if len(listed.Oracles) != 2 {
+		t.Fatalf("want 2 oracles, got %d", len(listed.Oracles))
+	}
+	o := listed.Oracles[0]
+	if o.ID != "LUX-USD" || o.Name != "LUX/USD" || o.Feed != "LUX/USD" || o.Value != "2.50" ||
+		o.Source != "O-Chain" || o.Status != "active" || o.UpdatedAt != "2024-04-01T00:00:00Z" {
+		t.Fatalf("oracle view mismatch: %+v", o)
+	}
+
+	// An empty registry is an honest empty list — a real, gated route, not a 404.
+	f.priceFeeds = nil
+	code, body = do(t, app, http.MethodGet, "/v1/explorer/oracles", "acme")
+	_ = json.Unmarshal(body, &listed)
+	if code != http.StatusOK || len(listed.Oracles) != 0 {
+		t.Fatalf("empty registry want 200 [], got %d %+v", code, listed.Oracles)
+	}
+}
+
+func TestOraclesGraphQLErrorHonestEmpty(t *testing.T) {
+	f := &fakeChain{gqlError: "schema unavailable"}
+	app := mountApp(t, f.server(t).URL)
+	// A GraphQL {errors} envelope degrades to an honest-EMPTY list (200), not a
+	// console-error 502 — and never a fabricated feed.
+	code, body := do(t, app, http.MethodGet, "/v1/explorer/oracles", "acme")
+	if code != http.StatusOK {
+		t.Fatalf("graphql error want 200 (honest-empty), got %d (%s)", code, body)
+	}
+	var listed struct {
+		Oracles []oracleView `json:"oracles"`
+	}
+	if err := json.Unmarshal(body, &listed); err != nil {
+		t.Fatalf("shape: %v (%s)", err, body)
+	}
+	if len(listed.Oracles) != 0 {
+		t.Fatalf("graphql error must return honest-empty list, got %+v", listed.Oracles)
+	}
+}
+
+func TestPublicDataSameAcrossOrgsButAuthRequired(t *testing.T) {
+	f := &fakeChain{
+		healthy: true, chainName: "Lux C-Chain",
+		blocks:     []map[string]any{{"height": 100, "timestamp": 1711929600}},
+		priceFeeds: []map[string]any{{"id": "LUX-USD", "pair": "LUX/USD", "price": "2.50"}},
+	}
+	app := mountApp(t, f.server(t).URL)
+
+	// Two different validated orgs both see the SAME public ledger (a blockchain has
+	// no per-org private row to leak); an UNauthenticated caller sees nothing (403).
+	for _, path := range []string{"/v1/explorer/indexers", "/v1/explorer/oracles"} {
+		if code, _ := do(t, app, http.MethodGet, path, ""); code != http.StatusUnauthorized {
+			t.Fatalf("unauth %s want 401, got %d", path, code)
+		}
+		a, ba := do(t, app, http.MethodGet, path, "acme")
+		b, bb := do(t, app, http.MethodGet, path, "other")
+		if a != http.StatusOK || b != http.StatusOK {
+			t.Fatalf("%s want 200 for both orgs, got %d/%d", path, a, b)
+		}
+		if string(ba) != string(bb) {
+			t.Fatalf("%s public data must be identical across orgs:\n acme=%s\nother=%s", path, ba, bb)
+		}
+	}
+}
+
+// TestCallerAuthorizationIsForwarded pins the ONE request fact these two typed ops
+// still reach for. Chain data is a public ledger, but the upstream may itself be
+// gated, so with no CHAIN_DATA_TOKEN configured the caller's own Authorization is
+// passed through (client.go's authorize, fed by graph.go's forwarded). A typed op
+// receives only a context, so that header crosses on cloud.Bridge — and if it ever
+// stops crossing, the read still answers 200 and the upstream silently sees an
+// anonymous caller. Nothing but this test would notice.
+func TestCallerAuthorizationIsForwarded(t *testing.T) {
+	var gotIndexer, gotGraph string
+	mux := http.NewServeMux()
+	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
+		gotIndexer = r.Header.Get("Authorization")
+		writeJSON(w, map[string]any{"healthy": true, "chain_name": "Lux C-Chain"})
+	})
+	mux.HandleFunc("/v1/explorer/blocks", func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, map[string]any{"items": []map[string]any{}})
+	})
+	mux.HandleFunc("/v1/explorer/graphql", func(w http.ResponseWriter, r *http.Request) {
+		gotGraph = r.Header.Get("Authorization")
+		writeJSON(w, map[string]any{"data": map[string]any{"priceFeeds": []map[string]any{}}})
+	})
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+
+	app := mountApp(t, srv.URL)
+	for _, path := range []string{"/v1/explorer/indexers", "/v1/explorer/oracles"} {
+		req := httptest.NewRequest(http.MethodGet, path, nil)
+		req.Header.Set("X-Org-Id", "acme")
+		req.Header.Set("X-User-Id", "u-acme")
+		req.Header.Set("Authorization", "Bearer caller-token")
+		resp, err := app.Test(req, zip.TestConfig{Timeout: 30 * time.Second, FailOnTimeout: true})
+		if err != nil {
+			t.Fatalf("Test %s: %v", path, err)
+		}
+		_ = resp.Body.Close()
+	}
+	if gotIndexer != "Bearer caller-token" {
+		t.Errorf("indexer saw Authorization %q, want the caller's own — a typed op that "+
+			"cannot reach the request drops the caller's identity on the far side of the hop", gotIndexer)
+	}
+	if gotGraph != "Bearer caller-token" {
+		t.Errorf("graph saw Authorization %q, want the caller's own", gotGraph)
+	}
+}
+
+// TestServiceTokenWinsOverCallerAuthorization pins the other half of the one-rule
+// model: a configured CHAIN_DATA_TOKEN replaces the caller's Authorization rather
+// than sitting beside it, so an upstream never sees two identities for one read.
+func TestServiceTokenWinsOverCallerAuthorization(t *testing.T) {
+	var got string
+	mux := http.NewServeMux()
+	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
+		got = r.Header.Get("Authorization")
+		writeJSON(w, map[string]any{"healthy": true})
+	})
+	mux.HandleFunc("/v1/explorer/blocks", func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, map[string]any{"items": []map[string]any{}})
+	})
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+
+	app := mountApp(t, srv.URL)
+	t.Setenv("CHAIN_DATA_TOKEN", "svc-token")
+
+	req := httptest.NewRequest(http.MethodGet, "/v1/explorer/indexers", nil)
+	req.Header.Set("X-Org-Id", "acme")
+	req.Header.Set("X-User-Id", "u-acme")
+	req.Header.Set("Authorization", "Bearer caller-token")
+	resp, err := app.Test(req, zip.TestConfig{Timeout: 30 * time.Second, FailOnTimeout: true})
+	if err != nil {
+		t.Fatalf("Test: %v", err)
+	}
+	_ = resp.Body.Close()
+	if got != "Bearer svc-token" {
+		t.Errorf("indexer saw Authorization %q, want the service token", got)
+	}
+}

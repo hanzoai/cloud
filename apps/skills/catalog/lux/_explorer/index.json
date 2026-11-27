@@ -1,0 +1,32 @@
+{
+  "$schema": "https://schemas.agentskills.io/discovery/0.2.0/schema.json",
+  "base_url": "https://api.lux.network",
+  "brand": "lux",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://lux.id",
+  "mcp": {
+    "description": "Model Context Protocol over JSON-RPC 2.0 — one POST per message, stateless, protocol revision 2026-07-28. tools/list answers without a credential with one tool per subsystem (its operations in the \"op\" enum) plus \"describe\", which returns one operation's input schema. tools/call names a subsystem tool and carries {\"op\": <operation>, \"input\": <its arguments>}; it takes the same bearer the REST API does, and a call that carries none is answered 401 with a WWW-Authenticate header naming the resource metadata at /.well-known/oauth-protected-resource, which names the authorization server to sign in at. The tool surface is the public contract: the operator's admin product is not offered, and a name that would disclose a secret or mutate an identity is withheld — the list says how many, under _meta.",
+    "method": "POST",
+    "url": "https://api.lux.network/v1/mcp"
+  },
+  "skill_count": 2,
+  "skills": [
+    {
+      "description": "Read explorer indexers: Reports the deployment's chain indexer(s) and how far each has indexed..",
+      "digest": "sha256:f5aa1d089e0b3ffdd0ceb61e770e43808651b18af2d3100f1a945f8fcf68c3ef",
+      "name": "explorer_indexers",
+      "service": "explorer",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/explorer_indexers/SKILL.md"
+    },
+    {
+      "description": "Read explorer oracles: Reports the on-chain price/data oracles from the graph's O-Chain PriceFeed registry..",
+      "digest": "sha256:316670400531bb26a335339fe499f72590db25bf3e881db0932074f0b53a43c3",
+      "name": "explorer_oracles",
+      "service": "explorer",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/explorer_oracles/SKILL.md"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

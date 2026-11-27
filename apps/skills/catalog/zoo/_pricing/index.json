@@ -1,0 +1,192 @@
+{
+  "$schema": "https://schemas.agentskills.io/discovery/0.2.0/schema.json",
+  "base_url": "https://api.zoo.ngo",
+  "brand": "zoo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://zoolabs.id",
+  "mcp": {
+    "description": "Model Context Protocol over JSON-RPC 2.0 — one POST per message, stateless, protocol revision 2026-07-28. tools/list answers without a credential with one tool per subsystem (its operations in the \"op\" enum) plus \"describe\", which returns one operation's input schema. tools/call names a subsystem tool and carries {\"op\": <operation>, \"input\": <its arguments>}; it takes the same bearer the REST API does, and a call that carries none is answered 401 with a WWW-Authenticate header naming the resource metadata at /.well-known/oauth-protected-resource, which names the authorization server to sign in at. The tool surface is the public contract: the operator's admin product is not offered, and a name that would disclose a secret or mutate an identity is withheld — the list says how many, under _meta.",
+    "method": "POST",
+    "url": "https://api.zoo.ngo/v1/mcp"
+  },
+  "skill_count": 22,
+  "skills": [
+    {
+      "description": "Read pricing base: Returns the Zoo Base plans — the managed-instance tiers, each with its monthly and annual price, storage and request allowances and feature list..",
+      "digest": "sha256:319669b56e4e5a4da6a4de6d0261fd9aae9b3ff0a3bd43d773fa84c7ad44aadc",
+      "name": "pricing_base",
+      "service": "pricing",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/pricing_base/SKILL.md"
+    },
+    {
+      "description": "Read pricing blockchain: Returns the blockchain access plans — the RPC and node tiers, each with its monthly price, compute-unit allowance and feature list..",
+      "digest": "sha256:1dcb368c2967de9aba44b7f3dae32d9ff64c61ac22f364d50793ebf22f1e4dd7",
+      "name": "pricing_blockchain",
+      "service": "pricing",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/pricing_blockchain/SKILL.md"
+    },
+    {
+      "description": "Read pricing cloud: Returns the public cloud section of the catalog in one document: its instance plans, its regions and its block-storage prices., Returns just the cloud instance plans — each with its vCPU, memory, disk, CPU type, VM allowance, feature list and monthly and hourl",
+      "digest": "sha256:2d9c3bdcb29a5ee42df271487b6abed6ef1381c758ae47a76fd0e0756cf45c88",
+      "name": "pricing_cloud",
+      "service": "pricing",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/pricing_cloud/SKILL.md"
+    },
+    {
+      "description": "Read pricing compute: Returns the compute section of the catalog: the cloud provider and region the prices are quoted for, the monthly markup applied to them, the full instance-size tier list and the named presets., Returns just the named compute sizes — the short, human-labelled",
+      "digest": "sha256:d0b629baa10ae93f43036f7a0b3c4c1134e3873d996ed656467756f70133afd9",
+      "name": "pricing_compute",
+      "service": "pricing",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/pricing_compute/SKILL.md"
+    },
+    {
+      "description": "Read pricing datastore: Returns the Zoo Datastore rate card: the tier list, the per-GB storage and egress usage rates, the annual discount and the trial..",
+      "digest": "sha256:21caf6d92ee0743fa48128c55729b03a81dc96691d741ce5345f51f65ba8b1be",
+      "name": "pricing_datastore",
+      "service": "pricing",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/pricing_datastore/SKILL.md"
+    },
+    {
+      "description": "Read pricing enablement: Returns what the caller can actually use: every managed item with its global state and whether it is effective for this caller — a beta item is, while the platform's `beta` switch is on for it..",
+      "digest": "sha256:fd698fa9383efe3736d9bec5d024e848037d8ad66d95a580ff371ed012da1e6b",
+      "name": "pricing_enablement",
+      "service": "pricing",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/pricing_enablement/SKILL.md"
+    },
+    {
+      "description": "Read pricing featured: Returns the models the catalog highlights, filtered to what the caller's org may see..",
+      "digest": "sha256:cf74f1ed11587348635f2045dc813e9c2f55eb29169d6a55de20d79714f8897c",
+      "name": "pricing_featured",
+      "service": "pricing",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/pricing_featured/SKILL.md"
+    },
+    {
+      "description": "Read pricing free: Returns the models that cost nothing to call, filtered to what the caller's org may see..",
+      "digest": "sha256:0a8fc7888f392e86aff01f9e4cbc2b606b090585932975f354f9b78ec9be4938",
+      "name": "pricing_free",
+      "service": "pricing",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/pricing_free/SKILL.md"
+    },
+    {
+      "description": "Read pricing gpu: ListGPUTiers returns the rentable GPU configurations, each with its accelerator count and model, VRAM, vCPU, host memory and hourly price..",
+      "digest": "sha256:bddb473ffcf32cb685e63b2f0d07107d99c1f2ee4fd44250963986a2326f55a4",
+      "name": "pricing_gpu",
+      "service": "pricing",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/pricing_gpu/SKILL.md"
+    },
+    {
+      "description": "Read pricing health: Reports that the pricing subsystem is mounted and serving..",
+      "digest": "sha256:fb07ab277082918979b040f0b3a17cb4a92b73eba4b4e95fd47c9ace16857daa",
+      "name": "pricing_health",
+      "service": "pricing",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/pricing_health/SKILL.md"
+    },
+    {
+      "description": "Read pricing iam: ListIAMPlans returns the identity plans — the Zoo IAM tiers, each with its monthly and annual price, monthly-active-user allowance and feature list..",
+      "digest": "sha256:99479186e8de83024dc875fa59a18bcfbde6580cc9b14e80592386d139bd5ff4",
+      "name": "pricing_iam",
+      "service": "pricing",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/pricing_iam/SKILL.md"
+    },
+    {
+      "description": "Read pricing model: Returns one model's catalog entry — its pricing, context window and capabilities as the pricing source records them..",
+      "digest": "sha256:a98be5542af6ea7b086586324a420215a5e14748ef4e4880d5c3147a6a6c0611",
+      "name": "pricing_model",
+      "service": "pricing",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/pricing_model/SKILL.md"
+    },
+    {
+      "description": "Read pricing models: Returns the whole model catalog — every model the gateway serves, Zen and third-party alike — filtered to what the caller may see..",
+      "digest": "sha256:bdcd9a6bfcd3064bb64368a1ba8bf6d762d6197934cdacf03b0c97c82d7fc46d",
+      "name": "pricing_models",
+      "service": "pricing",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/pricing_models/SKILL.md"
+    },
+    {
+      "description": "Read pricing paas: ListPaaSPlans returns the application-hosting plans — the deploy-and-host tiers, each with its monthly and annual price, app and memory allowances and feature list..",
+      "digest": "sha256:2d569a97ed1b225d15dd125b50d39d8f8315c92b604a12547570d86ba620a379",
+      "name": "pricing_paas",
+      "service": "pricing",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/pricing_paas/SKILL.md"
+    },
+    {
+      "description": "Read pricing policy: Returns the pricing policy document: the revenue-sharing terms (the idle-resale share and the open-source share, each with its percentage and who is eligible) and the commitments Zoo makes about how it bills — no hidden fees, no egress charges, no surprise bi",
+      "digest": "sha256:16ffbc2102b899de6727dac32429e38afb596f886c45fdf247a9f82e25d6771a",
+      "name": "pricing_policy",
+      "service": "pricing",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/pricing_policy/SKILL.md"
+    },
+    {
+      "description": "Read pricing pricing: Returns the whole pricing catalog in one document: Zen and third-party models, providers, model families, the free-model list, plan and infrastructure pricing..",
+      "digest": "sha256:8a5971a989449a0fad6d3203dbc09a938a440d9ffe7062861d60eab3a733e85e",
+      "name": "pricing_pricing",
+      "service": "pricing",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/pricing_pricing/SKILL.md"
+    },
+    {
+      "description": "Read pricing providers: Returns the model providers the catalog knows, each with its info object, filtered to what the caller's org may see..",
+      "digest": "sha256:26b7b97cc4fd0691096cdbba72809c55022ab2f8c320e39641dba86918de9388",
+      "name": "pricing_providers",
+      "service": "pricing",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/pricing_providers/SKILL.md"
+    },
+    {
+      "description": "Read pricing services: Returns the managed-service rate cards — Search, Crawl, Vector, Console and Managed Services — each with its own tiers, and some with usage rates or a comparison table..",
+      "digest": "sha256:76759364dd70db53b172356f130f8031e2ec9fff3409a814522d25792e9247fa",
+      "name": "pricing_services",
+      "service": "pricing",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/pricing_services/SKILL.md"
+    },
+    {
+      "description": "Read pricing subscriptions: Returns the API subscription plans — the account-level tiers a customer subscribes to, each with its monthly and annual price, included credit, rate limits and feature list..",
+      "digest": "sha256:9c96348c758f5c4c62052704fae6d10f641b4dd0933f21eed4d64962c7db5832",
+      "name": "pricing_subscriptions",
+      "service": "pricing",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/pricing_subscriptions/SKILL.md"
+    },
+    {
+      "description": "Read pricing summary: Returns the catalog's headline statistics — model counts by family and the provider directory..",
+      "digest": "sha256:85d2fc34c1c71a099276f9874c3dff6ba5f525c0dff3a9e15bc26e510f0d0de9",
+      "name": "pricing_summary",
+      "service": "pricing",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/pricing_summary/SKILL.md"
+    },
+    {
+      "description": "Read pricing tariff: Returns the platform's rate card: what a bill is made of, what each part costs, and the completion windows a request may ask for..",
+      "digest": "sha256:61a3511f958e77ca8ebcddb5bd2a195c458d5a3b78755d10be43e4d0e3393013",
+      "name": "pricing_tariff",
+      "service": "pricing",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/pricing_tariff/SKILL.md"
+    },
+    {
+      "description": "Read pricing tools: Returns the per-use tool prices — web search, web fetch, code interpreter, file storage, image generation, speech-to-text and text-to-speech — each with the unit it is billed by and its price in that unit..",
+      "digest": "sha256:d7672df70bc52ac49c3e49b80f71d75f52632291bcf835e63680f6f04d3a21c4",
+      "name": "pricing_tools",
+      "service": "pricing",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/pricing_tools/SKILL.md"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

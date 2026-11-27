@@ -1,7 +1,10 @@
 package plane
 
-// A plane call must not be cut off at the TRANSPORT's 30s response-read default while
-// the caller has given itself a longer budget.
+// The defect these pin: a plane call was cut off at the TRANSPORT's 30s
+// response-read default while the caller had given itself 110s. The work
+// succeeded — production measured a turn at 41,153ms answered 200 by both `ai`
+// and `agents` — and the caller had already hung up. Every log on the callee
+// side said healthy; only the caller reported failure.
 //
 // A unit test cannot hold a socket open for 40 seconds to prove this, so these
 // assert the two properties that make the failure impossible instead: the
@@ -19,7 +22,7 @@ import (
 
 // The number that mattered. zap-proto/http's default is 30s; the chat bridge
 // budgets 110s for one turn. A ceiling below the caller's own budget means the
-// caller can never spend it.
+// caller can never spend it — which is exactly what shipped.
 func TestTheCeilingExceedsTheLongestCallerBudget(t *testing.T) {
 	const transportDefault = 30 * time.Second
 	const bridgeAgentTimeout = 110 * time.Second // apps/integrations/channel.go

@@ -1,0 +1,243 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Hanzo Cloud API",
+    "description": "Package share is a public URL for a service on your own machine, and a list of what you have open.",
+    "version": "v1"
+  },
+  "servers": [
+    {
+      "url": "https://api.hanzo.ai"
+    }
+  ],
+  "security": [
+    {
+      "bearer": []
+    }
+  ],
+  "tags": [
+    {
+      "name": "share"
+    }
+  ],
+  "paths": {
+    "/v1/share": {
+      "get": {
+        "operationId": "get_share",
+        "summary": "Returns the tunnel shares the caller's account currently has open — their org's, or in a held org their own — across every environment it has enabled.",
+        "description": "Returns the tunnel shares the caller's account currently has open —\ntheir org's, or in a held org their own — across every environment it has\nenabled. It is a READ and it degrades honestly: an\nunconfigured deployment, an org that has not provisioned yet, and an unreachable\ncontroller all answer an EMPTY list at 200 rather than an error, so the console\nnever error-toasts on load.",
+        "tags": [
+          "share"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/share.sharesOut"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/share/enable": {
+      "post": {
+        "operationId": "post_share_enable",
+        "summary": "Provisions the caller's tunnel account — their org's, or in a held org, where every self-serve signup lands, their own — and returns the credential the `hanzo share` CLI needs to run a tunnel.",
+        "description": "Provisions the caller's tunnel account — their org's, or in a held org,\nwhere every self-serve signup lands, their own — and returns the credential the\n`hanzo share` CLI needs to run a tunnel. It is idempotent: the account is keyed\ndeterministically off the VALIDATED org and, in a held org, the caller's\nattested subject, so a repeat call hands back the same account rather than\ncreating a second one, and a caller can only ever provision their OWN. 503 when\nthe deployment has no share controller configured; 503 when that controller is\nunreachable.",
+        "tags": [
+          "share"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/share.enableResp"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/share/rotate": {
+      "post": {
+        "operationId": "post_share_rotate",
+        "summary": "Replaces the credential of a tunnel account and ends every environment enabled with it, shares and all, so a credential handed out before — to a member who has left, or to anyone who read it — opens nothing from now on.",
+        "description": "Replaces the credential of a tunnel account and ends every\nenvironment enabled with it, shares and all, so a credential handed out before\n— to a member who has left, or to anyone who read it — opens nothing from now\non. The account is kept: enable hands its holder the new credential.\n\nIn a customer's org the account is the org's, which its members share, and an\nadmin of the org or a SuperAdmin rotates it. In a held org each person's\naccount is their own, and they rotate it — every account they hold, the one\nan API key of theirs was handed before included, so none stays live. An admin\nof the org or a SuperAdmin then rotates the org's own account, which no call\nthere hands out, whether or not they hold an account of their own; when that\none cannot be rotated, `pending` says so and their own are rotated still.\n\nAn account never provisioned has nothing to rotate and counts 0. 503 when the\ndeployment has no share controller configured; 503 when that controller is\nunreachable, or holds the caller's account under a credential this deployment\ndoes not derive — out of a rotation's reach, so it is refused rather than\nreported done.",
+        "tags": [
+          "share"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/share.rotated"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "problem-details": {
+        "description": "An RFC 9457 problem document.",
+        "properties": {
+          "code": {
+            "description": "A stable token a client can branch on, when the refusal names one.",
+            "type": "string"
+          },
+          "detail": {
+            "description": "What was refused, for a person to read.",
+            "type": "string"
+          },
+          "status": {
+            "description": "The HTTP status.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "title": {
+            "description": "The status's reason phrase.",
+            "type": "string"
+          },
+          "type": {
+            "description": "about:blank",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "status",
+          "detail"
+        ],
+        "type": "object"
+      },
+      "share.enableResp": {
+        "properties": {
+          "accountToken": {
+            "description": "AccountToken is the caller's tunnel-account credential: their org's, or in a\nheld org their own. Treat it as a secret: it is what the CLI enables an\nenvironment with.",
+            "type": "string"
+          },
+          "controller": {
+            "description": "Controller is the public controller endpoint the CLI enables against.",
+            "type": "string"
+          },
+          "namespace": {
+            "description": "Namespace is the public frontend a share is published into, when the\ndeployment names one.",
+            "type": "string"
+          },
+          "urlTemplate": {
+            "description": "URLTemplate is the shape a share token expands to, so the CLI can print the\nresulting URL without asking again.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "share.rotated": {
+        "properties": {
+          "ended": {
+            "description": "Ended is how many environments the rotated accounts had enabled. Each is\nended with its shares, so a machine that ran a tunnel on an account enables\nagain with the new credential.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "pending": {
+            "description": "Pending says what this call could not rotate, and is empty when it rotated\neverything. In a held org an admin rotates their own account first and the\norg's own after it, so the org's failing to rotate is said here rather than\nkeeping them from their own; calling again tries it again.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "share.shareView": {
+        "properties": {
+          "backend": {
+            "description": "Backend is the local endpoint the share proxies to.",
+            "type": "string"
+          },
+          "backendMode": {
+            "description": "BackendMode is how the tunnel serves the backend, e.g. proxy or web.",
+            "type": "string"
+          },
+          "createdAt": {
+            "description": "CreatedAt is when the share was opened, unix seconds.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "token": {
+            "description": "Token is the share's own identifier, the leaf of its public URL.",
+            "type": "string"
+          },
+          "url": {
+            "description": "URL is the share's public address, rendered from the deployment's URL template.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "share.sharesOut": {
+        "properties": {
+          "shares": {
+            "description": "Shares is the org's active shares — empty rather than absent when there are\nnone, or when the controller cannot be reached.",
+            "items": {
+              "$ref": "#/components/schemas/share.shareView"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      }
+    },
+    "securitySchemes": {
+      "bearer": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "The caller's credential, sent as `Authorization: Bearer \u003ctoken\u003e`. It is either an access token minted by Hanzo IAM or an API key (pk-/sk-). X-Authorization, and HTTP Basic carrying the token as the password, are accepted spellings of the same header for clients that cannot set Authorization; a browser presents the session cookie instead. Every operation requires it unless it says `security: []`."
+      }
+    }
+  }
+}

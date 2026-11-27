@@ -1,0 +1,375 @@
+// Copyright © 2026 Hanzo AI. MIT License.
+
+package commerce
+
+// posture_rpc.go — the org's processor posture and its saved cards, over the
+// internal plane: which processor a browser tokenizes against, which money the
+// org is transacting in, the cards it has on file, and the catalog it buys from.
+//
+// TWO WIRES, ON PURPOSE. Settings and mode are TYPED, because each is a handful
+// of fields this side decides the meaning of. Methods and plans are RENDERED —
+// carried as the bytes the store produced — because their wire is a deep tree of
+// the store's OWN models, where a mirror here would be sixty fields whose only
+// job is to agree with something else. A value the endpoint decides is typed; a
+// document it forwards is bytes.
+
+import (
+	"context"
+	"encoding/json"
+	"sort"
+	"strings"
+
+	commercebilling "github.com/hanzoai/commerce/api/billing"
+	"github.com/hanzoai/commerce/api/promo"
+	commercedatastore "github.com/hanzoai/commerce/datastore"
+	"github.com/hanzoai/commerce/models/paymentmethod"
+	commercetypes "github.com/hanzoai/commerce/types"
+	"github.com/zap-proto/zip"
+
+	"github.com/hanzoai/cloud/client"
+	"github.com/hanzoai/cloud/sdk"
+	"github.com/hanzoai/cloud/sdk/network"
+)
+
+// exposePosture publishes the posture, methods and catalog ops. Mount calls it.
+func exposePosture() {
+	cloud.Plane().Post("/billing/settings", planeSettings,
+		zip.WithOperationID(client.BillingSettings),
+		zip.WithSummary("Public processor configuration for this org"))
+	cloud.Plane().Post("/billing/mode", planeMode,
+		zip.WithOperationID(client.BillingMode),
+		zip.WithSummary("Move this org between test and live money"))
+	cloud.Plane().Post("/billing/methods", planeMethods,
+		zip.WithOperationID(client.BillingMethods),
+		zip.WithSummary("Cards and accounts a subject has on file"))
+	cloud.Plane().Post("/billing/method/save", planeMethodSave,
+		zip.WithOperationID(client.BillingMethodSave),
+		zip.WithSummary("Save a payment method for a subject"))
+	cloud.Plane().Post("/billing/method/update", planeMethodUpdate,
+		zip.WithOperationID(client.BillingMethodUpdate),
+		zip.WithSummary("Update billing details on one saved payment method"))
+	cloud.Plane().Post("/billing/method/default", planeMethodDefault,
+		zip.WithOperationID(client.BillingMethodDefault),
+		zip.WithSummary("Set one saved payment method as default"))
+	cloud.Plane().Post("/billing/method/detach", planeMethodDetach,
+		zip.WithOperationID(client.BillingMethodDetach),
+		zip.WithSummary("Remove one saved payment method"))
+	cloud.Plane().Post("/billing/plans", planePlans,
+		zip.WithOperationID(client.BillingPlans),
+		zip.WithSummary("The public plan catalog"))
+}
+
+// Answers the PUBLIC half of this org's processor configuration — the ids a
+// browser needs to tokenize a card, and the environment it must tokenize
+// against.
+//
+// It carries no secret: an application id is published to every checkout page by
+// design. What matters is that it resolves sandbox-versus-production through the
+// SAME authority the charge path uses, so the account a browser tokenizes
+// against is always the account the charge will be made on. A mismatch there is
+// a card that vaults and then cannot be charged.
+//
+// A named handler, not a closure, so zipdoc can lift this prose into the registry.
+func planeSettings(ctx context.Context, _ *cloud.Unit) (*client.PaymentConfig, error) {
+	org, err := orgOf(ctx, "settings")
+	if err != nil {
+		return nil, err
+	}
+	return paymentConfigOf(commercebilling.ReadPaymentConfig(ctx, org)), nil
+}
+
+// paymentConfigOf is commerce's public payment configuration in the plane's
+// vocabulary. Every field the browser reads to choose a card form is carried:
+// Square's ids, PayPal's, and Stripe's publishable key with the per-currency
+// Cards map. Leaving one out hides that processor from the checkout.
+func paymentConfigOf(cfg *commercebilling.PaymentConfig) *client.PaymentConfig {
+	var pp *client.PayPalPublicConfig
+	if cfg.PayPal.Enabled || cfg.PayPal.ClientId != "" {
+		pp = &client.PayPalPublicConfig{
+			Enabled:     cfg.PayPal.Enabled,
+			ClientID:    cfg.PayPal.ClientId,
+			Environment: cfg.PayPal.Environment,
+		}
+	}
+	var st *client.StripePublicConfig
+	if cfg.Stripe.Enabled || cfg.Stripe.PublishableKey != "" {
+		st = &client.StripePublicConfig{
+			Enabled:        cfg.Stripe.Enabled,
+			PublishableKey: cfg.Stripe.PublishableKey,
+			Environment:    cfg.Stripe.Environment,
+		}
+	}
+	cards := make([]client.PaymentCard, 0, len(cfg.Cards))
+	for cur, proc := range cfg.Cards {
+		cards = append(cards, client.PaymentCard{Currency: cur, Processor: proc})
+	}
+	sort.Slice(cards, func(i, j int) bool { return cards[i].Currency < cards[j].Currency })
+	return &client.PaymentConfig{
+		Provider:      cfg.Provider,
+		ApplicationID: cfg.ApplicationId,
+		LocationID:    cfg.LocationId,
+		Environment:   cfg.Environment,
+		Live:          cfg.Live,
+		PayPal:        pp,
+		Stripe:        st,
+		Cards:         cards,
+	}
+}
+
+// Moves this org between sandbox money and real money.
+//
+// It flips whether a charge hits a real card, so it is the one posture change
+// that is not self-service — the endpoint holds it at the platform bar. Live and
+// testMode come back as one fact stated twice, in the two vocabularies its
+// readers use, from the single authority that decided it.
+//
+// A named handler, not a closure, so zipdoc can lift this prose into the registry.
+func planeMode(ctx context.Context, in *client.ModeIn) (*client.Mode, error) {
+	org, err := orgOf(ctx, "mode")
+	if err != nil {
+		return nil, err
+	}
+	// Off mainnet there is no live posture to move to: this deployment has its
+	// own chain and its own coin and no rail to a card, so an org that could
+	// leave sandbox here would be asking to settle against books nothing can
+	// settle. Refused rather than silently ignored — a posture that reports it
+	// changed and did not is how an operator concludes real money is armed.
+	if !in.TestMode && network.SandboxOnly() {
+		return nil, zip.ErrForbidden("this network has no live money; real charges exist on mainnet only")
+	}
+	m, merr := commercebilling.SetTestMode(ctx, org, in.TestMode)
+	if merr != nil {
+		return nil, zip.Errorf(500, "failed to set test mode")
+	}
+	return &client.Mode{OrgID: m.OrgId, OrgName: m.OrgName, Live: m.Live, TestMode: m.TestMode}, nil
+}
+
+// Lists the cards and accounts one subject has on file, optionally of one kind.
+//
+// A store that cannot be read answers an EMPTY LIST rather than a failure, which
+// is what this address has always done: the saved-cards panel renders empty
+// instead of breaking the page around it. The subject is the endpoint's, so a
+// query cannot widen the list to another customer of the same org.
+//
+// A named handler, not a closure, so zipdoc can lift this prose into the registry.
+func planeMethods(ctx context.Context, in *client.MethodsIn) (*client.Rendered, error) {
+	org, err := orgOf(ctx, "methods")
+	if err != nil {
+		return nil, err
+	}
+	rows, lerr := commercebilling.ListMethods(ctx, org, in.Subject, in.Kind)
+	if lerr != nil {
+		// The honest empty list this address has always answered with, kept here
+		// rather than at the endpoint so both halves cannot disagree about it.
+		rows = nil
+	}
+	if rows == nil {
+		rows = []commercebilling.Method{}
+	}
+	return rendered(rows)
+}
+
+// Saves a payment method for a subject: vaults the instrument at the processor
+// and persists the row.
+//
+// Saving a card that is ALREADY on file answers with the row that already holds
+// it rather than stacking a duplicate, and the endpoint needs to tell the two
+// apart to answer 201 or 200 — so whether the row is new is part of the answer,
+// not something a reader infers.
+//
+// The email names the processor's customer profile and is the CALLER'S own,
+// resolved at the endpoint from its credential: the store must never read an
+// identity it was not handed.
+//
+// A named handler, not a closure, so zipdoc can lift this prose into the registry.
+func planeMethodSave(ctx context.Context, in *client.MethodSaveIn) (*client.Rendered, error) {
+	org, err := orgOf(ctx, "save method")
+	if err != nil {
+		return nil, err
+	}
+	var body commercebilling.CreateMethodIn
+	if uerr := json.Unmarshal(in.Body, &body); uerr != nil {
+		return nil, zip.Errorf(400, "invalid request body")
+	}
+	// The subject the endpoint resolved wins over anything the body carried: a
+	// customer id a caller could choose is a card saved onto somebody else.
+	body.CustomerId = in.Subject
+	// The payer's name is the identity's, as the endpoint read it off the user record:
+	// never the body's.
+	body.BillingName = in.Name
+	m, created, merr := commercebilling.CreateMethod(ctx, org, in.Email, body)
+	if merr != nil {
+		switch {
+		case commercebilling.IsMethodRefused(merr):
+			return nil, zip.Errorf(400, "%v", merr)
+		case commercebilling.IsCardDeclined(merr):
+			return nil, zip.Errorf(402, "%v", merr)
+		default:
+			return nil, zip.Errorf(500, "failed to create payment method")
+		}
+	}
+	out, rerr := rendered(m)
+	if rerr != nil {
+		return nil, rerr
+	}
+	out.Created = created
+	return out, nil
+}
+
+// Removes one saved payment method.
+//
+// A method this subject does not own is NOT FOUND rather than refused — the same
+// answer whether the id names nothing or names somebody else's card — so an id
+// cannot be probed for existence. Privileged is the ENDPOINT'S determination that
+// this caller may act on any subject inside the org, and travels as one, because
+// authority decided twice is authority that eventually disagrees with itself.
+//
+// A named handler, not a closure, so zipdoc can lift this prose into the registry.
+func planeMethodDetach(ctx context.Context, in *client.MethodRef) (*client.Detachment, error) {
+	org, err := orgOf(ctx, "detach method")
+	if err != nil {
+		return nil, err
+	}
+	d, derr := commercebilling.DetachMethod(ctx, org, in.ID, in.Subject, in.Privileged)
+	if derr != nil {
+		if commercebilling.IsMethodNotFound(derr) {
+			return nil, zip.Errorf(404, "payment method not found")
+		}
+		return nil, zip.Errorf(500, "failed to detach payment method")
+	}
+	return &client.Detachment{Deleted: d.Deleted, ID: d.Id}, nil
+}
+
+// Updates billing address or non-vaulted metadata on one saved payment method.
+//
+// A named handler, not a closure, so zipdoc can lift this prose into the registry.
+func planeMethodUpdate(ctx context.Context, in *client.MethodUpdateIn) (*client.Rendered, error) {
+	org, err := orgOf(ctx, "update method")
+	if err != nil {
+		return nil, err
+	}
+	db := commercedatastore.New(org.Namespaced(ctx))
+	pm := paymentmethod.New(db)
+	if gerr := pm.GetById(in.ID); gerr != nil {
+		return nil, zip.Errorf(404, "payment method not found")
+	}
+	if !in.Privileged && (in.Subject == "" ||
+		(!strings.EqualFold(strings.TrimSpace(pm.CustomerId), in.Subject) &&
+			!strings.EqualFold(strings.TrimSpace(pm.UserId), in.Subject))) {
+		return nil, zip.Errorf(404, "payment method not found")
+	}
+	var req struct {
+		BillingAddress *commercetypes.Address `json:"billingAddress,omitempty"`
+		Metadata       map[string]interface{} `json:"metadata,omitempty"`
+	}
+	if uerr := json.Unmarshal(in.Body, &req); uerr != nil {
+		return nil, zip.Errorf(400, "invalid request body")
+	}
+	if req.BillingAddress != nil {
+		pm.BillingAddress = req.BillingAddress
+	}
+	if req.Metadata != nil {
+		if pm.Metadata == nil {
+			pm.Metadata = map[string]interface{}{}
+		}
+		vaultedKeys := map[string]bool{
+			"customerId": true, "cardId": true, "squareCustomerId": true,
+			"squareCardId": true, "stripeCustomerId": true, "stripePaymentMethodId": true,
+			"fingerprint": true, "verified": true,
+		}
+		for k, v := range req.Metadata {
+			if !vaultedKeys[k] {
+				pm.Metadata[k] = v
+			}
+		}
+	}
+	if uerr := pm.Update(); uerr != nil {
+		return nil, zip.Errorf(500, "failed to update payment method")
+	}
+	owner := strings.TrimSpace(in.Subject)
+	if owner == "" {
+		owner = strings.TrimSpace(pm.CustomerId)
+	}
+	rows, lerr := commercebilling.ListMethods(ctx, org, owner, "")
+	if lerr == nil {
+		for _, m := range rows {
+			if m.Id == pm.Id() {
+				return rendered(m)
+			}
+		}
+	}
+	return rendered(pm)
+}
+
+// Marks one saved payment method as default for the subject.
+//
+// A named handler, not a closure, so zipdoc can lift this prose into the registry.
+func planeMethodDefault(ctx context.Context, in *client.MethodRef) (*client.Rendered, error) {
+	org, err := orgOf(ctx, "default method")
+	if err != nil {
+		return nil, err
+	}
+	ch, serr := commercebilling.SetDefaultMethod(ctx, org, in.ID, in.Subject)
+	if serr != nil {
+		switch {
+		case commercebilling.IsMethodNotFound(serr):
+			return nil, zip.Errorf(404, "payment method not found")
+		case commercebilling.IsMethodUnchargeable(serr):
+			return nil, zip.Errorf(422, "%v", serr)
+		default:
+			return nil, zip.Errorf(500, "failed to set default payment method")
+		}
+	}
+	return rendered(ch.Method)
+}
+
+// Answers the public plan catalog of the brand a host resolves to, optionally
+// narrowed to one category.
+//
+// It takes no org and needs none: the catalog is what anyone may buy there, so
+// there is nothing to scope and giving it a tenant would invent one. It takes
+// the HOST, because the catalog is the serving brand's — a brand that publishes
+// no plans answers an empty list, never another brand's.
+//
+// The active offer is resolved HERE, in the process that holds the platform row
+// it lives in, and applied to the prices before they leave — so what the catalog
+// quotes is what the checkout will charge. An endpoint that priced this itself
+// would need its own copy of the window rule, and a catalog priced without the
+// offer is a different catalog.
+//
+// A coupon code, when one is asked about, is quoted in the same place for the same
+// reason: each covered paid plan carries what each month the coupon discounts
+// charges under it and how many months that is, every other row why not. Nothing
+// is reserved by a quote, and an empty code leaves the catalog exactly as it was.
+//
+// A named handler, not a closure, so zipdoc can lift this prose into the registry.
+func planePlans(ctx context.Context, in *client.PlansIn) (*client.Rendered, error) {
+	rows, err := commercebilling.ReadPlans(ctx, in.Host, in.Category, promoNow(ctx))
+	if err != nil {
+		return nil, zip.Errorf(500, "failed to list plans")
+	}
+	rows = commercebilling.QuoteCoupon(ctx, rows, in.Coupon)
+	if rows == nil {
+		rows = []commercebilling.PlanView{}
+	}
+	return rendered(rows)
+}
+
+// promoNow is the offer in force, read in the process that holds the platform
+// row it lives in. It is one function so the catalog and a sale cannot price the
+// same plan two ways.
+func promoNow(ctx context.Context) *promo.Promo { return promo.Current(ctx) }
+
+// rendered marshals a store view into the bytes the endpoint forwards.
+//
+// It is the ONE place this file turns a value into a document, so the two
+// rendered families cannot come to encode differently, and a marshal that fails
+// is a 500 rather than an empty body — an empty document is a lie a client will
+// happily parse.
+func rendered(v any) (*client.Rendered, error) {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return nil, zip.Errorf(500, "failed to render answer")
+	}
+	return &client.Rendered{Body: b}, nil
+}

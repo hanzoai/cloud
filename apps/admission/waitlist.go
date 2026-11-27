@@ -1,0 +1,443 @@
+package admission
+
+// The launch-control gate — the COMPLETE waitlist feature, COMPOSING the ONE flag
+// engine (clients/flags) one-way. Decomplected into the two orthogonal axes it always
+// was, with a single decision plane:
+//
+//   - MODE (per service):  waitlist.<svc> IS a platform switch, evaluated through the
+//     flag engine (flags.Bool / flags.SetPlatformSwitch / flags.Register). There is no
+//     second mode store.
+//   - HOST MAP + metadata:  the registry (registry.go) resolves a request host to the
+//     service whose switch governs it, and carries display metadata.
+//
+// The decide is WaitlistModeForHost(host) → (mode, service, known): resolve host→svc,
+// then read waitlist.<svc>. The ingress guard consumes this decide; the admin
+// board (/v1/admin/services) and the guard's runtime mode read (/v1/admission/waitlist,
+// served here) read it too. Per-user approval (pending|approved) is the second,
+// orthogonal axis — IAM's, in approval.go.
+//
+// flags NEVER imports this package; this package imports flags. That one-way arrow is
+// the whole point of the decomplection: the engine is pure, the feature composes it.
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"strconv"
+	"strings"
+	"time"
+
+	"github.com/hanzoai/cloud/apps/flags"
+	"github.com/hanzoai/cloud/sdk"
+	"github.com/hanzoai/cloud/sdk/principal"
+	luxlog "github.com/luxfi/log"
+
+	"github.com/hanzoai/cloud/client"
+	flagsplane "github.com/hanzoai/cloud/client/flag"
+)
+
+// registryState is admission's process-wide launch state: the platform-tenant
+// host→service registry store + the deployment brand it was seeded for. Installed by
+// Mount, torn down by Shutdown.
+type registryState struct {
+	store *cloud.OrgStore[*waitlistStore]
+	brand string
+}
+
+var mounted *registryState
+
+// SeedService is one row of the launch registry (a hosted service + its hosts). Mode
+// is intentionally absent — the launch posture (gated) is waitlistDef's Default "true".
+type SeedService struct {
+	Service     string
+	DisplayName string
+	Description string
+	Hosts       []string
+}
+
+// ServiceInput is the admin onboard/edit payload for /v1/admin/services. WaitlistMode
+// sets the launch switch for a NEW service; a re-register PRESERVES the live switch.
+type ServiceInput struct {
+	// Service is the slug to onboard or edit, lowercased on the way in. Required.
+	// It is the registry key and it names the switch — waitlist.<service> — so a
+	// slug that already exists edits that service rather than creating a second.
+	Service string `json:"service"`
+	// DisplayName is the name the launch board shows. It also titles the switch
+	// ("Waitlist · <displayName>") the first time the service is registered.
+	DisplayName string `json:"displayName"`
+	// Description is one line saying what the service is, for the board.
+	Description string `json:"description"`
+	// Hosts is every request host this service governs — "chat.hanzo.ai",
+	// "hanzo.chat". Each is normalized (lowercased, port stripped) and the set
+	// REPLACES the stored one, so an edit that omits a host stops governing it. A
+	// host another service already claims is skipped: first claim wins.
+	Hosts []string `json:"hosts"`
+	// WaitlistMode is the launch mode for a NEW service: true gates it to approved
+	// users, false opens it. On a re-register it is IGNORED — the live switch is
+	// preserved, so editing the hosts of an opened service never silently closes it.
+	WaitlistMode bool `json:"waitlistMode"`
+}
+
+// ServiceView is one service as the admin board renders it: the registry row plus its
+// LIVE waitlist mode (the waitlist.<svc> switch evaluated through the engine).
+type ServiceView struct {
+	ServiceRow
+	// WaitlistMode is the mode IN FORCE: true means the service is gated to
+	// approved users, false means it is open to anyone. It is read from the
+	// waitlist.<service> switch at the moment of the read, not stored on the
+	// registry row, so it reflects a flip made anywhere in the fleet within one
+	// evaluation TTL.
+	WaitlistMode bool `json:"waitlistMode"`
+}
+
+// waitlistKey is the ONE naming rule: a service's mode is the switch waitlist.<svc>.
+func waitlistKey(svc string) string { return "waitlist." + strings.ToLower(strings.TrimSpace(svc)) }
+
+// waitlistDef is the platform switch for one service's mode. Default "true" = the
+// launch posture (gated until an admin opens it), so a deployment with no stored flag
+// behaves exactly as the old admission seed (waitlistMode ON).
+// waitlistDefault is a service's mode when no operator has set one: GATED. A
+// service registered and not yet opened admits approved users only, which is the
+// safe direction and is the value every read fell back to while the answer could
+// not cross a process boundary.
+const waitlistDefault = true
+
+func waitlistDef(svc, display string) flags.Def {
+	if strings.TrimSpace(display) == "" {
+		display = svc
+	}
+	return flags.Def{
+		Key:      waitlistKey(svc),
+		Category: "Launch",
+		Label:    "Waitlist · " + display,
+		Desc:     "Waitlist mode for " + display + ": ON gates the service to APPROVED users; OFF opens it.",
+		Type:     flags.TypeBool,
+		Default:  strconv.FormatBool(waitlistDefault),
+	}
+}
+
+// ensureWaitlistDef registers a service's switch if it is not already registered
+// (Mount registers the seed set with nicer labels; this covers runtime onboards).
+func ensureWaitlistDef(svc, display string) {
+	key := waitlistKey(svc)
+	for _, d := range flags.Defs() {
+		if d.Key == key {
+			return
+		}
+	}
+	flags.Register(waitlistDef(svc, display))
+}
+
+// boolDef is the minimal PostHog flag definition for a boolean switch value.
+func boolDef(on bool) json.RawMessage {
+	if on {
+		return json.RawMessage(`{"active":true}`)
+	}
+	return json.RawMessage(`{"active":false}`)
+}
+
+// requireRegistry resolves the launch registry store, or an error when the gate is
+// not mounted (writes need it; the decide fail-opens instead).
+//
+// It opens in orgns.Reserved — the deployment's own namespace, the SAME one the
+// flag engine evaluates its platform switches from, so the registry and the
+// waitlist.<svc> switches co-locate. One waitlist.db for the deployment.
+func requireRegistry() (*waitlistStore, error) {
+	if mounted == nil || mounted.store == nil {
+		return nil, fmt.Errorf("admission: waitlist registry not mounted")
+	}
+	ns, err := principal.OrgNamespace(principal.Reserved, principal.Reserved)
+	if err != nil {
+		return nil, err
+	}
+	return mounted.store.For(ns)
+}
+
+// WaitlistModeForHost is THE decide the public read /v1/admission/waitlist and
+// the admin board call: resolve host→service, then read the waitlist.<svc> switch
+// through the flag engine. FAIL-OPEN by construction — an unmounted registry, a store
+// error, or an un-governed host all return known=false, so a request is NEVER gated
+// pre-boot or on a registry fault (availability over a hard gate, matching the guard).
+func WaitlistModeForHost(ctx context.Context, host string) (mode bool, service string, known bool) {
+	st, err := requireRegistry()
+	if err != nil {
+		return false, "", false
+	}
+	svc, known, err := st.ServiceForHost(ctx, host)
+	if err != nil || !known {
+		return false, "", false
+	}
+	// ASKED OF THE APP THAT OWNS THE STORE. flags.Bool read this process's own
+	// registry, which only the flags plugin fills, so it always answered the
+	// definition's Default — gated, which is the safe direction, and which an
+	// operator could therefore never turn OFF.
+	return flagsplane.Bool(ctx, waitlistKey(svc), waitlistDefault), svc, true
+}
+
+// ListWaitlistServices returns the admin board: every registered service with its LIVE
+// mode (the waitlist.<svc> switch). SuperAdmin surface (the caller gates).
+func ListWaitlistServices(ctx context.Context) ([]ServiceView, error) {
+	st, err := requireRegistry()
+	if err != nil {
+		return nil, err
+	}
+	rows, err := st.List(ctx)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]ServiceView, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, ServiceView{ServiceRow: r, WaitlistMode: flagsplane.Bool(ctx, waitlistKey(r.Service), waitlistDefault)})
+	}
+	return out, nil
+}
+
+// SetWaitlistMode flips one service's waitlist switch — the launch lever — and returns
+// the updated view. It is the ONE write path (through the flags app's own write, audited
+// in the flag activity log); the flip is hot (this pod applies immediately, peers
+// converge within the eval TTL). ErrServiceNotFound when the slug is unknown.
+func SetWaitlistMode(ctx context.Context, service string, mode bool, actor string) (ServiceView, error) {
+	service = strings.ToLower(strings.TrimSpace(service))
+	if service == "" {
+		return ServiceView{}, fmt.Errorf("admission: service is required")
+	}
+	st, err := requireRegistry()
+	if err != nil {
+		return ServiceView{}, err
+	}
+	row, err := st.Get(ctx, service) // ErrServiceNotFound → 404 upstream
+	if err != nil {
+		return ServiceView{}, err
+	}
+	ensureWaitlistDef(service, row.DisplayName)
+	if _, err := flagsplane.FlagsSet(ctx, &client.FlagSetIn{
+		Key: waitlistKey(service), Definition: boolDef(mode), Actor: actor,
+	}); err != nil {
+		return ServiceView{}, err
+	}
+	return ServiceView{ServiceRow: row, WaitlistMode: flagsplane.Bool(ctx, waitlistKey(service), waitlistDefault)}, nil
+}
+
+// UpsertWaitlistService onboards or edits a hosted service so a new host is governed
+// WITHOUT a redeploy. A NEW service takes in.WaitlistMode as its launch mode; a
+// re-register PRESERVES the live switch (never silently re-gating an opened service).
+func UpsertWaitlistService(ctx context.Context, in ServiceInput, actor string) (ServiceView, error) {
+	svc := strings.ToLower(strings.TrimSpace(in.Service))
+	if svc == "" {
+		return ServiceView{}, fmt.Errorf("admission: service slug is required")
+	}
+	st, err := requireRegistry()
+	if err != nil {
+		return ServiceView{}, err
+	}
+	_, getErr := st.Get(ctx, svc)
+	isNew := errors.Is(getErr, ErrServiceNotFound)
+	if getErr != nil && !isNew {
+		return ServiceView{}, getErr
+	}
+	row, err := st.Upsert(ctx, ServiceRow{
+		Service:     svc,
+		DisplayName: in.DisplayName,
+		Description: in.Description,
+		Hosts:       in.Hosts,
+	}, actor, time.Now().Unix())
+	if err != nil {
+		return ServiceView{}, err
+	}
+	ensureWaitlistDef(svc, row.DisplayName)
+	if isNew {
+		if _, err := flagsplane.FlagsSet(ctx, &client.FlagSetIn{
+			Key: waitlistKey(svc), Definition: boolDef(in.WaitlistMode), Actor: actor,
+		}); err != nil {
+			return ServiceView{}, err
+		}
+	}
+	return ServiceView{ServiceRow: row, WaitlistMode: flagsplane.Bool(ctx, waitlistKey(svc), waitlistDefault)}, nil
+}
+
+// seedRegistry seeds the registry and registers a waitlist.<svc> switch per known
+// service, COMPOSING the flag engine (flags.Register). Best-effort + fail-safe: a
+// registry error (e.g. cek master key not yet injected) degrades to the in-memory seed
+// switches — the decide then fail-opens, exactly the flag engine's own boot posture.
+// Returns the number of seeded services (for the mount log). Called from Mount.
+func seedRegistry(brand string, log luxlog.Logger) int {
+	seed := seedWaitlist(brand)
+	for _, sv := range seed { // in-memory switches — always succeeds
+		flags.Register(waitlistDef(sv.Service, sv.DisplayName))
+	}
+	st, err := requireRegistry()
+	if err != nil {
+		log.Warn("waitlist registry unavailable — modes degrade to seed defaults", "err", err)
+		return len(seed)
+	}
+	if _, err := st.Seed(context.Background(), seed, time.Now().Unix()); err != nil {
+		log.Warn("waitlist registry seed failed", "err", err)
+		return len(seed)
+	}
+	if rows, err := st.List(context.Background()); err == nil {
+		for _, r := range rows { // register any persisted onboard beyond the seed
+			ensureWaitlistDef(r.Service, r.DisplayName)
+		}
+	}
+	return len(seed)
+}
+
+// waitlistOps is the receiver the waitlist op hangs off. A method value is the only
+// bound form cmd/zipdoc can lift prose from, so the op is a method and not a
+// closure.
+type waitlistOps struct{}
+
+// waitlistQuery addresses ONE host. The host is an ADDRESS, not an identity, so it
+// is an ordinary input rather than something read off the validated principal.
+type waitlistQuery struct {
+	// Host is the host to resolve, e.g. "chat.hanzo.ai". Defaults to the request's
+	// own Host header when omitted, which is what lets a guard running on the
+	// governed host ask about itself with no argument.
+	Host string `json:"host"`
+}
+
+// waitlistModeView is the guard's answer for ONE host.
+type waitlistModeView struct {
+	// Host is the queried host, normalized (lowercased, port stripped).
+	Host string `json:"host"`
+	// Service is the registered service that governs this host, empty when none does.
+	Service string `json:"service"`
+	// WaitlistMode is true when the service is GATED to approved users, false when
+	// it is open. Always false for an ungoverned host.
+	WaitlistMode bool `json:"waitlistMode"`
+	// Known is false when no registered service claims this host, or when the
+	// registry is unavailable — the guard then lets the request through, which is
+	// why the two cases answer alike.
+	Known bool `json:"known"`
+}
+
+// WaitlistMode reports whether ONE host is currently gated by the launch waitlist.
+// It resolves the host to the service that governs it and reads that service's
+// waitlist switch, so a guard sitting in front of a hosted surface can decide in one
+// call whether to show the waitlist or the product. It answers for the ONE host
+// asked about and never enumerates the registry, which is why it needs no
+// credential. It FAILS OPEN: an unregistered host, an unmounted registry and a store
+// fault all answer known=false with mode=false, so a request is never gated pre-boot
+// or on a registry fault.
+func (waitlistOps) mode(ctx context.Context, in *waitlistQuery) (*waitlistModeView, error) {
+	host := strings.TrimSpace(in.Host)
+	if host == "" {
+		host = requestHost(ctx)
+	}
+	mode, service, known := WaitlistModeForHost(ctx, host)
+	return &waitlistModeView{
+		Host:         NormalizeHost(host),
+		Service:      service,
+		WaitlistMode: mode,
+		Known:        known,
+	}, nil
+}
+
+// requestHost is the host the request itself was addressed to — the default this
+// route has always used when ?host= is omitted. It is a property of the REQUEST and
+// of nothing else, so it is read from the request rather than modeled as a second In
+// field a caller could set. Empty off the HTTP path, where there is no request and
+// therefore no host, which resolves to known=false — the same fail-open answer an
+// unregistered host gets.
+func requestHost(ctx context.Context) string {
+	c, ok := cloud.Request(ctx)
+	if !ok {
+		return ""
+	}
+	return c.Fiber().Hostname()
+}
+
+// ── lifecycle ────────────────────────────────────────────────────────────────
+
+// Mount installs the launch-control gate: it opens the platform-tenant host→service
+// registry, seeds it for the deployment brand, registers a waitlist.<svc> switch per
+// service in the flag engine (flags.Register), and serves the guard's public mode read
+// at /v1/admission/waitlist. Fail-safe: a registry error (e.g. cek master key not yet
+// injected) degrades to the in-memory seed switches — WaitlistModeForHost then
+// fail-opens. Mounts AFTER flags so the engine's platform-switch plane is installed first.
+func Use(app cloud.Router, deps cloud.Deps) error {
+	if cloud.DataDir() == "" {
+		return fmt.Errorf("admission.Use:  empty cloud.DataDir()")
+	}
+	b := cloud.NewBase(deps, "admission")
+	log := b.Log
+	mounted = &registryState{
+		store: cloud.NewOrgStore[*waitlistStore](b, "waitlist", openWaitlistStore),
+		brand: cloud.Brand(),
+	}
+	n := seedRegistry(cloud.Brand(), log)
+	g := app.Group("/v1/admission")
+	// The guard's public runtime mode read (host→service→waitlist.<svc>), one namespace
+	// under /v1/flag. It is what the ingress guard asks, and it is exempt from the
+	// guard's own gating so a user on the waitlist can still resolve mode.
+	//
+	// A typed op receives only a context, so the request the ?host= default falls
+	// back to reaches it from that context. Whoever composes the app parks it there,
+	// at the root, ahead of every leaf; this surface installs no middleware of its
+	// own. One that it installed for itself could only hang on a /v1/admission/waitlist
+	// node, and the leaf below registers through the root, so that node would carry
+	// middleware over an empty subtree and zip refuses to compose it.
+	g.Get("/waitlist", waitlistOps{}.mode)
+	log.Info("admission gate ready", "services", n)
+	return nil
+}
+
+// zipdoc lifts the doc comment off each typed op and its In/Out fields into
+// zipdoc_gen.go, which is the ONLY way that prose reaches the published document
+// and the MCP tool list — Go drops comments at compile time.
+//
+//go:generate go run github.com/zap-proto/zip/cmd/zipdoc
+
+// Shutdown closes the launch registry's per-org store handles.
+func Shutdown() error {
+	if mounted == nil || mounted.store == nil {
+		return nil
+	}
+	return mounted.store.CloseAll()
+}
+
+// ── brand seed (moved verbatim from the former flags/waitlist.go) ────────────────
+
+// seedWaitlist returns the launch registry for a brand. White-labeled so a Lux/Zoo/Pars
+// deployment governs its OWN hosts. New hosted services onboard at runtime via
+// POST /v1/admin/services (no redeploy). admin.<brand> is deliberately NOT seeded (it
+// is admin-guarded, not a waitlist surface).
+func seedWaitlist(brand string) []SeedService {
+	d := domainFor(brand)
+	return []SeedService{
+		{Service: "studio", DisplayName: "Studio", Description: "AI app studio", Hosts: []string{"studio." + d}},
+		{Service: "chat", DisplayName: "Chat", Description: "AI chat", Hosts: hostsFor(brand, "chat", "chat."+d)},
+		{Service: "console", DisplayName: "Console", Description: "Cloud console", Hosts: []string{"console." + d}},
+		{Service: "app", DisplayName: "App", Description: "App builder", Hosts: hostsFor(brand, "app", "app."+d)},
+		{Service: "api", DisplayName: "API", Description: "Inference API gateway", Hosts: []string{"api." + d}},
+		{Service: "team", DisplayName: "Team", Description: "Team space", Hosts: hostsFor(brand, "team", "team."+d)},
+	}
+}
+
+// domainFor maps a brand to its primary domain. Defaults to hanzo.ai.
+func domainFor(brand string) string {
+	switch strings.ToLower(strings.TrimSpace(brand)) {
+	case "lux":
+		return "lux.network"
+	case "zoo":
+		return "zoo.ngo"
+	case "pars":
+		return "pars.network"
+	default:
+		return "hanzo.ai"
+	}
+}
+
+// hostsFor returns the apex-brand host (hanzo.chat / zoo.chat style) plus the
+// <label>.<domain> alias when the brand ships an apex-label domain; else just the alias.
+func hostsFor(brand, label, alias string) []string {
+	switch strings.ToLower(strings.TrimSpace(brand)) {
+	case "", "hanzo":
+		return []string{"hanzo." + label, alias}
+	case "zoo":
+		return []string{"zoo." + label, alias}
+	default:
+		return []string{alias}
+	}
+}

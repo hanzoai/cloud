@@ -1,0 +1,2683 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Hanzo Cloud API",
+    "description": "Package studio is Hanzo Studio's workflow backend: every creation — an image, a poster, a document, a deck, a type system, a 3D model, an ad, a film, a voice, a song — is a run of a graph of steps that the person who started it owns.",
+    "version": "v1"
+  },
+  "servers": [
+    {
+      "url": "https://api.hanzo.ai"
+    }
+  ],
+  "security": [
+    {
+      "bearer": []
+    }
+  ],
+  "tags": [
+    {
+      "name": "studio"
+    }
+  ],
+  "paths": {
+    "/v1/studio/brands": {
+      "get": {
+        "operationId": "get_studio_brands",
+        "summary": "Lists the brands you may read — palettes and type systems as design tokens.",
+        "description": "Lists the brands you may read — palettes and type systems as design tokens.",
+        "tags": [
+          "studio"
+        ],
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Limit is how many rows one page holds, 1 to 100 (default 50).",
+            "schema": {
+              "format": "int64",
+              "type": "integer"
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "description": "Cursor is the previous page's next.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/studio.BrandPage"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      },
+      "post": {
+        "operationId": "post_studio_brands",
+        "summary": "Saves a brand: its tokens in the W3C design-token format (color, font, type, space, radius groups) and up to 16 logo items.",
+        "description": "Saves a brand: its tokens in the W3C design-token format (color, font, type,\nspace, radius groups) and up to 16 logo items. A run started with it reads the\ntokens as brand.*.",
+        "tags": [
+          "studio"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "name": "Acme",
+                "tokens": {
+                  "color": {
+                    "primary": {
+                      "$type": "color",
+                      "$value": "#ff5a1f"
+                    }
+                  }
+                }
+              },
+              "schema": {
+                "$ref": "#/components/schemas/studio.BrandWrite"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/studio.Brand"
+                }
+              }
+            },
+            "description": "created"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/studio/brands/{id}": {
+      "delete": {
+        "operationId": "delete_studio_brands_by_id",
+        "summary": "Deletes one of your brands.",
+        "description": "Deletes one of your brands.",
+        "tags": [
+          "studio"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the resource's id, from the path.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "no content"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      },
+      "get": {
+        "operationId": "get_studio_brands_by_id",
+        "summary": "Reads one brand you may read.",
+        "description": "Reads one brand you may read.",
+        "tags": [
+          "studio"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the resource's id, from the path.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/studio.Brand"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      },
+      "patch": {
+        "operationId": "patch_studio_brands_by_id",
+        "summary": "Changes one of your brands; absent fields stay as they are.",
+        "description": "Changes one of your brands; absent fields stay as they are.",
+        "tags": [
+          "studio"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/studio.BrandPatch"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/studio.Brand"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/studio/chat": {
+      "post": {
+        "operationId": "post_studio_chat",
+        "summary": "One chat turn that plans and launches runs, streamed",
+        "description": "Sends one message in a thread (a new thread when `thread` is absent). The assistant answers in text and, when the message asks for something to be made, plans it as runs and starts them; each is exactly the run POST /v1/studio/runs would start, checked and paid for the same way.\n\nAnswers text/event-stream: `thread` {thread} first; `delta` {text} as the answer is written; `run` {seq, run} for each run the turn started (follow it on its own events); `error` (a problem document) when a planned run could not start — a wallet that cannot cover it is status 402 — and the turn goes on; `done` {thread, message, runs} last, with the stored message. 402 before the stream when the wallet cannot pay for the turn itself.",
+        "tags": [
+          "studio"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChatTurn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "2XX": {
+            "description": "Success",
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          }
+        },
+        "x-public": true
+      }
+    },
+    "/v1/studio/documents": {
+      "get": {
+        "operationId": "get_studio_documents",
+        "summary": "Lists the documents and decks you may read, most recently changed first.",
+        "description": "Lists the documents and decks you may read, most recently changed first.",
+        "tags": [
+          "studio"
+        ],
+        "parameters": [
+          {
+            "name": "kind",
+            "in": "query",
+            "required": false,
+            "description": "Kind is doc or deck.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "format": "int64",
+              "type": "integer"
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/studio.DocumentPage"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      },
+      "post": {
+        "operationId": "post_studio_documents",
+        "summary": "Writes a document (kind doc, its IR blocks) or a deck (kind deck, its slides).",
+        "description": "Writes a document (kind doc, its IR blocks) or a deck (kind deck, its slides).\nRender it with a run: template document or slides, input.document its id.",
+        "tags": [
+          "studio"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "ir": {
+                  "slides": [
+                    {
+                      "layout": "title",
+                      "title": "Q3 review"
+                    }
+                  ]
+                },
+                "kind": "deck",
+                "title": "Q3 review"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/studio.DocumentWrite"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/studio.Document"
+                }
+              }
+            },
+            "description": "created"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/studio/documents/{id}": {
+      "delete": {
+        "operationId": "delete_studio_documents_by_id",
+        "summary": "Deletes one of your documents.",
+        "description": "Deletes one of your documents.",
+        "tags": [
+          "studio"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the resource's id, from the path.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "no content"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      },
+      "get": {
+        "operationId": "get_studio_documents_by_id",
+        "summary": "Reads one document you may read.",
+        "description": "Reads one document you may read.",
+        "tags": [
+          "studio"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the resource's id, from the path.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/studio.Document"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      },
+      "patch": {
+        "operationId": "patch_studio_documents_by_id",
+        "summary": "Changes one of your documents; absent fields stay as they are.",
+        "description": "Changes one of your documents; absent fields stay as they are.",
+        "tags": [
+          "studio"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/studio.DocumentPatch"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/studio.Document"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/studio/estimate": {
+      "post": {
+        "operationId": "post_studio_estimate",
+        "summary": "Prices a run without starting it: the estimate POST /v1/studio/runs would reserve, step by step.",
+        "description": "Prices a run without starting it: the estimate POST /v1/studio/runs would\nreserve, step by step. Nothing is reserved and nothing runs.",
+        "tags": [
+          "studio"
+        ],
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/studio.RunCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/studio.Estimate"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/studio/flows": {
+      "get": {
+        "operationId": "get_studio_flows",
+        "summary": "Lists the flows you may read, most recently changed first.",
+        "description": "Lists the flows you may read, most recently changed first.",
+        "tags": [
+          "studio"
+        ],
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Limit is how many rows one page holds, 1 to 100 (default 50).",
+            "schema": {
+              "format": "int64",
+              "type": "integer"
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "description": "Cursor is the previous page's next.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/studio.FlowPage"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      },
+      "post": {
+        "operationId": "post_studio_flows",
+        "summary": "Saves a graph as a flow of yours.",
+        "description": "Saves a graph as a flow of yours. Start it with POST /v1/studio/runs {\"flow\": id}.",
+        "tags": [
+          "studio"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/studio.FlowWrite"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/studio.Flow"
+                }
+              }
+            },
+            "description": "created"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/studio/flows/{id}": {
+      "delete": {
+        "operationId": "delete_studio_flows_by_id",
+        "summary": "Deletes one of your flows.",
+        "description": "Deletes one of your flows.",
+        "tags": [
+          "studio"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the resource's id, from the path.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "no content"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      },
+      "get": {
+        "operationId": "get_studio_flows_by_id",
+        "summary": "Reads one flow you may read.",
+        "description": "Reads one flow you may read.",
+        "tags": [
+          "studio"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the resource's id, from the path.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/studio.Flow"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      },
+      "patch": {
+        "operationId": "patch_studio_flows_by_id",
+        "summary": "Changes one of your flows; absent fields stay as they are.",
+        "description": "Changes one of your flows; absent fields stay as they are.",
+        "tags": [
+          "studio"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/studio.FlowPatch"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/studio.Flow"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/studio/gpus": {
+      "get": {
+        "operationId": "get_studio_gpus",
+        "summary": "Lists the GPUs your org has linked with `hanzo link` that can take a studio.render step, each with whether it is free now.",
+        "description": "Lists the GPUs your org has linked with `hanzo link` that can take a\nstudio.render step, each with whether it is free now. With none online, a\nstudio.render step waits in the queue.",
+        "tags": [
+          "studio"
+        ],
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Limit is how many rows one page holds, 1 to 100 (default 50).",
+            "schema": {
+              "format": "int64",
+              "type": "integer"
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "description": "Cursor is the previous page's next.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/studio.GpuList"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/studio/render/{wildcard1}": {
+      "post": {
+        "operationId": "post_studio_render_by_wildcard1",
+        "summary": "The render lane's door, for Studio's render workers alone",
+        "description": "The CPU render workers claim render jobs here, heartbeat them, ask for the upload of the one file a job makes, and complete or fail them: the durable engine's own activity verbs, for the render lane only. Admits the render workload's identity and answers 403 to every other caller, a person included.",
+        "tags": [
+          "studio"
+        ],
+        "parameters": [
+          {
+            "name": "wildcard1",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/studio/runs": {
+      "get": {
+        "operationId": "get_studio_runs",
+        "summary": "Lists the runs you may read — your own and those your org shares — newest first.",
+        "description": "Lists the runs you may read — your own and those your org shares — newest\nfirst. Filter by kind or status.",
+        "tags": [
+          "studio"
+        ],
+        "parameters": [
+          {
+            "name": "kind",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "description": "Status keeps only runs at this status.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "format": "int64",
+              "type": "integer"
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/studio.RunPage"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      },
+      "post": {
+        "operationId": "post_studio_runs",
+        "summary": "Starts a run: name exactly one of template, flow or graph, with the input its inputs schema asks for.",
+        "description": "Starts a run: name exactly one of template, flow or graph, with the input its\ninputs schema asks for. The run is checked, priced and its estimate reserved\nagainst your org's wallet, then queued; the answer is the run at queued. Follow\nit on GET /v1/studio/runs/{id}/events.\n\nparent makes this run the next version of that run: it takes the parent's graph\nand input, overlaid by what this request states. Send Idempotency-Key to make a\nretried request start one run, not two. 402 when the wallet cannot cover the\nestimate; 422 when the graph or input does not validate.",
+        "tags": [
+          "studio"
+        ],
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "input": {
+                  "prompt": "a lighthouse at dawn, risograph"
+                },
+                "template": "image"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/studio.RunCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/studio.Run"
+                }
+              }
+            },
+            "description": "created"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/studio/runs/{id}": {
+      "get": {
+        "operationId": "get_studio_runs_by_id",
+        "summary": "Reads one run: its graph, its input, every step's state, the assets it made and what it cost.",
+        "description": "Reads one run: its graph, its input, every step's state, the assets it made\nand what it cost. A run you may not read answers 404.",
+        "tags": [
+          "studio"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the resource's id, from the path.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/studio.Run"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      },
+      "patch": {
+        "operationId": "patch_studio_runs_by_id",
+        "summary": "Renames or shares one of your runs.",
+        "description": "Renames or shares one of your runs. Sharing a run lets every member of your\norg read it; its files are Library items, shared from the Library.",
+        "tags": [
+          "studio"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/studio.RunPatch"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/studio.Run"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/studio/runs/{id}/cancel": {
+      "post": {
+        "operationId": "post_studio_runs_by_id_cancel",
+        "summary": "Cancels one of your runs: a step in flight is told to stop, nothing new starts, and the reservation settles to what finished steps cost.",
+        "description": "Cancels one of your runs: a step in flight is told to stop, nothing new\nstarts, and the reservation settles to what finished steps cost. Cancelling a\nrun that already ended answers it unchanged.",
+        "tags": [
+          "studio"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the resource's id, from the path.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/studio.Run"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/studio/runs/{id}/events": {
+      "get": {
+        "operationId": "get_studio_runs_by_id_events",
+        "summary": "Stream a run's progress as Server-Sent Events",
+        "description": "Holds text/event-stream open on one run you may read and writes one frame per change until the run ends, then a final `done` frame, and closes. Every frame carries `id:`, the event's sequence number in the run, so a client that reconnects with Last-Event-ID (or ?after=) receives exactly what it missed. A run that already ended replays its events and closes.\n\nFrames (`event:` name, `data:` JSON): `run` {seq, run} on a status change; `step` {seq, run, step} when a step's status, attempt or progress moves; `asset` {seq, run, step, asset} when an output lands, as its Library item with fresh signed URLs; `log` {seq, run, step, text}; `done` {seq, run} when the run ended (succeeded, failed or canceled). Each carries the run, step or asset as it is now. A `: ping` comment every 15 seconds keeps intermediaries from closing the stream.\n\nAuthenticate with `Authorization: Bearer` (a fetch-based reader; a browser EventSource cannot set it) or the session cookie. 404 for a run you may not read; 429 when your org already holds 64 streams.",
+        "tags": [
+          "studio"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "2XX": {
+            "description": "Success",
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          }
+        },
+        "x-public": true
+      }
+    },
+    "/v1/studio/runs/{id}/retry": {
+      "post": {
+        "operationId": "post_studio_runs_by_id_retry",
+        "summary": "Resumes one of your runs that failed or was cancelled: the steps that did not succeed run again in the same run, and the steps that did keep their outputs and are neither run nor charged again.",
+        "description": "Resumes one of your runs that failed or was cancelled: the steps that did not\nsucceed run again in the same run, and the steps that did keep their outputs\nand are neither run nor charged again. What is left to run is reserved first\n(402 when it cannot be); 409 while the run is still going or once it succeeded.",
+        "tags": [
+          "studio"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the resource's id, from the path.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/studio.Run"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/studio/runs/{id}/versions": {
+      "get": {
+        "operationId": "get_studio_runs_by_id_versions",
+        "summary": "Lists every version of a creation you may read — the runs in this run's lineage — oldest (version 1) first.",
+        "description": "Lists every version of a creation you may read — the runs in this run's\nlineage — oldest (version 1) first.",
+        "tags": [
+          "studio"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the resource's id, from the path.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/studio.RunPage"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/studio/templates": {
+      "get": {
+        "operationId": "get_studio_templates",
+        "summary": "Lists templates: the public catalog (org empty) first, then your org's own that you may read.",
+        "description": "Lists templates: the public catalog (org empty) first, then your org's own\nthat you may read. Filter by kind. A cursor pages your org's templates.",
+        "tags": [
+          "studio"
+        ],
+        "parameters": [
+          {
+            "name": "kind",
+            "in": "query",
+            "required": false,
+            "description": "Kind keeps only templates that make this: image, poster, document, slides,\ntype, model, ad, video, film, voice, music or other.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "format": "int64",
+              "type": "integer"
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/studio.TemplatePage"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      },
+      "post": {
+        "operationId": "post_studio_templates",
+        "summary": "Saves a template to your org: a graph and the inputs schema its runs are started with.",
+        "description": "Saves a template to your org: a graph and the inputs schema its runs are\nstarted with. It is yours until you share it.",
+        "tags": [
+          "studio"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "graph": {
+                  "steps": [
+                    {
+                      "id": "html",
+                      "op": "chat",
+                      "with": {
+                        "prompt": "{{input.brief}}"
+                      }
+                    }
+                  ]
+                },
+                "kind": "poster",
+                "title": "Event poster"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/studio.TemplateWrite"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/studio.Template"
+                }
+              }
+            },
+            "description": "created"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/studio/templates/{id}": {
+      "delete": {
+        "operationId": "delete_studio_templates_by_id",
+        "summary": "Deletes one of your templates.",
+        "description": "Deletes one of your templates.",
+        "tags": [
+          "studio"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the resource's id, from the path.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "no content"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      },
+      "get": {
+        "operationId": "get_studio_templates_by_id",
+        "summary": "Reads one template: a catalog slug or one of your org's templates you may read.",
+        "description": "Reads one template: a catalog slug or one of your org's templates you may read.",
+        "tags": [
+          "studio"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the resource's id, from the path.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/studio.Template"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      },
+      "patch": {
+        "operationId": "patch_studio_templates_by_id",
+        "summary": "Changes one of your templates; absent fields stay as they are.",
+        "description": "Changes one of your templates; absent fields stay as they are. Catalog\ntemplates cannot be changed.",
+        "tags": [
+          "studio"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/studio.TemplatePatch"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/studio.Template"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/studio/threads": {
+      "get": {
+        "operationId": "get_studio_threads",
+        "summary": "Lists your chat threads, most recent first.",
+        "description": "Lists your chat threads, most recent first.",
+        "tags": [
+          "studio"
+        ],
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Limit is how many rows one page holds, 1 to 100 (default 50).",
+            "schema": {
+              "format": "int64",
+              "type": "integer"
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "description": "Cursor is the previous page's next.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/studio.ThreadPage"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/studio/threads/{id}": {
+      "delete": {
+        "operationId": "delete_studio_threads_by_id",
+        "summary": "Deletes one of your threads.",
+        "description": "Deletes one of your threads. Its runs and their files stay.",
+        "tags": [
+          "studio"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the resource's id, from the path.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "no content"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      },
+      "get": {
+        "operationId": "get_studio_threads_by_id",
+        "summary": "Reads one of your threads and its messages, oldest first.",
+        "description": "Reads one of your threads and its messages, oldest first.",
+        "tags": [
+          "studio"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the resource's id, from the path.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/studio.Thread"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "ChatTurn": {
+        "type": "object",
+        "properties": {
+          "assets": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "brand": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          },
+          "model": {
+            "type": "string"
+          },
+          "thread": {
+            "type": "string"
+          }
+        }
+      },
+      "problem-details": {
+        "description": "An RFC 9457 problem document.",
+        "properties": {
+          "code": {
+            "description": "A stable token a client can branch on, when the refusal names one.",
+            "type": "string"
+          },
+          "detail": {
+            "description": "What was refused, for a person to read.",
+            "type": "string"
+          },
+          "status": {
+            "description": "The HTTP status.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "title": {
+            "description": "The status's reason phrase.",
+            "type": "string"
+          },
+          "type": {
+            "description": "about:blank",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "status",
+          "detail"
+        ],
+        "type": "object"
+      },
+      "studio.Brand": {
+        "properties": {
+          "created": {
+            "type": "string"
+          },
+          "creator": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "logos": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "name": {
+            "type": "string"
+          },
+          "org": {
+            "type": "string"
+          },
+          "shared": {
+            "type": "boolean"
+          },
+          "tokens": {
+            "additionalProperties": {},
+            "type": "object"
+          },
+          "updated": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "studio.BrandPage": {
+        "properties": {
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/studio.Brand"
+            },
+            "type": "array"
+          },
+          "next": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "studio.BrandPatch": {
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "logos": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "name": {
+            "type": "string"
+          },
+          "shared": {
+            "type": "boolean"
+          },
+          "tokens": {
+            "additionalProperties": {},
+            "type": "object"
+          }
+        },
+        "type": "object"
+      },
+      "studio.BrandWrite": {
+        "properties": {
+          "logos": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "name": {
+            "type": "string"
+          },
+          "shared": {
+            "type": "boolean"
+          },
+          "tokens": {
+            "additionalProperties": {},
+            "type": "object"
+          }
+        },
+        "type": "object"
+      },
+      "studio.Document": {
+        "properties": {
+          "brand": {
+            "type": "string"
+          },
+          "created": {
+            "type": "string"
+          },
+          "creator": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "ir": {
+            "$ref": "#/components/schemas/studio.IR"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "org": {
+            "type": "string"
+          },
+          "shared": {
+            "type": "boolean"
+          },
+          "title": {
+            "type": "string"
+          },
+          "updated": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "studio.DocumentPage": {
+        "properties": {
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/studio.Document"
+            },
+            "type": "array"
+          },
+          "next": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "studio.DocumentPatch": {
+        "properties": {
+          "brand": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "ir": {
+            "$ref": "#/components/schemas/studio.IR"
+          },
+          "shared": {
+            "type": "boolean"
+          },
+          "title": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "studio.DocumentWrite": {
+        "properties": {
+          "brand": {
+            "type": "string"
+          },
+          "ir": {
+            "$ref": "#/components/schemas/studio.IR"
+          },
+          "kind": {
+            "description": "Kind is doc or deck.",
+            "type": "string"
+          },
+          "shared": {
+            "type": "boolean"
+          },
+          "title": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "studio.Estimate": {
+        "properties": {
+          "cents": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "steps": {
+            "items": {
+              "$ref": "#/components/schemas/studio.StepPrice"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "studio.Flow": {
+        "properties": {
+          "created": {
+            "type": "string"
+          },
+          "creator": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "graph": {
+            "$ref": "#/components/schemas/studio.Graph"
+          },
+          "id": {
+            "type": "string"
+          },
+          "inputs": {
+            "additionalProperties": {},
+            "type": "object"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "org": {
+            "type": "string"
+          },
+          "shared": {
+            "type": "boolean"
+          },
+          "updated": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "studio.FlowPage": {
+        "properties": {
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/studio.Flow"
+            },
+            "type": "array"
+          },
+          "next": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "studio.FlowPatch": {
+        "properties": {
+          "description": {
+            "type": "string"
+          },
+          "graph": {
+            "$ref": "#/components/schemas/studio.Graph"
+          },
+          "id": {
+            "type": "string"
+          },
+          "inputs": {
+            "additionalProperties": {},
+            "type": "object"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "shared": {
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
+      "studio.FlowWrite": {
+        "properties": {
+          "description": {
+            "type": "string"
+          },
+          "graph": {
+            "$ref": "#/components/schemas/studio.Graph"
+          },
+          "inputs": {
+            "additionalProperties": {},
+            "type": "object"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "shared": {
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
+      "studio.Gpu": {
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "machine": {
+            "type": "string"
+          },
+          "name": {
+            "description": "Name is the device, as its worker reports it.",
+            "type": "string"
+          },
+          "owner": {
+            "description": "Owner is org (linked by your org with hanzo link) or platform.",
+            "type": "string"
+          },
+          "seen": {
+            "description": "Seen is its worker's last heartbeat.",
+            "type": "string"
+          },
+          "status": {
+            "description": "Status is idle, busy or offline.",
+            "type": "string"
+          },
+          "vram_mb": {
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "studio.GpuList": {
+        "properties": {
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/studio.Gpu"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "studio.Graph": {
+        "properties": {
+          "steps": {
+            "description": "Steps are the graph's steps, 1 to 64 of them.",
+            "items": {
+              "$ref": "#/components/schemas/studio.Spec"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "studio.IR": {
+        "properties": {
+          "blocks": {
+            "items": {
+              "additionalProperties": {},
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "slides": {
+            "items": {
+              "additionalProperties": {},
+              "type": "object"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "studio.Item": {
+        "properties": {
+          "bytes": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "created": {
+            "type": "string"
+          },
+          "download": {
+            "type": "string"
+          },
+          "expires": {
+            "type": "string"
+          },
+          "height": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "id": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "mime": {
+            "type": "string"
+          },
+          "mine": {
+            "type": "boolean"
+          },
+          "name": {
+            "type": "string"
+          },
+          "origin": {
+            "type": "string"
+          },
+          "owner": {
+            "type": "string"
+          },
+          "pages": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "preview": {
+            "type": "string"
+          },
+          "ref": {
+            "type": "string"
+          },
+          "seconds": {
+            "format": "double",
+            "type": "number"
+          },
+          "shared": {
+            "type": "boolean"
+          },
+          "source": {
+            "type": "string"
+          },
+          "url": {
+            "description": "URL opens the file inline; Download saves it; Preview is its still.",
+            "type": "string"
+          },
+          "width": {
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "studio.Message": {
+        "properties": {
+          "assets": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "created": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "role": {
+            "type": "string"
+          },
+          "runs": {
+            "description": "Runs are the runs this message started.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "text": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "studio.Problem": {
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "detail": {
+            "type": "string"
+          },
+          "status": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "title": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "studio.Run": {
+        "properties": {
+          "brand": {
+            "type": "string"
+          },
+          "charged_cents": {
+            "description": "ChargedCents is what the finished steps cost; final once the run ends.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "created": {
+            "type": "string"
+          },
+          "creator": {
+            "type": "string"
+          },
+          "error": {
+            "$ref": "#/components/schemas/studio.Problem"
+          },
+          "estimate_cents": {
+            "description": "EstimateCents is what was reserved when the run started.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "finished": {
+            "type": "string"
+          },
+          "flow": {
+            "type": "string"
+          },
+          "graph": {
+            "$ref": "#/components/schemas/studio.Graph"
+          },
+          "id": {
+            "type": "string"
+          },
+          "input": {
+            "additionalProperties": {},
+            "description": "Input is what the run was given, as its inputs schema reads it.",
+            "type": "object"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "org": {
+            "type": "string"
+          },
+          "outputs": {
+            "description": "Outputs are the Library items the run made, the final steps' first.",
+            "items": {
+              "$ref": "#/components/schemas/studio.Item"
+            },
+            "type": "array"
+          },
+          "parent": {
+            "type": "string"
+          },
+          "root": {
+            "description": "Root is the first version's id; equal to id on version 1.",
+            "type": "string"
+          },
+          "shared": {
+            "type": "boolean"
+          },
+          "started": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "steps": {
+            "items": {
+              "$ref": "#/components/schemas/studio.Step"
+            },
+            "type": "array"
+          },
+          "template": {
+            "type": "string"
+          },
+          "text": {
+            "description": "Text is the last chat step's text, when the run's product is words.",
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "version": {
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "studio.RunCreate": {
+        "properties": {
+          "brand": {
+            "description": "Brand is a brand id; its tokens are brand.* in the graph.",
+            "type": "string"
+          },
+          "flow": {
+            "description": "Flow is a flow id.",
+            "type": "string"
+          },
+          "graph": {
+            "$ref": "#/components/schemas/studio.Graph"
+          },
+          "input": {
+            "additionalProperties": {},
+            "description": "Input are the values the inputs schema asks for.",
+            "type": "object"
+          },
+          "parent": {
+            "description": "Parent makes this run the next version of that run.",
+            "type": "string"
+          },
+          "shared": {
+            "type": "boolean"
+          },
+          "template": {
+            "description": "Template is a template id.",
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "studio.RunPage": {
+        "properties": {
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/studio.Run"
+            },
+            "type": "array"
+          },
+          "next": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "studio.RunPatch": {
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "shared": {
+            "type": "boolean"
+          },
+          "title": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "studio.Spec": {
+        "properties": {
+          "each": {
+            "description": "Each fans the step out: a {{path}} naming an array, run once per item (at\nmost 64), its outputs the items' outputs in order.",
+            "type": "string"
+          },
+          "id": {
+            "description": "ID names the step within its graph: a lowercase letter, then up to 31\nlowercase letters, digits or underscores.",
+            "type": "string"
+          },
+          "op": {
+            "description": "Op is what the step does: chat, image.generate, image.edit, voice.speak,\nmusic.generate, video.generate, model.generate, studio.render, render.html,\nrender.document, render.slides, render.composition or video.edit.",
+            "type": "string"
+          },
+          "title": {
+            "description": "Title is what a person sees for the step.",
+            "type": "string"
+          },
+          "with": {
+            "additionalProperties": {},
+            "description": "With are the op's parameters. Values may reference other steps.",
+            "type": "object"
+          }
+        },
+        "type": "object"
+      },
+      "studio.Step": {
+        "properties": {
+          "attempt": {
+            "description": "Attempt is how many times the step has started.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "cost_cents": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "error": {
+            "$ref": "#/components/schemas/studio.Problem"
+          },
+          "executor": {
+            "description": "Executor is where the step runs: gateway, studio.render, render or flow.run.",
+            "type": "string"
+          },
+          "finished": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "items": {
+            "description": "Items is how many items a step with each fanned out to.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "message": {
+            "description": "Message is what the step is doing now, for a person.",
+            "type": "string"
+          },
+          "op": {
+            "type": "string"
+          },
+          "outputs": {
+            "description": "Outputs are the Library item ids the step made.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "progress": {
+            "format": "double",
+            "type": "number"
+          },
+          "started": {
+            "type": "string"
+          },
+          "status": {
+            "description": "Status is pending, queued, running, succeeded, failed, canceled or skipped.",
+            "type": "string"
+          },
+          "text": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "studio.StepPrice": {
+        "properties": {
+          "cents": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "id": {
+            "type": "string"
+          },
+          "op": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "studio.Template": {
+        "properties": {
+          "created": {
+            "type": "string"
+          },
+          "creator": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "graph": {
+            "$ref": "#/components/schemas/studio.Graph"
+          },
+          "id": {
+            "description": "ID is a catalog slug (image, poster) or an org template's id.",
+            "type": "string"
+          },
+          "inputs": {
+            "additionalProperties": {},
+            "type": "object"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "org": {
+            "type": "string"
+          },
+          "preview": {
+            "description": "Preview is an asset id or https URL of a still that shows what it makes.",
+            "type": "string"
+          },
+          "shared": {
+            "type": "boolean"
+          },
+          "title": {
+            "type": "string"
+          },
+          "updated": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "studio.TemplatePage": {
+        "properties": {
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/studio.Template"
+            },
+            "type": "array"
+          },
+          "next": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "studio.TemplatePatch": {
+        "properties": {
+          "description": {
+            "type": "string"
+          },
+          "graph": {
+            "$ref": "#/components/schemas/studio.Graph"
+          },
+          "id": {
+            "type": "string"
+          },
+          "inputs": {
+            "additionalProperties": {},
+            "type": "object"
+          },
+          "preview": {
+            "type": "string"
+          },
+          "shared": {
+            "type": "boolean"
+          },
+          "title": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "studio.TemplateWrite": {
+        "properties": {
+          "description": {
+            "type": "string"
+          },
+          "graph": {
+            "$ref": "#/components/schemas/studio.Graph"
+          },
+          "inputs": {
+            "additionalProperties": {},
+            "type": "object"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "preview": {
+            "type": "string"
+          },
+          "shared": {
+            "type": "boolean"
+          },
+          "title": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "studio.Thread": {
+        "properties": {
+          "created": {
+            "type": "string"
+          },
+          "creator": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "messages": {
+            "items": {
+              "$ref": "#/components/schemas/studio.Message"
+            },
+            "type": "array"
+          },
+          "org": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "updated": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "studio.ThreadCard": {
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "updated": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "studio.ThreadPage": {
+        "properties": {
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/studio.ThreadCard"
+            },
+            "type": "array"
+          },
+          "next": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      }
+    },
+    "securitySchemes": {
+      "bearer": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "The caller's credential, sent as `Authorization: Bearer \u003ctoken\u003e`. It is either an access token minted by Hanzo IAM or an API key (pk-/sk-). X-Authorization, and HTTP Basic carrying the token as the password, are accepted spellings of the same header for clients that cannot set Authorization; a browser presents the session cookie instead. Every operation requires it unless it says `security: []`."
+      }
+    }
+  }
+}

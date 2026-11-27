@@ -1,0 +1,228 @@
+package projects
+
+import (
+	"context"
+	"github.com/hanzoai/cloud/sdk/object"
+	"strings"
+	"testing"
+	"time"
+)
+
+// grant_test.go pins the two halves of the credential-free deploy path: the
+// grant CI is handed is scoped to ONE prefix and expires, and the reconcile that
+// replaced `--delete` prunes only that prefix and never on an empty manifest.
+
+func TestGrantIsScopedToOnePrefixAndExpires(t *testing.T) {
+	startFakeS3(t)
+	b := openBlobStore()
+
+	now := time.Unix(1_700_000_000, 0).UTC()
+	g, err := mintGrant(context.Background(), b, "acme/site", now)
+	if err != nil {
+		t.Fatalf("mint: %v", err)
+	}
+	if g == nil {
+		t.Fatal("no grant minted despite presign being configured")
+	}
+	if g.Prefix != "acme/site" {
+		t.Errorf("prefix = %q", g.Prefix)
+	}
+	if want := now.Add(grantTTL).Unix(); g.ExpiresAt != want {
+		t.Errorf("expiresAt = %d, want %d", g.ExpiresAt, want)
+	}
+	// Signed for the PUBLIC host: CI resolves that, and the signature covers it.
+	if !strings.Contains(g.URL, "s3.example.test") {
+		t.Errorf("grant URL %q is not the public endpoint", g.URL)
+	}
+
+	// The form carries a signed policy, and what it confines is proven by posting
+	// to it (sdk/object's conformance suite): a key under the prefix, never a
+	// neighbour's.
+	if g.Fields["policy"] == "" || g.Fields["signature"] == "" {
+		t.Errorf("grant fields = %v, want a signed policy", g.Fields)
+	}
+}
+
+// TestGrantsDifferPerPrefix: two sites must not receive interchangeable grants.
+// If one site's grant authorized another's prefix, the shared-bucket hazard this
+// whole mechanism exists to remove would still be present.
+func TestGrantsDifferPerPrefix(t *testing.T) {
+	startFakeS3(t)
+	b := openBlobStore()
+	now := time.Unix(1_700_000_000, 0).UTC()
+
+	a, err := mintGrant(context.Background(), b, "acme/site", now)
+	if err != nil || a == nil {
+		t.Fatalf("mint a: %v", err)
+	}
+	c, err := mintGrant(context.Background(), b, "other/site", now)
+	if err != nil || c == nil {
+		t.Fatalf("mint c: %v", err)
+	}
+	if a.Fields["policy"] == c.Fields["policy"] {
+		t.Fatal("two prefixes produced an identical policy")
+	}
+	// Distinct policies must carry distinct signatures.
+	if sigOf(a.Fields) == sigOf(c.Fields) {
+		t.Fatal("distinct policies share a signature")
+	}
+}
+
+func sigOf(f map[string]string) string {
+	for _, k := range []string{"x-amz-signature", "signature", "X-Amz-Signature"} {
+		if v, ok := f[k]; ok {
+			return v
+		}
+	}
+	return ""
+}
+
+func TestGrantAbsentWhenPresignUnconfigured(t *testing.T) {
+	// A store with no public address ⇒ nothing to sign with. A deployment must still
+	// be creatable, so this is (nil, nil), not an error.
+	was := objects
+	objects = func() object.Store { return &object.Local{Dir: t.TempDir()} }
+	t.Cleanup(func() { objects = was })
+	b := openBlobStore()
+	g, err := mintGrant(context.Background(), b, "acme/site", time.Now())
+	if err != nil {
+		t.Fatalf("unconfigured presign returned an error: %v", err)
+	}
+	if g != nil {
+		t.Fatal("a grant was minted with no credentials configured")
+	}
+}
+
+func TestReconcileRemovesOnlyStaleKeys(t *testing.T) {
+	f := startFakeS3(t)
+	b := openBlobStore()
+	cli := b.store
+	f.seed(b.bucket, "acme/site/index.html", "new")
+	f.seed(b.bucket, "acme/site/about.html", "new")
+	f.seed(b.bucket, "acme/site/gone.html", "stale")
+
+	keep := map[string]bool{"index.html": true, "about.html": true}
+	removed, err := reconcilePrefix(context.Background(), cli, b.bucket, "acme/site", keep)
+	if err != nil {
+		t.Fatalf("reconcile: %v", err)
+	}
+	if removed != 1 {
+		t.Errorf("removed = %d, want 1", removed)
+	}
+	if _, ok := f.body(b.bucket, "acme/site/gone.html"); ok {
+		t.Error("the deleted page still serves — this is the bug --delete used to prevent")
+	}
+	for _, k := range []string{"acme/site/index.html", "acme/site/about.html"} {
+		if _, ok := f.body(b.bucket, k); !ok {
+			t.Errorf("%s was removed but is in the manifest", k)
+		}
+	}
+}
+
+// TestReconcileNeverLeavesItsPrefix is the cross-tenant boundary: reconciling one
+// site must not consider, let alone delete, another org's objects.
+func TestReconcileNeverLeavesItsPrefix(t *testing.T) {
+	f := startFakeS3(t)
+	b := openBlobStore()
+	cli := b.store
+	f.seed(b.bucket, "acme/site/index.html", "mine")
+	f.seed(b.bucket, "other/site/index.html", "theirs")
+	// A sibling prefix that shares acme/site as a STRING prefix but is a different
+	// site — the case the trailing slash exists for.
+	f.seed(b.bucket, "acme/site-two/index.html", "sibling")
+
+	// A manifest that mentions nothing of theirs.
+	keep := map[string]bool{"index.html": true}
+	if _, err := reconcilePrefix(context.Background(), cli, b.bucket, "acme/site", keep); err != nil {
+		t.Fatalf("reconcile: %v", err)
+	}
+	for _, k := range []string{"other/site/index.html", "acme/site-two/index.html"} {
+		if _, ok := f.body(b.bucket, k); !ok {
+			t.Fatalf("%s was deleted by another site's reconcile", k)
+		}
+	}
+}
+
+// TestReconcileEmptyManifestDeletesNothing: a build that reports no files has
+// almost certainly failed to enumerate its output. Honouring that literally would
+// delete the whole live site.
+func TestReconcileEmptyManifestDeletesNothing(t *testing.T) {
+	f := startFakeS3(t)
+	b := openBlobStore()
+	cli := b.store
+	f.seed(b.bucket, "acme/site/index.html", "live")
+
+	removed, err := reconcilePrefix(context.Background(), cli, b.bucket, "acme/site", map[string]bool{})
+	if err != nil {
+		t.Fatalf("reconcile: %v", err)
+	}
+	if removed != 0 {
+		t.Fatalf("removed = %d on an empty manifest, want 0", removed)
+	}
+	if _, ok := f.body(b.bucket, "acme/site/index.html"); !ok {
+		t.Fatal("an empty manifest deleted the live site")
+	}
+}
+
+// TestFailureOwnsProject pins which deployment may mark a project broken.
+//
+// The regression it exists for: `p.Status = "error"` used to be unconditional on
+// any non-live completion, so completing a SUPERSEDED deployment took down a site
+// that was up. Measured on hanzo-ai — v5 live and every byte correct in the
+// bucket, completing v3 (an older probe) as error flipped the project to "error"
+// and the host started 404ing. The same bug fires in ordinary use whenever a
+// rebuild fails while the previous build is still serving, which is precisely what
+// the "report a failed build" step in every CI workflow does.
+func TestFailureOwnsProject(t *testing.T) {
+	cases := []struct {
+		name          string
+		currentDeploy string
+		deployID      string
+		want          bool
+	}{
+		// Nothing has ever gone live, so there is no site to protect and the
+		// project HAS genuinely failed.
+		{"first deploy fails: project is broken", "", "dep_1", true},
+		// The live deployment itself failed — the thing being served is the thing
+		// that broke.
+		{"the live deployment fails: project is broken", "dep_1", "dep_1", true},
+		// The case that took hanzo-ai down.
+		{"a superseded deployment fails: site stays up", "dep_5", "dep_3", false},
+		// The ordinary shape: a rebuild fails while the previous build serves.
+		{"a newer build fails while the old one serves", "dep_1", "dep_2", false},
+	}
+	for _, c := range cases {
+		if got := failureOwnsProject(c.currentDeploy, c.deployID); got != c.want {
+			t.Errorf("%s: failureOwnsProject(%q, %q) = %v, want %v",
+				c.name, c.currentDeploy, c.deployID, got, c.want)
+		}
+	}
+}
+
+// TestCopyKeysStaysInsideItsPrefixes: the copy takes exactly the named keys from
+// one prefix to the other, and a key that climbs out of either is refused before
+// any object moves.
+func TestCopyKeysStaysInsideItsPrefixes(t *testing.T) {
+	f := startFakeS3(t)
+	b := openBlobStore()
+	cli := b.store
+	f.seed(b.bucket, "acme/one/a.js", "A")
+	f.seed(b.bucket, "acme/one/dir/b.html", "B")
+	f.seed(b.bucket, "other/secret", "S")
+
+	n, err := copyKeys(context.Background(), cli, b.bucket, "acme/one", "acme/two", []string{"a.js", "dir/b.html"})
+	if err != nil || n != 2 {
+		t.Fatalf("copy = %d, %v; want 2, nil", n, err)
+	}
+	if got, _ := f.body(b.bucket, "acme/two/dir/b.html"); string(got) != "B" {
+		t.Errorf("copied body = %q, want B", got)
+	}
+	for _, k := range []string{"../other/secret", "/abs", "a/../../x", ""} {
+		if n, err := copyKeys(context.Background(), cli, b.bucket, "acme/one", "acme/two", []string{"a.js", k}); err == nil || n != 0 {
+			t.Errorf("key %q: copy = %d, %v; want a refusal with nothing copied", k, n, err)
+		}
+	}
+	if _, ok := f.body(b.bucket, "acme/two/secret"); ok {
+		t.Error("a key escaped its prefix")
+	}
+}

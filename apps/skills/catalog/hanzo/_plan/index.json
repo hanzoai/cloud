@@ -1,0 +1,128 @@
+{
+  "$schema": "https://schemas.agentskills.io/discovery/0.2.0/schema.json",
+  "base_url": "https://api.hanzo.ai",
+  "brand": "hanzo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://hanzo.id",
+  "mcp": {
+    "description": "Model Context Protocol over JSON-RPC 2.0 — one POST per message, stateless, protocol revision 2026-07-28. tools/list answers without a credential with one tool per subsystem (its operations in the \"op\" enum) plus \"describe\", which returns one operation's input schema. tools/call names a subsystem tool and carries {\"op\": <operation>, \"input\": <its arguments>}; it takes the same bearer the REST API does, and a call that carries none is answered 401 with a WWW-Authenticate header naming the resource metadata at /.well-known/oauth-protected-resource, which names the authorization server to sign in at. The tool surface is the public contract: the operator's admin product is not offered, and a name that would disclose a secret or mutate an identity is withheld — the list says how many, under _meta.",
+    "method": "POST",
+    "url": "https://api.hanzo.ai/v1/mcp"
+  },
+  "skill_count": 14,
+  "skills": [
+    {
+      "description": "Read plan blockchain: Returns the blockchain RPC plan catalog: the tiers metered in monthly compute units, with their prices, limits and overage terms..",
+      "digest": "sha256:feefb0d29a4dc2ad74d0afd3588563e3b75eb43333a8c6b8468ddc95e117e50b",
+      "name": "plan_blockchain",
+      "service": "plan",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/plan_blockchain/SKILL.md"
+    },
+    {
+      "description": "Read plan dns: ListDNSPlans returns the DNS plans on sale: the tiers priced on zones, records per zone and queries per day..",
+      "digest": "sha256:ae29b5011ca4cca0bd6b6f5091197d2ea4560f5a2020abec392d6f43dc522064",
+      "name": "plan_dns",
+      "service": "plan",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/plan_dns/SKILL.md"
+    },
+    {
+      "description": "Read plan entitlements: Returns what one plan GRANTS and not what it costs: the canonical namespaced entitlement block and the flat license-feature list derived from it..",
+      "digest": "sha256:4a3743f93f2edb17498d2fb616c5875c74018204dc69a0c4bbadbfc33ed71004",
+      "name": "plan_entitlements",
+      "service": "plan",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/plan_entitlements/SKILL.md"
+    },
+    {
+      "description": "Read plan gpu: ListGPUTiers returns the rentable GPU configurations, each with its accelerator count and model, VRAM, vCPUs, host memory and hourly price..",
+      "digest": "sha256:10a8a2e7c3388299a1d70d920b82b90e8adcb7163b2564afee25054cc13a0553",
+      "name": "plan_gpu",
+      "service": "plan",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/plan_gpu/SKILL.md"
+    },
+    {
+      "description": "Read plan health: Reports that the plans subsystem is mounted and serving..",
+      "digest": "sha256:3bf33e962aee81d0495ee9502cb66e1748b4fdd2ec50c7b44356f3bbbf9a3c3a",
+      "name": "plan_health",
+      "service": "plan",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/plan_health/SKILL.md"
+    },
+    {
+      "description": "Read plan plan: Returns the Hanzo cloud plan catalog: every cloud tier with its price, included capacity, limits and feature list, scoped to the caller's catalog..",
+      "digest": "sha256:b004feb0b22bb30fee64eaf991c8f9f7d594e9142fca93aed68eddd3a8fda3f8",
+      "name": "plan_plan",
+      "service": "plan",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/plan_plan/SKILL.md"
+    },
+    {
+      "description": "Read plan policy: Returns the published pricing policy: whether pricing is transparent, the revenue-sharing terms (idle compute resale and the open-source share) and the principles the catalog is priced by..",
+      "digest": "sha256:1353486d7e2c3e9554d28bb5a547c1a0145e0eb457e129ead01e5873b71a815f",
+      "name": "plan_policy",
+      "service": "plan",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/plan_policy/SKILL.md"
+    },
+    {
+      "description": "Read plan regions: Returns the regions cloud capacity is offered in, each with its display name and physical location..",
+      "digest": "sha256:0c23d9c422f251bda7b9e72004cd8c4f137eb0e0df534d4e0c979d73540a8617",
+      "name": "plan_regions",
+      "service": "plan",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/plan_regions/SKILL.md"
+    },
+    {
+      "description": "Read plan resolve: Resolves one plan to everything a consumer of the catalog needs at once: its canonical entitlement block, the flat license-feature list a signed license carries, its billing reference, and the catalog it came from..",
+      "digest": "sha256:d2e4aad861db1f0e565fd5a29e7c0aaf1fe2caf0e0bf32dca5030c7a17547075",
+      "name": "plan_resolve",
+      "service": "plan",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/plan_resolve/SKILL.md"
+    },
+    {
+      "description": "Read plan schema: Returns the two JSON Schema documents this surface speaks: entitlements.schema.json, which declares every entitlement key with its type, unit and enum, and plan.schema.json, which a catalog plan record conforms to..",
+      "digest": "sha256:704680e05b69be45818f9bedadf92b41dfa9fe468b795ec9994b933324f4cf99",
+      "name": "plan_schema",
+      "service": "plan",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/plan_schema/SKILL.md"
+    },
+    {
+      "description": "Read plan storage: Returns the block-storage price block: the price per GB per month and the volume size bounds a cloud plan may attach..",
+      "digest": "sha256:fd2e89c7a6270d12a1098418db417e436dc6219c581a583c733a7b8124a10928",
+      "name": "plan_storage",
+      "service": "plan",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/plan_storage/SKILL.md"
+    },
+    {
+      "description": "Read plan subscriptions: Returns the plans a customer subscribes to that are on sale — each with its monthly and annual price, seat rules, limits, the entitlement block it grants and its billing reference..",
+      "digest": "sha256:afe7f2b793c773fc7da183493f8de9e501709751e41ccb87b704299cda0df1b2",
+      "name": "plan_subscriptions",
+      "service": "plan",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/plan_subscriptions/SKILL.md"
+    },
+    {
+      "description": "Read plan tools: Returns the per-use price of every metered tool — web search, code interpreter, image generation, speech — each with the unit it is billed in..",
+      "digest": "sha256:03111c9f30bbeb4b4fc1b06a65edfbbfff90d1869c8b6035bb5cf7beeb42f093",
+      "name": "plan_tools",
+      "service": "plan",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/plan_tools/SKILL.md"
+    },
+    {
+      "description": "Read plan vocab: Returns the entitlement key vocabulary: every key with its namespace, JSON type, nullability, unit, enum and title, the list of namespaces, and the engine features a license can grant..",
+      "digest": "sha256:0fbbb836bb570544a6054e51901067117a657701a43b235af8951908b37a2ab4",
+      "name": "plan_vocab",
+      "service": "plan",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/plan_vocab/SKILL.md"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

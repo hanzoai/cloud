@@ -1,0 +1,75 @@
+{
+  "$schema": "https://schemas.agentskills.io/discovery/0.2.0/schema.json",
+  "base_url": "https://api.zoo.ngo",
+  "brand": "zoo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://zoolabs.id",
+  "mcp": {
+    "description": "Model Context Protocol over JSON-RPC 2.0 — one POST per message, stateless, protocol revision 2026-07-28. tools/list answers without a credential with one tool per subsystem (its operations in the \"op\" enum) plus \"describe\", which returns one operation's input schema. tools/call names a subsystem tool and carries {\"op\": <operation>, \"input\": <its arguments>}; it takes the same bearer the REST API does, and a call that carries none is answered 401 with a WWW-Authenticate header naming the resource metadata at /.well-known/oauth-protected-resource, which names the authorization server to sign in at. The tool surface is the public contract: the operator's admin product is not offered, and a name that would disclose a secret or mutate an identity is withheld — the list says how many, under _meta.",
+    "method": "POST",
+    "url": "https://api.zoo.ngo/v1/mcp"
+  },
+  "skill_count": 7,
+  "skills": [
+    {
+      "description": "Read sandbox fs: Read a file, or list a directory.",
+      "digest": "sha256:449a509ee11e5b06a69cf42755b16f7034aee365f447429c957253d0a9a95c87",
+      "name": "sandbox_fs",
+      "service": "sandbox",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/sandbox_fs/SKILL.md"
+    },
+    {
+      "description": "Read sandbox ports: Lists the TCP ports something listens on in a sandbox the caller holds, each with the preview host that serves it — what the sandbox's Browser can open..",
+      "digest": "sha256:86d940d30c706f88ea16d7de4ea7adcc5ddebcfff13a3ad606cd610a1977caf1",
+      "name": "sandbox_ports",
+      "service": "sandbox",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/sandbox_ports/SKILL.md"
+    },
+    {
+      "description": "Read sandbox preview: A preview's own request.",
+      "digest": "sha256:1b7c37de64a1483bf034f27349247c324bee71feb30de6bf25a5ea012da15c44",
+      "name": "sandbox_preview",
+      "service": "sandbox",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/sandbox_preview/SKILL.md"
+    },
+    {
+      "description": "Read sandbox quota: Answers the caller's sandbox quota: the account it belongs to — the org, or a person in the signup org — how many of that account's paid sandboxes are running, and how many may run at once (-1 for no bound)..",
+      "digest": "sha256:d2c96fd7ccb923fbc4654befaf2820a067774a24ace89a3d7ce4c2865ee19f6f",
+      "name": "sandbox_quota",
+      "service": "sandbox",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/sandbox_quota/SKILL.md"
+    },
+    {
+      "description": "Read sandbox sandbox: Lists the sandboxes the caller holds, newest first., Returns one sandbox: its class, project, image, the runtime it was given, its status and when its lease ends..",
+      "digest": "sha256:918ac586c007b0348eec581043c73f854f22bfd921d1eb90df5e0252c1e1ca21",
+      "name": "sandbox_sandbox",
+      "service": "sandbox",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/sandbox_sandbox/SKILL.md",
+      "works": [
+        "engineering"
+      ]
+    },
+    {
+      "description": "Read sandbox screen: The screen, as a page, The screen, as a socket.",
+      "digest": "sha256:780f0c48a544cb82c487e65075b18785e4c1938c74d300947c8fabe9a137797b",
+      "name": "sandbox_screen",
+      "service": "sandbox",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/sandbox_screen/SKILL.md"
+    },
+    {
+      "description": "Read sandbox terminal: The terminal, as a page, The terminal, as a socket.",
+      "digest": "sha256:be536e8581595c05f5a3fa7c8584ecee53184020a7378b429dcb5ef1322d69c4",
+      "name": "sandbox_terminal",
+      "service": "sandbox",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/sandbox_terminal/SKILL.md"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

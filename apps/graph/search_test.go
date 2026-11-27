@@ -1,0 +1,359 @@
+package graph
+
+import (
+	"context"
+	"encoding/json"
+	"net/http"
+	"slices"
+	"testing"
+	"time"
+
+	"github.com/hanzoai/cloud/internal/sqltest"
+)
+
+// searched runs a search against a store seeded with facts, returning the values
+// that matched. It goes through the same filter every other read does, which is
+// the point of the term.
+func searched(t *testing.T, s *store, q string, f filter) []string {
+	t.Helper()
+	f.Match = terms(q)
+	facts, err := s.read(context.Background(), f)
+	if err != nil {
+		t.Fatalf("search %q: %v", q, err)
+	}
+	out := make([]string, 0, len(facts))
+	for _, fact := range facts {
+		out = append(out, fact.Value)
+	}
+	return out
+}
+
+func seedForSearch(t *testing.T) *store {
+	t.Helper()
+	s := newStore(t)
+	facts := []Fact{
+		mk(t, "acme/svc/api", "owner", "acme/team/core", true, "registry", t0),
+		mk(t, "acme/svc/api", "runtime", "go1.25", false, "scanner", t0),
+		mk(t, "acme/svc/worker", "owner", "acme/team/platform", true, "registry", t0),
+		mk(t, "acme/svc/worker", "runtime", "rust", false, "scanner", t0),
+	}
+	if _, err := s.record(context.Background(), facts); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	return s
+}
+
+// TestSearchFindsByTextWhereReadFindsByKey is the capability. Nothing in the
+// plane could answer "where is this mentioned" before: a reader had to know an
+// entity key already, which is exactly what somebody searching does not have.
+func TestSearchFindsByTextWhereReadFindsByKey(t *testing.T) {
+	sqltest.Engines(t, func(t *testing.T, _ sqltest.Open) {
+		s := seedForSearch(t)
+
+		got := searched(t, s, "platform", filter{})
+		if len(got) != 1 || got[0] != "acme/team/platform" {
+			t.Fatalf("search for platform = %v, want the one assertion naming it", got)
+		}
+
+		// The term matches wherever the index reads: the value above, and the SOURCE
+		// here, which no read filter can narrow by at all.
+		if got := searched(t, s, "scanner", filter{}); len(got) != 2 {
+			t.Errorf("search by source = %v, want both scanner assertions", got)
+		}
+	})
+}
+
+// TestSearchIsAPrefix pins the behavior a search box needs: a caller typing part
+// of a word finds the word.
+func TestSearchIsAPrefix(t *testing.T) {
+	sqltest.Engines(t, func(t *testing.T, _ sqltest.Open) {
+		s := seedForSearch(t)
+
+		if got := searched(t, s, "regist", filter{}); len(got) != 2 {
+			t.Errorf("prefix search = %v, want the two registry assertions", got)
+		}
+	})
+}
+
+// TestEveryWordNarrows proves more words mean fewer answers, not more.
+func TestEveryWordNarrows(t *testing.T) {
+	sqltest.Engines(t, func(t *testing.T, _ sqltest.Open) {
+		s := seedForSearch(t)
+
+		one := searched(t, s, "registry", filter{})
+		two := searched(t, s, "registry core", filter{})
+		if len(one) != 2 {
+			t.Fatalf("registry = %v, want 2", one)
+		}
+		if len(two) != 1 || two[0] != "acme/team/core" {
+			t.Errorf("registry core = %v, want only the assertion carrying both", two)
+		}
+	})
+}
+
+// TestSearchComposesWithEveryOtherNarrowing is why Match is a term of the filter
+// rather than a read of its own: a caller narrows by relation and by instant in
+// the same request, and gets them applied to what it searched for.
+func TestSearchComposesWithEveryOtherNarrowing(t *testing.T) {
+	sqltest.Engines(t, func(t *testing.T, _ sqltest.Open) {
+		s := seedForSearch(t)
+
+		if got := searched(t, s, "acme", filter{}); len(got) != 4 {
+			t.Fatalf("unnarrowed search = %v, want every assertion", got)
+		}
+		if got := searched(t, s, "acme", filter{Relation: "owner"}); len(got) != 2 {
+			t.Errorf("search narrowed to owner = %v, want the two owner assertions", got)
+		}
+		if got := searched(t, s, "acme", filter{Entity: "acme/svc/api"}); len(got) != 2 {
+			t.Errorf("search narrowed to one entity = %v, want its two assertions", got)
+		}
+		if got := searched(t, s, "acme", filter{Known: t0.Add(-time.Hour)}); len(got) != 0 {
+			t.Errorf("search before anything was knowable = %v, want nothing", got)
+		}
+		if got := searched(t, s, "acme", filter{Limit: 1}); len(got) != 1 {
+			t.Errorf("search under a ceiling = %v, want one", got)
+		}
+	})
+}
+
+// TestASearchAnswersItsBestMatchFirst: a limited search keeps the rows its
+// words match best, not the rows filed first. The older row mentions the word
+// once in a long passage; the newer one is about it. The seeded rows, none of
+// which say it, are what give the word a rarity for bm25 to weigh.
+func TestASearchAnswersItsBestMatchFirst(t *testing.T) {
+	sqltest.Engines(t, func(t *testing.T, _ sqltest.Open) {
+		s := seedForSearch(t)
+		weak := mk(t, "acme/doc/notes", "summary",
+			"a long passage that mentions kubernetes once among a great many other words on unrelated matters",
+			false, "wiki", t0)
+		strong := mk(t, "acme/svc/kubernetes", "runtime", "kubernetes", false, "kubernetes", t0)
+		for _, f := range []Fact{weak, strong} {
+			if _, err := s.record(context.Background(), []Fact{f}); err != nil {
+				t.Fatalf("record: %v", err)
+			}
+		}
+
+		for _, tc := range []struct {
+			name  string
+			limit int
+			want  []string
+		}{
+			{"every match, best first", 0, []string{strong.Value, weak.Value}},
+			{"a limit keeps the best", 1, []string{strong.Value}},
+		} {
+			t.Run(tc.name, func(t *testing.T) {
+				if got := searched(t, s, "kubernetes", filter{Limit: tc.limit}); !slices.Equal(got, tc.want) {
+					t.Fatalf("search = %q, want %q", got, tc.want)
+				}
+			})
+		}
+	})
+}
+
+// TestTheSearchEndpointKeepsTheBestMatch carries the order to the wire: under a
+// limit the endpoint answers the best match and says it stopped.
+func TestTheSearchEndpointKeepsTheBestMatch(t *testing.T) {
+	sqltest.Engines(t, func(t *testing.T, _ sqltest.Open) {
+		app := mountGraph(t)
+		assertFact(t, app, "", "acme/doc/notes", "summary",
+			"a long passage that mentions kubernetes once among a great many other words on unrelated matters", false)
+		assertFact(t, app, "", "acme/svc/kubernetes", "runtime", "kubernetes", false)
+
+		code, b := call(t, app, http.MethodGet, "/v1/graph/search?q=kubernetes&limit=1", "", nil)
+		var out graphReadOut
+		if err := json.Unmarshal(b, &out); err != nil || code != http.StatusOK {
+			t.Fatalf("search: %d %v %s", code, err, b)
+		}
+		if len(out.Assertions) != 1 || out.Assertions[0].Entity != "acme/svc/kubernetes" || !out.Truncated {
+			t.Fatalf("search under a limit answered %+v, want the row about kubernetes, truncated", out)
+		}
+	})
+}
+
+// TestAssertionsIndexOnArrival guards the trigger. An assertion written after the
+// index exists has to be findable without anybody rebuilding anything.
+func TestAssertionsIndexOnArrival(t *testing.T) {
+	sqltest.Engines(t, func(t *testing.T, _ sqltest.Open) {
+		s := seedForSearch(t)
+
+		if got := searched(t, s, "kubernetes", filter{}); len(got) != 0 {
+			t.Fatalf("nothing has said kubernetes yet, got %v", got)
+		}
+		if _, err := s.record(context.Background(), []Fact{
+			mk(t, "acme/svc/api", "runsOn", "kubernetes", false, "deploy", t0),
+		}); err != nil {
+			t.Fatalf("record: %v", err)
+		}
+		if got := searched(t, s, "kubernetes", filter{}); len(got) != 1 {
+			t.Errorf("a new assertion was not indexed: %v", got)
+		}
+	})
+}
+
+// TestTheIndexIsBuiltFromRowsAlreadyThere is the migration. A database written
+// before the index existed must search as what it holds, not as though it were
+// empty — an index that answers nothing is worse than one that errors, because a
+// caller believes it.
+func TestTheIndexIsBuiltFromRowsAlreadyThere(t *testing.T) {
+	sqltest.Engines(t, func(t *testing.T, _ sqltest.Open) {
+		s := seedForSearch(t)
+
+		// Drop the index, as a database predating this migration has none.
+		for _, stmt := range unindex(s) {
+			if _, err := s.db.Exec(stmt); err != nil {
+				t.Fatalf("%s: %v", stmt, err)
+			}
+		}
+
+		reopened, err := openStore(s.db)
+		if err != nil {
+			t.Fatalf("reopen: %v", err)
+		}
+		if got := searched(t, reopened, "registry", filter{}); len(got) != 2 {
+			t.Errorf("the rebuild missed rows already in the database: %v", got)
+		}
+	})
+}
+
+// unindex is what takes the index off a store: SQLite's virtual table and the
+// triggers that feed it, PostgreSQL's generated column (which takes its index
+// with it).
+func unindex(s *store) []string {
+	if s.d.Postgres() {
+		return []string{`ALTER TABLE assertion DROP COLUMN fts`}
+	}
+	return []string{`DROP TRIGGER assertion_ai`, `DROP TRIGGER assertion_ad`, `DROP TRIGGER assertion_au`, `DROP TABLE assertion_fts`}
+}
+
+// TestReopeningLeavesABuiltIndexAlone pins that the build runs once. Opening a
+// database must not re-scan every assertion in it.
+func TestReopeningLeavesABuiltIndexAlone(t *testing.T) {
+	sqltest.Engines(t, func(t *testing.T, _ sqltest.Open) {
+		s := seedForSearch(t)
+
+		for i := range 3 {
+			if _, err := openStore(s.db); err != nil {
+				t.Fatalf("reopen %d: %v", i, err)
+			}
+		}
+		if got := searched(t, s, "registry", filter{}); len(got) != 2 {
+			t.Errorf("re-opening changed what the index holds: %v", got)
+		}
+	})
+}
+
+// TestAnAssertionsPunctuationIsTextAndNotSyntax is the one that would otherwise
+// be a 500. FTS5 reads `-`, `*`, `:`, `^` and `"` as operators and tsquery reads
+// `&`, `|`, `!`, `:` and `'`, and entity keys and search boxes are full of them.
+func TestAnAssertionsPunctuationIsTextAndNotSyntax(t *testing.T) {
+	sqltest.Engines(t, func(t *testing.T, _ sqltest.Open) {
+		s := seedForSearch(t)
+
+		for _, q := range []string{
+			`acme/svc/api`, `-core`, `"`, `a"b`, `*`, `^`, `foo:bar`, `AND`, `NOT registry`, `((`,
+			`a & b`, `a | b`, `!a`, `a <-> b`, `a:*`, `it's`, `a\b`, "a\x00b", "a\xffb",
+		} {
+			f := filter{Match: terms(q)}
+			if len(f.Match) == 0 {
+				continue
+			}
+			for _, any := range []bool{false, true} {
+				f.Any = any
+				if _, err := s.read(context.Background(), f); err != nil {
+					t.Errorf("searching %q (any: %v) was read as syntax: %v", q, any, err)
+				}
+			}
+		}
+	})
+}
+
+// TestASlashedKeySearchesAsItself proves the punctuation above is not merely
+// tolerated but useful: the way people name entities here is findable.
+func TestASlashedKeySearchesAsItself(t *testing.T) {
+	sqltest.Engines(t, func(t *testing.T, _ sqltest.Open) {
+		s := seedForSearch(t)
+
+		if got := searched(t, s, "acme/svc/worker", filter{}); len(got) != 2 {
+			t.Errorf("searching an entity key = %v, want its two assertions", got)
+		}
+	})
+}
+
+// TestNothingToSearchForIsNotAMatchForEverything guards the empty query. A filter
+// with no term matches every row, so a blank search must be refused rather than
+// quietly becoming a full read.
+func TestNothingToSearchForIsNotAMatchForEverything(t *testing.T) {
+	for _, q := range []string{"", "   ", "\t\n"} {
+		if got := terms(q); len(got) != 0 {
+			t.Errorf("terms(%q) = %q, want none so the op can refuse it", q, got)
+		}
+	}
+	if got := terms(`"" ""`); len(got) != 2 {
+		t.Errorf("terms of quote-only input = %q; each is still a term, not nothing", got)
+	}
+}
+
+// TestTheSearchEndpointAnswers carries the term out to the wire.
+func TestTheSearchEndpointAnswers(t *testing.T) {
+	sqltest.Engines(t, func(t *testing.T, _ sqltest.Open) {
+		app := mountGraph(t)
+		assertFact(t, app, "", "acme/svc/api", "owner", "acme/team/core", true)
+		assertFact(t, app, "", "acme/svc/worker", "owner", "acme/team/platform", true)
+
+		got := valuesOf(answered(t, app, "", "/v1/graph/search?q=platform"))
+		if len(got) != 1 || got[0] != "acme/team/platform" {
+			t.Errorf("the endpoint found %v, want the one assertion naming platform", got)
+		}
+	})
+}
+
+// TestABlankSearchIsRefused pins that the endpoint does not quietly become a full
+// read when there is nothing to search for.
+func TestABlankSearchIsRefused(t *testing.T) {
+	sqltest.Engines(t, func(t *testing.T, _ sqltest.Open) {
+		app := mountGraph(t)
+		assertFact(t, app, "", "acme/svc/api", "owner", "acme/team/core", true)
+
+		if code, _ := call(t, app, http.MethodGet, "/v1/graph/search?q=+++", "", nil); code != http.StatusBadRequest {
+			t.Errorf("a blank search answered %d; it must be refused, not answered with everything", code)
+		}
+	})
+}
+
+// TestSearchCannotCrossAGraphDatabase is the tenancy property, restated for the
+// endpoint that reaches rows by text rather than by key. The index lives in the
+// same file as the assertions, so this holds by construction — and this is the
+// test that says a change which moved it out would be wrong.
+func TestSearchCannotCrossAGraphDatabase(t *testing.T) {
+	sqltest.Engines(t, func(t *testing.T, _ sqltest.Open) {
+		app := mountGraph(t)
+		assertFact(t, app, "alpha", "acme/svc/api", "owner", "acme/team/core", true)
+		assertFact(t, app, "beta", "acme/svc/api", "owner", "acme/team/platform", true)
+
+		if got := valuesOf(answered(t, app, "alpha", "/v1/graph/search?q=team")); len(got) != 1 || got[0] != "acme/team/core" {
+			t.Errorf("alpha searched into another database: %v", got)
+		}
+		if got := valuesOf(answered(t, app, "beta", "/v1/graph/search?q=core")); len(got) != 0 {
+			t.Errorf("beta found alpha's assertion by text: %v", got)
+		}
+	})
+}
+
+// TestSearchIsOnTheGraphQLEndpointToo keeps the two endpoints from drifting: one
+// schema, one op, both addresses.
+func TestSearchIsOnTheGraphQLEndpointToo(t *testing.T) {
+	sqltest.Engines(t, func(t *testing.T, _ sqltest.Open) {
+		app := mountGraph(t)
+		assertFact(t, app, "", "acme/svc/api", "owner", "acme/team/core", true)
+		assertFact(t, app, "", "acme/svc/worker", "runtime", "rust", false)
+
+		env := ask(t, app, `{ search(q: "rust") { entity relation value source } }`)
+		hits, _ := env["data"].(map[string]any)["search"].([]any)
+		if len(hits) != 1 {
+			t.Fatalf("graphql search found %d, want 1", len(hits))
+		}
+		if v := hits[0].(map[string]any)["value"]; v != "rust" {
+			t.Errorf("graphql search returned %v", v)
+		}
+	})
+}

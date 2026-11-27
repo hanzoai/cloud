@@ -1,0 +1,2685 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Hanzo Cloud API",
+    "description": "Package graph is one organization's entities and the relations between them, held as assertions: somebody, at some moment, from some evidence, asserted that this thing stands in that relation to that other thing.",
+    "version": "v1"
+  },
+  "servers": [
+    {
+      "url": "https://api.hanzo.ai"
+    }
+  ],
+  "security": [
+    {
+      "bearer": []
+    }
+  ],
+  "tags": [
+    {
+      "name": "graph"
+    }
+  ],
+  "paths": {
+    "/v1/graph": {
+      "get": {
+        "operationId": "graphRead",
+        "summary": "Lists the assertions recorded, every version, oldest first.",
+        "description": "Lists the assertions recorded, every version, oldest first.\n\nIt resolves nothing: a superseded claim and the one that superseded it both\nappear.\n\nTime: as_of keeps statements begun by that instant of the world and as_known\nkeeps what this plane had heard by then; either absent is no bound.",
+        "tags": [
+          "graph"
+        ],
+        "parameters": [
+          {
+            "name": "entity",
+            "in": "query",
+            "required": false,
+            "description": "Entity narrows to what was asserted ABOUT one entity. Absent matches every\nentity.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "acme/svc/api"
+          },
+          {
+            "name": "relation",
+            "in": "query",
+            "required": false,
+            "description": "Relation narrows to one relation. Absent matches every relation.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "value",
+            "in": "query",
+            "required": false,
+            "description": "Value narrows to assertions pointing AT one value, which is how the edges\ninto an entity are read. A property's scalar is matched byte for byte and\nan edge's value by its key, folded as every key is.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "as_of",
+            "in": "query",
+            "required": false,
+            "description": "AsOf bounds the read to statements begun by an instant of the world, RFC\n3339. Absent reads every instant.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "as_known",
+            "in": "query",
+            "required": false,
+            "description": "AsKnown bounds the read to what this plane had heard by an instant, RFC\n3339. Absent reads everything it holds.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "2026-09-01T00:00:00Z"
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Limit caps how many assertions come back. Absent, zero, or anything above\nthe walk ceiling is the ceiling.",
+            "schema": {
+              "format": "int64",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/graph.graphReadOut"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      },
+      "post": {
+        "operationId": "graphAssert",
+        "summary": "Records a batch of assertions and counts what became of each.",
+        "description": "Records a batch of assertions and counts what became of each.\n\nEach member is judged alone: one refusal does not discard the rest, and a\nmember this plane already holds is a duplicate, not a refusal. A batch with\nnothing admitted answers 400.\n\nTime: at and until are when the statement was so, which an as_of read is\nbounded by; the server stamps knowable, the later of seen and its own clock,\nwhich an as_known read is bounded by. Nothing is overwritten: a correction is\nthe statement filed again, and the version known latest speaks for it.",
+        "tags": [
+          "graph"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "assertions": [
+                  {
+                    "at": "2026-09-01T00:00:00Z",
+                    "confidence": 0.9,
+                    "entity": "acme/svc/api",
+                    "evidence": "wiki/api#1",
+                    "names": true,
+                    "relation": "owner",
+                    "source": "wiki/api",
+                    "value": "acme/team/core"
+                  }
+                ]
+              },
+              "schema": {
+                "$ref": "#/components/schemas/graph.graphAssertIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/graph.graphAssertOut"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/graph/answer": {
+      "post": {
+        "operationId": "graphAnswer",
+        "summary": "Answers a question from the whole graph and cites the assertions it rests on.",
+        "description": "Answers a question from the whole graph and cites the assertions it\nrests on.\n\nIt asks a model what each community's in-force facts say about the question,\nthen asks once more for one answer from those findings. Every cited ID is\nchecked to be a row of this graph, a failed model call fails the answer, and\nthe calls are billed to the calling organization.\n\nTime: as_of and as_known place the graph that is read; either absent is now.",
+        "tags": [
+          "graph"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "question": "Which teams own the billing services?"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/graph.graphAnswerIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/graph.graphAnswerOut"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/graph/apple": {
+      "post": {
+        "operationId": "graphApple",
+        "summary": "Ingests an Apple Personal Knowledge Graph snapshot — live stable_graph triples, withdrawn expired_stable_graph rows and entityTagging kinship scorecards — into the organization's assertion plane.",
+        "description": "Ingests an Apple Personal Knowledge Graph snapshot — live stable_graph\ntriples, withdrawn expired_stable_graph rows and entityTagging kinship\nscorecards — into the organization's assertion plane.\n\nTwo-row reified edges sharing a relationship_id (one naming a CS*/nm_*\nrelationship type under PS1, the other pointing at the target entity) are\ncollapsed into edges under their canonical relation names while preserving\nthe raw Apple predicate and relationship class in evidence. Withdrawn rows in\nexpired are recorded with until stamped so they remain inspectable in history\nwithout holding as live facts.\n\nTime: at is the snapshot's valid instant, which an as_of read is bounded by;\nthe server stamps knowable at the write, which an as_known read is bounded by.",
+        "tags": [
+          "graph"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "at": "2026-10-28T00:00:00Z",
+                "owner": "me",
+                "triples": [
+                  {
+                    "confidence": 0.96,
+                    "object": "CS165",
+                    "predicate": "PS500",
+                    "relationship_id": "4412",
+                    "relationship_predicate": "PS1",
+                    "subject": "9100000000007919"
+                  },
+                  {
+                    "confidence": 0.96,
+                    "object": "9100000000013724",
+                    "predicate": "PS500",
+                    "relationship_id": "4412",
+                    "relationship_predicate": "PS45",
+                    "subject": "9100000000007919"
+                  }
+                ]
+              },
+              "schema": {
+                "$ref": "#/components/schemas/graph.graphAppleIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/graph.graphAssertOut"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/graph/communities": {
+      "post": {
+        "operationId": "graphCommunities",
+        "summary": "Partitions the edge graph into sets of entities more densely connected to each other than to the rest.",
+        "description": "Partitions the edge graph into sets of entities more densely\nconnected to each other than to the rest.\n\nThe graph is the one a walk reads, direction dropped, and the partition is\ndeterministic: the same graph at the same point numbers the same communities.\n\nTime: as_of and as_known place the graph that is partitioned; either absent is\nnow.",
+        "tags": [
+          "graph"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "as_of": "2026-09-01T00:00:00Z"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/graph.graphCommunitiesIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/graph.graphCommunitiesOut"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/graph/convo": {
+      "post": {
+        "operationId": "graphConvo",
+        "summary": "Extracts entity state and relationship assertions from conversation turns and updates the graph.",
+        "description": "Extracts entity state and relationship assertions from conversation\nturns and updates the graph.\n\nFirst-person statements bind to the turn's speaker, second-person statements\nto its partner, and named subjects to their entity keys. Questions are\nskipped. Single-valued state updates (such as moving cities or changing\nroles) supersede prior values at the turn's timestamp, and explicit\ndepartures (such as leaving an employer) file a retraction ending the prior\nclaim. Set dry_run to inspect what the turns state without writing.\n\nTime: each turn's at (or the batch's at when omitted) is the valid instant of\nthe assertions extracted from it, which an as_of read is bounded by; each\nbecomes knowable at the write, which an as_known read is bounded by.",
+        "tags": [
+          "graph"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "at": "2026-10-28T10:00:00Z",
+                "source": "chat/rev-1",
+                "turns": [
+                  {
+                    "id": "1",
+                    "partner": "tomas",
+                    "speaker": "mara",
+                    "text": "I work at Halden Labs and I live in Berlin."
+                  }
+                ]
+              },
+              "schema": {
+                "$ref": "#/components/schemas/graph.graphConvoIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/graph.graphConvoOut"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/graph/derive": {
+      "post": {
+        "operationId": "graphDerive",
+        "summary": "Concludes what the organization's rules derive from the graph, with a proof for every conclusion: the rule, and each support as the assertion in force it rests on or as the derived atom it is.",
+        "description": "Concludes what the organization's rules derive from the graph, with a\nproof for every conclusion: the rule, and each support as the assertion in\nforce it rests on or as the derived atom it is.\n\nThe rules are assertions — (`rule:\u003cname\u003e`, `rule`, `\u003ctext\u003e`), Datalog over\nthe organization's relations, with recursion, stratified negation and the\nbuiltins = and != — and the graph is read the way resolve reads it, so a\nretraction, an until and a declared cardinality all apply. Nothing derived is\nstored unless an admin asks to file it. Without names assertions to derive\nwithout, and the answer then says what would be lost, and what gained, if\nthey had never been filed.\n\nTime: as_of and as_known place the graph and the rules it is read with, as\nthey place a resolve; either absent is now. Filing takes neither: a filed\nconclusion holds from the instant it was derived.",
+        "tags": [
+          "graph"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "as_of": "2026-09-01T00:00:00Z",
+                "predicates": [
+                  "ancestor"
+                ]
+              },
+              "schema": {
+                "$ref": "#/components/schemas/graph.graphDeriveIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/graph.graphDeriveOut"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/graph/diff": {
+      "post": {
+        "operationId": "graphDiff",
+        "summary": "Reports what came into force, was superseded and was retracted between two points.",
+        "description": "Reports what came into force, was superseded and was retracted between\ntwo points.\n\nEach point is resolved as resolve would, never read off the rows in between.\nA version that loses the order is invisible here as it is there, and one that\nrepeats what held is agreement, not change.\n\nTime: a point is an as_of and an as_known instant, from and from_known against\nto and to_known. Hold the known instants equal for what happened in the world;\nhold the valid instants equal for what the record learned. to and to_known\ndefault to now, from to to and from_known to to_known, and the two points must\ndiffer.",
+        "tags": [
+          "graph"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "entity": "acme/svc/api",
+                "from": "2026-08-01T00:00:00Z",
+                "to": "2026-09-01T00:00:00Z"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/graph.graphDiffIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/graph.graphDiffOut"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/graph/entity": {
+      "post": {
+        "operationId": "graphEntity",
+        "summary": "Resolves the complete state of one entity at a point: its type, its holding properties and edges in both directions, its kinship scorecard and the expired statements it no longer holds.",
+        "description": "Resolves the complete state of one entity at a point: its type, its\nholding properties and edges in both directions, its kinship scorecard and\nthe expired statements it no longer holds.\n\nEach (entity, relation) pair is settled by the same Resolve rule as\ngraphResolve. Statements begun by the point that lost to a retraction, an\nuntil or a newer value are returned in expired rather than discarded.\n\nTime: as_of is the instant of the world asked about and as_known how much this\nplane had heard by then; either absent is now.",
+        "tags": [
+          "graph"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "as_of": "2026-09-01T00:00:00Z",
+                "entity": "acme/person/mara"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/graph.graphEntityIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/graph.graphEntityOut"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/graph/erase": {
+      "post": {
+        "operationId": "graphErase",
+        "summary": "Removes every assertion that names an entity and returns a receipt.",
+        "description": "Removes every assertion that names an entity and returns a receipt.\n\nIt requires an admin of the organization it acts in; platform sudo is not\nenough, so erasure is never cross-tenant. Nothing is removed while a matching\nassertion is under litigation hold (409) or where the erasure cannot be\nrecorded (503). The audit trail keeps who, when, why, how many and the\nreceipt's digest, never the entity, and holds it before the erasure commits.\n\nTime: erasure is the one act outside the two times. The rows go at every\nas_of and as_known, so no past read recovers them.",
+        "tags": [
+          "graph"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "entity": "acme/person/42",
+                "reason": "DSR-1187, GDPR Art. 17"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/graph.graphEraseIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/graph.graphEraseOut"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/graph/extract": {
+      "post": {
+        "operationId": "graphExtract",
+        "summary": "Reads the relations a source states and returns them, recording nothing.",
+        "description": "Reads the relations a source states and returns them, recording\nnothing.\n\nA line `relation:: value` states one; a value written `[[key]]` names an\nentity and makes the relation an edge. The subject is the nearest heading\nabove the line, or the request's subject until a heading names one.\n\nWhat filing would refuse is returned apart, in refused: a declaration from a\ncaller who is not an admin of the organization, and what the declared schema\nrefuses, checked against the store and against the types and declarations the\ndocument itself states that the caller may file.\n\nTime: it records nothing and takes no as_of or as_known; the schema is checked\nas of now.",
+        "tags": [
+          "graph"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "at": "2026-09-01T00:00:00Z",
+                "source": "wiki/api",
+                "text": "# acme/svc/api\nowner:: [[acme/team/core]]\ntier:: 1"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/graph.graphSourceIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/graph.graphExtractOut"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/graph/graphql": {
+      "get": {
+        "operationId": "get_graph_graphql",
+        "summary": "Read the graph's GraphQL schema.",
+        "description": "Returns the schema POST at this address runs queries against, as GraphQL SDL: the five types the store models and the fields askable of each. It is what a code generator or an editor reads, and it is the same for every organization; what a query answers is scoped to the caller's.",
+        "tags": [
+          "graph"
+        ],
+        "responses": {
+          "2XX": {
+            "description": "Success",
+            "content": {
+              "text/plain; charset=utf-8": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          }
+        },
+        "x-public": true
+      },
+      "post": {
+        "operationId": "post_graph_graphql",
+        "summary": "Ask the graph in one request, traversing.",
+        "description": "Runs a GraphQL query against this organization's assertions.\n\nIt is the one endpoint here a caller can TRAVERSE: the REST ops each answer a single question, so composing them — the entities this one points at, and what each of those resolves to — costs a request per hop with the intermediate keys held by the caller. Here that is one query and the nesting is the answer's shape.\n\nIt adds no way to ask anything new. Every field runs the SAME operation the matching REST route runs, so the tenancy, the as-of bound, the traversal bounds and the conflict rule are the ones already in force; the schema is served by GET at this same address, and introspection is not.\n\nA query that ran answers 200 with each failure in an `errors` list beside the data, which is the wire every GraphQL client parses; one that could not begin — it does not parse, or names a fragment it does not define — answers 400 with the reason and no data. `edges` nest at most three deep, refused before any operation runs, and one root field's edges answer at most 1000 entities.",
+        "tags": [
+          "graph"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/graphQLIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "2XX": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/graphQLOut"
+                }
+              }
+            }
+          }
+        },
+        "x-public": true
+      }
+    },
+    "/v1/graph/ingest": {
+      "post": {
+        "operationId": "graphIngest",
+        "summary": "Reads a source and records what it states, through the same admission as assert.",
+        "description": "Reads a source and records what it states, through the same\nadmission as assert.\n\nEach assertion's evidence is the section that stated it, `\u003csource\u003e#\u003csection\u003e`,\nso the same source at the same at records one set of rows however often it is\ndelivered. What extract reports refused is not recorded; it is counted as\nrefused, with its reason, in the order the document states it. A source\nstating no relation is refused whole.\n\nTime: at is the valid time of every assertion recorded, which an as_of read is\nbounded by; each becomes knowable at the write, so a read with an earlier\nas_known does not see it.",
+        "tags": [
+          "graph"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "at": "2026-09-01T00:00:00Z",
+                "source": "wiki/api",
+                "text": "# acme/svc/api\nowner:: [[acme/team/core]]\ntier:: 1"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/graph.graphSourceIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/graph.graphAssertOut"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/graph/neighbors": {
+      "post": {
+        "operationId": "graphNeighbors",
+        "summary": "Walks the in-force edges from a set of seeds and lists every entity reached, bounded.",
+        "description": "Walks the in-force edges from a set of seeds and lists every\nentity reached, bounded.\n\nOnly the edge that holds at the point is a hop: a superseded or retracted\nedge is not, and neither is a property.\n\nTime: as_of walks the graph as it stood at that instant and as_known as this\nplane knew it then; either absent is now.",
+        "tags": [
+          "graph"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "depth": 2,
+                "relation": "depends",
+                "seeds": [
+                  "acme/svc/api"
+                ]
+              },
+              "schema": {
+                "$ref": "#/components/schemas/graph.graphNeighborsIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/graph.graphNeighborsOut"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/graph/ontology": {
+      "get": {
+        "operationId": "graphOntology",
+        "summary": "Lists the entity classes, predicates, classifier features and kinship scorecard columns of the personal knowledge graph ontology.",
+        "description": "Lists the entity classes, predicates, classifier features and\nkinship scorecard columns of the personal knowledge graph ontology.\n\nEvery code graph.db and entityTagging.db write on macOS and iOS is here with\nits plain-language reading and the canonical relation key graphApple maps it\nto. Filter by group or by substring q.\n\nTime: it takes no as_of or as_known; the shipped catalog is static.",
+        "tags": [
+          "graph"
+        ],
+        "parameters": [
+          {
+            "name": "group",
+            "in": "query",
+            "required": false,
+            "description": "Group narrows classes or features to one group, such as core, person,\nactivity, edge, identity, communication or photos. Absent returns every\ngroup.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "edge"
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "description": "Q narrows classes, predicates and features to entries whose code, label,\ncanonical relation or source contains this substring, case-insensitively.\nAbsent returns the whole catalog.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "employment"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/graph.graphOntologyOut"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/graph/path": {
+      "post": {
+        "operationId": "graphPath",
+        "summary": "Finds the shortest chain of in-force edges from one entity to another.",
+        "description": "Finds the shortest chain of in-force edges from one entity to another.\n\nIt is the walk behind neighbors stopped at a goal: the same bound and the same\nrule for which edge is in force. A causal chain is this op with relations\nnaming the relations that mean cause, such as caused_by and influenced.\n\nTime: as_of and as_known place the graph the path is found in; either absent\nis now.",
+        "tags": [
+          "graph"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "direction": "both",
+                "from": "acme/svc/api",
+                "to": "acme/team/core"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/graph.graphPathIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/graph.graphPathOut"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/graph/resolve": {
+      "post": {
+        "operationId": "graphResolve",
+        "summary": "Answers what holds for one entity and relation at a point, winner first, with every weaker account that disagreed.",
+        "description": "Answers what holds for one entity and relation at a point, winner\nfirst, with every weaker account that disagreed.\n\nThe winner is the holding statement begun most recently, then the strongest\nunder the rule vocabulary names. A relation that holds many values answers\neach; a disagreement is reported as contested, never resolved into silence.\n\nTime: as_of is the instant of the world asked about and as_known how much this\nplane had heard; either absent is now.",
+        "tags": [
+          "graph"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "as_of": "2026-09-01T00:00:00Z",
+                "entity": "acme/svc/api",
+                "relation": "owner"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/graph.graphResolveIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/graph.graphResolveOut"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/graph/search": {
+      "get": {
+        "operationId": "graphSearch",
+        "summary": "Finds assertions by their words, where read finds them by their keys, best match first.",
+        "description": "Finds assertions by their words, where read finds them by their keys,\nbest match first.\n\nEvery word must match, as a prefix. The answer is ordered by bm25, which\nweighs a word by how rare it is and a row by how much of it the words are, so\na limit keeps the best matches rather than the oldest. It resolves nothing, so\na match may be a claim later corrected; ask resolve about what it finds.\n\nTime: as_of and as_known bound it exactly as they bound read; either absent is\nno bound.",
+        "tags": [
+          "graph"
+        ],
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "required": true,
+            "description": "Q is what to look for: words, matched as prefixes, all of them required.\nPunctuation is text here rather than syntax, so an entity key searches as\nitself.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "billing owner"
+          },
+          {
+            "name": "relation",
+            "in": "query",
+            "required": false,
+            "description": "Relation narrows to one relation. Absent matches every relation.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "as_of",
+            "in": "query",
+            "required": false,
+            "description": "AsOf bounds the search to statements begun by an instant of the world,\nRFC 3339. Absent searches every instant.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "as_known",
+            "in": "query",
+            "required": false,
+            "description": "AsKnown bounds the search to what this plane had heard by an instant, RFC\n3339. Absent searches everything it holds.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Limit caps how many assertions come back. Absent, zero, or anything above\nthe walk ceiling is the ceiling.",
+            "schema": {
+              "format": "int64",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/graph.graphReadOut"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/graph/vocabulary": {
+      "get": {
+        "operationId": "graphVocabulary",
+        "summary": "Lists the relations in use, the schema declared for them and the rule that settles a conflict.",
+        "description": "Lists the relations in use, the schema declared for them and the\nrule that settles a conflict.\n\nTime: it takes no as_of or as_known; the schema is the one in force now.",
+        "tags": [
+          "graph"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/graph.graphVocabularyOut"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "graph.graphAnswerIn": {
+        "properties": {
+          "as_known": {
+            "description": "AsKnown is how much this plane had heard, RFC 3339: the answer as it would\nhave been given then, which is what makes a past answer reproducible.\nAbsent is now.",
+            "type": "string"
+          },
+          "as_of": {
+            "description": "AsOf answers from the graph as it stood at an instant of the world, RFC\n3339: what held then. Absent is now.",
+            "type": "string"
+          },
+          "question": {
+            "description": "Question is what to answer, in words, 1000 bytes at most. Its words also\ndecide which communities are read first, so naming the things it is about\nis what aims it.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "question"
+        ],
+        "type": "object"
+      },
+      "graph.graphAnswerOut": {
+        "properties": {
+          "answer": {
+            "description": "Answer is the answer, in prose.",
+            "type": "string"
+          },
+          "as_known": {
+            "description": "AsKnown is the knowledge instant it was taken at, RFC 3339, the same way.",
+            "type": "string"
+          },
+          "as_of": {
+            "description": "AsOf is the instant the graph was read at, RFC 3339: the one asked for, or\nthe server's clock when none was.",
+            "type": "string"
+          },
+          "asked": {
+            "description": "Asked is how many communities were read.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "assertions": {
+            "description": "Assertions are the IDs of every assertion the answer rests on, ascending.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "calls": {
+            "description": "Calls is how many model calls the answer made, each billed to the calling\norganization.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "clipped": {
+            "description": "Clipped says the answer did not read all it gathered: a community held\nmore facts than one call carries, or more members than one answer reads,\nand kept the ones the question named and then the most connected; a member\nheld more than 64 assertions and kept its newest; or the findings held more\nthan the answering call carries and kept the highest scored.",
+            "type": "boolean"
+          },
+          "communities": {
+            "description": "Communities are every community the answer rests on, ascending.",
+            "items": {
+              "format": "int64",
+              "type": "integer"
+            },
+            "type": "array"
+          },
+          "findings": {
+            "description": "Findings are the findings the answer cites, most relevant first.",
+            "items": {
+              "$ref": "#/components/schemas/graph.graphFinding"
+            },
+            "type": "array"
+          },
+          "grounded": {
+            "description": "Grounded is false when no community held a fact bearing on the question,\nor the findings did not answer it. Answer is then empty: an answer resting\non nothing is not one this plane gives.",
+            "type": "boolean"
+          },
+          "skipped": {
+            "description": "Skipped is how many were not, because one answer makes at most eight map\ncalls and reads at most 2048 entities. They are the ones the question's\nwords ranked last.",
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "graph.graphAppleIn": {
+        "properties": {
+          "at": {
+            "description": "At is the valid instant of the snapshot, RFC 3339. Required.",
+            "type": "string"
+          },
+          "expired": {
+            "description": "Expired is the withdrawn rows from expired_stable_graph. Each is filed\nwith an until instant so it stays in the bitemporal record and surfaces\nin graphEntity's expired list without holding in live resolution.",
+            "items": {
+              "$ref": "#/components/schemas/graph.graphAppleTriple"
+            },
+            "type": "array"
+          },
+          "owner": {
+            "description": "Owner is the entity key for the device owner (\"(Me)\"). When set,\nentities flagged with nm_isCurrentUser are linked to Owner via `same`,\nand high-confidence kinship scorecard columns emit edges from Owner.",
+            "type": "string"
+          },
+          "scorecards": {
+            "description": "Scorecards is the per-person kinship probability rows from\nentityTagging.db.",
+            "items": {
+              "$ref": "#/components/schemas/graph.graphAppleScorecard"
+            },
+            "type": "array"
+          },
+          "source": {
+            "description": "Source names the device or store this snapshot came from. Absent defaults\nto apple/intelligence-platform.",
+            "type": "string"
+          },
+          "triples": {
+            "description": "Triples is the live rows from stable_graph. Reified two-row edges sharing\na relationship_id are paired into edges automatically.",
+            "items": {
+              "$ref": "#/components/schemas/graph.graphAppleTriple"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "at"
+        ],
+        "type": "object"
+      },
+      "graph.graphAppleScorecard": {
+        "properties": {
+          "entity": {
+            "description": "Entity is the person's identifier in the graph. Required.",
+            "type": "string"
+          },
+          "features": {
+            "description": "Features is the optional 144-element numeric input vector in\nmetadata.json order (0..19 identity, 20..59 communication, 60..143\nphotos).",
+            "items": {
+              "format": "double",
+              "type": "number"
+            },
+            "type": "array"
+          },
+          "scores": {
+            "additionalProperties": {
+              "format": "double",
+              "type": "number"
+            },
+            "description": "Scores maps each relationship column (mother, father, parent, sister,\nbrother, sibling, daughter, son, child, partner, coworker, friend,\nfamily, familyAndFriends, alumni, unknown) to its probability in [0,1].",
+            "type": "object"
+          }
+        },
+        "required": [
+          "entity",
+          "scores"
+        ],
+        "type": "object"
+      },
+      "graph.graphAppleTriple": {
+        "properties": {
+          "confidence": {
+            "description": "Confidence is the daemon's certainty in [0,1]. Absent defaults to 1 for\ncopied facts and 0 for unscored rows.",
+            "format": "double",
+            "type": "number"
+          },
+          "object": {
+            "description": "Object is the target entity identifier, class code or scalar literal.\nRequired.",
+            "type": "string"
+          },
+          "predicate": {
+            "description": "Predicate is the predicate code, such as PS1, PS33, PS500 or PS598.\nRequired.",
+            "type": "string"
+          },
+          "relationship_id": {
+            "description": "RelationshipID groups the two rows of a reified edge in stable_graph:\none row with RelationshipPredicate PS1 naming the CS*/nm_* relationship\nclass, and a companion row naming the target entity or value. Absent on\nsingle-row triples.",
+            "type": "string"
+          },
+          "relationship_predicate": {
+            "description": "RelationshipPredicate is the sub-predicate on a reified edge row, such as\nPS1 for the relationship class or PS45 for the target entity. Absent on\nsingle-row triples.",
+            "type": "string"
+          },
+          "source_duplicates": {
+            "description": "SourceDuplicates is how many duplicate source records backed the row.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "sources": {
+            "description": "Sources names the OS stores that contributed the row, such as Contacts,\nCalendar, Photos or Family Sharing. Absent defaults to apple/graph.db.",
+            "type": "string"
+          },
+          "subject": {
+            "description": "Subject is the source entity identifier in graph.db, such as\n9100000000007919. Required.",
+            "type": "string"
+          },
+          "timestamp": {
+            "description": "Timestamp is when the daemon recorded the row, RFC 3339. Absent defaults\nto the batch's At instant.",
+            "type": "string"
+          },
+          "until": {
+            "description": "Until is when a withdrawn row in expired_stable_graph stopped holding,\nRFC 3339. Absent on expired rows defaults to the batch's At instant.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "subject",
+          "predicate",
+          "object"
+        ],
+        "type": "object"
+      },
+      "graph.graphAssertIn": {
+        "properties": {
+          "assertions": {
+            "description": "Assertions is the batch. Each member is judged on its own: one refusal\ndoes not discard the rest, because a caller redelivering five facts must\nnot lose four of them to one malformed fifth.",
+            "items": {
+              "$ref": "#/components/schemas/graph.graphFact"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "assertions"
+        ],
+        "type": "object"
+      },
+      "graph.graphAssertOut": {
+        "properties": {
+          "duplicate": {
+            "description": "Duplicate is how many members this plane already held. A redelivery\ncollides on its content address and is counted here, not refused: it is\nthe success a retrying caller depends on.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "reasons": {
+            "description": "Reasons names why each refused member was refused, in the order sent.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "recorded": {
+            "description": "Recorded is how many members became new rows.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "refused": {
+            "description": "Refused is how many members were turned away — a missing entity, a\ntimestamp that is not RFC 3339, a confidence outside [0,1], a relation\nwhose declared domain or range the entity's type does not meet, or a\ndeclaration from a caller who is not an admin of the organization. The\nrest of the batch was still recorded; a batch refused whole answers 400,\nor 403 when a member of it was refused for want of authority.",
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "graph.graphAtom": {
+        "properties": {
+          "object": {
+            "description": "Object is its second argument. Absent for a predicate the rules use with\none argument.",
+            "type": "string"
+          },
+          "predicate": {
+            "description": "Predicate is the relation the tuple is of.",
+            "type": "string"
+          },
+          "subject": {
+            "description": "Subject is its first argument.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "graph.graphChange": {
+        "properties": {
+          "now": {
+            "$ref": "#/components/schemas/graph.wireFact",
+            "description": "Now is the assertion in force at To: the claim that replaced Was, or,\nfor a retraction, the retraction itself — which is who withdrew it and on\nwhat evidence."
+          },
+          "was": {
+            "$ref": "#/components/schemas/graph.wireFact",
+            "description": "Was is the assertion in force at From."
+          }
+        },
+        "type": "object"
+      },
+      "graph.graphCommunitiesIn": {
+        "properties": {
+          "as_known": {
+            "description": "AsKnown is how much this plane had heard, RFC 3339: the answer as it would\nhave been given then, which is what makes a past answer reproducible.\nAbsent is now.",
+            "type": "string"
+          },
+          "as_of": {
+            "description": "AsOf partitions the graph as it stood at an instant of the world, RFC\n3339: the edges that held then. Absent is now.",
+            "type": "string"
+          },
+          "level": {
+            "description": "Level is how fine a partition to answer with. 0, the default, is the\ncoarsest — the partition detection stops at, where modularity is highest —\nand each level above it is the pass before, finer. `levels` in the answer\nsays how many there are.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "relation": {
+            "description": "Relation narrows the graph to one edge relation, by its key. Absent\npartitions every edge.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "graph.graphCommunitiesOut": {
+        "properties": {
+          "as_known": {
+            "description": "AsKnown is the knowledge instant it was taken at, RFC 3339, the same way.",
+            "type": "string"
+          },
+          "as_of": {
+            "description": "AsOf is the instant the graph was read at, RFC 3339: the one asked for, or\nthe server's clock when none was.",
+            "type": "string"
+          },
+          "bound": {
+            "description": "Bound is the most members listed in one answer.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "ceiling": {
+            "description": "Ceiling is the most edge assertions one partition reads — every row, so an\nedge three sources asserted counts three times. A graph over it is refused\nrather than partitioned from part of itself.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "communities": {
+            "description": "Communities are the communities, largest first.",
+            "items": {
+              "$ref": "#/components/schemas/graph.graphCommunity"
+            },
+            "type": "array"
+          },
+          "edges": {
+            "description": "Edges is how many distinct undirected edges were partitioned.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "entities": {
+            "description": "Entities is how many entities the edge graph holds. An entity with no edge\nin force at AsOf is in no community.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "level": {
+            "description": "Level is the level answered.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "levels": {
+            "description": "Levels is how many levels detection found. A graph where no two entities\nbelong together more than chance has one, of single entities.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "modularity": {
+            "description": "Modularity is Newman's Q of this level's partition, from -0.5 to 1: the\nshare of edge weight inside communities, less what chance would put there.\nAbove about 0.3 is usually read as real structure rather than chance.",
+            "format": "double",
+            "type": "number"
+          },
+          "truncated": {
+            "description": "Truncated says the member lists stop at Bound entities in all, filled in\ncommunity order. Every community is still listed with its full Size.",
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
+      "graph.graphCommunity": {
+        "properties": {
+          "id": {
+            "description": "ID numbers the community by size, largest first, then by its lowest key.\nThe same graph at the same instant and level numbers it the same way every\ntime; another instant may not.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "members": {
+            "description": "Members are the entities in it, in key order.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "size": {
+            "description": "Size is how many entities belong to it, whether or not all are listed.",
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "graph.graphConclusion": {
+        "properties": {
+          "decay": {
+            "description": "Decay is the product of the confidences of the distinct statements the\nproof rests on: how much certainty survives the derivation. Absent unless\nevery one states a confidence above zero and the proof has at most 1024\natoms.",
+            "format": "double",
+            "type": "number"
+          },
+          "from": {
+            "description": "From is the latest start among the statements the proof rests on, RFC\n3339. What a rule negates has no statement to date it, so a conclusion\ndrawn through a negation may not have held from then.",
+            "type": "string"
+          },
+          "object": {
+            "description": "Object is its second argument. Absent for a predicate the rules use with\none argument.",
+            "type": "string"
+          },
+          "predicate": {
+            "description": "Predicate is the relation concluded.",
+            "type": "string"
+          },
+          "rule": {
+            "description": "Rule is the rule that concluded it, `rule:\u003cname\u003e`.",
+            "type": "string"
+          },
+          "rule_id": {
+            "description": "RuleID is the ID of the assertion stating that rule's text as it was in\nforce.",
+            "type": "string"
+          },
+          "subject": {
+            "description": "Subject is the tuple's first argument.",
+            "type": "string"
+          },
+          "supports": {
+            "description": "Supports are the rule's positive atoms as they matched, in the order the\nrule writes them. What the rule negates is absent at the point and has no\nsupport to cite.",
+            "items": {
+              "$ref": "#/components/schemas/graph.graphSupport"
+            },
+            "type": "array"
+          },
+          "until": {
+            "description": "Until is the earliest until any of those statements states, RFC 3339.\nAbsent is open. A statement a later assertion ends is a later question,\nasked at a later as_of.",
+            "type": "string"
+          },
+          "weakest": {
+            "description": "Weakest is the ID of the statement with the lowest confidence among them,\nthe first on a tie: the link the conclusion is only as strong as. Absent\nexactly when Decay is.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "graph.graphConvoIn": {
+        "properties": {
+          "at": {
+            "description": "At is the default valid instant for any turn that omits its own At,\nRFC 3339. Required.",
+            "type": "string"
+          },
+          "dry_run": {
+            "description": "DryRun when true returns the extracted assertions without writing them to\nthe store. Absent or false files them through the assertion admission\npath.",
+            "type": "boolean"
+          },
+          "source": {
+            "description": "Source names the conversation these turns came from, such as\nchat/thread-42. Required.",
+            "type": "string"
+          },
+          "turns": {
+            "description": "Turns is the ordered dialogue turns to read. Required.",
+            "items": {
+              "$ref": "#/components/schemas/graph.graphTurn"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "source",
+          "at",
+          "turns"
+        ],
+        "type": "object"
+      },
+      "graph.graphConvoOut": {
+        "properties": {
+          "assertions": {
+            "description": "Assertions is the assertions extracted from the turns, in turn order.",
+            "items": {
+              "$ref": "#/components/schemas/graph.graphFact"
+            },
+            "type": "array"
+          },
+          "duplicate": {
+            "description": "Duplicate is how many extracted assertions the store already held.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "reasons": {
+            "description": "Reasons names why each refused assertion was refused, in order.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "recorded": {
+            "description": "Recorded is how many extracted assertions became new rows in the store.\nZero when DryRun is true.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "refused": {
+            "description": "Refused is how many extracted assertions were refused by admission or\nschema checks.",
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "graph.graphDeclared": {
+        "properties": {
+          "cardinality": {
+            "description": "Cardinality is how many values the relation holds at once: one, or many.\nAbsent is the default — one for a property, many for an edge.",
+            "type": "string"
+          },
+          "domain": {
+            "description": "Domain is the type the entity asserting it must have. Absent is any.",
+            "type": "string"
+          },
+          "range": {
+            "description": "Range is the type the entity it points at must have; a relation with a\nrange is an edge. Absent is any.",
+            "type": "string"
+          },
+          "relation": {
+            "description": "Relation is the relation declared, without its `relation:` prefix.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "graph.graphDeriveIn": {
+        "properties": {
+          "as_known": {
+            "description": "AsKnown is how much this plane had heard, RFC 3339 — of the statements\nand of the rules — so a past answer is reproducible. Absent is now.",
+            "type": "string"
+          },
+          "as_of": {
+            "description": "AsOf derives from the graph as it stood at an instant of the world, RFC\n3339: the statements that held then. Absent is now.",
+            "type": "string"
+          },
+          "file": {
+            "description": "File files each tuple Derived lists as an assertion: (subject, predicate,\nobject) from the instant it was derived at, open, its source the rule,\nits evidence the rule's ID, its confidence the decay, and an edge when\nthe object is an entity by its proof. It requires an admin of the\norganization, the graph as it stands now — no as_of, as_known or\nwithout — and predicates with two arguments. It is refused whole when a\nrelation that holds one value at a time would keep only one of the\nvalues a subject is concluded or asserted to have, and when a conclusion\nis about a `relation:` or `rule:` key. Each is judged as any assertion\nis, and the write is on the audit trail before it commits. A filed\nconclusion is an assertion like any other: it does not fall when a\nsupport later does.",
+            "type": "boolean"
+          },
+          "predicates": {
+            "description": "Predicates are what to derive: every tuple the rules in force conclude of\neach, with its proof. Each must be the head of a rule in force, asserted\nas (`rule:\u003cname\u003e`, `rule`, `\u003ctext\u003e`) — for example `ancestor(X, Z) :-\nparent(X, Y), ancestor(Y, Z)`. At least one, at most 256.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "without": {
+            "description": "Without is assertion IDs, of statements or of rules, to derive without as\nthough they had never been filed. The derivation then runs twice, and\nLost and Gained say what that changes. Each must be a row this derivation\nreads. At most 256.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "graph.graphDeriveOut": {
+        "properties": {
+          "as_known": {
+            "description": "AsKnown is the knowledge instant it was taken at, RFC 3339, the same way.",
+            "type": "string"
+          },
+          "as_of": {
+            "description": "AsOf is the instant the graph was read at, RFC 3339: the one asked for, or\nthe server's clock when none was.",
+            "type": "string"
+          },
+          "bound": {
+            "description": "Bound is the most tuples one evaluation derives.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "cut": {
+            "description": "Cut names the bound that stopped it: `tuples`, at Bound tuples derived,\nor `steps`, at Steps rows examined. Absent exactly when Truncated is\nfalse.",
+            "type": "string"
+          },
+          "derived": {
+            "description": "Derived is every tuple of the predicates asked for that the rules derive,\nordered by predicate, subject and object. A tuple an assertion already\nstates is asserted, not derived, and is not here.",
+            "items": {
+              "$ref": "#/components/schemas/graph.graphConclusion"
+            },
+            "type": "array"
+          },
+          "filed": {
+            "$ref": "#/components/schemas/graph.graphAssertOut",
+            "description": "Filed is what filing Derived did, member by member as an assertion batch\nreports it. Absent unless file was asked."
+          },
+          "gained": {
+            "description": "Gained is each that holds only without them — a negation those\nassertions had been refuting. Empty when Without is absent.",
+            "items": {
+              "$ref": "#/components/schemas/graph.graphAtom"
+            },
+            "type": "array"
+          },
+          "lemmas": {
+            "description": "Lemmas is every derived tuple of any other predicate a proof in Derived\ncites, in the same order, so every support that is not an assertion can\nbe followed to a proof.",
+            "items": {
+              "$ref": "#/components/schemas/graph.graphConclusion"
+            },
+            "type": "array"
+          },
+          "lost": {
+            "description": "Lost is each tuple of the predicates asked for, asserted or derived, that\nholds with everything and not without the assertions Without names.\nEmpty when Without is absent.",
+            "items": {
+              "$ref": "#/components/schemas/graph.graphAtom"
+            },
+            "type": "array"
+          },
+          "steps": {
+            "description": "Steps is the most rows one evaluation's joins examine.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "truncated": {
+            "description": "Truncated says a bound stopped the evaluation before its fixpoint. Every\ntuple listed still holds; some that hold are missing.",
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
+      "graph.graphDiffIn": {
+        "properties": {
+          "entity": {
+            "description": "Entity narrows the diff to what was asserted about one entity. Absent\ndiffs the whole graph, bounded by Limit.",
+            "type": "string"
+          },
+          "from": {
+            "description": "From is the earlier instant of the world, RFC 3339. What held here is\nthe baseline, so a statement beginning exactly at From is part of it and\nnot a change. Absent is To: the diff is then of what was heard, not of\nwhat happened.",
+            "type": "string"
+          },
+          "from_known": {
+            "description": "FromKnown is how much this plane had heard at the baseline, RFC 3339.\nAbsent is ToKnown: the diff is then of the world, as known once.",
+            "type": "string"
+          },
+          "limit": {
+            "description": "Limit caps how many (entity, relation) pairs are examined, in key order.\nAbsent, zero, or anything above the walk ceiling is the ceiling.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "to": {
+            "description": "To is the later instant of the world, RFC 3339, and may not precede From.\nA statement beginning or ending exactly at To is in the diff. Absent is\nnow.",
+            "type": "string"
+          },
+          "to_known": {
+            "description": "ToKnown is how much it had heard at the later point, RFC 3339, and may\nnot precede FromKnown. Absent is now.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "graph.graphDiffOut": {
+        "properties": {
+          "asserted": {
+            "description": "Asserted is each statement holding at To that did not at From.",
+            "items": {
+              "$ref": "#/components/schemas/graph.wireFact"
+            },
+            "type": "array"
+          },
+          "bound": {
+            "description": "Bound is how many pairs this diff examined at most.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "from": {
+            "description": "From is the earlier instant, RFC 3339, echoed.",
+            "type": "string"
+          },
+          "from_known": {
+            "description": "FromKnown is the knowledge instant of the baseline, RFC 3339.",
+            "type": "string"
+          },
+          "retracted": {
+            "description": "Retracted is each statement that held at From and no longer does at To,\nwith what ended it as Now: the retraction, the later value, or the\nstatement itself when its own until did.",
+            "items": {
+              "$ref": "#/components/schemas/graph.graphChange"
+            },
+            "type": "array"
+          },
+          "superseded": {
+            "description": "Superseded is each property whose value at From was replaced by a\ndifferent one at To, once per pair however many came in between.",
+            "items": {
+              "$ref": "#/components/schemas/graph.graphChange"
+            },
+            "type": "array"
+          },
+          "to": {
+            "description": "To is the later instant, RFC 3339: the one asked for, or the server's\nclock when none was.",
+            "type": "string"
+          },
+          "to_known": {
+            "description": "ToKnown is the knowledge instant of the later point, RFC 3339.",
+            "type": "string"
+          },
+          "truncated": {
+            "description": "Truncated says more pairs gathered assertions in the interval than Bound,\nor that one pair holds more than a single read returns. Narrow by entity\nor by a shorter interval to see the rest.",
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
+      "graph.graphEntityIn": {
+        "properties": {
+          "as_known": {
+            "description": "AsKnown is how much this plane had heard, RFC 3339: the answer as it would\nhave been given then. Absent is now.",
+            "type": "string"
+          },
+          "as_of": {
+            "description": "AsOf is the instant of the world to answer about, RFC 3339: what held\nthen. Absent is now.",
+            "type": "string"
+          },
+          "entity": {
+            "description": "Entity is the entity key to resolve. Required.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "entity"
+        ],
+        "type": "object"
+      },
+      "graph.graphEntityOut": {
+        "properties": {
+          "as_known": {
+            "description": "AsKnown is the knowledge instant this state was resolved at, RFC 3339.",
+            "type": "string"
+          },
+          "as_of": {
+            "description": "AsOf is the valid instant this state was resolved at, RFC 3339.",
+            "type": "string"
+          },
+          "entity": {
+            "description": "Entity is the folded entity key the question named.",
+            "type": "string"
+          },
+          "expired": {
+            "description": "Expired is every statement about the entity that was known by AsKnown and\nbegun by AsOf but no longer holds at AsOf because its until passed, a\nretraction ended it, or a later statement superseded it.",
+            "items": {
+              "$ref": "#/components/schemas/graph.wireFact"
+            },
+            "type": "array"
+          },
+          "incoming": {
+            "description": "Incoming is every in-force edge pointing at the entity at the point,\nordered by source entity and relation key.",
+            "items": {
+              "$ref": "#/components/schemas/graph.wireFact"
+            },
+            "type": "array"
+          },
+          "known": {
+            "description": "Known is true when at least one property, outgoing edge, incoming edge or\nexpired statement was found for the entity.",
+            "type": "boolean"
+          },
+          "outgoing": {
+            "description": "Outgoing is every in-force edge asserted about the entity at the point,\nordered by relation key and then winner order.",
+            "items": {
+              "$ref": "#/components/schemas/graph.wireFact"
+            },
+            "type": "array"
+          },
+          "properties": {
+            "description": "Properties is every in-force scalar property of the entity at the point,\nordered by relation key.",
+            "items": {
+              "$ref": "#/components/schemas/graph.graphEntityProperty"
+            },
+            "type": "array"
+          },
+          "scorecard": {
+            "description": "Scorecard is the kinship and closeness scores holding on the entity,\nhighest score first.",
+            "items": {
+              "$ref": "#/components/schemas/graph.graphKinshipScore"
+            },
+            "type": "array"
+          },
+          "truncated": {
+            "description": "Truncated says the read of outgoing or incoming assertions hit the walk\nceiling.",
+            "type": "boolean"
+          },
+          "type": {
+            "description": "Type is the winning `type` of the entity at the point. Absent when no\ntype holds.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "graph.graphEntityProperty": {
+        "properties": {
+          "conflicts": {
+            "description": "Conflicts is every weaker account of the winner's moment that names a\ndifferent value, strongest first.",
+            "items": {
+              "$ref": "#/components/schemas/graph.wireFact"
+            },
+            "type": "array"
+          },
+          "contested": {
+            "description": "Contested is true exactly when Conflicts is not empty.",
+            "type": "boolean"
+          },
+          "relation": {
+            "description": "Relation is the scalar relation's key.",
+            "type": "string"
+          },
+          "value": {
+            "description": "Value is the winning scalar value holding at the point.",
+            "type": "string"
+          },
+          "winner": {
+            "$ref": "#/components/schemas/graph.wireFact",
+            "description": "Winner is the assertion that speaks for this relation at the point."
+          }
+        },
+        "type": "object"
+      },
+      "graph.graphEraseIn": {
+        "properties": {
+          "entity": {
+            "description": "Entity is the key to erase. Every assertion ABOUT it and every edge\npointing AT it is removed, under every spelling it may have been filed\nunder — its NFC key, that key decomposed, and the bytes sent — so a subject\nfiled before keys were folded goes with the rest; a property whose scalar\nhappens to spell it is not a reference and stays. Required, 512 bytes at\nmost.",
+            "type": "string"
+          },
+          "reason": {
+            "description": "Reason is why, as the audit trail will keep it — a request number, a legal\nbasis. It outlives the erasure, so it may not contain the entity: refused\nwhen it does. Required, 512 bytes at most.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "entity",
+          "reason"
+        ],
+        "type": "object"
+      },
+      "graph.graphEraseOut": {
+        "properties": {
+          "at": {
+            "description": "At is the instant of the erasure, RFC 3339, and the time on its audit\nrecord.",
+            "type": "string"
+          },
+          "by": {
+            "description": "By is the identity that erased — `owner` or `owner/user` — from the\nvalidated principal.",
+            "type": "string"
+          },
+          "complete": {
+            "description": "Complete is true only when no store may still hold the subject: every\nstore erased or absent and nothing Remaining. While a store is\nunsupported it is false, and that store is handled out of band before\nthe erasure is done.",
+            "type": "boolean"
+          },
+          "digest": {
+            "description": "Digest is SHA-256, hex, over IDs in their ascending order, each written\n`\u003clength\u003e:\u003cid\u003e` — the same content address an assertion's own ID is. The\naudit trail records it in place of the ids, so the receipt verifies\nagainst the trail and the trail names nothing.",
+            "type": "string"
+          },
+          "entity": {
+            "description": "Entity is the key that was erased, folded as every key here is (NFC, no\ncontrol characters) and echoed so a stored receipt says what it is for.\nThis plane keeps no copy of it.",
+            "type": "string"
+          },
+          "ids": {
+            "description": "IDs are the content addresses of the assertions removed, ascending.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "remaining": {
+            "description": "Remaining is how many assertions still name the entity because one call\nremoves at most ten thousand. Non-zero means call again; each call is its\nown receipt.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "sources": {
+            "description": "Sources are the documents the removed assertions were filed from. This\nplane does not own them: ingesting one again files the subject again.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "stores": {
+            "description": "Stores is every store in this deployment that may hold what the org says\nabout the subject, and what happened in each: this graph first, then the\nstores this op cannot reach.",
+            "items": {
+              "$ref": "#/components/schemas/graph.graphStore"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "graph.graphExtractOut": {
+        "properties": {
+          "refused": {
+            "description": "Refused are the relations found that filing would refuse — a subject or\nobject whose type is not the relation's declared domain or range, or a\ndeclaration from a caller who is not an admin — each carrying its reason.\nIngest records none of them.",
+            "items": {
+              "$ref": "#/components/schemas/graph.graphTriple"
+            },
+            "type": "array"
+          },
+          "triples": {
+            "description": "Triples are the relations found that the caller may file, in the order\nthe document states them.",
+            "items": {
+              "$ref": "#/components/schemas/graph.graphTriple"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "graph.graphFact": {
+        "properties": {
+          "at": {
+            "description": "At is when the thing was so, RFC 3339. Required, and refused when it sits\nmore than five minutes ahead of the server clock — an assertion dated\nfurther out would never mature and would skew every read until it did.",
+            "type": "string"
+          },
+          "confidence": {
+            "description": "Confidence in [0,1]. A tie-breaker within the order, never a substitute\nfor it. Absent is 0, the weakest an assertion can be.",
+            "format": "double",
+            "type": "number"
+          },
+          "entity": {
+            "description": "Entity is the thing being described, in the organization's own namespace.\nIt is not created: an entity exists because something was asserted about it.\nIt is a key, folded to Unicode NFC with control characters removed, so two\nspellings of one name are one entity. An entity named `relation:\u003cname\u003e` is\nthat relation's declaration and one named `rule:\u003cname\u003e` is a rule\n(graphDerive), and only an admin of the organization may assert anything\nof either. Required, 512 bytes at most.",
+            "type": "string"
+          },
+          "evidence": {
+            "description": "Evidence points at the record this claim came from, 512 bytes at most. An\nassertion without one is admitted and carries no defence.",
+            "type": "string"
+          },
+          "names": {
+            "description": "Names says the value is an entity. A walk reads only the edges, so this is\na declaration and never a guess about the value's shape.",
+            "type": "boolean"
+          },
+          "relation": {
+            "description": "Relation is what is being asserted — `depends`, `owner`, `same`, `title`\n— and a key, folded as Entity is. It is open until the organization\ndeclares it: once `relation:\u003cname\u003e` has a `domain` or `range` in force,\nthe entity's `type` (and, for range, the value's) must match it. Required,\n128 bytes at most.",
+            "type": "string"
+          },
+          "seen": {
+            "description": "Seen is when this assertion became knowable, RFC 3339. Defaults to At and\nmay not precede it. It is provenance and it decides nothing: the instant\nevery read uses is derived as the later of Seen and the server's own clock.",
+            "type": "string"
+          },
+          "source": {
+            "description": "Source names who asserted. Required, because an assertion nobody is named\nfor cannot be weighed against one that is. Open text: this plane ranks no\nsource above another.",
+            "type": "string"
+          },
+          "until": {
+            "description": "Until is when the thing stopped being so, RFC 3339, and must follow At.\nAbsent is open: the statement holds until something ends it. A term of\noffice, an employment, a membership are At and Until on one statement.",
+            "type": "string"
+          },
+          "value": {
+            "description": "Value is what the relation points at. When Names is true it is another\nentity's key, folded as Entity is, and the assertion is an EDGE; otherwise\nit is a scalar, kept byte for byte, and the assertion is a property. 2048\nbytes at most, or 512 when it names an entity.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "entity",
+          "relation",
+          "at",
+          "source"
+        ],
+        "type": "object"
+      },
+      "graph.graphFinding": {
+        "properties": {
+          "assertions": {
+            "description": "Assertions are the IDs of the assertions it cites, each a row a read of\nthis graph returns.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "communities": {
+            "description": "Communities are the communities of the facts it cites, at level 0 of the\npartition at AsOf — the ids POST /v1/graph/communities answers with.",
+            "items": {
+              "format": "int64",
+              "type": "integer"
+            },
+            "type": "array"
+          },
+          "score": {
+            "description": "Score is how much the model judged it helps, 1 to 100.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "text": {
+            "description": "Text is what the model found, in its words.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "graph.graphKinshipScore": {
+        "properties": {
+          "assertion": {
+            "$ref": "#/components/schemas/graph.wireFact",
+            "description": "Assertion is the underlying scorecard assertion holding at the point."
+          },
+          "relationship": {
+            "description": "Relationship is the scorecard column, such as mother, father, partner,\nfamily or familyAndFriends.",
+            "type": "string"
+          },
+          "score": {
+            "description": "Score is the classifier probability in [0,1].",
+            "format": "double",
+            "type": "number"
+          }
+        },
+        "type": "object"
+      },
+      "graph.graphNeighborsIn": {
+        "properties": {
+          "as_known": {
+            "description": "AsKnown is how much this plane had heard, RFC 3339: the answer as it would\nhave been given then, which is what makes a past answer reproducible.\nAbsent is now.",
+            "type": "string"
+          },
+          "as_of": {
+            "description": "AsOf walks the graph as it stood at an instant of the world, RFC 3339:\nthe edges that held then. Absent is now.",
+            "type": "string"
+          },
+          "depth": {
+            "description": "Depth is how many hops. Absent is one.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "direction": {
+            "description": "Direction is out, in or both. Out follows an edge from its entity to its\nvalue — what the node points at; in follows it the other way — what points\nat the node; both is the union of the two, not a third rule. Absent is out.",
+            "type": "string"
+          },
+          "relation": {
+            "description": "Relation narrows the walk to one edge relation. Absent follows all. Only\nedges IN FORCE are ever followed — the assertion that wins its (entity,\nrelation) at the instant — so a superseded or retracted edge is not a hop,\nand neither is a property.",
+            "type": "string"
+          },
+          "seeds": {
+            "description": "Seeds is where the walk starts. At least one.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "seeds"
+        ],
+        "type": "object"
+      },
+      "graph.graphNeighborsOut": {
+        "properties": {
+          "bound": {
+            "description": "Bound is the ceiling this walk was held to, the same for every caller, so\nTruncated can be read against a number rather than guessed at.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "depth": {
+            "description": "Depth is the deepest hop count actually reached. It is at most the depth\nasked for, and smaller when the walk ran out of edges first.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "entities": {
+            "description": "Entities is everything reached, the seeds included, ordered by the fewest\nhops that reach each one and then by key.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "truncated": {
+            "description": "Truncated says the bound stopped the walk. The bound is part of the answer\nrather than a silent short read.",
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
+      "graph.graphOntologyClass": {
+        "properties": {
+          "edge": {
+            "description": "Edge is true for the relationship-type classes (CS* and nm_*RelationshipType)\nthat reify a two-row edge sharing a relationshipId in stable_graph.",
+            "type": "boolean"
+          },
+          "group": {
+            "description": "Group is the class family: core, person, attribute, place, event,\nactivity, activity type, transport, media, animal, commerce or edge.",
+            "type": "string"
+          },
+          "id": {
+            "description": "ID is the raw code stored in graph.db, such as SB104, CS165 or nm_walletOrder.",
+            "type": "string"
+          },
+          "label": {
+            "description": "Label is the human-readable class name, such as person or employment\nrelationship type.",
+            "type": "string"
+          },
+          "mechanism": {
+            "description": "Mechanism records whether the daemon mechanism populating the class is\nimplemented, unverified or unlocated.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "graph.graphOntologyFeature": {
+        "properties": {
+          "group": {
+            "description": "Group is the feature block: identity (0..19), communication (20..59) or\nphotos (60..143).",
+            "type": "string"
+          },
+          "index": {
+            "description": "Index is the feature's 0-based position (0..143) in metadata.json.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "name": {
+            "description": "Name is Apple's feature identifier, such as sameLastName or\nphotosPersonPosteriorProbabilityGivenSaturdayNight.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "graph.graphOntologyOut": {
+        "properties": {
+          "classes": {
+            "description": "Classes is the matching entity classes (181 in the unfiltered catalog).",
+            "items": {
+              "$ref": "#/components/schemas/graph.graphOntologyClass"
+            },
+            "type": "array"
+          },
+          "features": {
+            "description": "Features is the matching EntityTagging classifier features (144 in the\nunfiltered catalog).",
+            "items": {
+              "$ref": "#/components/schemas/graph.graphOntologyFeature"
+            },
+            "type": "array"
+          },
+          "predicates": {
+            "description": "Predicates is the matching predicates (278 in the unfiltered catalog).",
+            "items": {
+              "$ref": "#/components/schemas/graph.graphOntologyPredicate"
+            },
+            "type": "array"
+          },
+          "score_columns": {
+            "description": "ScoreColumns is the 17 relationship columns of entityTagging.db's\nkinship scorecard.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "graph.graphOntologyPredicate": {
+        "properties": {
+          "id": {
+            "description": "ID is the raw predicate code stored in graph.db, such as PS1, PS500 or\nnm_isCurrentUser.",
+            "type": "string"
+          },
+          "label": {
+            "description": "Label is the plain-language reading of what the predicate records.",
+            "type": "string"
+          },
+          "mechanism": {
+            "description": "Mechanism records whether the daemon mechanism is implemented, unverified\nor unlocated.",
+            "type": "string"
+          },
+          "method": {
+            "description": "Method names how the daemon obtains the value: Copied, Joined, Rule,\nApple-shipped, Embedding model, XGBoost, Face clustering or Local LLM.",
+            "type": "string"
+          },
+          "names": {
+            "description": "Names is true when the predicate links its subject to another entity\nrather than a scalar literal.",
+            "type": "boolean"
+          },
+          "relation": {
+            "description": "Relation is the canonical snake_case relation key this plane files the\npredicate under when ingesting an Apple graph.",
+            "type": "string"
+          },
+          "source": {
+            "description": "Source names the OS store or subsystem the daemon reads the predicate from.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "graph.graphPathIn": {
+        "properties": {
+          "as_known": {
+            "description": "AsKnown is how much this plane had heard, RFC 3339: the answer as it would\nhave been given then, which is what makes a past answer reproducible.\nAbsent is now.",
+            "type": "string"
+          },
+          "as_of": {
+            "description": "AsOf finds the path through the graph as it stood at an instant of the\nworld, RFC 3339: an edge that did not hold then is not crossed. Absent is\nnow.",
+            "type": "string"
+          },
+          "direction": {
+            "description": "Direction is out, in or both. Out crosses each edge from its entity to\nits value; in crosses it backwards; both crosses it either way. Absent is\nout.",
+            "type": "string"
+          },
+          "from": {
+            "description": "From is the entity the path starts at. Required.",
+            "type": "string"
+          },
+          "relations": {
+            "description": "Relations is the edge relations a path may cross. Absent crosses every\nrelation. A causal chain is this list naming the relations that mean\ncause — `caused_by` and `influenced` under the decision convention. At\nmost 256.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "to": {
+            "description": "To is the entity the path ends at. Required.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "from",
+          "to"
+        ],
+        "type": "object"
+      },
+      "graph.graphPathOut": {
+        "properties": {
+          "as_known": {
+            "description": "AsKnown is the knowledge instant it was taken at, RFC 3339, the same way.",
+            "type": "string"
+          },
+          "as_of": {
+            "description": "AsOf is the instant the path was taken at, RFC 3339: the one asked for,\nor the server's clock when none was.",
+            "type": "string"
+          },
+          "bound": {
+            "description": "Bound is the ceiling the search was held to, the same one a walk is.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "decay": {
+            "description": "Decay is the product of the edges' confidences: how much certainty\nsurvives the whole chain. Absent unless every edge states a confidence\nabove zero — an unstated confidence reads as zero, and a product of\nnumbers nobody gave measures nothing.",
+            "format": "double",
+            "type": "number"
+          },
+          "edges": {
+            "description": "Edges is the path from From to To, one assertion per hop, each with its\nsource, evidence and filer. An edge is listed as it was asserted, so\nunder in or both it may point against the direction of travel.",
+            "items": {
+              "$ref": "#/components/schemas/graph.wireFact"
+            },
+            "type": "array"
+          },
+          "found": {
+            "description": "Found is false when no path of in-force edges joins the two within the\nbound. That is an answer, not an error.",
+            "type": "boolean"
+          },
+          "hops": {
+            "description": "Hops is how many edges the path crosses: zero when From is To, and zero\nwhen nothing was found.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "truncated": {
+            "description": "Truncated says the bound stopped the search before a path was found, so\nFound false means none within the bound rather than none at all.",
+            "type": "boolean"
+          },
+          "weakest": {
+            "$ref": "#/components/schemas/graph.wireFact",
+            "description": "Weakest is the edge with the lowest confidence, the first of them on a\ntie: the link the chain is only as strong as. Absent exactly when Decay\nis."
+          }
+        },
+        "type": "object"
+      },
+      "graph.graphReadOut": {
+        "properties": {
+          "assertions": {
+            "description": "Assertions are the matching rows: a read's in the order they were written,\noldest first; a search's best match first. Every version is here: this\nresolves nothing and withholds nothing, so a superseded claim and the one\nthat superseded it both appear.",
+            "items": {
+              "$ref": "#/components/schemas/graph.wireFact"
+            },
+            "type": "array"
+          },
+          "truncated": {
+            "description": "Truncated says more assertions matched than came back: the limit, or the\nceiling, stopped the read. Narrow it, or page by as_known, to see the rest;\na search that stopped kept the best matches.",
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
+      "graph.graphResolveIn": {
+        "properties": {
+          "as_known": {
+            "description": "AsKnown is how much this plane had heard, RFC 3339: the answer as it would\nhave been given then, which is what makes a past answer reproducible.\nAbsent is now.",
+            "type": "string"
+          },
+          "as_of": {
+            "description": "AsOf is the instant of the world to answer about, RFC 3339: what held\nthen. Absent is now.",
+            "type": "string"
+          },
+          "entity": {
+            "description": "Entity is the thing to answer about. Required.",
+            "type": "string"
+          },
+          "relation": {
+            "description": "Relation is the one relation to settle. Required: this answers a single\n(entity, relation) pair, never a whole entity at once.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "entity",
+          "relation"
+        ],
+        "type": "object"
+      },
+      "graph.graphResolveOut": {
+        "properties": {
+          "as_known": {
+            "description": "AsKnown is the knowledge instant it was taken at, RFC 3339, the same way.",
+            "type": "string"
+          },
+          "as_of": {
+            "description": "AsOf is the valid instant this answer was taken at, RFC 3339: the one\nasked for, or the server's clock when none was.",
+            "type": "string"
+          },
+          "conflicts": {
+            "description": "Conflicts is, for a relation holding one value, every weaker account of\nthe winner's moment that names a different value, strongest first. They\nlost the order and stay visible, so a disagreement is never resolved into\nsilence.",
+            "items": {
+              "$ref": "#/components/schemas/graph.wireFact"
+            },
+            "type": "array"
+          },
+          "contested": {
+            "description": "Contested is true exactly when Conflicts is not empty.",
+            "type": "boolean"
+          },
+          "entity": {
+            "description": "Entity is the entity the question named, echoed so a stored answer still\nsays what it is about.",
+            "type": "string"
+          },
+          "held": {
+            "description": "Held is every statement holding at the point, Winner first, one per\nvalue: one for a relation that holds one value at a time, and every one\nthe pair holds for a relation that holds many — the five holders of a\nposition over five terms are five.",
+            "items": {
+              "$ref": "#/components/schemas/graph.wireFact"
+            },
+            "type": "array"
+          },
+          "known": {
+            "description": "Known is false when nothing held at the point. That is an answer, not an\nerror.",
+            "type": "boolean"
+          },
+          "relation": {
+            "description": "Relation is the relation the question named, echoed for the same reason.",
+            "type": "string"
+          },
+          "truncated": {
+            "description": "Truncated says this pair holds more statements than one read returns, so\nthe answer was decided from the ceiling-full begun most recently. It is\nreported because a provenance plane that trims silently is a plane that\nanswers confidently and wrongly; narrow the question with as_of to see\nwhat it dropped.",
+            "type": "boolean"
+          },
+          "winner": {
+            "$ref": "#/components/schemas/graph.wireFact",
+            "description": "Winner is the statement holding at the point that began most recently,\nthen the strongest under the order `rule` names. Absent exactly when Known\nis false."
+          }
+        },
+        "type": "object"
+      },
+      "graph.graphSourceIn": {
+        "properties": {
+          "at": {
+            "description": "At is when what the source says was so, RFC 3339. Required by ingest — which\nrecords — and read by nothing in extract, which records nothing. Required for\nthe same reason /v1/graph requires it: it is part of the assertion's content\naddress, so re-reading one source at one instant records one set of rows\nhowever many times it is delivered. A clock read here instead would append\nthe whole document again on every re-read.",
+            "type": "string"
+          },
+          "source": {
+            "description": "Source names where the text came from — a URL, a document id, a page title.\nIt is stamped on every assertion as its source, and with the section number\nas its evidence, so a claim can be traced back to the passage that made it.\nRequired.",
+            "type": "string"
+          },
+          "subject": {
+            "description": "Subject is the entity the text is about before any heading names one. A\ndocument that states relations above its first heading needs it; one whose\nevery section is headed does not.",
+            "type": "string"
+          },
+          "text": {
+            "description": "Text is the document. Relations are read from it and from nothing else: a\nline written `relation:: value` states one, and prose states none. Required.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "source",
+          "text"
+        ],
+        "type": "object"
+      },
+      "graph.graphStore": {
+        "properties": {
+          "detail": {
+            "description": "Detail says what an unsupported store is missing before an erasure could\nreach it.",
+            "type": "string"
+          },
+          "removed": {
+            "description": "Removed is how many of its rows were removed.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "status": {
+            "description": "Status is erased (rows naming the entity were removed), absent (it held\nnone) or unsupported (this op cannot reach it, so it may still hold the\nsubject).",
+            "type": "string"
+          },
+          "store": {
+            "description": "Store names it: `graph` is the caller's own (org, project) assertion\nfile, its full-text index included; `knowledge` is the org's wiki pages,\nmemories and sources with their vectors; `ai.memory` is /v1/ai/memory.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "graph.graphSupport": {
+        "properties": {
+          "assertion": {
+            "description": "Assertion is the ID of the statement in force the atom rests on. Absent\nwhen the atom is itself derived: it is then an entry of Derived or\nLemmas, with a proof of its own.",
+            "type": "string"
+          },
+          "object": {
+            "description": "Object is its second argument. Absent for a predicate the rules use with\none argument.",
+            "type": "string"
+          },
+          "predicate": {
+            "description": "Predicate is the relation the supporting atom is of.",
+            "type": "string"
+          },
+          "subject": {
+            "description": "Subject is its first argument.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "graph.graphTriple": {
+        "properties": {
+          "names": {
+            "description": "Names is the author's declaration that Object is an entity and the assertion\nis an EDGE, written `[[key]]`. Absent, the relation is a property of Subject.\nIt is read from the notation and never guessed from the value's shape.",
+            "type": "boolean"
+          },
+          "object": {
+            "description": "Object is what the relation points at. When Names is true it has been\nunwrapped from its `[[…]]` and is another entity's key.",
+            "type": "string"
+          },
+          "predicate": {
+            "description": "Predicate is the relation, exactly as the line spells it before the `::`.\nThis surface holds no vocabulary, so it renames nothing.",
+            "type": "string"
+          },
+          "reason": {
+            "description": "Reason is why filing it would be refused: the declared schema, or a\ndeclaration from a caller who is not an admin of the organization. Present\nonly on a member of Refused.",
+            "type": "string"
+          },
+          "section": {
+            "description": "Section is which section of the source stated it, counting from zero. It is\nthe second half of every resulting assertion's evidence, `\u003csource\u003e#\u003csection\u003e`.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "subject": {
+            "description": "Subject is the entity the statement is about: the nearest heading above the\nline, or the request's own subject where no heading has appeared yet.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "graph.graphTurn": {
+        "properties": {
+          "at": {
+            "description": "At is when this turn was spoken, RFC 3339. Absent defaults to the\nconversation's At instant.",
+            "type": "string"
+          },
+          "id": {
+            "description": "ID is the turn's identifier within the conversation, appended to Source\nas `#\u003cid\u003e` in Evidence. Absent defaults to its 1-based position.",
+            "type": "string"
+          },
+          "partner": {
+            "description": "Partner is the entity key of the participant addressed in this turn.\nSecond-person references (you, your) resolve to Partner.",
+            "type": "string"
+          },
+          "speaker": {
+            "description": "Speaker is the entity key of the participant speaking this turn. First-\nperson references (I, me, my) resolve to Speaker. Required.",
+            "type": "string"
+          },
+          "text": {
+            "description": "Text is what the speaker said. Required.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "speaker",
+          "text"
+        ],
+        "type": "object"
+      },
+      "graph.graphVocabularyOut": {
+        "properties": {
+          "bound": {
+            "description": "Bound is the ceiling on one walk.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "relations": {
+            "description": "Relations is what this organization has actually asserted. This plane\ndeclares none of its own.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "rule": {
+            "description": "Rule names the terms of the precedence order, in the order they apply. A\nreader who is told a winner without the rule cannot check it.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "schema": {
+            "description": "Schema is what the organization has declared, in force now: each relation\nwith a domain or range, asserted as (`relation:\u003cname\u003e`, `domain` |\n`range`, `\u003ctype\u003e`) and checked against the entities' (`\u003centity\u003e`, `type`,\n`\u003ctype\u003e`). A relation absent here is open.\n\nA decision is an entity of type `decision` by convention, never enforced:\n`scenario`, `reasoning`, `outcome` and `confidence` are its properties;\n`decided_by`, `caused_by`, `influenced` and `precedent` are its edges.\nDeclare their domain and range to make that convention checked; find a\nprecedent with search, then neighbors over `precedent`.",
+            "items": {
+              "$ref": "#/components/schemas/graph.graphDeclared"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "graph.wireFact": {
+        "properties": {
+          "at": {
+            "description": "At is when the thing was so, RFC 3339, as the asserter gave it.",
+            "type": "string"
+          },
+          "by": {
+            "description": "By is the identity that filed it — `owner` or `owner/user` — stamped from\nthe validated principal at the write, never from the body.",
+            "type": "string"
+          },
+          "confidence": {
+            "description": "Confidence in [0,1] as the asserter gave it; absent is 0. It breaks a tie\nbetween two assertions equally knowable and decides nothing else.",
+            "format": "double",
+            "type": "number"
+          },
+          "entity": {
+            "description": "Entity is the thing described, in the organization's own namespace.",
+            "type": "string"
+          },
+          "evidence": {
+            "description": "Evidence points at the record the claim came from. Absent when the asserter\ngave none.",
+            "type": "string"
+          },
+          "id": {
+            "description": "ID is the assertion's content address, minted by the server from what was\nasserted. Two callers who assert the identical thing land on one ID and one\nrow; changing any asserted field makes a different ID and a second row.",
+            "type": "string"
+          },
+          "knowable": {
+            "description": "Knowable is the first instant this plane could have answered with the\nassertion, RFC 3339: the later of Seen and the server's clock at the write.\nDerived and never supplied, which is what stops history filed today from\nbeing backdated into a past read.",
+            "type": "string"
+          },
+          "names": {
+            "description": "Names true means the assertion is an edge and Value is an entity. A walk\nreads only these.",
+            "type": "boolean"
+          },
+          "relation": {
+            "description": "Relation is what was asserted of it.",
+            "type": "string"
+          },
+          "seen": {
+            "description": "Seen is when the asserter says it became knowable, RFC 3339. Provenance\nonly — Knowable is what an as-of read is bounded by.",
+            "type": "string"
+          },
+          "source": {
+            "description": "Source names who asserted, as the caller gave it. This plane ranks no\nsource above another, so it never outweighs a later Knowable.",
+            "type": "string"
+          },
+          "until": {
+            "description": "Until is when the thing stopped being so, RFC 3339, as the asserter gave\nit. Absent is open.",
+            "type": "string"
+          },
+          "value": {
+            "description": "Value is what the relation points at: another entity's key when Names is\ntrue, otherwise a scalar.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "graphQLError": {
+        "type": "object",
+        "properties": {
+          "message": {
+            "type": "string"
+          },
+          "path": {
+            "type": "array",
+            "items": {}
+          }
+        }
+      },
+      "graphQLIn": {
+        "type": "object",
+        "properties": {
+          "operationName": {
+            "type": "string"
+          },
+          "query": {
+            "type": "string"
+          },
+          "variables": {}
+        }
+      },
+      "graphQLOut": {
+        "type": "object",
+        "properties": {
+          "data": {},
+          "errors": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/graphQLError"
+            }
+          }
+        }
+      },
+      "problem-details": {
+        "description": "An RFC 9457 problem document.",
+        "properties": {
+          "code": {
+            "description": "A stable token a client can branch on, when the refusal names one.",
+            "type": "string"
+          },
+          "detail": {
+            "description": "What was refused, for a person to read.",
+            "type": "string"
+          },
+          "status": {
+            "description": "The HTTP status.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "title": {
+            "description": "The status's reason phrase.",
+            "type": "string"
+          },
+          "type": {
+            "description": "about:blank",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "status",
+          "detail"
+        ],
+        "type": "object"
+      }
+    },
+    "securitySchemes": {
+      "bearer": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "The caller's credential, sent as `Authorization: Bearer \u003ctoken\u003e`. It is either an access token minted by Hanzo IAM or an API key (pk-/sk-). X-Authorization, and HTTP Basic carrying the token as the password, are accepted spellings of the same header for clients that cannot set Authorization; a browser presents the session cookie instead. Every operation requires it unless it says `security: []`."
+      }
+    }
+  }
+}

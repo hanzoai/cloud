@@ -1,0 +1,75 @@
+{
+  "$schema": "https://schemas.agentskills.io/discovery/0.2.0/schema.json",
+  "base_url": "https://api.lux.network",
+  "brand": "lux",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://lux.id",
+  "mcp": {
+    "description": "Model Context Protocol over JSON-RPC 2.0 — one POST per message, stateless, protocol revision 2026-07-28. tools/list answers without a credential with one tool per subsystem (its operations in the \"op\" enum) plus \"describe\", which returns one operation's input schema. tools/call names a subsystem tool and carries {\"op\": <operation>, \"input\": <its arguments>}; it takes the same bearer the REST API does, and a call that carries none is answered 401 with a WWW-Authenticate header naming the resource metadata at /.well-known/oauth-protected-resource, which names the authorization server to sign in at. The tool surface is the public contract: the operator's admin product is not offered, and a name that would disclose a secret or mutate an identity is withheld — the list says how many, under _meta.",
+    "method": "POST",
+    "url": "https://api.lux.network/v1/mcp"
+  },
+  "skill_count": 7,
+  "skills": [
+    {
+      "description": "Read dataroom analytics: Rolls up every share link pointing at one data room: session and page-view totals for the room, plus the per-page breakdown for each link beneath it., Reports how one share link was actually read: total viewing sessions, total page views, and per page the",
+      "digest": "sha256:85b6ad7b4e121879b7d4d6a543a6603bdbf636dcb7e471c9de5df2bfdf0a923e",
+      "name": "dataroom_analytics",
+      "service": "dataroom",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/dataroom_analytics/SKILL.md"
+    },
+    {
+      "description": "Read dataroom datarooms: Returns every data room in the caller org's own store, newest first, with its short public id, name, description and timestamps., Reads one of the caller org's data rooms together with every document in it, each carrying its membership id and order index.",
+      "digest": "sha256:5aa18698154a6ca0c0c2e299f86469f3896aac0e49147c5648ee7c1a20226e7e",
+      "name": "dataroom_datarooms",
+      "service": "dataroom",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/dataroom_datarooms/SKILL.md"
+    },
+    {
+      "description": "Read dataroom documents: Returns every document in the caller org's own store, newest first — name, opaque storage key, content type, page count, size and timestamps., Reads one of the caller org's documents — its name, opaque storage key, content type, page count, size and times",
+      "digest": "sha256:2ceae3e6d07c31ef3d2e29479914fc93f63e927004c35604ece4afca50b993fa",
+      "name": "dataroom_documents",
+      "service": "dataroom",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/dataroom_documents/SKILL.md",
+      "works": [
+        "director"
+      ]
+    },
+    {
+      "description": "Read dataroom health: Reports that the data room subsystem is up..",
+      "digest": "sha256:9d35866b5f5244eae1652158b24c1bc60698c42e1c86badbb33d6fb7a702a03a",
+      "name": "dataroom_health",
+      "service": "dataroom",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/dataroom_health/SKILL.md"
+    },
+    {
+      "description": "Read dataroom links: Returns every live share link in the caller org's own store, newest first, with the controls a visitor will meet: whether an address is required, whether a password is set, the allow and deny lists, whether download is permitted, and when the link expires..",
+      "digest": "sha256:f2dbbb1340e4f45110e66e384312e5a702d81bef5ece446062b5db70cc36ac7d",
+      "name": "dataroom_links",
+      "service": "dataroom",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/dataroom_links/SKILL.md"
+    },
+    {
+      "description": "Read dataroom trust: Answers the caller org's OWN trust centre: its settings, every item it holds in both tiers, the requests waiting on it, and the grants it has made., Answers an org's public trust centre: its name, the text a party must accept to ask for a document, and every ",
+      "digest": "sha256:2caff940ef89d0dbf779b788f44bee350d219efbadf53e5d0c4faf9a762aa939",
+      "name": "dataroom_trust",
+      "service": "dataroom",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/dataroom_trust/SKILL.md"
+    },
+    {
+      "description": "Read dataroom view: What a share link's visitor sees before authenticating, Read a document's bytes as an authorised link visitor.",
+      "digest": "sha256:a5036d687573dc5eeb800fe8b8296785d407bea85a0d224d8143ce8c8af7dcbb",
+      "name": "dataroom_view",
+      "service": "dataroom",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/dataroom_view/SKILL.md"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

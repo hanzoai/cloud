@@ -1,0 +1,910 @@
+package transport
+
+// routes.go — the /v1/transport HTTP surface. Every route is org-gated
+// (principal.Org) and wrapped cloud.Terminal(cloud.Handle(...)): transports
+// mounts after the commerce /v1 error-flattening filter, so Terminal writes
+// the real 4xx in-band before that filter can rewrite it to 500 (service.go).
+// Mutations (pairing approve, allowlist put) additionally require org admin.
+// There are NO public routes here — platform webhooks stay in provider.
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"errors"
+	"net/http"
+	"strconv"
+	"strings"
+	"time"
+
+	"github.com/hanzoai/cloud/client"
+	"github.com/hanzoai/cloud/manifest"
+	"github.com/hanzoai/cloud/sdk"
+	"github.com/hanzoai/cloud/sdk/plane"
+	"github.com/hanzoai/cloud/sdk/principal"
+	"github.com/hanzoai/cloud/sdk/spec"
+	"github.com/hanzoai/authz"
+	"github.com/zap-proto/zip"
+)
+
+// sendMaxBody bounds one POST /send body (attachments are URLs, not bytes).
+const sendMaxBody = 1 << 20 // 1 MiB
+
+// zipdoc lifts the doc comment off each typed op and its In/Out fields into
+// zipdoc_gen.go, which is the ONLY way that prose reaches the published document
+// and the MCP tool list — Go drops comments at compile time. Run by
+// `make -C apps/transport openapi`.
+//
+//go:generate go run github.com/zap-proto/zip/cmd/zipdoc
+
+// routes registers the /v1/transport surface. The :transport send route is LAST:
+// zip matches in registration order, so the static paths above must win.
+//
+// Six of the seven are TYPED ops — one registry entry each, which is what the
+// OpenAPI operation, the MCP tool, the CLI command and every generated SDK
+// method are all projected from. The seventh is named at its registration.
+//
+// The typed ops keep the cloud.Terminal wrapper the untyped ones carried:
+// transports mounts after the commerce /v1 error-flattening filter, so Terminal is
+// what writes the real 4xx in-band before that filter can rewrite it to 500. It
+// composes at registration time through zip's With, so a typed op is gated
+// exactly as the untyped route beside it.
+func routes(app cloud.Router, s *cloud.Service[state]) error {
+	// A typed op receives only a context, so the validated org has to be parked
+	// there. cloud.Bridge parks it, and the composer owns that install: the
+	// fused host at its root, a plugin program in its constructor.
+
+	o := ops{s: s}
+	// cloud.Terminal is func(func(*zip.Ctx) error) func(*zip.Ctx) error; zip.Middleware
+	// names the same shape over the defined Handler type, so it is adapted here
+	// rather than by widening either signature.
+	terminal := func(next zip.Handler) zip.Handler { return cloud.Terminal(next) }
+	ch := app.Group("/v1/transport").With(terminal)
+	ch.Get("", o.list)
+	ch.Get("/inbox", o.inbox)
+	ch.Get("/pairing", o.pairingList)
+	ch.Post("/pairing/approve", o.pairingApprove)
+	ch.Get("/allowlist", o.allowlistGet)
+	ch.Put("/allowlist", o.allowlistPut)
+	ch.Get("/agent", o.agentGet)
+	ch.Put("/agent", o.agentPut)
+
+	g := app.Group("/v1/transport")
+	// UNTYPED BY DESIGN — send has TWO independent blockers, both wire facts.
+	//
+	//  1. A PACKAGE-LOCAL body cap. It reads c.Body() and refuses anything over
+	//     sendMaxBody (1 MiB) with 400 "body exceeds 1 MiB". A typed op never sees
+	//     the raw bytes — zip decodes first — and cloud's global zip BodyLimit is
+	//     far larger, so the cap would silently vanish.
+	//  2. DisallowUnknownFields. The outbound body is the envelope's NARROW
+	//     projection (C2-6): identity fields (sender, account, transport) are
+	//     deliberately NOT decodable, and a request carrying one is refused LOUDLY
+	//     with 400 rather than having it silently dropped. zip's decode is
+	//     jsonenc.Unmarshal with no strictness option, so every one of those
+	//     requests would start succeeding with the field ignored — the silent
+	//     acceptance this route exists to prevent.
+	//
+	// A third fact would have to move too: an idempotent replay answers 200 with
+	// the PRIOR Delivery receipt rather than re-sending. apps/transport/typed_wire_test.go
+	// holds this route as a CLOSED list and pins both refusals.
+	g.Raw(http.MethodPost, "/:transport/send", cloud.Terminal(cloud.Handle(s, send)))
+	return nil
+}
+
+// ops binds the store to the typed transports ops. A TypedHandler is
+// func(context.Context, *In) (*Out, error) — no parameter for the service — so it
+// arrives as a RECEIVER and every op is a method value, which is also the only
+// bound form cmd/zipdoc can lift prose from.
+type ops struct{ s *cloud.Service[state] }
+
+// requireOrgAdmin is the mutation gate, and it is the ONE reason this package
+// reaches for the REQUEST. Approving a pairing or editing an allowlist decides
+// who may talk to the org's bots, so it takes admin of the org — which is
+// X-User-IsAdmin / X-User-IsOrgAdmin, two claims principal.OrgFrom does not
+// carry and that must never become In fields a caller could assert for itself.
+// Fails closed off the HTTP path: no request, no attested admin, no mutation.
+func requireOrgAdmin(ctx context.Context) error {
+	c, ok := cloud.Request(ctx)
+	if !ok {
+		return zip.ErrForbidden("a validated principal is required")
+	}
+	if !(principal.Super(c) || principal.IsOrgAdmin(c)) {
+		return zip.ErrForbidden("org admin required")
+	}
+	return nil
+}
+
+// inboxReader is the caller as the inbox's ownership rule reads them, on every
+// door the op is reached by (REST, MCP, the call plane): the subject the identity
+// boundary attested, and whether they hold platform authority. A credential that
+// names no stable subject owns nothing (principal.SubjectFrom), and neither does a
+// call with no person behind it. An admin of a customer's own org reads the org's
+// rows — its bots are theirs to run — and an admin of a held org (hanzo, whose
+// members are customers who are strangers to each other) reads only their own.
+//
+// A SuperAdmin's read needs no record written here: cloud's audit middleware
+// records every request made with SuperAdmin authority, reads included
+// (isSecurityRelevant, audit_middleware.go), and its in-process twin (Trail,
+// note.go) the one door no request carries.
+func inboxReader(ctx context.Context, org string) reader {
+	sub, ok := principal.SubjectFrom(ctx)
+	if !ok {
+		sub = ""
+	}
+	return reader{subject: sub, super: principal.SuperFrom(ctx), admin: cloud.Who(ctx).OrgAdmin && !authz.IsHeldOrg(org)}
+}
+
+// ── JSON projections (camelCase, closed shapes) ──────────────────────────────
+
+// transportView is one chat transport as this org sees it: the fixed transport
+// facts, the org's connection to it, and the org's access policy for it.
+type transportView struct {
+	// ID is the fixed transport identifier — discord, slack, teams, telegram or
+	// whatsapp — and the value every route on this surface names a transport by, including the
+	// `:transport` segment of the send path. The listing is always in that order.
+	ID string `json:"id"`
+	// Connected is whether integrations holds a connection for (this org, this
+	// transport) — whether someone finished its connect flow. False leaves Account
+	// and AccountLabel empty, and a send is then refused downstream rather than
+	// here: by the transport's own binding check (403 for a Telegram chat this org
+	// has not bound, 409 for a Discord or Teams channel with no inbound-learned
+	// route), or on Slack by the absent per-org bot token, which surfaces as 502.
+	Connected bool `json:"connected"`
+	// Account is the id-shaped fact about that connection: the lowercased external
+	// id integrations custodies for it — a Discord guild id, a Slack team
+	// (workspace) id, a Teams AAD tenant id, or the Telegram chat the org bound.
+	// Empty when not connected. Informational: the access policy keys on
+	// (org, transport), so exactly one account is representable per pair.
+	Account string `json:"account"`
+	// AccountLabel is the human label of that same account — the Discord guild
+	// name, the Slack team name, the Teams tenant name (falling back to the tenant
+	// id), the Telegram chat title. DISPLAY ONLY: never a key, and never swapped
+	// with Account, on any surface.
+	AccountLabel string `json:"accountLabel"`
+	// Capabilities is what this transport renders natively — read it before
+	// composing a message that needs threading, media or interactive actions.
+	Capabilities capabilities `json:"capabilities"`
+	// DMPolicy is how this org admits direct messages here: "pairing", "allowlist"
+	// or "open", defaulting to "pairing" when the org has never set one.
+	DMPolicy DMPolicy `json:"dmPolicy"`
+	// GroupPolicy is how this org admits group and thread channels here: "open",
+	// "allowlist" or "disabled", defaulting to "open". Both policy fields come
+	// back EMPTY — rather than the listing failing — when the policy cannot be
+	// read; GET /v1/transport/allowlist carries the same two with the entries they
+	// consult.
+	GroupPolicy GroupPolicy `json:"groupPolicy"`
+	// PendingPairing counts the org's UNEXPIRED pairing requests on this transport:
+	// exactly the rows GET /v1/transport/pairing returns for it, one per person
+	// waiting on an admin. It never exceeds three — the pending cap per
+	// (org, transport) — and expired requests are not counted.
+	PendingPairing int `json:"pendingPairing"`
+}
+
+// inboxView is one stored inbound message: the portable envelope (envelope.go)
+// as this API publishes it, identical in shape whichever transport it came from.
+type inboxView struct {
+	// ID is the store's row id, assigned on insert — SERVER-SET, and the cursor:
+	// pass a page's last id back as `since`. It rises with arrival order but is
+	// not contiguous, because one sequence is shared by every org in the store and
+	// a caller reads only its own rows.
+	ID int64 `json:"id"`
+	// Transport is the transport this message arrived on — discord, slack, teams or
+	// telegram — and the `:transport` segment to reply through.
+	Transport string `json:"transport"`
+	// Account is the lowercased external id of the org's connected account on that
+	// transport: the Discord guild id, the Slack team id, the Teams AAD tenant id,
+	// or the bound Telegram chat id. Informational only — the gate keys on
+	// (org, transport), never on the account.
+	Account string `json:"account"`
+	// ChannelID is the conversation on the ORIGINATING transport, and the value to
+	// send back as `channel.id`: a Discord channel snowflake, a Slack conversation id
+	// (D… IM, C… public channel, G… private or mpim), a Teams conversation id
+	// (19:…@thread.… for a Teams channel or group chat, a:… for a personal chat), or a
+	// Telegram chat id in decimal (negative for a group, positive for a DM). It is
+	// stable for the life of the channel, so every message from one conversation
+	// carries the same value.
+	ChannelID string `json:"channelId"`
+	// ChannelKind is how ingest classified the channel: "dm", "group" or "thread". It
+	// decides which policy gated the message — dmPolicy for "dm", groupPolicy for
+	// BOTH "group" and "thread". Only Slack ever reports "thread"; Telegram's
+	// reply-to id becomes ReplyTo instead, and Discord's ingress is guild-scoped
+	// so its channels are always "group".
+	ChannelKind string `json:"channelKind"`
+	// Sender is the TRANSPORT-NATIVE user id of whoever wrote the message — a
+	// Discord member.user.id, a Slack U… user id, a Teams aadObjectId (falling
+	// back to from.id), a Telegram from.id in decimal. Stable per person per
+	// transport, and the identity the gate keys on: an allow entry, an access-group
+	// member and a pairing approval all name exactly this value.
+	Sender string `json:"sender"`
+	// SenderUser is the HANZO account subject that chat identity is linked to,
+	// resolved at ingest through the org's user link. Best-effort and omitted when
+	// absent: a person who never linked their chat account — or a link store that
+	// could not be read — leaves it empty and is never blocked for it.
+	SenderUser string `json:"senderUser,omitempty"`
+	// Text is the body as the transport delivered it, with the bot mention already
+	// stripped by the ingress adapter (on Discord it is the /hanzo prompt argument,
+	// since that ingress is slash commands only), truncated to 8 KiB on store.
+	// Inbound attachments are not stored — this is the whole of what was said.
+	Text string `json:"text"`
+	// ReplyTo is the transport's reply target for this message: Slack's thread_ts,
+	// or the Telegram message id it arrived as. Send it back as the body's
+	// `replyTo` to answer in the SAME thread. Empty means the transport reported
+	// none — a top-level Slack message, and every Discord and Teams message, since
+	// neither carries one — and a reply then lands at the top level of the channel.
+	ReplyTo string `json:"replyTo,omitempty"`
+	// CreatedAt is Unix SECONDS, stamped by the ingest goroutine when the message
+	// was accepted — not the transport's own send time. Rows are dropped 30 days
+	// after it.
+	CreatedAt int64 `json:"createdAt"`
+}
+
+// pairingView is one pending pairing request: someone who messaged a
+// pairing-gated transport and is waiting on an org admin.
+type pairingView struct {
+	// Transport is the transport the request arrived on — discord, slack, teams or
+	// telegram — and half of what approval names. The cap of three unapproved
+	// requests applies per (org, transport); while it is full no further code is
+	// minted until one is approved or expires.
+	Transport string `json:"transport"`
+	// Sender is the transport-native user id waiting for access — the same
+	// identity inbox messages carry. Approving mints a DM allow entry for exactly
+	// this value and nothing wider: pairing never grants group access.
+	Sender string `json:"sender"`
+	// Code is the CAPABILITY that authorises the approval: eight characters from a
+	// 32-symbol uppercase alphabet (A-Z0-9 minus the confusables 0, O, 1 and I),
+	// minted with crypto/rand and also sent to the requester in chat. An org admin
+	// passes it with the transport to POST /v1/transport/pairing/approve, which
+	// CONSUMES it — the request row is deleted, so a code approves once — and which
+	// takes org admin as well as the code. It lives ONE HOUR from CreatedAt;
+	// expired requests are not listed here, and approving one is a 404. It is shown
+	// on this admin surface and NEVER logged.
+	Code string `json:"code"`
+	// CreatedAt is Unix SECONDS of FIRST contact: when the request was minted and
+	// the code sent. Expiry is measured from here and from nowhere else.
+	CreatedAt int64 `json:"createdAt"`
+	// LastSeen is Unix SECONDS of the MOST RECENT message from this sender while
+	// the request has been pending. It moves as they keep writing, which is how an
+	// admin tells a live request from an abandoned one — but it does not extend the
+	// hour and does not re-send the code, since one request sends exactly one chat
+	// reply.
+	LastSeen int64 `json:"lastSeen"`
+}
+
+// allowlistView is one transport's access policy for this org: what the gate does
+// to an inbound message, and every entry it consults doing it. Both the GET and
+// the PUT answer this shape.
+type allowlistView struct {
+	// DMPolicy decides every inbound DIRECT message, defaulting to "pairing" when
+	// the org has never set one. "pairing": a sender with no entry is sent a
+	// pairing code and the message is DROPPED — it never reaches the inbox — and
+	// they are admitted only once an admin approves. "allowlist": only DM admits,
+	// and Paired senders are suspended, since a pairing grant counts under
+	// "pairing" alone. "open" is not unconditional either — it still requires `*`
+	// or a matching entry in DM.
+	DMPolicy DMPolicy `json:"dmPolicy"`
+	// GroupPolicy decides every inbound GROUP or THREAD message — a thread is a
+	// group surface — defaulting to "open". "open" admits every sender in the channel.
+	// "allowlist" admits only what Group lists, so an EMPTY Group blocks the
+	// transport's group channels outright. "disabled" drops all of them.
+	GroupPolicy GroupPolicy `json:"groupPolicy"`
+	// DM is the CONFIG-managed DM allow entries — the list PUT
+	// /v1/transport/allowlist owns and replaces wholesale. An entry matches a sender
+	// either EXACTLY, as the transport-native id inbox messages carry, or as
+	// `accessGroup:<name>` resolved through AccessGroups. A bare `*` admits
+	// everyone, but only while DMPolicy is "open": it is gate syntax, not an
+	// identity, so under "allowlist" it matches nobody.
+	DM []string `json:"dm"`
+	// Group is the CONFIG-managed group allow entries, consulted only while
+	// GroupPolicy is "allowlist". Entries match the same two ways as DM, and here a
+	// bare `*` admits every sender in the channel.
+	Group []string `json:"group"`
+	// Paired is the senders admitted by PAIRING — the entries POST
+	// /v1/transport/pairing/approve minted, DM scope only. READ-ONLY on this
+	// endpoint: the PUT writes config entries and can never revoke one of these
+	// (listing a paired sender under DM instead promotes that entry to config,
+	// which the admin then owns). They admit only while DMPolicy is "pairing".
+	Paired []string `json:"paired"`
+	// AccessGroups is the org's named sender sets, as group name -> transport ->
+	// member entries, held once for the whole org. A DM or Group entry written
+	// `accessGroup:<name>` admits any sender listed under that name for THIS
+	// transport, or under the transport `*`, which is how one set covers every
+	// transport at once. Replaced wholesale by the PUT.
+	AccessGroups map[string]map[string][]string `json:"accessGroups"`
+}
+
+// nonNil keeps list fields JSON arrays ([] not null) — integrations idiom.
+func nonNil(v []string) []string {
+	if v == nil {
+		return []string{}
+	}
+	return v
+}
+
+// ── handlers ─────────────────────────────────────────────────────────────────
+
+// chatTransports is the transport listing as one read answers it.
+//
+// The name is QUALIFIED with the product because the schema namespace is FLAT
+// across the whole fleet: apps/content already publishes a `transportList` for its
+// SOCIAL transports, and openapi.Compose refuses one name with two shapes ("every
+// generated SDK would bind whichever it read last"). These are chat transports,
+// so that is what the type is called; the wire key stays `transports`.
+type chatTransports struct {
+	// Transports is every chat transport this deployment supports, in a fixed
+	// order, each carrying whether the org has connected it, the account behind
+	// the connection, what the transport can do, the org's DM/group access
+	// policies for it, and how many pairing requests are waiting.
+	Transports []transportView `json:"transports"`
+}
+
+// list returns every chat transport transports can talk to — Discord, Slack, Teams
+// and Telegram — with the caller org's own facts on each: whether it is
+// connected and to which account, what the transport supports, the org's DM and
+// group access policies, and how many pairing requests are pending approval. The
+// order is fixed, so a console can render the same rows every time. A policy that
+// cannot be read leaves that transport's policy fields empty rather than failing
+// the whole listing.
+// askConnection asks integrations whether this org has the transport connected.
+//
+// It is an ASK, not a call, because integrations is a different PROCESS and owns
+// that store. This surface used to call provider.ConnectionFor in-process,
+// which resolves a package-level handle that is only ever set inside integrations
+// itself — so every answer here was a silent "not connected". Measured:
+// /v1/provider reported the Slack workspace, its team id and nine scopes while
+// this listing reported connected:false for the same install, and a send was
+// refused on the strength of that.
+//
+// A read that cannot be answered leaves the row UNCONNECTED rather than failing
+// the whole listing, which is the same rule the policy read beside it follows: one
+// unreachable peer must not blank every transport a console renders.
+func askConnection(ctx context.Context, provider string) client.Connection {
+	out, err := plane.Call[client.ConnectionIn, client.Connection](ctx, manifest.Provider,
+		client.IntegrationsConnection, &client.ConnectionIn{Provider: provider})
+	if err != nil || out == nil {
+		return client.Connection{}
+	}
+	return *out
+}
+
+// list reports every chat transport this org can send through, and whether it can
+// send through it right now.
+//
+// A transport appears here whether or not it is connected — an empty list would
+// leave a caller unable to tell "this org has no Slack" from "Slack is down",
+// which are different problems with different fixes. Each entry carries the
+// connection behind it, so the answer to "why can I not post?" is in the same
+// response as the transport that cannot post.
+func (o ops) list(ctx context.Context, _ *cloud.Unit) (*chatTransports, error) {
+	s := o.s
+	org, err := principal.Acting(ctx)
+	if err != nil {
+		return nil, err
+	}
+	pending := map[string]int{}
+	rows, err := listPairing(ctx, s.State.store, org, time.Now().Unix())
+	if err != nil {
+		return nil, zip.Errorf(http.StatusInternalServerError, "pairing: %v", err)
+	}
+	for _, r := range rows {
+		pending[r.Transport]++
+	}
+	out := make([]transportView, 0, len(transports))
+	for _, tr := range transports {
+		conn := askConnection(ctx, tr.id)
+		// Absent row ⇒ defaults (policyFor); a read error leaves zero policy
+		// fields rather than failing the whole listing.
+		p, _ := policyFor(ctx, s.State.store, org, tr.id)
+		out = append(out, transportView{
+			ID:        tr.id,
+			Connected: conn.Connected,
+			// C2-7: account is the id-shaped fact (lowercased external id),
+			// accountLabel the human label — never swapped, on any surface.
+			Account:        strings.ToLower(conn.Account),
+			AccountLabel:   conn.AccountLabel,
+			Capabilities:   tr.caps,
+			DMPolicy:       p.DM,
+			GroupPolicy:    p.Group,
+			PendingPairing: pending[tr.id],
+		})
+	}
+	return &chatTransports{Transports: out}, nil
+}
+
+// inboxIn pages the org's inbound message log.
+//
+// Both fields are STRINGS, not numbers, and deliberately so: this route answers
+// 400 for a value it cannot parse as an integer, and zip's URL binder silently
+// leaves an unparseable value at the field's zero — so an int64 field would turn
+// `?since=abc` from today's 400 into a silent read from the beginning. Parsing
+// here keeps the refusal exactly where the wire has it.
+type inboxIn struct {
+	// Since is the exclusive cursor: only messages with a higher row id come
+	// back. Empty starts at the beginning. Must parse as an integer.
+	Since string `json:"since"`
+	// Limit caps how many messages come back. Empty or 0 uses the store's
+	// default page size. Must parse as an integer.
+	Limit string `json:"limit"`
+}
+
+// inboxPage is one page of the org's inbound messages.
+type inboxPage struct {
+	// Cursor is the row id to pass back as `since` for the next page. It is the
+	// last message's id, or the requested cursor when the page is empty.
+	Cursor int64 `json:"cursor"`
+	// Messages are the inbound messages, oldest first.
+	Messages []inboxView `json:"messages"`
+}
+
+// inbox returns the caller's own messages to the org's connected chat bots —
+// those recorded on the caller's linked account — oldest first, in the portable
+// envelope shape every transport normalises into. It is a CURSOR feed, not a
+// search: pass the returned cursor back as `since` to get only what has arrived
+// since. A message is its person's: another member's is never listed, an admin
+// of the org reads only their own, and one recorded on no account is listed to a
+// SuperAdmin alone.
+//
+// Example: {"since": "1042", "limit": "100"}
+func (o ops) inbox(ctx context.Context, in *inboxIn) (*inboxPage, error) {
+	s := o.s
+	org, err := principal.Acting(ctx)
+	if err != nil {
+		return nil, err
+	}
+	var since int64
+	if q := strings.TrimSpace(in.Since); q != "" {
+		v, err := strconv.ParseInt(q, 10, 64)
+		if err != nil {
+			return nil, zip.ErrBadRequest("since must be an integer cursor")
+		}
+		since = v
+	}
+	var limit int
+	if q := strings.TrimSpace(in.Limit); q != "" {
+		v, err := strconv.Atoi(q)
+		if err != nil {
+			return nil, zip.ErrBadRequest("limit must be an integer")
+		}
+		limit = v
+	}
+	// The org scopes the read and the caller filters it: a message is listed only
+	// to the person it is recorded on (store.listInbox).
+	rows, err := s.State.store.listInbox(ctx, org, inboxReader(ctx, org), since, limit)
+	if err != nil {
+		return nil, zip.Errorf(http.StatusInternalServerError, "inbox: %v", err)
+	}
+	msgs := make([]inboxView, 0, len(rows))
+	cursor := since
+	for _, r := range rows {
+		msgs = append(msgs, inboxView{
+			ID:          r.ID,
+			Transport:   r.Transport,
+			Account:     r.Account,
+			ChannelID:   r.ChannelID,
+			ChannelKind: string(r.ChannelKind),
+			Sender:      r.Sender,
+			SenderUser:  r.SenderUser,
+			Text:        r.Text,
+			ReplyTo:     r.ReplyTo,
+			CreatedAt:   r.CreatedAt,
+		})
+		cursor = r.ID
+	}
+	return &inboxPage{Cursor: cursor, Messages: msgs}, nil
+}
+
+// pairingQueue is the org's pending pairing requests.
+type pairingQueue struct {
+	// Pending is every unexpired pairing request waiting on an org admin, each
+	// carrying the transport, the requesting sender and the code to approve it with.
+	Pending []pairingView `json:"pending"`
+}
+
+// pairingList returns the pairing requests waiting for the caller org to approve
+// — one per person who messaged a connected bot on a transport whose DM policy is
+// "pairing" and who is not allowed yet. Each row carries the CODE an org admin
+// passes to POST /v1/transport/pairing/approve. Expired requests are not
+// returned. Codes are capability strings: they are shown here, and never logged.
+// Reading them is an org admin's, as approving them is.
+func (o ops) pairingList(ctx context.Context, _ *cloud.Unit) (*pairingQueue, error) {
+	s := o.s
+	org, err := principal.Acting(ctx)
+	if err != nil {
+		return nil, err
+	}
+	// Each row names a person waiting to message the org's bot and carries the code
+	// that approves them: the approver's to read, as approving is.
+	if err := requireOrgAdmin(ctx); err != nil {
+		return nil, zip.ErrForbidden("reading pairing requests requires org admin")
+	}
+	rows, err := listPairing(ctx, s.State.store, org, time.Now().Unix())
+	if err != nil {
+		return nil, zip.Errorf(http.StatusInternalServerError, "pairing: %v", err)
+	}
+	out := make([]pairingView, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, pairingView{
+			Transport: r.Transport,
+			Sender:    r.Sender,
+			Code:      r.Code,
+			CreatedAt: r.CreatedAt,
+			LastSeen:  r.LastSeen,
+		})
+	}
+	return &pairingQueue{Pending: out}, nil
+}
+
+// approvePairingIn names one pending pairing request. Both fields are BODY-only
+// (`url:"-"`): zip's binder fills an In field from the query string too, and this
+// route has never taken an approval there — without the opt-out
+// `?code=` would approve a pairing the body never asked for, from a URL that
+// lands in access logs.
+type approvePairingIn struct {
+	// Transport is the transport the request came in on: discord, slack, teams,
+	// telegram or whatsapp.
+	Transport string `json:"transport" url:"-"`
+	// Code is the pairing code from GET /v1/transport/pairing. It is a capability:
+	// holding it is what authorises the approval, alongside org admin.
+	Code string `json:"code" url:"-"`
+}
+
+// pairingApproved is the result of approving one pairing request.
+type pairingApproved struct {
+	// OwnerBootstrapped is true when this approval was the org's FIRST on the
+	// transport and therefore also made the sender its owner.
+	OwnerBootstrapped bool `json:"ownerBootstrapped"`
+	// Sender is the external chat identity that is now allowed to DM the org's bot.
+	Sender string `json:"sender"`
+}
+
+// pairingApprove turns one pending pairing code into a standing allow entry, so
+// that person can DM the org's bot on that transport from now on. It requires ORG
+// ADMIN, not merely membership. The first approval an org makes on a transport also
+// bootstraps that sender as the transport's owner, which the answer reports. An
+// unknown or expired code is a 404, and a code always belongs to exactly one
+// org, so it can never approve someone into another tenant.
+//
+// Example: {"transport": "telegram", "code": "PAIR-7Q2M"}
+func (o ops) pairingApprove(ctx context.Context, in *approvePairingIn) (*pairingApproved, error) {
+	s := o.s
+	org, err := principal.Acting(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if err := requireOrgAdmin(ctx); err != nil {
+		return nil, zip.ErrForbidden("approving a pairing requires org admin")
+	}
+	transport := strings.TrimSpace(in.Transport)
+	code := strings.TrimSpace(in.Code)
+	if transport == "" || code == "" {
+		return nil, zip.ErrBadRequest("transport and code are required")
+	}
+	sender, ownerBoot, ok, err := approvePairing(ctx, s.State.store, org, transport, code, time.Now().Unix())
+	if err != nil {
+		return nil, zip.Errorf(http.StatusInternalServerError, "approve: %v", err)
+	}
+	if !ok {
+		return nil, zip.ErrNotFound("unknown or expired code")
+	}
+	return &pairingApproved{OwnerBootstrapped: ownerBoot, Sender: sender}, nil
+}
+
+// allowlistRef names the transport whose access policy to read.
+type allowlistRef struct {
+	// Transport is the transport to read: discord, github, linear, slack, teams, telegram or whatsapp.
+	// Required; an unknown value is a 404.
+	Transport string `json:"transport"`
+}
+
+// allowlistGet returns the caller org's access policy for one transport: whether
+// DMs are pairing-gated, allowlisted or open, whether group channels are open,
+// allowlisted or disabled, the config-managed DM and group allow entries, the
+// senders approved through PAIRING (read-only here), and the org's named access
+// groups. An unknown transport is a 404. The entries name the people the org's
+// bots admit, so reading them is an org admin's, as editing them is.
+//
+// Example: {"transport": "slack"}
+func (o ops) allowlistGet(ctx context.Context, in *allowlistRef) (*allowlistView, error) {
+	s := o.s
+	org, err := principal.Acting(ctx)
+	if err != nil {
+		return nil, err
+	}
+	// The entries name the people the org's bots admit: the editor's to read, as
+	// editing them is. The policies alone are on GET /v1/transport for every member.
+	if err := requireOrgAdmin(ctx); err != nil {
+		return nil, zip.ErrForbidden("reading the allowlist requires org admin")
+	}
+	transport := strings.TrimSpace(in.Transport)
+	if transport == "" {
+		return nil, zip.ErrBadRequest("transport query parameter is required")
+	}
+	if _, ok := transportFor(transport); !ok {
+		return nil, zip.ErrNotFound("unknown transport")
+	}
+	v, err := allowlistFor(ctx, s.State.store, org, transport)
+	if err != nil {
+		return nil, zip.Errorf(http.StatusInternalServerError, "allowlist: %v", err)
+	}
+	return &v, nil
+}
+
+// allowlistPutIn is a PARTIAL edit of one transport's access policy: every field
+// but `transport` is applied only when the request provides it. An empty string
+// leaves a policy alone; a NULL or ABSENT list leaves that list alone, while an
+// EMPTY list ([]) clears it. That distinction is the whole contract of this
+// route, so the list fields are plain slices rather than pointers — encoding/json
+// gives a nil slice for both null and absent, and a non-nil empty slice for [],
+// which is exactly the three-way answer the handler keys on.
+//
+// `url:"-"` on every field is what keeps this a BODY: zip's binder fills an In
+// field from the query string as well as the body, and this route has never
+// taken a policy there — without the opt-out `?dmPolicy=open` would open an
+// org's DMs from a URL.
+type allowlistPutIn struct {
+	// Transport is the transport to edit: discord, github, linear, slack, teams, telegram or whatsapp.
+	// Required; an unknown value is a 404.
+	Transport string `json:"transport" url:"-"`
+	// DMPolicy sets how direct messages are admitted: "pairing" (a person must be
+	// approved first), "allowlist" (only listed senders) or "open". Empty leaves
+	// it unchanged.
+	DMPolicy string `json:"dmPolicy" url:"-"`
+	// GroupPolicy sets how group and thread channels are admitted: "open",
+	// "allowlist" or "disabled". Empty leaves it unchanged.
+	GroupPolicy string `json:"groupPolicy" url:"-"`
+	// DM REPLACES the config-managed DM allow entries. Absent or null leaves them
+	// alone; an empty list clears them. It never touches senders approved through
+	// pairing — a policy edit cannot revoke an approved pairing.
+	DM []string `json:"dm" url:"-"`
+	// Group REPLACES the config-managed group allow entries. Absent or null
+	// leaves them alone; an empty list clears them.
+	Group []string `json:"group" url:"-"`
+	// AccessGroups REPLACES the org's named access groups, as
+	// group name -> transport -> entries. Absent or null leaves them alone.
+	AccessGroups map[string]map[string][]string `json:"accessGroups" url:"-"`
+}
+
+// allowlistPut edits the caller org's access policy for one transport and answers
+// the policy as GET would, so both verbs return ONE shape. It requires ORG ADMIN.
+// Every field but `transport` is optional and applied only when provided: an empty
+// policy string leaves that policy alone, an absent or null list leaves that list
+// alone, and an EMPTY list clears it. It writes only CONFIG-sourced allow entries
+// — senders approved through pairing belong to the approval flow, so a policy
+// edit can never revoke one. An unknown transport is a 404.
+//
+// Example: {"transport": "slack", "dmPolicy": "allowlist", "dm": ["U024BE7LH"]}
+func (o ops) allowlistPut(ctx context.Context, in *allowlistPutIn) (*allowlistView, error) {
+	s := o.s
+	org, err := principal.Acting(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if err := requireOrgAdmin(ctx); err != nil {
+		return nil, zip.ErrForbidden("editing the allowlist requires org admin")
+	}
+	body := in
+	transport := strings.TrimSpace(body.Transport)
+	if transport == "" {
+		return nil, zip.ErrBadRequest("transport is required")
+	}
+	if _, ok := transportFor(transport); !ok {
+		return nil, zip.ErrNotFound("unknown transport")
+	}
+	dm, group := DMPolicy(body.DMPolicy), GroupPolicy(body.GroupPolicy)
+	switch dm {
+	case "", DMPairing, DMAllowlist, DMOpen:
+	case DMMembers:
+		if !workspace[transport] {
+			return nil, zip.ErrBadRequest("dmPolicy members is for a workspace platform")
+		}
+	default:
+		return nil, zip.ErrBadRequest("dmPolicy must be pairing, allowlist, open, or members")
+	}
+	switch group {
+	case "", GroupOpen, GroupAllowlist, GroupDisabled:
+	default:
+		return nil, zip.ErrBadRequest("groupPolicy must be open, allowlist, or disabled")
+	}
+	st := s.State.store
+	now := time.Now().Unix()
+	if dm != "" || group != "" {
+		p, err := policyFor(ctx, st, org, transport)
+		if err != nil {
+			return nil, zip.Errorf(http.StatusInternalServerError, "policy: %v", err)
+		}
+		if dm != "" {
+			p.DM = dm
+		}
+		if group != "" {
+			p.Group = group
+		}
+		if err := setPolicy(ctx, st, org, transport, p, now); err != nil {
+			return nil, zip.Errorf(http.StatusInternalServerError, "policy: %v", err)
+		}
+	}
+	// channel_allow two-writer split: this PUT owns ONLY config-source rows
+	// (putAllow); pairing-source rows belong to approvePairing — a policy edit
+	// can never revoke an approved pairing.
+	if body.DM != nil {
+		if err := putAllow(ctx, st, org, transport, "dm", body.DM, now); err != nil {
+			return nil, zip.Errorf(http.StatusInternalServerError, "allowlist: %v", err)
+		}
+	}
+	if body.Group != nil {
+		if err := putAllow(ctx, st, org, transport, "group", body.Group, now); err != nil {
+			return nil, zip.Errorf(http.StatusInternalServerError, "allowlist: %v", err)
+		}
+	}
+	if body.AccessGroups != nil {
+		if err := putAccessGroups(ctx, st, org, body.AccessGroups); err != nil {
+			return nil, zip.Errorf(http.StatusInternalServerError, "access groups: %v", err)
+		}
+	}
+	v, err := allowlistFor(ctx, st, org, transport)
+	if err != nil {
+		return nil, zip.Errorf(http.StatusInternalServerError, "allowlist: %v", err)
+	}
+	return &v, nil
+}
+
+// allowlistFor builds the allowlist payload GET returns and PUT echoes.
+func allowlistFor(ctx context.Context, st *store, org, transport string) (allowlistView, error) {
+	p, err := policyFor(ctx, st, org, transport)
+	if err != nil {
+		return allowlistView{}, err
+	}
+	// paired = pairing-source rows, minted only by approvePairing (dm scope —
+	// pairing is a DM concept); surfaced read-only so admins see who is paired.
+	dm, paired, err := allowEntries(ctx, st, org, transport, "dm")
+	if err != nil {
+		return allowlistView{}, err
+	}
+	group, _, err := allowEntries(ctx, st, org, transport, "group")
+	if err != nil {
+		return allowlistView{}, err
+	}
+	groups, err := listAccessGroups(ctx, st, org)
+	if err != nil {
+		return allowlistView{}, err
+	}
+	return allowlistView{
+		DMPolicy:     p.DM,
+		GroupPolicy:  p.Group,
+		DM:           nonNil(dm),
+		Group:        nonNil(group),
+		Paired:       nonNil(paired),
+		AccessGroups: groups,
+	}, nil
+}
+
+// listAccessGroups reads the org's access groups (name → transport → entries) —
+// the read mirror of putAccessGroups (policy.go), for the allowlist payload.
+func listAccessGroups(ctx context.Context, st *store, org string) (map[string]map[string][]string, error) {
+	rows, err := st.db.QueryContext(ctx, `SELECT name, channel, entry FROM channel_access_group
+  WHERE org = $1 ORDER BY name, channel, entry`, org)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	out := map[string]map[string][]string{}
+	for rows.Next() {
+		var name, transport, entry string
+		if err := rows.Scan(&name, &transport, &entry); err != nil {
+			return nil, err
+		}
+		if out[name] == nil {
+			out[name] = map[string][]string{}
+		}
+		out[name][transport] = append(out[name][transport], entry)
+	}
+	return out, rows.Err()
+}
+
+// The prose for the one operation here that cannot be a typed op. The six ops
+// above carry theirs in a doc comment zipdoc lifts; send is pinned untyped by
+// two wire facts (routes says which), so there is no comment for anything to
+// lift and the published document would carry an operationId and nothing else —
+// an SDK method and a CLI command that cannot explain themselves. Declared
+// through the same registry Register uses, so it renders only while the router
+// actually serves the route.
+func init() {
+	spec.Describe("/v1/transport/:transport/send", http.MethodPost,
+		"Send a message from your org's bot to one chat channel",
+		"Delivers text, attachments and actions to one channel on a connected chat transport — "+
+			"discord, github, linear, slack, teams, telegram or whatsapp — and answers that transport's own receipt, the "+
+			"`messageId` it assigned and the Unix second it landed. An unknown transport is a 404.\n\n"+
+			"The body is the envelope's NARROW outbound projection: `channel`, `text`, `attachments`, "+
+			"`actions`, `replyTo` and `idempotency`, and nothing else. Identity is not a field — the "+
+			"transport is the path segment and the sender is the caller's validated org — so a body "+
+			"carrying `sender`, `account` or `transport` is refused with 400 rather than having it "+
+			"silently dropped. `channel.id` is required, and so is something to say: text, or at least "+
+			"one attachment.\n\n"+
+			"Requires a validated principal; 401 without one. The channel must already belong to the "+
+			"caller's org — each transport verifies the binding itself, so a channel this org has not "+
+			"bound is 403 and a channel whose route the bot has never learned is 409, meaning someone "+
+			"has to message the bot there first. A route learned only so a pairing reply could be "+
+			"delivered lasts exactly as long as that pairing request does, so a channel whose sender "+
+			"was never approved goes back to 409 within the hour. A transport that fails answers "+
+			"502 carrying status and shape only, never a token.\n\n"+
+			"Sending is at-most-once only if you ask for it: pass an `idempotency` string and a "+
+			"replay answers 200 with the PRIOR receipt instead of sending twice, while a send that "+
+			"fails releases the key so the caller can re-attempt. Bodies over 1 MiB are refused. Every "+
+			"transport currently renders text only, so attachments and actions are flattened "+
+			"deterministically to one line each after the text rather than dropped.")
+}
+
+// send is POST /v1/transport/:transport/send — the ONE egress endpoint. The body is
+// the envelope's narrow outbound projection (C2-6): identity fields (sender,
+// account, transport) are not decodable — DisallowUnknownFields rejects them
+// loudly instead of silently dropping them.
+func send(s *cloud.Service[state], c *zip.Ctx) error {
+	org, ok := principal.Org(c)
+	if !ok {
+		return principal.Refused(c)
+	}
+	raw := c.Body()
+	if len(raw) > sendMaxBody {
+		return zip.ErrBadRequest("body exceeds 1 MiB")
+	}
+	dec := json.NewDecoder(bytes.NewReader(raw))
+	dec.DisallowUnknownFields()
+	var r SendRequest
+	if err := dec.Decode(&r); err != nil {
+		return zip.ErrBadRequest("invalid body: " + err.Error())
+	}
+	if err := r.validate(); err != nil {
+		return zip.ErrBadRequest(err.Error())
+	}
+	transport := strings.TrimSpace(c.Param("transport"))
+	tr, ok := transportFor(transport)
+	if !ok {
+		return zip.ErrNotFound("unknown transport")
+	}
+	m := Message{
+		Transport:   transport,
+		Channel:     r.Channel,
+		Text:        r.Text,
+		Attachments: r.Attachments,
+		Actions:     r.Actions,
+		ReplyTo:     r.ReplyTo,
+		Idempotency: r.Idempotency,
+	}
+	ctx := c.Context()
+	st := s.State.store
+	if r.Idempotency != "" {
+		fresh, prior, err := st.markSend(ctx, org, transport, r.Idempotency, time.Now().Unix())
+		if err != nil {
+			return zip.Errorf(http.StatusInternalServerError, "idempotency: %v", err)
+		}
+		if !fresh {
+			return c.JSON(http.StatusOK, prior)
+		}
+	}
+	d, err := tr.send(ctx, s, org, m)
+	if err != nil {
+		// C2-1: release the claimed key in the SAME error path so the caller
+		// can re-attempt; only a completed send replays a receipt.
+		if r.Idempotency != "" {
+			_ = st.unmarkSend(ctx, org, transport, r.Idempotency)
+		}
+		// The transports' typed refusals (errChannelNotBound telegram.go,
+		// errNoRoute discord.go) map to a status HERE, in one place: 403 —
+		// the channel is not org-bound; 409 — no inbound-learned route yet.
+		switch {
+		case errors.Is(err, errChannelNotBound):
+			return zip.ErrForbidden("channel is not bound to this org")
+		case errors.Is(err, errNoRoute):
+			return zip.ErrConflict("no inbound route for this channel; the bot must be messaged there first")
+		}
+		// Transport errors carry status/shape only — never tokens (the Send*
+		// contract in integrations/ingress.go).
+		return zip.Errorf(http.StatusBadGateway, "%s: %v", tr.id, err)
+	}
+	if r.Idempotency != "" {
+		// Best-effort: the message is delivered; a lost receipt only degrades
+		// a later replay to an empty Delivery (documented markSend tradeoff).
+		if err := st.finishSend(ctx, org, transport, r.Idempotency, d.MessageID); err != nil {
+			s.Log.Warn("transport: send receipt", "transport", transport, "err", err)
+		}
+	}
+	return c.JSON(http.StatusOK, d)
+}

@@ -74,7 +74,9 @@ func (noCallerTools) Call(_ context.Context, name string, _ json.RawMessage) (an
 // reaches the wire as a 403 from a service behaving exactly as built.
 //
 // That last failure is the reason this is a function rather than two lines of
-// advice.
+// advice. It is what the o11y binary did while assembling its own app, and its
+// subsystem then compensated from inside its own Mount, on a group node that
+// owned no routes — a program zip refuses to compose, which is the outage.
 func Identify(app *zip.App, cfg *Config) { IdentifyWith(app, BoundaryOf(cfg)) }
 
 // IdentifyWith is Identify over a boundary already built, so App can hand the same one

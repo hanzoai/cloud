@@ -10,8 +10,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hanzoai/authz"
 	"github.com/hanzoai/cloud/sdk/principal"
+	"github.com/hanzoai/authz"
 )
 
 // The membership set has to CROSS the boundary, or a surface that offers a

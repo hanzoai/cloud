@@ -1,0 +1,333 @@
+package main
+
+import (
+	"context"
+	"encoding/json"
+	"flag"
+	"fmt"
+	"io"
+	"maps"
+	"net/http"
+	"os"
+	"slices"
+	"sort"
+	"strings"
+	"time"
+
+	"github.com/hanzoai/cloud/sdk/env"
+)
+
+type class int
+
+const (
+	classHealth   class = iota // liveness — must be 200
+	classPublic                // public data — 200 (503 tolerated if staged)
+	classAuthed                // org-scoped read — gates without a token, 2xx with one
+	classTolerant              // preview/superadmin/cross-org — {200,401,403}
+)
+
+// classNames is the spelling `-class` takes, and it is the ONE place a class has a
+// name. It exists because a container healthcheck asks a narrower question than a
+// release gate: "is this deployment serving", not "does this build route every
+// surface a release must route". Running the whole matrix as a healthcheck marks a
+// perfectly healthy deployment unhealthy for every product it did not enable — a
+// 404 on an unrouted prefix is the deployment's shape, not its health.
+var classNames = map[string]class{
+	"health":   classHealth,
+	"public":   classPublic,
+	"authed":   classAuthed,
+	"tolerant": classTolerant,
+}
+
+type probe struct {
+	name   string
+	method string
+	path   string
+	class  class
+}
+
+// probes is the core-subsystem matrix — one side-effect-free read per major product
+// surface the manifest routes (+ the AI module catch-all). Paths are the LITERAL
+// registered routes (no /api/ prefix); verified against their registration sites.
+var probes = []probe{
+	// ── liveness and readiness ──
+	//
+	// Three routes, because two different processes answer and they know
+	// different things. /v1/* is a PLUGIN's (serve.go), and a plugin can report
+	// that its own planes mounted fail-closed — the `degraded` field this file
+	// reads below. /readyz is the HOST's (cmd/cloud), and it is the only one that
+	// can see a SIBLING that never started at all: the host fork/execs each app,
+	// so a plugin that dies before listening is a fact only the parent holds.
+	//
+	// Measured on a booted image: /v1/health answered {"revision":…,"status":"ok"}
+	// while /readyz answered {"absent":{"s3":"zip: Load(s3): exited before
+	// listening: exit status 1"},"status":"ok"} — one process serving, one
+	// subsystem gone, and only the second route said so.
+	//
+	// /readyz is 200 for an absence like that on purpose, and 503 only when the
+	// absent app is Vital, which exactly one is: `ai`, the owner of /v1. That
+	// case is the reason to ask — 2026-08-01, ~30 minutes of /v1/models and
+	// /v1/chat/completions answering "mount /v1: no instance running" behind a
+	// pod that every liveness probe called healthy.
+	//
+	// They are on :8080 with everything else. An older note here sent /healthz to
+	// a separate :9090 listener; the host does not bind that port (serve.go leaves
+	// it for a plugin, since N children cannot share one), and /readyz answers on
+	// the main surface.
+	{"health", http.MethodGet, "/v1/base/health", classHealth},
+	{"ready", http.MethodGet, "/readyz", classHealth},
+
+	// ── public (no auth, no balance) ──
+	{"traffic-globe", http.MethodGet, "/v1/traffic/globe", classPublic},
+	{"router-stats-platform", http.MethodGet, "/v1/router/stats?scope=platform", classPublic},
+	{"templates", http.MethodGet, "/v1/template", classPublic},
+	{"prompts-catalog", http.MethodGet, "/v1/prompt/catalog", classPublic},
+	{"health", http.MethodGet, "/v1/health", classHealth},
+	{"plans", http.MethodGet, "/v1/plan", classPublic}, // the paywall's own cure URL
+	{"kms-health", http.MethodGet, "/v1/kms/health", classPublic},
+	{"deploy-health", http.MethodGet, "/v1/deploy/health", classPublic},
+	{"s3-health", http.MethodGet, "/v1/s3/health", classPublic},
+	{"analytics-health", http.MethodGet, "/v1/analytics/health", classPublic},
+
+	// ── authed org-scoped reads (gate without a token; 2xx with one) ──
+	{"models", http.MethodGet, "/v1/models", classAuthed},
+	{"billing-balance", http.MethodGet, "/v1/billing/balance", classAuthed},
+	{"billing-usage", http.MethodGet, "/v1/billing/usage", classAuthed}, // BUG 2: was 500
+	{"router-stats", http.MethodGet, "/v1/router/stats", classAuthed},   // BUG 1: was 402 authed
+	{"projects", http.MethodGet, "/v1/project", classAuthed},
+	{"agents", http.MethodGet, "/v1/agent", classAuthed},
+	{"functions", http.MethodGet, "/v1/function", classAuthed},
+	{"wallets", http.MethodGet, "/v1/wallet", classAuthed},
+	{"provider", http.MethodGet, "/v1/provider", classAuthed},
+	{"marketplace", http.MethodGet, "/v1/marketplace/listings", classAuthed},
+	{"o11y", http.MethodGet, "/v1/o11y/status", classAuthed},
+	{"team", http.MethodGet, "/v1/team/bots", classAuthed},
+	{"storage-buckets", http.MethodGet, "/v1/s3/buckets", classAuthed},
+	{"analytics", http.MethodGet, "/v1/analytics/overview", classAuthed},
+	{"knowledge", http.MethodGet, "/v1/knowledge/connectors/catalog", classAuthed},
+	{"automations", http.MethodGet, "/v1/automations/connectors", classAuthed},
+
+	// ── tolerant (preview / SuperAdmin / cross-org / staged-optional) ──
+	{"account", http.MethodGet, "/v1/ai/account", classTolerant},
+	{"chats", http.MethodGet, "/v1/ai/chats", classTolerant},
+	{"kms-secrets", http.MethodGet, "/v1/kms/secrets", classTolerant}, // BUG 1: was 402
+	{"deploy-apps", http.MethodGet, "/v1/deploy/applications", classTolerant},
+	{"websearch", http.MethodGet, "/v1/websearch/search?q=hanzo", classTolerant},
+}
+
+type result struct {
+	probe
+	status int
+	pass   bool
+	reason string
+}
+
+func main() {
+	base := flag.String("base", env.Or("SMOKE_BASE_URL", ""), "base URL of the cloud API (e.g. http://127.0.0.1:8000)")
+	token := flag.String("token", env.Or("SMOKE_TOKEN", ""), "bearer token for the authenticated matrix (optional)")
+	strict := flag.Bool("strict", env.Or("SMOKE_STRICT", "") != "", "require authed reads to be 2xx with a token (fails on 401/403)")
+	timeoutSec := flag.Int("timeout", env.Int("SMOKE_TIMEOUT", 15), "per-request timeout in seconds")
+	only := flag.String("class", env.Or("SMOKE_CLASS", ""), "run only this class of probe (health|public|authed|tolerant); empty runs the whole matrix")
+	flag.Parse()
+
+	if strings.TrimSpace(*base) == "" {
+		fmt.Fprintln(os.Stderr, "smoke: -base (or SMOKE_BASE_URL) is required")
+		os.Exit(2)
+	}
+	baseURL := strings.TrimRight(strings.TrimSpace(*base), "/")
+	hasToken := strings.TrimSpace(*token) != ""
+
+	run := probes
+	if name := strings.TrimSpace(*only); name != "" {
+		c, ok := classNames[name]
+		if !ok {
+			fmt.Fprintf(os.Stderr, "smoke: -class %q is not one of %s\n", name, strings.Join(slices.Sorted(maps.Keys(classNames)), " "))
+			os.Exit(2)
+		}
+		run = nil
+		for _, p := range probes {
+			if p.class == c {
+				run = append(run, p)
+			}
+		}
+	}
+
+	client := &http.Client{Timeout: time.Duration(*timeoutSec) * time.Second}
+	results := make([]result, 0, len(run))
+	for _, p := range run {
+		status, err := do(client, baseURL, *token, p)
+		r := result{probe: p, status: status}
+		if err != nil {
+			r.pass, r.reason = false, "request error: "+err.Error()
+		} else {
+			r.pass, r.reason = evaluate(p, status, hasToken, *strict)
+		}
+		results = append(results, r)
+	}
+
+	// A status-code sweep cannot see a plane that mounted fail-closed: commerce
+	// with an unusable KV_URL answers an honest 503 on its own routes, which reads
+	// as "staged" and passes. That is how a dead revenue surface once shipped
+	// behind a green gate. /v1/health names the failed planes; any of them is a
+	// hard fail, because the image is not fit to ship.
+	if dead, err := degradedPlanes(client, baseURL); err != nil {
+		fmt.Fprintf(os.Stderr, "\nsmoke: could not read /v1/health: %v\n", err)
+		os.Exit(1)
+	} else if len(dead) > 0 {
+		fmt.Fprintf(os.Stderr, "\nsmoke: FAILED — %d subsystem(s) mounted fail-closed:\n", len(dead))
+		for _, name := range degradedNamesOf(dead) {
+			fmt.Fprintf(os.Stderr, "  %-14s %s\n", name, dead[name])
+		}
+		os.Exit(1)
+	}
+
+	report(results, baseURL, hasToken, *strict)
+	for _, r := range results {
+		if !r.pass {
+			os.Exit(1)
+		}
+	}
+}
+
+// do issues one probe request. The token (when present) rides Authorization on EVERY
+// probe — a public endpoint ignores it, an authed one is exercised on its real path.
+func do(client *http.Client, baseURL, token string, p probe) (int, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), client.Timeout)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, p.method, baseURL+p.path, nil)
+	if err != nil {
+		return 0, err
+	}
+	req.Header.Set("Accept", "application/json")
+	if strings.TrimSpace(token) != "" {
+		req.Header.Set("Authorization", "Bearer "+token)
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return 0, err
+	}
+	_ = resp.Body.Close()
+	return resp.StatusCode, nil
+}
+
+// evaluate maps a probe's status to pass/fail. The two universal regressions (402 on
+// a read, any 5xx) fail on EVERY class before the per-class rules are consulted.
+func evaluate(p probe, status int, hasToken, strict bool) (bool, string) {
+	// Universal: this is a read-only smoke, so a 402 is the balance-gate-over-blocks
+	// regression and a 5xx is a crash/upstream fault — never acceptable, any class.
+	if status == http.StatusPaymentRequired {
+		return false, "402 on a read — balance gate over-blocks reads (the bug this guards)"
+	}
+	if status >= 500 && status != http.StatusServiceUnavailable {
+		return false, fmt.Sprintf("%d server error", status)
+	}
+	staged := status == http.StatusServiceUnavailable // subsystem staged/uninitialised in this env
+
+	switch p.class {
+	case classHealth:
+		if status == http.StatusOK {
+			return true, ""
+		}
+		return false, "liveness must be 200"
+	case classPublic:
+		if status == http.StatusOK || staged {
+			return true, ""
+		}
+		return false, "public endpoint must be 200"
+	case classAuthed:
+		if staged {
+			return true, "" // subsystem not initialised in this env
+		}
+		if hasToken {
+			if status >= 200 && status < 300 {
+				return true, ""
+			}
+			if !strict && (status == http.StatusUnauthorized || status == http.StatusForbidden) {
+				return true, "" // token not validated by this env — a correct gate, not a break
+			}
+			return false, "authed read should be 2xx with a token"
+		}
+		if status == http.StatusUnauthorized || status == http.StatusForbidden {
+			return true, ""
+		}
+		return false, "authed read must gate (401/403) without a token"
+	case classTolerant:
+		if status == http.StatusOK || status == http.StatusUnauthorized || status == http.StatusForbidden || staged {
+			return true, ""
+		}
+		return false, "expected 200/401/403"
+	}
+	return false, "unclassified"
+}
+
+func report(results []result, baseURL string, hasToken, strict bool) {
+	sort.SliceStable(results, func(i, j int) bool { return results[i].class < results[j].class })
+	mode := "anonymous"
+	if hasToken {
+		mode = "authenticated"
+		if strict {
+			mode += " (strict)"
+		}
+	}
+	fmt.Printf("\ncloud smoke — %s\nbase=%s\n\n", mode, baseURL)
+	fmt.Printf("%-4s  %-22s  %-8s  %s\n", "", "SUBSYSTEM", "STATUS", "PATH")
+	fmt.Println(strings.Repeat("─", 88))
+	passed, failed := 0, 0
+	for _, r := range results {
+		mark := "PASS"
+		if !r.pass {
+			mark = "FAIL"
+			failed++
+		} else {
+			passed++
+		}
+		code := fmt.Sprintf("%d", r.status)
+		if r.status == 0 {
+			code = "ERR"
+		}
+		line := fmt.Sprintf("%-4s  %-22s  %-8s  %s", mark, r.name, code, r.path)
+		if !r.pass {
+			line += "  ← " + r.reason
+		}
+		fmt.Println(line)
+	}
+	fmt.Println(strings.Repeat("─", 88))
+	fmt.Printf("%d passed, %d failed, %d total\n\n", passed, failed, len(results))
+	if failed > 0 {
+		fmt.Printf("SMOKE FAIL: %d core endpoint(s) broken — release must not ship\n", failed)
+	} else {
+		fmt.Println("SMOKE PASS: every core subsystem returned a working code (no 402-on-read, no 5xx)")
+	}
+}
+
+// degradedPlanes asks /v1/health which subsystems mounted fail-closed. An empty
+// map means every enabled plane booted. A transport error is itself a failure —
+// a smoke that cannot reach health has proven nothing.
+func degradedPlanes(client *http.Client, baseURL string) (map[string]string, error) {
+	req, err := http.NewRequest(http.MethodGet, baseURL+"/v1/health", nil)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	if err != nil {
+		return nil, err
+	}
+	// Tolerate an older binary with no `degraded` field: absent means healthy, so
+	// this gate can roll out before every environment serves the new shape.
+	var h struct {
+		Degraded map[string]string `json:"degraded"`
+	}
+	if err := json.Unmarshal(body, &h); err != nil {
+		return nil, nil
+	}
+	return h.Degraded, nil
+}
+
+func degradedNamesOf(m map[string]string) []string {
+	return slices.Sorted(maps.Keys(m))
+}

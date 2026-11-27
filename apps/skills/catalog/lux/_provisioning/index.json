@@ -1,0 +1,72 @@
+{
+  "$schema": "https://schemas.agentskills.io/discovery/0.2.0/schema.json",
+  "base_url": "https://api.lux.network",
+  "brand": "lux",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://lux.id",
+  "mcp": {
+    "description": "Model Context Protocol over JSON-RPC 2.0 — one POST per message, stateless, protocol revision 2026-07-28. tools/list answers without a credential with one tool per subsystem (its operations in the \"op\" enum) plus \"describe\", which returns one operation's input schema. tools/call names a subsystem tool and carries {\"op\": <operation>, \"input\": <its arguments>}; it takes the same bearer the REST API does, and a call that carries none is answered 401 with a WWW-Authenticate header naming the resource metadata at /.well-known/oauth-protected-resource, which names the authorization server to sign in at. The tool surface is the public contract: the operator's admin product is not offered, and a name that would disclose a secret or mutate an identity is withheld — the list says how many, under _meta.",
+    "method": "POST",
+    "url": "https://api.lux.network/v1/mcp"
+  },
+  "skill_count": 7,
+  "skills": [
+    {
+      "description": "Read provisioning datastore: Lists the caller org's Lux Datastore warehouses., Returns one Lux Datastore warehouse's metadata..",
+      "digest": "sha256:12d15b7f19d45252a0bacfeb18d483c526a25358b92b7ccce3f16694ce4cd03d",
+      "name": "provisioning_datastore",
+      "service": "provisioning",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/provisioning_datastore/SKILL.md"
+    },
+    {
+      "description": "Read provisioning docdb: Lists the caller org's Lux DocDB document databases., Returns one Lux DocDB database's metadata..",
+      "digest": "sha256:61e0a0481a9b0ec982a02ee083cda9c47662698896cd614f482740cb3e507b75",
+      "name": "provisioning_docdb",
+      "service": "provisioning",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/provisioning_docdb/SKILL.md"
+    },
+    {
+      "description": "Read provisioning kv: Lists the caller org's Lux KV stores., Returns one Lux KV store's metadata..",
+      "digest": "sha256:2a8a6340936bd1a4a68a0c79367458c90c80bcb141970e203be44e3bb127ab90",
+      "name": "provisioning_kv",
+      "service": "provisioning",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/provisioning_kv/SKILL.md"
+    },
+    {
+      "description": "Read provisioning s3: Lists the caller org's object-storage buckets., Returns one bucket's metadata..",
+      "digest": "sha256:a88f2e0f48c1eba390c865a85b00d4c80fedf7e4a4ed6c347f3ac7cab010a807",
+      "name": "provisioning_s3",
+      "service": "provisioning",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/provisioning_s3/SKILL.md"
+    },
+    {
+      "description": "Read provisioning search: Lists the caller org's search indexes., Returns one search index's metadata..",
+      "digest": "sha256:ddcbd3757c53bb2d01b257d45975e01e51c5583bbc6b9705ab36780a2d1f1be6",
+      "name": "provisioning_search",
+      "service": "provisioning",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/provisioning_search/SKILL.md"
+    },
+    {
+      "description": "Read provisioning sql: Lists the caller org's Lux SQL databases., Returns one Lux SQL database's metadata..",
+      "digest": "sha256:9da753595433f98624d72e5154e4f85cd3ea10a3c61dda3c74115cbb133450e7",
+      "name": "provisioning_sql",
+      "service": "provisioning",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/provisioning_sql/SKILL.md"
+    },
+    {
+      "description": "Read provisioning vector: Lists the caller org's vector collections., Returns one vector collection's metadata..",
+      "digest": "sha256:0ec50bfbea8f20951df5d6f3548360fdf6afd8455a3472e86a82a1739b7e5853",
+      "name": "provisioning_vector",
+      "service": "provisioning",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/provisioning_vector/SKILL.md"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

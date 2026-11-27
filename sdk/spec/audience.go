@@ -8,8 +8,8 @@ package spec
 // and docs.hanzo.ai present to a customer, against what an operator reaches
 // through the same origin.
 //
-// 	PUBLIC    the customer surface — openapi.yaml, and GET /v1/openapi.json.
-// 	INTERNAL  everything, unchanged — private.yaml, the compose the routing gates measure.
+//	PUBLIC    the customer surface — openapi.yaml, and GET /v1/openapi.json.
+//	INTERNAL  everything, unchanged — private.yaml, the compose the routing gates measure.
 //
 // THE PUBLIC ONE HOLDS THE NAME, because the name is what gets read. openapi.yaml
 // is what a developer types, what an SDK generator defaults to and what a
@@ -49,13 +49,15 @@ package spec
 //     address outside /v1/admin, is named in [operated] and stamped by the
 //     compose, and stays in the internal document beside the admin family.
 //
-// That held the inference surface public and the other hundred-odd products —
-// commerce, git, observability, accounting, the cap table — out of every
-// generated client, while those same clients quietly read the internal document
-// instead. A whitelist nothing reads is a statement of intent. The rule above
-// says what the customer surface IS, from the address, so a product launched
-// next month is public the day it answers — unless it is the operator's, which
-// its address already says.
+// It used to be a whitelist: eighteen operations, each declared by hand in the
+// app that served it, everything else internal by default. That held the
+// inference surface public and the other hundred-odd products — commerce, git,
+// observability, accounting, the cap table — out of every generated client,
+// while those same clients quietly read the internal document instead. A
+// whitelist nothing reads is a statement of intent. The rule above says what the
+// customer surface IS, from the address, so a product launched next month is
+// public the day it answers — unless it is the operator's, which its address
+// already says.
 //
 // # Why this is not the prefix list the whitelist refused
 //

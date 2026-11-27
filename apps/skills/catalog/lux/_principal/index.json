@@ -1,0 +1,56 @@
+{
+  "$schema": "https://schemas.agentskills.io/discovery/0.2.0/schema.json",
+  "base_url": "https://api.lux.network",
+  "brand": "lux",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://lux.id",
+  "mcp": {
+    "description": "Model Context Protocol over JSON-RPC 2.0 — one POST per message, stateless, protocol revision 2026-07-28. tools/list answers without a credential with one tool per subsystem (its operations in the \"op\" enum) plus \"describe\", which returns one operation's input schema. tools/call names a subsystem tool and carries {\"op\": <operation>, \"input\": <its arguments>}; it takes the same bearer the REST API does, and a call that carries none is answered 401 with a WWW-Authenticate header naming the resource metadata at /.well-known/oauth-protected-resource, which names the authorization server to sign in at. The tool surface is the public contract: the operator's admin product is not offered, and a name that would disclose a secret or mutate an identity is withheld — the list says how many, under _meta.",
+    "method": "POST",
+    "url": "https://api.lux.network/v1/mcp"
+  },
+  "skill_count": 5,
+  "skills": [
+    {
+      "description": "Read principal agents: Attests which principal one of the caller's agents answers to: the org, the chain of agents that spawned it, and the same signed with the platform's key as a JWS (EdDSA) a verifier checks offline against GET /v1/principal/keys..",
+      "digest": "sha256:35c4807525d5f237f2f1bf8c577c0f0534f56b990d65b80567d69cd531a4fd64",
+      "name": "principal_agents",
+      "service": "principal",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/principal_agents/SKILL.md"
+    },
+    {
+      "description": "Read principal clearance: Lists the caller org's clearances, newest first, 200 at most; a payee narrows them., Reads one of the caller org's clearances, as it was decided..",
+      "digest": "sha256:36d1f5b0222879ef183c68d0982ea4b8f6ede7d59fa5ac4f81a81e97372d3f80",
+      "name": "principal_clearance",
+      "service": "principal",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/principal_clearance/SKILL.md"
+    },
+    {
+      "description": "Read principal keys: Publishes the keys attestations are signed with, as a JSON Web Key Set (RFC 7517; Ed25519 keys as RFC 8037 writes them)..",
+      "digest": "sha256:690ada5f5f66906b940a5c7caf67359272636160f97cc976606f6b078686dbc6",
+      "name": "principal_keys",
+      "service": "principal",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/principal_keys/SKILL.md"
+    },
+    {
+      "description": "Read principal principal: Returns the caller's org as an economic principal, composed from the apps that own each fact: its legal entity and founders' identity verification (company), the W-9 or W-8 it certified (tax), its wallets (wallet), the agents that answer to it — spawned ",
+      "digest": "sha256:c0e073cdbf9b93688036576b4ac9a9874e10672846cfe851a857555cc8d20efb",
+      "name": "principal_principal",
+      "service": "principal",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/principal_principal/SKILL.md"
+    },
+    {
+      "description": "Read principal statements: Reads whether one statement the platform signed about an agent still stands: live, expired, or revoked and when..",
+      "digest": "sha256:0867db8e0d59741ab7fd3d7d09c2fed8d1ccd64ac373b3f8298ffc290905a540",
+      "name": "principal_statements",
+      "service": "principal",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/principal_statements/SKILL.md"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

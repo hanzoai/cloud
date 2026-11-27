@@ -56,8 +56,9 @@ func newAuditApp(t *testing.T) (*zip.App, *audit.Recorder) {
 		}
 		return c.JSON(http.StatusOK, map[string]string{"ok": "true"})
 	})
-	// The handler ignores the body; the point is what the middleware records
-	// (metadata only).
+	// A mutation whose request body carries secrets — used to prove the body is
+	// never captured. The handler ignores the body; the point is what the
+	// middleware records (metadata only).
 	app.Raw(http.MethodPost, "/v1/iam/users", func(c *zip.Ctx) error {
 		return c.JSON(http.StatusOK, map[string]string{"ok": "true"})
 	})
@@ -420,7 +421,9 @@ func TestScrubToken_NoFalsePositives(t *testing.T) {
 	}
 }
 
-// Each MUST now be redacted.
+// TestScrubToken_RedReviewBypassClasses is the regression for the 4 scrub-bypass
+// classes Red found: base64url with -/_, all-alpha opaque >=len, percent-encoded
+// prefixes, and delimiter-glued UA tokens. Each MUST now be redacted.
 func TestScrubToken_RedReviewBypassClasses(t *testing.T) {
 	for _, sec := range []string{
 		"AbCdEf-GhIjKl_MnOpQrStUvWxYz012345",       // base64url with - and _

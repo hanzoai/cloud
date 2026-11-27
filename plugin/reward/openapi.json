@@ -1,0 +1,1161 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Hanzo Cloud API",
+    "description": "Package reward mounts the rewards rules engine (github.com/hanzoai/reward) at /v1/reward, with the admin queue at /v1/admin/reward, and feeds it what really happened.",
+    "version": "v1"
+  },
+  "servers": [
+    {
+      "url": "https://api.hanzo.ai"
+    }
+  ],
+  "security": [
+    {
+      "bearer": []
+    }
+  ],
+  "tags": [
+    {
+      "name": "admin"
+    },
+    {
+      "name": "reward"
+    }
+  ],
+  "paths": {
+    "/v1/admin/reward/claims": {
+      "get": {
+        "operationId": "get_admin_reward_claims",
+        "summary": "The staff queue of claims (SuperAdmin)",
+        "description": "SuperAdmin only. Lists claims, newest first, filtered by status, program or subject. Each carries the evidence its event stated: the canonical URL, the checks run on it (fetched_at, status, public, ref_found, author_match, with the whole history of a post's week), or needs_review when the source could not be read.",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/v1/admin/reward/claims/{claim}/approve": {
+      "post": {
+        "operationId": "post_admin_reward_claims_by_claim_approve",
+        "summary": "Approve a claim (SuperAdmin)",
+        "description": "SuperAdmin only. Decides that the claim is awarded and writes what it earns, each exactly once. Approving a claim already approved finishes it, so a retry is safe.",
+        "tags": [
+          "admin"
+        ],
+        "parameters": [
+          {
+            "name": "claim",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/admin/reward/claims/{claim}/reject": {
+      "post": {
+        "operationId": "post_admin_reward_claims_by_claim_reject",
+        "summary": "Reject a claim with a note (SuperAdmin)",
+        "description": "SuperAdmin only. Refuses the claim; a note saying why is required. A rejected claim frees its limits and budget.",
+        "tags": [
+          "admin"
+        ],
+        "parameters": [
+          {
+            "name": "claim",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/admin/reward/claims/{claim}/reverse": {
+      "post": {
+        "operationId": "post_admin_reward_claims_by_claim_reverse",
+        "summary": "Reverse an awarded claim with a note (SuperAdmin)",
+        "description": "SuperAdmin only. Undoes what an awarded claim earned with compensating ledger rows, never an edit; a note is required. A claim that granted credit cannot be reversed here.",
+        "tags": [
+          "admin"
+        ],
+        "parameters": [
+          {
+            "name": "claim",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/admin/reward/legacy": {
+      "post": {
+        "operationId": "post_admin_reward_legacy",
+        "summary": "Writes what members earned before the program from the platform's own records, once: tokens at 100,000 per point, referred signups, referred orgs with spend, verified stars and follows, and bounty awards, each by the one score every board shares.",
+        "description": "Writes what members earned before the program from the platform's own records,\nonce: tokens at 100,000 per point, referred signups, referred orgs with spend,\nverified stars and follows, and bounty awards, each by the one score every board\nshares. The points count toward lifetime points, levels and rank and are never\nredeemable. It is idempotent per person and source, and the trail names who ran\nit. SuperAdmin only.",
+        "tags": [
+          "admin"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/reward.legacyOut"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-tool": true
+      }
+    },
+    "/v1/admin/reward/posts": {
+      "get": {
+        "operationId": "get_admin_reward_posts",
+        "summary": "Lists the posts of every member, newest first, optionally of one status, so staff can find one to look at again.",
+        "description": "Lists the posts of every member, newest first, optionally of one status, so staff\ncan find one to look at again. SuperAdmin only.",
+        "tags": [
+          "admin"
+        ],
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "description": "Status is pending, verified, removed or review; empty is every post.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/reward.postList"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-tool": true
+      }
+    },
+    "/v1/admin/reward/posts/{id}/recheck": {
+      "post": {
+        "operationId": "post_admin_reward_posts_by_id_recheck",
+        "summary": "Looks at any member's post now, with the same checks as the daily look, and adds the look to its history.",
+        "description": "Looks at any member's post now, with the same checks as the daily look, and adds\nthe look to its history. A removed post that is back up and carries the member's\nlink is held again and its week starts over. SuperAdmin only.",
+        "tags": [
+          "admin"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "post:9f8c1d2e"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/reward.postView"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-tool": true
+      }
+    },
+    "/v1/admin/reward/programs": {
+      "get": {
+        "operationId": "get_admin_reward_programs",
+        "summary": "List the reward programs (SuperAdmin)",
+        "description": "SuperAdmin only. Lists every program with its rules, budget, levels, badges and email templates.",
+        "tags": [
+          "admin"
+        ]
+      },
+      "post": {
+        "operationId": "post_admin_reward_programs",
+        "summary": "Create a reward program (SuperAdmin)",
+        "description": "SuperAdmin only. Creates a program under a slug. Every save is on the audit trail.",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/v1/admin/reward/programs/{program}": {
+      "delete": {
+        "operationId": "delete_admin_reward_programs_by_program",
+        "summary": "Delete a reward program (SuperAdmin)",
+        "description": "SuperAdmin only. Refused with 400 once any claim or ledger row names the program: retire it with active=false instead.",
+        "tags": [
+          "admin"
+        ],
+        "parameters": [
+          {
+            "name": "program",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "get": {
+        "operationId": "get_admin_reward_programs_by_program",
+        "summary": "Read one reward program (SuperAdmin)",
+        "description": "SuperAdmin only. Reads the program: its rules with their versions, its monthly budget and its levels and badges.",
+        "tags": [
+          "admin"
+        ],
+        "parameters": [
+          {
+            "name": "program",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "put": {
+        "operationId": "put_admin_reward_programs_by_program",
+        "summary": "Save a reward program's settings (SuperAdmin)",
+        "description": "SuperAdmin only. Replaces the program's name, whether it is active, its budget, levels, badges and templates. Rules are saved one at a time. The last save wins and is on the trail.",
+        "tags": [
+          "admin"
+        ],
+        "parameters": [
+          {
+            "name": "program",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/admin/reward/programs/{program}/backfill": {
+      "post": {
+        "operationId": "post_admin_reward_programs_by_program_backfill",
+        "summary": "Write legacy points for people (SuperAdmin)",
+        "description": "SuperAdmin only. Takes up to 5,000 rows of subject, source, points and evidence and writes each as a legacy ledger entry: counted in lifetime points, levels and rank, never redeemable, idempotent per person and source (the first count stands). One call is one trail record naming who ran it.",
+        "tags": [
+          "admin"
+        ],
+        "parameters": [
+          {
+            "name": "program",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/admin/reward/programs/{program}/rules/{rule}": {
+      "delete": {
+        "operationId": "delete_admin_reward_programs_by_program_rules_by_rule",
+        "summary": "Delete one rule (SuperAdmin)",
+        "description": "SuperAdmin only. Refused with 400 once any claim names the rule: retire it with active=false instead.",
+        "tags": [
+          "admin"
+        ],
+        "parameters": [
+          {
+            "name": "program",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "rule",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "put": {
+        "operationId": "put_admin_reward_programs_by_program_rules_by_rule",
+        "summary": "Create or replace one rule (SuperAdmin)",
+        "description": "SuperAdmin only. A rule reads one catalog event, tests its fields, and says what an approved claim does: points, a badge, credit or an email. Its approval is manual until set to auto, and it carries its own limits. The rule's version rises only when its content changes, and a claim already made keeps awarding what its version said.",
+        "tags": [
+          "admin"
+        ],
+        "parameters": [
+          {
+            "name": "program",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "rule",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/admin/reward/simulate": {
+      "post": {
+        "operationId": "post_admin_reward_simulate",
+        "summary": "Dry-run a rule against an event (SuperAdmin)",
+        "description": "SuperAdmin only. Evaluates a rule, saved or not, against an event and says what it would decide, writing nothing.",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/v1/reward/badge/{handle}": {
+      "get": {
+        "operationId": "get_reward_badge_by_handle",
+        "summary": "The README badge of a person's level, as an SVG",
+        "description": "Public once the person turns their profile on. Name the handle with the .svg extension. theme=dark|light and style=flat|card choose the look. The image is never cached by a shared cache and answers 304 to a matching ETag, and every word on it is escaped.",
+        "tags": [
+          "reward"
+        ],
+        "parameters": [
+          {
+            "name": "handle",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "security": [],
+        "x-public": true
+      }
+    },
+    "/v1/reward/catalog": {
+      "get": {
+        "operationId": "get_reward_catalog",
+        "summary": "The events, pillars, levels and rule operators the program is built from",
+        "description": "Public. Lists the five pillars (use, share, community, contribute, expert), every event a rule may read with the typed fields each carries and whether it must arrive with evidence, the comparison operators and the actions a rule may take. The admin screens build their dropdowns from it.",
+        "tags": [
+          "reward"
+        ],
+        "security": [],
+        "x-public": true
+      }
+    },
+    "/v1/reward/events": {
+      "post": {
+        "operationId": "post_reward_events",
+        "summary": "State one event to the rules engine (the platform only)",
+        "description": "Only the platform principal states an event: the platform's own feeders do, in process, and a client never can. The event is refused unless it carries exactly the fields the catalog lists for its type, and, for an event that took place on another site, the evidence of where and the checks run there. The same event id again is the same claim, so a retry awards nothing twice. Answers each rule's decision: claimed, skipped, or why it was withheld.",
+        "tags": [
+          "reward"
+        ],
+        "x-public": true
+      }
+    },
+    "/v1/reward/health": {
+      "get": {
+        "operationId": "get_reward_health",
+        "summary": "Whether the rewards program can answer",
+        "description": "Answers 200 with the program's name when its store answers, and 503 when it does not. No credential is needed.",
+        "tags": [
+          "reward"
+        ],
+        "security": [],
+        "x-public": true
+      }
+    },
+    "/v1/reward/me": {
+      "get": {
+        "operationId": "get_reward_me",
+        "summary": "Your level, lifetime points, redeemable points and badges",
+        "description": "Reads the signed-in person's standing in each program from the append-only ledger: lifetime points (which levels and rank read, and which never fall), the part of them that is redeemable, the level and the next one, and the badges held.",
+        "tags": [
+          "reward"
+        ],
+        "x-public": true
+      }
+    },
+    "/v1/reward/me/claims": {
+      "get": {
+        "operationId": "get_reward_me_claims",
+        "summary": "Your claims, and where each stands",
+        "description": "Lists the signed-in person's claims, newest first, each with the rule, the points it would earn, its status (pending, approved, awarded, rejected, reversed) and the evidence the claim carries. A pending claim is not points.",
+        "tags": [
+          "reward"
+        ],
+        "x-public": true
+      }
+    },
+    "/v1/reward/me/explore": {
+      "get": {
+        "operationId": "get_reward_me_explore",
+        "summary": "What you could earn next, by pillar",
+        "description": "Lists the active rules the signed-in person holds no live claim under, grouped by pillar, so a page can suggest what to try next from what they have not done.",
+        "tags": [
+          "reward"
+        ],
+        "x-public": true
+      }
+    },
+    "/v1/reward/me/github/badge": {
+      "post": {
+        "operationId": "post_reward_me_github_badge",
+        "summary": "Verifies against GitHub's API that a project of yours carries a Hanzo badge image in its README, and puts one claim to staff for each kind it carries: your live profile badge, your rank badge, or the Built with Hanzo badge.",
+        "description": "Verifies against GitHub's API that a project of yours carries a Hanzo badge image\nin its README, and puts one claim to staff for each kind it carries: your live\nprofile badge, your rank badge, or the Built with Hanzo badge. The project must be\npublic, not a fork, and owned by the GitHub account you linked at sign-in. Each kind\nis counted once for the project, so asking again claims nothing twice. Asked at most\nten times an hour.",
+        "tags": [
+          "reward"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "repo": "you/your-project"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/reward.badgeIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/reward.badgeOut"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/reward/me/github/check": {
+      "post": {
+        "operationId": "post_reward_me_github_check",
+        "summary": "Reads the stars, follows and forks of the GitHub account you linked at sign-in, from GitHub's API, and puts to staff each that is a repository or account of ours, once each.",
+        "description": "Reads the stars, follows and forks of the GitHub account you linked at sign-in,\nfrom GitHub's API, and puts to staff each that is a repository or account of ours,\nonce each. Asked at most twice an hour.",
+        "tags": [
+          "reward"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/reward.checkOut"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/reward/me/posts": {
+      "get": {
+        "operationId": "get_reward_me_posts",
+        "summary": "Lists your posts, newest first, each with its status and every look at it.",
+        "description": "Lists your posts, newest first, each with its status and every look at it. Pending\nposts are not points; the count of them is beside the list.",
+        "tags": [
+          "reward"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/reward.postList"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      },
+      "post": {
+        "operationId": "post_reward_me_posts",
+        "summary": "Takes the address of a post of yours, reads it from its network, and holds it for a week if it is public, is yours, and carries your own referral link.",
+        "description": "Takes the address of a post of yours, reads it from its network, and holds it for\na week if it is public, is yours, and carries your own referral link. A held post\nis not points: it is looked at every day, and one found gone, private or without\nyour link is removed and earns nothing. One still up after seven days is put to\nstaff, who decide it. Pasting a post again answers the first.",
+        "tags": [
+          "reward"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "url": "https://bsky.app/profile/you.bsky.social/post/3k..."
+              },
+              "schema": {
+                "$ref": "#/components/schemas/reward.postIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/reward.postView"
+                }
+              }
+            },
+            "description": "created"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/reward/me/posts/scan": {
+      "post": {
+        "operationId": "post_reward_me_posts_scan",
+        "summary": "Reads your recent public posts on Bluesky, Mastodon, Reddit, Hacker News or DEV by the handle you give, and holds each that carries your own referral link, as pasting it would.",
+        "description": "Reads your recent public posts on Bluesky, Mastodon, Reddit, Hacker News or DEV by the\nhandle you give, and holds each that carries your own referral link, as pasting\nit would. Every other network is pasted as an address: X, Medium and Hashnode are read when\npasted, and LinkedIn, TikTok, YouTube, Threads, Instagram and Facebook cannot be read\nwithout your sign-in there, so staff decide those by hand. Asked at most three times an hour.",
+        "tags": [
+          "reward"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "handle": "you.bsky.social",
+                "network": "bluesky"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/reward.scanIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/reward.scanOut"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/reward/me/posts/{id}/recheck": {
+      "post": {
+        "operationId": "post_reward_me_posts_by_id_recheck",
+        "summary": "Looks at one of your pending or removed posts now, with the same checks as the daily look, and adds the look to its history.",
+        "description": "Looks at one of your pending or removed posts now, with the same checks as the\ndaily look, and adds the look to its history. A removed post that is back up and\ncarries your link is held again and its week starts over. Asked at most ten times\nan hour.",
+        "tags": [
+          "reward"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "post:9f8c1d2e"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/reward.postView"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/reward/me/profile": {
+      "get": {
+        "operationId": "get_reward_me_profile",
+        "summary": "Your rewards profile",
+        "description": "Reads the signed-in person's handle, whether their profile is public, and their links. A profile is private until its owner turns it on.",
+        "tags": [
+          "reward"
+        ],
+        "x-public": true
+      },
+      "put": {
+        "operationId": "put_reward_me_profile",
+        "summary": "Set your handle, whether your profile is public, and your links",
+        "description": "Chooses a unique lower-case handle, turns the public profile on or off and sets https links. The public view shows level, lifetime points, badges and claim counts, never an email, org, subject id or redeemable balance.",
+        "tags": [
+          "reward"
+        ],
+        "x-public": true
+      }
+    },
+    "/v1/reward/profile/{handle}": {
+      "get": {
+        "operationId": "get_reward_profile_by_handle",
+        "summary": "A person's public rewards profile",
+        "description": "Public. Reads a person's level, lifetime points, badges and counts by pillar by the handle they chose, once they turned their profile on. A private profile and an unknown handle are the same 404.",
+        "tags": [
+          "reward"
+        ],
+        "parameters": [
+          {
+            "name": "handle",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "security": [],
+        "x-public": true
+      }
+    },
+    "/v1/reward/rules": {
+      "get": {
+        "operationId": "get_reward_rules",
+        "summary": "Lists what the rewards program pays for: every active rule of every active program, grouped by pillar (use, share, community, contribute, expert), each with what has to happen, the points, the badge or credit it awards, how often one person can earn it and whether staff verify each claim first.",
+        "description": "Lists what the rewards program pays for: every active rule of every active\nprogram, grouped by pillar (use, share, community, contribute, expert), each with\nwhat has to happen, the points, the badge or credit it awards, how often one person\ncan earn it and whether staff verify each claim first. Public: it needs no\ncredential, and it is the program's own list, so nothing else promises a reward.",
+        "tags": [
+          "reward"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/reward.rulesOut"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "security": [],
+        "x-public": true,
+        "x-tool": true
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "problem-details": {
+        "description": "An RFC 9457 problem document.",
+        "properties": {
+          "code": {
+            "description": "A stable token a client can branch on, when the refusal names one.",
+            "type": "string"
+          },
+          "detail": {
+            "description": "What was refused, for a person to read.",
+            "type": "string"
+          },
+          "status": {
+            "description": "The HTTP status.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "title": {
+            "description": "The status's reason phrase.",
+            "type": "string"
+          },
+          "type": {
+            "description": "about:blank",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "status",
+          "detail"
+        ],
+        "type": "object"
+      },
+      "reward.Check": {
+        "properties": {
+          "author_match": {
+            "description": "AuthorMatch is whether the author is the member's linked identity: yes, no\nor unknown.",
+            "type": "string"
+          },
+          "fetched_at": {
+            "description": "FetchedAt is when the source was fetched.",
+            "format": "date-time",
+            "type": "string"
+          },
+          "public": {
+            "description": "Public is whether the source is readable by anyone.",
+            "type": "boolean"
+          },
+          "ref_found": {
+            "description": "RefFound is whether the member's own ref code was found. It is stated only\nwhere a ref code is expected, which is a post.",
+            "type": "boolean"
+          },
+          "status": {
+            "description": "Status is the HTTP status the fetch answered.",
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "reward.badgeIn": {
+        "properties": {
+          "repo": {
+            "description": "Repo is the project as owner/name on GitHub.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "reward.badgeOut": {
+        "properties": {
+          "badges": {
+            "description": "Badges are the kinds the README carries: profile (the live badge of a rewards\nprofile), rank (the live rank badge) and built (the static Built with Hanzo\nbadge). Each earns once for the project.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "claimed": {
+            "description": "Claimed is how many claims this check made for staff: 0 when every badge of\nthe project had been claimed already.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "repo": {
+            "description": "Repo is the project, as GitHub names it.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "reward.checkOut": {
+        "properties": {
+          "follows": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "forks": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "login": {
+            "description": "Login is the GitHub account the caller linked.",
+            "type": "string"
+          },
+          "stars": {
+            "description": "Stars, Follows and Forks are the claims this check made, each for one\nrepository or account of ours that GitHub shows the caller has starred,\nfollowed or forked, and nobody had claimed before.",
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "reward.legacyOut": {
+        "properties": {
+          "by": {
+            "description": "By is who ran it, as the trail names them.",
+            "type": "string"
+          },
+          "entries": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "points": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "rows": {
+            "description": "Rows is how many rows it offered: the rest were counted by an earlier run.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "sources": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/reward.sourceOut"
+            },
+            "description": "Sources says, per source, how many people it credited and with how many points.",
+            "type": "object"
+          },
+          "subjects": {
+            "description": "Subjects is how many people it credited, Entries how many rows it wrote that\nwere new, and Points their sum.",
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "reward.pillarRules": {
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "rules": {
+            "items": {
+              "$ref": "#/components/schemas/reward.publicRule"
+            },
+            "type": "array"
+          },
+          "title": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "reward.postIn": {
+        "properties": {
+          "handle": {
+            "description": "Handle is who you are on that network, so the post's author can be matched.\nOptional; without it the author match is unknown.",
+            "type": "string"
+          },
+          "url": {
+            "description": "URL is the address of the post, on X, Bluesky, Reddit, Hacker News, Mastodon\nor LinkedIn.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "reward.postList": {
+        "properties": {
+          "pending": {
+            "description": "Pending is how many posts are held and count for nothing yet.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "posts": {
+            "items": {
+              "$ref": "#/components/schemas/reward.postView"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "reward.postView": {
+        "properties": {
+          "checks": {
+            "description": "Checks is every look at the post, oldest first.",
+            "items": {
+              "$ref": "#/components/schemas/reward.Check"
+            },
+            "type": "array"
+          },
+          "countsAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "daysLeft": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "id": {
+            "type": "string"
+          },
+          "network": {
+            "type": "string"
+          },
+          "note": {
+            "description": "Note says why a post was removed.",
+            "type": "string"
+          },
+          "since": {
+            "description": "Since is when the post's week began; CountsAt when it counts, and DaysLeft the\ndays until then. Both are absent unless the post is pending.",
+            "format": "date-time",
+            "type": "string"
+          },
+          "status": {
+            "description": "Status is pending (held for its week, counts for nothing), verified (it\nstayed up and was put to staff), removed (it earns nothing) or review (staff\ndecide it by hand).",
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          },
+          "week": {
+            "description": "Week is the ISO week the post was published in; a post in a later week can\nearn again.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "reward.publicBadge": {
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "rarity": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "reward.publicRule": {
+        "properties": {
+          "badge": {
+            "$ref": "#/components/schemas/reward.publicBadge",
+            "description": "Badge is the badge the rule awards, when it awards one."
+          },
+          "creditCents": {
+            "description": "CreditCents is the credit the rule grants, in cents. Present only when the\nrule has a credit action.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "event": {
+            "description": "Event says in plain words what has to happen for the rule to apply.",
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "limits": {
+            "description": "Limits says in plain words how often one person can earn it.",
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "pillar": {
+            "description": "Pillar is the part of the program the rule belongs to.",
+            "type": "string"
+          },
+          "points": {
+            "description": "Points is what the rule adds to lifetime points when staff approve it.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "review": {
+            "description": "Review is whether staff verify each claim of the rule before it awards\nanything.",
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
+      "reward.rulesOut": {
+        "properties": {
+          "pillars": {
+            "items": {
+              "$ref": "#/components/schemas/reward.pillarRules"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "reward.scanIn": {
+        "properties": {
+          "handle": {
+            "description": "Handle is your handle there; on Mastodon user@instance.",
+            "type": "string"
+          },
+          "network": {
+            "description": "Network is bluesky, mastodon, reddit, hn or devto.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "reward.scanOut": {
+        "properties": {
+          "held": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "looked": {
+            "description": "Looked is how many of the recent posts were read, Held how many carried your\nlink and are now held, and Skipped how many did not.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "posts": {
+            "items": {
+              "$ref": "#/components/schemas/reward.postView"
+            },
+            "type": "array"
+          },
+          "skipped": {
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "reward.sourceOut": {
+        "properties": {
+          "people": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "points": {
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      }
+    },
+    "securitySchemes": {
+      "bearer": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "The caller's credential, sent as `Authorization: Bearer \u003ctoken\u003e`. It is either an access token minted by Hanzo IAM or an API key (pk-/sk-). X-Authorization, and HTTP Basic carrying the token as the password, are accepted spellings of the same header for clients that cannot set Authorization; a browser presents the session cookie instead. Every operation requires it unless it says `security: []`."
+      }
+    }
+  }
+}

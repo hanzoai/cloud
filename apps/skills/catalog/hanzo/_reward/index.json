@@ -1,0 +1,64 @@
+{
+  "$schema": "https://schemas.agentskills.io/discovery/0.2.0/schema.json",
+  "base_url": "https://api.hanzo.ai",
+  "brand": "hanzo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://hanzo.id",
+  "mcp": {
+    "description": "Model Context Protocol over JSON-RPC 2.0 — one POST per message, stateless, protocol revision 2026-07-28. tools/list answers without a credential with one tool per subsystem (its operations in the \"op\" enum) plus \"describe\", which returns one operation's input schema. tools/call names a subsystem tool and carries {\"op\": <operation>, \"input\": <its arguments>}; it takes the same bearer the REST API does, and a call that carries none is answered 401 with a WWW-Authenticate header naming the resource metadata at /.well-known/oauth-protected-resource, which names the authorization server to sign in at. The tool surface is the public contract: the operator's admin product is not offered, and a name that would disclose a secret or mutate an identity is withheld — the list says how many, under _meta.",
+    "method": "POST",
+    "url": "https://api.hanzo.ai/v1/mcp"
+  },
+  "skill_count": 6,
+  "skills": [
+    {
+      "description": "Read reward badge: The README badge of a person's level, as an SVG.",
+      "digest": "sha256:77947d1b127f87a13e1d1c8c72dd3910265977ace249eca6d93fbfdac7132aa3",
+      "name": "reward_badge",
+      "service": "reward",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/reward_badge/SKILL.md"
+    },
+    {
+      "description": "Read reward catalog: The events, pillars, levels and rule operators the program is built from.",
+      "digest": "sha256:4652d6325501ba77cfadc1fd6cc3c0a79e20c561f4192d4fe4e19b96921b3ebf",
+      "name": "reward_catalog",
+      "service": "reward",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/reward_catalog/SKILL.md"
+    },
+    {
+      "description": "Read reward health: Whether the rewards program can answer.",
+      "digest": "sha256:c447fbd234851b2ca4e40ec7fe3c8d3b51ac3aaeef7b736bdde0fe3d233d4979",
+      "name": "reward_health",
+      "service": "reward",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/reward_health/SKILL.md"
+    },
+    {
+      "description": "Read reward me: Your level, lifetime points, redeemable points and badges, Your claims, and where each stands, What you could earn next, by pillar.",
+      "digest": "sha256:00394df907d070e1dd0d109b5471aea5246d9762e9aace77d39b7f1aefb64cb9",
+      "name": "reward_me",
+      "service": "reward",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/reward_me/SKILL.md"
+    },
+    {
+      "description": "Read reward profile: A person's public rewards profile.",
+      "digest": "sha256:6be26bdf7a6fee906c66e12e2575fa9f6ebe2ad3f9918cf3f65b11a64593fef6",
+      "name": "reward_profile",
+      "service": "reward",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/reward_profile/SKILL.md"
+    },
+    {
+      "description": "Read reward rules: Lists what the rewards program pays for: every active rule of every active program, grouped by pillar (use, share, community, contribute, expert), each with what has to happen, the points, the badge or credit it awards, how often one person can earn it and whet",
+      "digest": "sha256:7c37419f87ec9cd4c7500b8476461956dee1fc8e99401a3e0b44e0625344ee2f",
+      "name": "reward_rules",
+      "service": "reward",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/reward_rules/SKILL.md"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

@@ -13,8 +13,11 @@ import (
 
 // WHO PAYS IS NOT A CLIENT'S TO NAME.
 //
-// These tests pin the boundary: the header is minted from the validated
-// `billing_account` claim, and a forged copy never survives.
+// X-Billing-Account-Id used to be forwarded from whatever the client sent: it was
+// only an attribution hint, and nothing debited on it. ai/object.Payer now resolves
+// the PAYING account from it, so a restored client copy would be a caller naming
+// its own payer. These tests pin the boundary: the header is minted from the
+// validated `billing_account` claim, and a forged copy never survives.
 
 // billingClaims builds a validated claim set carrying a signed billing_account.
 func billingClaims(owner, name, billingAccount string) idClaims {

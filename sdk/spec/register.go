@@ -230,7 +230,10 @@ func Describe(path, method, summary, description string) {
 //
 // [Describe] carries the sentence; this carries the shape. They are separate
 // because they have separate owners: the prose is lifted from the handler's doc
-// comment, and the responses are the source document's own.
+// comment, and the responses are the source document's own. Prose without shape
+// is what the relay used to carry, and it published 293 of hanzoai/ai's 294
+// operations with no `responses` at all -- so every generated client handed the
+// caller an untyped result for a third of the API, GET /v1/models included.
 //
 // It is additive metadata on a route that exists, exactly as Describe is: a
 // registry entry cannot conjure an operation, and responses for an address the

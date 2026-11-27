@@ -9,6 +9,8 @@ import (
 	"github.com/zap-proto/zip"
 )
 
+// actorOf drives Actor through a real request with the headers a gateway mints,
+// so what is measured is what a handler would see.
 func actorOf(t *testing.T, h map[string]string) string {
 	t.Helper()
 	var got string

@@ -1,0 +1,291 @@
+package sites
+
+import (
+	"strings"
+	"sync"
+)
+
+// The reserved-subdomain policy — the ONE source of truth for which `<label>.apex`
+// subdomains may NOT be published sites. It is consulted in THREE places that must
+// never disagree:
+//
+//   - serve time (Server.siteSlug): a reserved host falls through to the normal
+//     API/console pipeline instead of the site server;
+//   - create time (projects.createProject): a project can never be created with a
+//     reserved slug;
+//   - bind time (projects Store.BindHost): the global site_hosts table can never
+//     physically contain a reserved host, whatever the caller.
+//
+// Because create AND bind both reject, `site_hosts` can NEVER hold a reserved host,
+// so even if the ingress reserved-regex ever drifts and a reserved host reaches the
+// pod, ResolveHost misses and the site server 404s BEFORE any auth surface is
+// shadowed. The serve gate is a backstop, not the sole guard.
+//
+// baseReserved is baked in and CANNOT be removed by operator config — trimming the
+// env only ever ADDS via SetReservedExtra, never subtracts. It covers:
+//   - the apex itself (empty label) and its canonical alias (www);
+//   - infrastructure / app-host labels that route real services on the apex;
+//   - auth/payment/security-sensitive labels (anti-phishing / cookie-tossing);
+//   - brand terms an impersonator would want.
+var baseReserved = func() map[string]bool {
+	labels := []string{
+		"", "www",
+		// SECURITY INVARIANT — reserved ⊇ every `<label>.<apex>` the SHARED brand
+		// `<brand>-app` IAM client registers as an OAuth redirect. If such a label were
+		// publishable, an attacker could first-come-claim `<label>.<apex>`, serve their
+		// own page, then run authorize with client_id=<brand>-app + a redirect that IS
+		// on the shared client's exact-match list → the victim's code lands on the
+		// attacker's page → token with aud=<brand>-app that the API trusts (account
+		// takeover). `www` (above) + `stg` are the current hanzo-app redirect labels;
+		// keep this in lock-step with init_data.json (TestReservedCoversSharedAppRedirects).
+		"stg",
+		// infrastructure / app hosts
+		//
+		// The three that are also STATIC SEGMENTS under /v1/project — sites, edge,
+		// tags — have a second job here. A static segment beats its param sibling on
+		// this router, so a project slugged `edge` would be addressed by the edge
+		// route instead of by itself; reserving the label means no such row can be
+		// created and the ambiguity has no way to arise.
+		"api", "app", "apps", "admin", "administrator", "root", "console", "console2", "dashboard",
+		"platform", "platform2", "portal", "sites", "site", "edge", "tags", "host", "hosting", "internal",
+		"gateway", "proxy", "router", "ingress", "cdn", "static", "assets", "mail",
+		"smtp", "imap", "ftp",
+		"ns", "ns1", "ns2", "dns", "status", "health", "healthz", "metrics", "grafana",
+		// auth / payment / security-sensitive (anti-phishing, cookie-tossing surface)
+		"login", "logout", "signin", "signup", "auth", "oauth", "oauth2", "sso", "session",
+		"secure", "security", "account", "accounts", "verify", "verification", "token",
+		"pay", "payment", "payments", "billing", "checkout", "wallet", "bank", "id",
+		// Hanzo platform surfaces + brand terms
+		"iam", "kms",
+		// The artifact and delivery plane. These were protected only by the
+		// first-party ALLOWLIST, so removing that list without naming them here
+		// would let a site published in our own org answer on oci.hanzo.ai or
+		// git.hanzo.ai — the hosts a registry client and every CI push resolve.
+		"oci", "pkg", "registry", "npm", "ci", "cd", "s3", "git", "forge", "runner",
+		// Product hosts. A denylist takes on the obligation an allowlist did not:
+		// a NEW internal host is shadowable until its label is named here. These
+		// are the ones that exist today — chat.hanzo.ai and models.hanzo.ai were
+		// caught by TestSiteSlugFirstParty, which is exactly what that test is
+		// for. Adding a host to the estate means adding its label in the same
+		// change.
+		"chat", "models", "search", "engine", "node", "rpc", "mcp", "agent",
+		"agents", "bot", "dev", "staging", "preview", "vpn", "ssh", "cloud", "hanzo", "hanzoai", "lux", "luxfi", "zoo", "zooai",
+		"official", "support", "help", "team", "docs", "blog", "store", "cowork",
+		// desktop.hanzo.ai answers with a redirect to the download page at the edge
+		// (universe sites `hanzo-ai-desktop`); a project slugged `desktop` would take
+		// the host from the redirect.
+		"desktop",
+		// crm.hanzo.ai is the console's CRM face and a callback of the shared
+		// hanzo-cloud client.
+		"crm",
+		// The networks' own sign-in hosts: dev.hanzo.ai (devnet, above) and
+		// test.hanzo.ai (testnet). Each is a callback of the shared hanzo-app
+		// client and signs people in on its own origin, so a site published there
+		// would be handed that client's codes.
+		"test",
+	}
+	m := make(map[string]bool, len(labels))
+	for _, l := range labels {
+		m[l] = true
+	}
+	return m
+}()
+
+var (
+	policyMu      sync.RWMutex
+	seeded        bool
+	extraReserved = map[string]bool{}
+)
+
+// seed derives the policy from the ENVIRONMENT the first time any gate asks, so a
+// process that enforces the gates without constructing a Server still reads the
+// real set. Both setters below mark the policy seeded, so an explicit publication
+// always wins and is never re-read over.
+//
+// Config is not the Server's to own. Which apps share a process is a per-plugin
+// composition choice, and as composed today plugin/projects links this package for
+// IsReserved/IsSelfHost and never calls New — the edge is not in that process. So a
+// set published only by New was EMPTY in the very process that enforces the claim
+// gate and the site_hosts invariant, while being full in the one that serves.
+// IsSelfHost answered false for everything there: `api.hanzo.ai` read as not-ours
+// and took a first-come row, which is the exact defect SetSelfDomains was added to
+// close, defeated by composition rather than by logic (no test could see it — they
+// publish the set themselves, in one binary). Every process reads the same
+// environment and ConfigFromEnv is the ONE reader of it, so deriving the policy
+// wherever the question is asked cannot drift the way a hand-off between processes
+// does — and it stays right however the plugins are later composed.
+func seed() {
+	policyMu.RLock()
+	ok := seeded
+	policyMu.RUnlock()
+	if ok {
+		return
+	}
+	cfg := ConfigFromEnv("")
+	labels, self := labelSet(cfg.Reserved), hosts(selfOf(cfg))
+	policyMu.Lock()
+	if !seeded { // an explicit New/SetX landed while we derived — it wins
+		extraReserved, selfDomains, seeded = labels, self, true
+	}
+	policyMu.Unlock()
+}
+
+// labelSet normalizes labels into the lowercase set the reserved comparison uses.
+func labelSet(labels []string) map[string]bool {
+	m := make(map[string]bool, len(labels))
+	for _, l := range labels {
+		if l = strings.ToLower(strings.TrimSpace(l)); l != "" {
+			m[l] = true
+		}
+	}
+	return m
+}
+
+// hosts normalizes a domain list, dropping blanks.
+func hosts(domains []string) []string {
+	out := make([]string, 0, len(domains))
+	for _, d := range domains {
+		if d = strings.ToLower(strings.TrimSpace(d)); d != "" {
+			out = append(out, d)
+		}
+	}
+	return out
+}
+
+// SetReservedExtra registers operator-supplied extra reserved labels (from
+// CLOUD_SITES_RESERVED). It ADDS to baseReserved; it can never remove a baked-in
+// reserved label. Called once at startup by New.
+func SetReservedExtra(labels []string) {
+	m := labelSet(labels)
+	policyMu.Lock()
+	extraReserved, seeded = m, true
+	policyMu.Unlock()
+}
+
+// SharePrefix opens every label the zrok frontend serves on the sites apex
+// (`share-<token>.hanzo.app`, `share-oauth.hanzo.app`): routed ahead of the site
+// wildcard, so a site slugged with it would be unreachable or a takeover.
+const SharePrefix = "share-"
+
+// IsReserved reports whether a subdomain LABEL may NOT be a published site. The
+// comparison is on the lowercased label.
+//
+// It takes a label, never a hostname: the set it compares against holds bare
+// labels, so a whole FQDN matches nothing. Ours is the predicate for a name whose
+// shape is not known in advance.
+func IsReserved(label string) bool {
+	label = strings.ToLower(strings.TrimSpace(label))
+	if baseReserved[label] || strings.HasPrefix(label, SharePrefix) {
+		return true
+	}
+	seed()
+	policyMu.RLock()
+	ok := extraReserved[label]
+	policyMu.RUnlock()
+	return ok
+}
+
+// Ours reports whether name is a name the PLATFORM holds rather than a tenant's to
+// take. It is the ONE predicate the claim gate and the host table both ask, over
+// the two shapes site_hosts actually stores:
+//
+//	a bare label  → the reserved-subdomain policy; it would publish as <label>.<apex>
+//	a hostname    → the self-domain set; at or under a registrable domain we run
+//
+// One question, two shapes, because the table holds both: a project's own bare slug
+// (deploy.go siteHost) and its custom FQDNs (domains.go). The storage gate used to
+// ask IsReserved with whichever it was given, so a HOSTNAME was compared against a
+// set of bare labels and `login.hanzo.ai` matched nothing — the backstop that is
+// supposed to make the serve-time gate a mere backstop contributed nothing at all
+// for the FQDN half. Splitting on shape is what makes one predicate answer both
+// without the label policy ever reaching a customer's own `www.example.com`.
+func Ours(name string) bool {
+	if strings.Contains(name, ".") {
+		return IsSelfHost(name)
+	}
+	return IsReserved(name)
+}
+
+// selfDomains is the registrable domains WE run — the sites apex (hanzo.app), the
+// brand domain (hanzo.ai), and any operator-supplied SelfDomains. Same shared-source
+// shape as the reserved labels above, for the same reason: the SERVE gate
+// (Server.customCandidate) and the CLAIM gate (projects setDomains) must read ONE set
+// or they drift. They did drift — serve excluded every self domain while claim
+// excluded only the sites apex, so a customer could claim `api.hanzo.ai`, our
+// production API host. It could never SERVE (the serve gate held), but the claim row
+// is first-come, so the claim permanently DENIED the host to its real owner. A gate
+// that runs only at read time cannot keep a table clean.
+var selfDomains []string
+
+// SetSelfDomains registers the domains we operate, from the same list the serve gate
+// is built with. Called once at startup by New, beside SetReservedExtra.
+func SetSelfDomains(domains []string) {
+	out := hosts(domains)
+	policyMu.Lock()
+	selfDomains, seeded = out, true
+	policyMu.Unlock()
+}
+
+// siteZone is the published-site zone, normalized, with the product default
+// (hanzo.app) — the zone <slug>.<zone> sites are served under. ONE reading, so
+// New and selfOf cannot disagree about which zone is ours.
+//
+// It was called apexOf, which is a DIFFERENT question from the one brand.Apex
+// answers (the registrable apex of a host). Two functions one package apart,
+// same name, unrelated meanings, in the exact area where confusing a host for
+// its apex already caused an outage.
+func siteZone(apex string) string {
+	if a := strings.ToLower(strings.TrimSpace(apex)); a != "" {
+		return a
+	}
+	return "hanzo.app"
+}
+
+// selfOf derives the domains WE run from config: the sites apex, the operator's own
+// self domains, and the first-party apex when first-party serving is actually on.
+//
+// The first-party apex is folded in HERE rather than by the caller, so the set is
+// COMPLETE by construction instead of by statement order. It used to be appended to
+// a local slice after publication, and SetSelfDomains copies — so the apex that
+// carries api/login/console was absent from the one predicate that decides whether
+// a host is ours, making every non-allowlisted <label>.<fpApex> a custom-domain
+// candidate. Gated on the SAME fail-closed pair New requires (an apex AND an owning
+// org): with no owner nothing first-party ever serves, so nothing is self on it.
+func selfOf(cfg Config) []string {
+	apex := siteZone(cfg.Apex)
+	out := []string{apex}
+	seen := map[string]bool{apex: true}
+	add := func(d string) {
+		if d = strings.ToLower(strings.TrimSpace(d)); d != "" && !seen[d] {
+			seen[d] = true
+			out = append(out, d)
+		}
+	}
+	for _, d := range cfg.SelfDomains {
+		add(d)
+	}
+	if strings.TrimSpace(cfg.FirstPartyOrg) != "" {
+		add(cfg.FirstPartyApex)
+	}
+	return out
+}
+
+// IsSelfHost reports whether host is one of OUR registrable domains or anything
+// beneath it. Those names are ours to assign and no DNS proof is even possible for
+// them (a customer cannot publish a TXT record in a zone we run), so they are never
+// claimable. The ONE self-domain predicate; serve and claim both call it.
+func IsSelfHost(host string) bool {
+	host = strings.ToLower(strings.TrimSpace(host))
+	if host == "" {
+		return false
+	}
+	seed()
+	policyMu.RLock()
+	defer policyMu.RUnlock()
+	for _, d := range selfDomains {
+		if host == d || strings.HasSuffix(host, "."+d) {
+			return true
+		}
+	}
+	return false
+}

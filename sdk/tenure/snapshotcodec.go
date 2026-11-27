@@ -44,10 +44,11 @@ type snapshotCodec interface {
 // wholeFile is the default codec: fold the WAL into the main file so it holds every
 // committed page, hold that file still, and ship its bytes.
 //
-// The bytes are the WHOLE payload. There is no key material to carry beside
-// them: a database's key is DERIVED from the deployment's master and the
-// namespace that owns it, so a successor holding the same master reopens the
-// restored file by naming it, with nothing shipped and nothing to lose.
+// The bytes are the WHOLE payload. There is no key material to carry beside them: a
+// database's key is DERIVED from the deployment's master and the namespace that owns
+// it, so a successor holding the same master reopens the restored file by naming it,
+// with nothing shipped and nothing to lose. This used to ship a wrapped-key sidecar
+// framed ahead of the database, which is the thing that could go missing.
 //
 // seal is the crypto client. The SQLCipher page-level and plaintext backends encrypt on
 // WRITE, so after the fold their main file already holds fresh ciphertext and seal is a

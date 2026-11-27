@@ -120,8 +120,10 @@ func Exchange(ctx context.Context, base, clientID, clientSecret, subject string,
 
 // subjectOf reads the display identity off a token IAM has just handed back.
 //
-// The token's AUTHORITY is established by every service that receives it, each
-// of which verifies it in full.
+// It does NOT verify the signature, and does not need to: the bytes came from the
+// issuer over this deployment's own IAM address, and what is read is used to fill
+// in a git author and a shell identity. The token's AUTHORITY is established by
+// every service that receives it, each of which verifies it in full.
 func subjectOf(token string) (owner, user, email, display string) {
 	parts := strings.Split(token, ".")
 	if len(parts) != 3 {

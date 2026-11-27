@@ -10,8 +10,10 @@ package meter
 // shared backends, and a [Client] is a Ledger behind the meter's own rules.
 //
 // With nothing registered a process meters nothing: [Free] allows every call and
-// charges none, which is the whole deployment when it is a laptop or a library
-// user.
+// charges none, which is the whole deployment when it is a laptop or a library user.
+// A process that was TOLD to bill — a named deployment (CLOUD_ENV) or a commerce
+// BaseURL — and has no ledger linked refuses instead, because a binary that
+// quietly stopped debiting is a revenue outage that looks like success.
 
 import (
 	"context"
@@ -58,7 +60,7 @@ type Doer interface {
 // asked wherever the deployment keeps them.
 type Config struct {
 	// BaseURL is the commerce service base, e.g.
-	// "http://commerce.internal:8001". No trailing /v1 — the
+	// "http://commerce.hanzo.svc.cluster.local:8001". No trailing /v1 — the
 	// ledger appends the canonical billing paths itself.
 	BaseURL string
 

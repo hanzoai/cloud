@@ -1,0 +1,40 @@
+{
+  "$schema": "https://schemas.agentskills.io/discovery/0.2.0/schema.json",
+  "base_url": "https://api.hanzo.ai",
+  "brand": "hanzo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://hanzo.id",
+  "mcp": {
+    "description": "Model Context Protocol over JSON-RPC 2.0 — one POST per message, stateless, protocol revision 2026-07-28. tools/list answers without a credential with one tool per subsystem (its operations in the \"op\" enum) plus \"describe\", which returns one operation's input schema. tools/call names a subsystem tool and carries {\"op\": <operation>, \"input\": <its arguments>}; it takes the same bearer the REST API does, and a call that carries none is answered 401 with a WWW-Authenticate header naming the resource metadata at /.well-known/oauth-protected-resource, which names the authorization server to sign in at. The tool surface is the public contract: the operator's admin product is not offered, and a name that would disclose a secret or mutate an identity is withheld — the list says how many, under _meta.",
+    "method": "POST",
+    "url": "https://api.hanzo.ai/v1/mcp"
+  },
+  "skill_count": 3,
+  "skills": [
+    {
+      "description": "Read blueprint blueprint: Returns every deployable blueprint with its service count and estimated monthly compute cost..",
+      "digest": "sha256:75f919c5b35c309231b5015bb86d1c76d4748d3537c9aeee4d84c232e5183143",
+      "name": "blueprint_blueprint",
+      "service": "blueprint",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/blueprint_blueprint/SKILL.md"
+    },
+    {
+      "description": "Read blueprint health: Reports blueprint liveness and echoes the compute rate card in force..",
+      "digest": "sha256:1e0944e9711266b41efb40e416b02b2bb7a9ce9bd7c21eb53fb645d36147bd6e",
+      "name": "blueprint_health",
+      "service": "blueprint",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/blueprint_health/SKILL.md"
+    },
+    {
+      "description": "Read blueprint sbom: A blueprint's bill of images and what running it costs.",
+      "digest": "sha256:c142a8c2197bfc4cfb6da4b5a41a03b7a9ecf7f2927fab5c235c907291c70374",
+      "name": "blueprint_sbom",
+      "service": "blueprint",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/blueprint_sbom/SKILL.md"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

@@ -1,0 +1,428 @@
+package kms
+
+// store.go is the per-ORG SQLite persistence for sealed KMS secrets — the
+// backend that REPLACES the single OS-locked ZapDB store, so cloud is no longer
+// pinned to replicas=1.
+//
+// WHY. luxfi/kms's SecretStore is one embedded ZapDB (a Badger fork) opened under
+// a SINGLE directory for ALL orgs. Badger takes an exclusive OS lock on its live
+// files, so exactly one process may open it — the hard reason cloud ran
+// replicas=1 with a cross-process writer lease. This store drops ZapDB entirely:
+// each org's sealed secrets live in ITS OWN encrypted SQLite file
+// ({DataDir}/orgs/{org}/kms.db via the canonical cloud.OrgDB → cek client), which
+// has NO exclusive-opener lock. Two tenants never share a file, so different pods
+// can serve different tenants (consistent-hash org→pod); within a tenant, WAL +
+// busy_timeout serialize writers and the horizontal-scale model pins each tenant
+// to one writer pod. See the Red Handoff in the package report.
+//
+// THE FILE IS THE TENANT BOUNDARY. fileOrg() shards a store path to a file by its
+// leading "/orgs/{org}" segment (the shape BOTH faces already use: the REST
+// handler folds :org into /orgs/{org}, and the in-process facade's refs carry it
+// too). A path with no such segment is genuinely deployment-wide and routes to
+// the reserved {DataDir}/orgs/_platform/kms.db partition. cloud.OrgDB folds the
+// org through the INJECTIVE namespace.Sanitize slugger, so two distinct orgs can never
+// collide on one file — physical isolation ON TOP OF the REST authz gate.
+//
+// ON HANZO-SQL the file is a schema (CLOUD_SQL_DSN set; cloud.OrgDB follows) and the
+// tenant boundary is the same: one schema per org namespace, so a query in one can
+// never reach another's rows. The SQL below is the dialect both engines share
+// (sdk/dialect). What the SQLCipher file hid, the schema does not: path, env,
+// name, scheme, key_handle and policy_id are coordinates, stored as given. Every
+// VALUE is the sealed envelope below and is no more or less protected on either engine.
+//
+// CRYPTO STAYS IN THE CLIENT. This layer persists ALREADY-SEALED records: Seal /
+// Open (the AES-256-GCM envelope, luxfi/kms/pkg/store) run in kms.go, so plaintext
+// never reaches this file. The stored `path` column is the FULL store path
+// (including /orgs/{org}); Seal's AAD binds that full path, so a record physically
+// moved into another org's file still fails to Open — the cross-org record-swap
+// defense is preserved, the store merely shards WHERE the row lives.
+
+import (
+	"context"
+	"database/sql"
+	"errors"
+	"fmt"
+	"strings"
+	"time"
+	"unicode/utf8"
+
+	"github.com/hanzoai/cloud/sdk"
+	"github.com/hanzoai/cloud/sdk/dialect"
+	"github.com/hanzoai/cloud/sdk/principal"
+	"github.com/hanzoai/namespace"
+	kmsstore "github.com/luxfi/kms/pkg/store"
+)
+
+// storeOpTimeout bounds one statement's wait for its org file's SOLE connection.
+//
+// WHY A NUMBER AND NOT ZERO. cloud.OrgDB pins each org file to one connection
+// (locus.Single), which is what makes a read-modify-write a safe transaction —
+// and it means every concurrent statement against one file queues behind the
+// holder. database/sql waits for that connection until its CONTEXT is done, so
+// the context-free db.QueryRow/Exec/Query these methods used waited forever.
+//
+// The platform's own secrets make this the common path rather than a corner: a
+// path outside orgs/<slug>/ resolves to namespace.System(), so HANZO_DEPLOY_TOKEN,
+// NPM_TOKEN and every other CI credential live in ONE file behind ONE connection.
+//
+// Unbounded, the only ceiling was the caller's: cmd/cloud's plugin transport gives
+// up at fifteen minutes, and reads were measured completing at duration_ms 900002
+// — the cap, not the work. Nothing waits that long: curl gives up, the publish
+// step gives up, and the answer arrives for nobody. Ten seconds is longer than any
+// healthy statement on a file this size and short enough that a caller learns the
+// store is busy while it still cares.
+// A var, not a const, only so the test below can narrow it: a test that proved
+// the bound by waiting ten real seconds would be paid for on every run forever.
+// Nothing else writes it — there is no flag, no env and no config for it.
+var storeOpTimeout = 10 * time.Second
+
+// bounded is the deadline every statement below runs under. Stated once, because
+// a method that forgot it would reintroduce the unbounded wait with nothing to
+// show for it.
+func bounded() (context.Context, context.CancelFunc) {
+	return context.WithTimeout(context.Background(), storeOpTimeout)
+}
+
+// errReadOnly is returned by a reader-mode store when a mutation is attempted. A
+// reader must never fork the authoritative writer's state.
+var errReadOnly = errors.New("kms: store is read-only (reader HA role)")
+
+// secretStore holds the lazily-opened per-entity SQLite handles.
+//
+// It used to hold its own map, its own lock and its own first-touch-opens-once
+// dance — a second copy of cloud.OrgStore, keyed on a slug it computed itself.
+// That copy is what let a tenant path spelling "/orgs/_platform/…" share a cache
+// slot with the facade before the key was corrected. There is now one registry
+// and the key is the namespace, so the two are different KINDS and the collision
+// is not expressible.
+type secretStore struct {
+	readOnly bool
+	stores   *cloud.OrgStore[*sql.DB]
+}
+
+func newSecretStore(b cloud.Base, readOnly bool) *secretStore {
+	return &secretStore{
+		readOnly: readOnly,
+		// A reader performs no DDL: the writer already migrated the file it
+		// hydrated, and a reader must never fork the authoritative state.
+		stores: cloud.NewOrgStore(b, "kms", func(db *sql.DB) (*sql.DB, error) {
+			if readOnly {
+				return db, nil
+			}
+			if err := migrateSecrets(db); err != nil {
+				return nil, err
+			}
+			return db, nil
+		}),
+	}
+}
+
+// fileOrg extracts the org whose file holds a secret path. A path shaped
+// "/orgs/{org}[/…]" belongs to tenant {org}; anything else is deployment-wide and
+// lands in the deployment's own partition. org is the RAW org and is empty
+// exactly when facade is true — the facade is chosen by the BOOLEAN and never by
+// an org string, so no org a caller can spell reaches it.
+func fileOrg(path string) (org string, facade bool) {
+	p := strings.Trim(strings.TrimSpace(path), "/")
+	if p == "" {
+		return "", true
+	}
+	segs := strings.SplitN(p, "/", 3)
+	if segs[0] == "orgs" && len(segs) >= 2 && segs[1] != "" {
+		return segs[1], false
+	}
+	return "", true
+}
+
+// namespaceFor names the database a secret path's records live in. It is the ONE
+// place in this package: the facade partition is the system namespace and a
+// tenant's is an org namespace, so which of the two a path reaches is decided by
+// KIND and cannot be argued into by a cleverly spelled org.
+func namespaceFor(path string) (namespace.Namespace, error) {
+	org, facade := fileOrg(path)
+	if facade {
+		return namespace.System(), nil
+	}
+	return principal.OrgNamespace(org, "")
+}
+
+// dbFor resolves (opening + migrating + caching on first use) the SQLite handle
+// for the org that owns path. When the file does not yet exist:
+//   - create=true  (the Put path) → create it.
+//   - create=false (read/list/delete) → return (nil, nil); the caller treats
+//     absence as "no such secret" and NEVER litters an empty store shell for an
+//     org that only had a read attempted.
+//
+// A reader (s.readOnly) never creates: create is forced false, and it performs no
+// DDL (the writer already migrated). The org is folded through the injective
+// slugger inside cloud.OrgDB, so a path can never traverse out of {DataDir}/orgs
+// or reach another tenant.
+func (s *secretStore) dbFor(path string, create bool) (*sql.DB, error) {
+	if s.readOnly {
+		create = false
+	}
+	ns, err := namespaceFor(path)
+	if err != nil {
+		return nil, nil // unnameable org → not found (same 404 as any miss; no oracle)
+	}
+	if !create && !s.stores.Has(ns) {
+		return nil, nil // nothing to open; caller returns not-found / empty
+	}
+	db, err := s.stores.For(ns)
+	if err != nil {
+		return nil, fmt.Errorf("kms: open org store %q: %w", path, err)
+	}
+	return db, nil
+}
+
+// migrateSecrets creates the sealed-secret table, in one transaction under the
+// store's migration lock. Idempotent (IF NOT EXISTS), so a reopen, a second replica
+// or a reader (opening an already-migrated store) is a no-op. The primary key (path,
+// env, name) is the exact coordinate the ZapDB key encoded
+// (kms/secrets/{path}/{env}/{name}), so listing semantics carry over unchanged. An
+// existing SQLite file is the same table, so it opens as it was.
+func migrateSecrets(db *sql.DB) error {
+	d := dialect.Of(db)
+	ddl := `
+CREATE TABLE IF NOT EXISTS kms_secrets (
+  path        TEXT NOT NULL,
+  env         TEXT NOT NULL,
+  name        TEXT NOT NULL,
+  scheme      TEXT NOT NULL DEFAULT 'aead+mlkem',
+  ciphertext  ` + d.Blob() + ` NOT NULL,
+  wrapped_dek ` + d.Blob() + ` NOT NULL,
+  key_handle  TEXT NOT NULL DEFAULT '',
+  policy_id   TEXT NOT NULL DEFAULT '',
+  created_at  BIGINT NOT NULL DEFAULT 0,
+  updated_at  BIGINT NOT NULL DEFAULT 0,
+  PRIMARY KEY (path, env, name)
+);`
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	defer cancel()
+	return d.Migrate(ctx, db, func(tx *sql.Tx) error {
+		_, err := tx.ExecContext(ctx, ddl)
+		return err
+	})
+}
+
+// stored says whether a coordinate can hold a secret at all. put refuses text
+// PostgreSQL would (a NUL byte, bytes that are not UTF-8), so nothing is ever kept
+// under one, and a read of one finds nothing on either engine instead of an error
+// on one of them.
+func stored(coords ...string) bool { return dialect.Text(coords...) == nil }
+
+// put upserts a SEALED secret into its org's file. On conflict it rewrites the
+// ciphertext/wrapped-DEK (a re-seal always mints a fresh per-secret DEK) and bumps
+// updated_at while preserving created_at.
+func (s *secretStore) put(sec *kmsstore.Secret) error {
+	if s.readOnly {
+		return errReadOnly
+	}
+	scheme := sec.Scheme
+	if scheme == "" {
+		scheme = kmsstore.ModeStandard
+	}
+	// Before the store is opened: a refused write must not create an org's store.
+	if err := dialect.Text(sec.Path, sec.Env, sec.Name, scheme, sec.KeyHandle, sec.PolicyID); err != nil {
+		return fmt.Errorf("kms: write secret: %w", err)
+	}
+	db, err := s.dbFor(sec.Path, true)
+	if err != nil {
+		return err
+	}
+	now := time.Now().Unix()
+	ctx, cancel := bounded()
+	defer cancel()
+	_, err = db.ExecContext(ctx,
+		`INSERT INTO kms_secrets (path,env,name,scheme,ciphertext,wrapped_dek,key_handle,policy_id,created_at,updated_at)
+		 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+		 ON CONFLICT(path,env,name) DO UPDATE SET
+		   scheme=excluded.scheme, ciphertext=excluded.ciphertext, wrapped_dek=excluded.wrapped_dek,
+		   key_handle=excluded.key_handle, policy_id=excluded.policy_id, updated_at=excluded.updated_at`,
+		sec.Path, sec.Env, sec.Name, scheme, sec.Ciphertext, sec.WrappedDEK, sec.KeyHandle, sec.PolicyID, now, now)
+	if err != nil {
+		return fmt.Errorf("kms: write secret: %w", err)
+	}
+	return nil
+}
+
+// get reads a sealed secret by its full coordinate. Returns ErrSecretNotFound
+// (verbatim, for a 404 mapping) when absent. The reconstructed Secret carries the
+// FULL stored path, so the Client's Open reproduces Seal's AAD exactly.
+func (s *secretStore) get(path, name, env string) (*kmsstore.Secret, error) {
+	if !stored(path, name, env) {
+		return nil, kmsstore.ErrSecretNotFound
+	}
+	db, err := s.dbFor(path, false)
+	if err != nil {
+		return nil, err
+	}
+	if db == nil {
+		return nil, kmsstore.ErrSecretNotFound // org has no store file yet
+	}
+	sec := &kmsstore.Secret{Path: path, Name: name, Env: env}
+	ctx, cancel := bounded()
+	defer cancel()
+	err = db.QueryRowContext(ctx,
+		`SELECT scheme, ciphertext, wrapped_dek, key_handle, policy_id FROM kms_secrets
+		 WHERE path=$1 AND env=$2 AND name=$3`, path, env, name).
+		Scan(&sec.Scheme, &sec.Ciphertext, &sec.WrappedDEK, &sec.KeyHandle, &sec.PolicyID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, kmsstore.ErrSecretNotFound
+	}
+	if err != nil {
+		return nil, fmt.Errorf("kms: read secret: %w", err)
+	}
+	return sec, nil
+}
+
+// findQuery names what an enumeration asks for. The zero value asks for
+// everything the store holds.
+//
+//	Path  subtree ROOT, recursive: "deploy" reaches "deploy/ci" and never
+//	      "deployfoo". Empty = every path.
+//	Env   exact. Empty = EVERY environment — there is deliberately no default,
+//	      because env is part of a secret's coordinate and silently choosing one
+//	      reports an empty store while another env holds every record.
+type findQuery struct {
+	Path string
+	Env  string
+}
+
+// find returns the metadata (never ciphertext) of every secret matching q.
+//
+// It is separate from [secretStore.list] on purpose. list answers "what is at
+// EXACTLY this coordinate", which is the question the credential broker asks to
+// scope an app (kms.Client.Names) — widening THAT to a subtree would hand an app
+// its sub-paths' credentials too. find answers "what does this store hold",
+// which is the question an audit, a rotation, or a migration asks. Two
+// questions, two methods; neither can silently answer the other.
+//
+// Without it the store could not be enumerated at all: `WHERE path=? AND env=?`
+// with an empty path matches only the root, and an unset env was silently
+// filled in, so a populated store answered `total: 0` — indistinguishable from
+// an empty one, and the reason a live secret was read as missing during an
+// 18-hour outage.
+func (s *secretStore) find(q findQuery) ([]*kmsstore.Secret, error) {
+	if !stored(q.Path, q.Env) {
+		return nil, nil
+	}
+	// The store file is chosen by path, so an enumeration is always scoped to
+	// one org's store — a caller cannot widen its way into another tenant's.
+	db, err := s.dbFor(q.Path, false)
+	if err != nil {
+		return nil, err
+	}
+	if db == nil {
+		return nil, nil // org has no store file yet → no secrets
+	}
+
+	where := []string{"1=1"}
+	args := []any{}
+	if q.Path != "" {
+		// The subtree root itself, plus everything beneath it: the paths that begin
+		// with it and a slash. A prefix is compared as the literal string it is, with
+		// no wildcard to escape and no case to fold, so a path containing '%' or '_'
+		// cannot broaden its own scope and "Team" does not reach "team". (LIKE would
+		// fold ASCII case on SQLite and not on PostgreSQL, and a coordinate is exact.)
+		prefix := q.Path + "/"
+		where = append(where, fmt.Sprintf("(path = $%d OR substr(path, 1, $%d) = $%d)", len(args)+1, len(args)+2, len(args)+3))
+		args = append(args, q.Path, utf8.RuneCountInString(prefix), prefix)
+	}
+	if q.Env != "" {
+		where = append(where, fmt.Sprintf("env = $%d", len(args)+1))
+		args = append(args, q.Env)
+	}
+
+	ctx, cancel := bounded()
+	defer cancel()
+	rows, err := db.QueryContext(ctx,
+		`SELECT path, env, name, scheme, key_handle, policy_id FROM kms_secrets
+		 WHERE `+strings.Join(where, " AND ")+` ORDER BY path, env, name`, args...)
+	if err != nil {
+		return nil, fmt.Errorf("kms: find secrets: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	var out []*kmsstore.Secret
+	for rows.Next() {
+		sec := &kmsstore.Secret{}
+		if err := rows.Scan(&sec.Path, &sec.Env, &sec.Name, &sec.Scheme, &sec.KeyHandle, &sec.PolicyID); err != nil {
+			return nil, fmt.Errorf("kms: scan secret: %w", err)
+		}
+		out = append(out, sec)
+	}
+	return out, rows.Err()
+}
+
+// list returns the metadata (never ciphertext) of the secrets at EXACTLY (path,
+// env) — the same exact-coordinate listing the ZapDB prefix scan did (it never
+// recursed into sub-paths). Nothing sensitive is decrypted.
+//
+// This is the credential broker's question; see [secretStore.find] for the
+// store-wide one.
+func (s *secretStore) list(path, env string) ([]*kmsstore.Secret, error) {
+	if !stored(path, env) {
+		return nil, nil
+	}
+	db, err := s.dbFor(path, false)
+	if err != nil {
+		return nil, err
+	}
+	if db == nil {
+		return nil, nil // org has no store file yet → no secrets
+	}
+	ctx, cancel := bounded()
+	defer cancel()
+	rows, err := db.QueryContext(ctx,
+		`SELECT name, scheme, key_handle, policy_id FROM kms_secrets
+		 WHERE path=$1 AND env=$2 ORDER BY name`, path, env)
+	if err != nil {
+		return nil, fmt.Errorf("kms: list secrets: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	var out []*kmsstore.Secret
+	for rows.Next() {
+		sec := &kmsstore.Secret{Path: path, Env: env}
+		if err := rows.Scan(&sec.Name, &sec.Scheme, &sec.KeyHandle, &sec.PolicyID); err != nil {
+			return nil, fmt.Errorf("kms: scan secret: %w", err)
+		}
+		out = append(out, sec)
+	}
+	return out, rows.Err()
+}
+
+// del removes a secret, returning ErrSecretNotFound (verbatim) when it was absent
+// so the REST layer maps a missing delete to 404 rather than 200.
+func (s *secretStore) del(path, name, env string) error {
+	if s.readOnly {
+		return errReadOnly
+	}
+	if !stored(path, name, env) {
+		return kmsstore.ErrSecretNotFound
+	}
+	db, err := s.dbFor(path, false)
+	if err != nil {
+		return err
+	}
+	if db == nil {
+		return kmsstore.ErrSecretNotFound // org has no store file yet
+	}
+	ctx, cancel := bounded()
+	defer cancel()
+	res, err := db.ExecContext(ctx, `DELETE FROM kms_secrets WHERE path=$1 AND env=$2 AND name=$3`, path, env, name)
+	if err != nil {
+		return fmt.Errorf("kms: delete secret: %w", err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("kms: delete secret: %w", err)
+	}
+	if n == 0 {
+		return kmsstore.ErrSecretNotFound
+	}
+	return nil
+}
+
+// close closes every open per-entity handle (best-effort), returning the first
+// error. Safe to call once at shutdown.
+func (s *secretStore) close() error { return s.stores.CloseAll() }

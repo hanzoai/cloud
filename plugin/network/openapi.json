@@ -1,0 +1,991 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Hanzo Cloud API",
+    "description": "Package network mounts the Hanzo Cloud NETWORKING surface: the tenant's Hanzo Zero Trust footprint — the overlay network, its routers and its services — served as clean, org-scoped REST off the unified cloud binary and fronting the Hanzo Zero Trust controller (hanzoai/zt, an ZT-based fabric).",
+    "version": "v1"
+  },
+  "servers": [
+    {
+      "url": "https://api.hanzo.ai"
+    }
+  ],
+  "security": [
+    {
+      "bearer": []
+    }
+  ],
+  "tags": [
+    {
+      "name": "admin"
+    },
+    {
+      "name": "network"
+    }
+  ],
+  "paths": {
+    "/v1/admin/network/invites": {
+      "get": {
+        "operationId": "get_admin_network_invites",
+        "summary": "Lists the invites, newest first: each one's id, status, note, issue time, expiry and who issued it.",
+        "description": "Lists the invites, newest first: each one's id, status, note, issue\ntime, expiry and who issued it. It never returns a code, nor anything a code can\nbe got from. It is a SuperAdmin's; another caller is refused 403, audited. A\nstatus is active, revoked, or expired for an active invite past its expiry.",
+        "tags": [
+          "admin"
+        ],
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Limit is how many invites a page holds; 0 means 200 and nothing above 1000 is\nhonoured.",
+            "schema": {
+              "format": "int64",
+              "type": "integer"
+            },
+            "example": 50
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "description": "Cursor is the previous page's next; empty for the first page. It is opaque: a\nvalue that was not given as a next is a 400.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/network.InviteList"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-tool": true
+      },
+      "post": {
+        "operationId": "post_admin_network_invites",
+        "summary": "Issues invite codes and answers them in clear, once.",
+        "description": "Issues invite codes and answers them in clear, once. It is a\nSuperAdmin's, and no one else may call it: another caller is refused 403 and the\nrefusal is audited. Each code is HNZ- and ten characters of Crockford base32, shown\nas HNZ-XXXXX-XXXXX, from crypto/rand and unique among the codes issued; only an HMAC\nof it is stored, so a code\nshown here and lost is revoked by id and issued again. The audit trail takes the\nintent, with the count and the note and never a code, before anything is written,\nand answers 503 with nothing written when it cannot.\n\nA count is 1 to 100 and a life 1 to 365 days, and an absent one is one code for\n30 days; anything else is 400.",
+        "tags": [
+          "admin"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "count": 5,
+                "expires_days": 14,
+                "note": "launch week"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/network.InviteIssueIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/network.InviteIssued"
+                }
+              }
+            },
+            "description": "created"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-tool": true
+      }
+    },
+    "/v1/admin/network/invites/{id}": {
+      "delete": {
+        "operationId": "delete_admin_network_invites_by_id",
+        "summary": "Revokes one invite and answers 204: its code stops verifying at once.",
+        "description": "Revokes one invite and answers 204: its code stops verifying at once.\nRevoking one that is already revoked is the same 204, and an id that names no\ninvite is 404. It is a SuperAdmin's; another caller is refused 403, audited. Every\nattempt is on the audit trail with its outcome, and the trail takes the intent before\nan invite is changed and answers 503 with nothing changed when it cannot.",
+        "tags": [
+          "admin"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the invite id from the path, as issue and the list show it.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "3fa85f6457174a2"
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "no content"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-tool": true
+      }
+    },
+    "/v1/network": {
+      "get": {
+        "operationId": "get_network",
+        "summary": "Returns the caller's org overlay network on the Zero Trust fabric.",
+        "description": "Returns the caller's org overlay network on the Zero Trust fabric.\n\nThe org has at most ONE overlay, projected from the edge-routers tagged with its\n\"org-\u003corg\u003e\" role attribute: nodes is the real router count and status is\n\"connected\" once at least one router has dialed home, \"provisioning\" while none\nhas. An org with no routers gets an empty list, never a fabricated network.\n\nThe read degrades rather than erroring: a deployment with no ZT credential, and a\ncontroller that cannot be reached, both answer 200 with an empty list so the\nconsole's Networks page renders a clean empty state instead of an error.",
+        "tags": [
+          "network"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/network.networkList"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/network/identities": {
+      "get": {
+        "operationId": "get_network_identities",
+        "summary": "Returns the fabric identities the caller's org owns.",
+        "description": "Returns the fabric identities the caller's org owns.\n\nOne row per identity tagged with the org's \"org-\u003corg\u003e\" role attribute, each\nnaming the IAM subject it logs in as. A steward sees every one; a plain member\nsees only its own, since who else is on the org's network is not a member's\nto read, and a plain member's API key, which holds no identity, is refused.\n\nA tenancy read over the full inventory, so like the mesh list it does NOT\ndegrade: an unconfigured deployment answers 503.",
+        "tags": [
+          "network"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/network.identityList"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      },
+      "post": {
+        "operationId": "post_network_identities",
+        "summary": "Puts the caller on the org's overlay as its own IAM subject.",
+        "description": "Puts the caller on the org's overlay as its own IAM subject.\n\nThe identity is the one whose externalId is the caller's `sub`, admitted by\nthe controller's \"iam\" auth policy: the caller logs in to the fabric with its\nown IAM access token, and nothing is enrolled. It is named by the subject\nunless a name is given, and carries the org's \"org-\u003corg\u003e\" role attribute plus\nany supplied roles — each scoped to the org, and a \"\u003cservice\u003e-host\" role\nrefused unless the org has published that service. Roles are a steward's to\ntake: a plain member joins with the org role alone, and asking for more is\n403 before the controller is written.\n\nAn API key is refused 403: the fabric admits an IAM access token, a person's\nor an application's, and a key has none to log in with.\n\nIDEMPOTENT: a caller who already has an identity gets the same one back, with\nany of these roles it lacked added — which is how one person's identity comes\nto serve every org they act in.\n\nA write, so it does not degrade: an unconfigured deployment answers 503.",
+        "tags": [
+          "network"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/network.identityIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/network.identityView"
+                }
+              }
+            },
+            "description": "created"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/network/identities/{id}": {
+      "delete": {
+        "operationId": "delete_network_identities_by_id",
+        "summary": "Takes one of the org's fabric identities out of the org.",
+        "description": "Takes one of the org's fabric identities out of the org.\n\nThe identity's \"org-\u003corg\u003e\" role and every role scoped to the org are\nremoved and the rest is left alone, so an identity another org shares keeps\nworking there. The identity itself is deleted when no org role is left on\nit, or when the caller IS its IAM subject — a person may always remove\nthemselves.\n\nAn id belonging to another org — or to nothing — is 404 before any write\nreaches the controller: whether an identity exists is itself a cross-tenant\nfact, and a delete may only ever act on what the caller could list, which for\na plain member is its own identity. A fabric administrator is the\ncontroller's own and is refused.",
+        "tags": [
+          "network"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the identity id from the path. The URL is the addressing authority,\nso it binds from there whatever else the request carries.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "no content"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/network/invite/verify": {
+      "post": {
+        "operationId": "post_network_invite_verify",
+        "summary": "Says whether an invite code is live: {\"valid\": true} or {\"valid\": false}, and nothing else.",
+        "description": "Says whether an invite code is live: {\"valid\": true} or {\"valid\":\nfalse}, and nothing else. It never says why a code is not valid: a code that was\nnever issued, one that is not shaped like a code, one that was revoked and one that\nhas expired get the same status and the same body, and it says nothing of who issued\na code. Verifying does not consume the code and does not spend it, and it needs no\naccount. Nothing on the server enforces an invite until redemption exists; the\noperations that will need one will answer with the problem type invite_required.\n\nA deployment that cannot hold invites, or has issued none yet, answers 503; then a\ncaller past ten requests an hour is 429, a body over 4 KiB 413 and a missing code or a\nbody that is not JSON 400, in that order. A caller that has missed five times in an\nhour is refused 429 until the window passes, whatever it asks, so the refusal says\nnothing about whether a code would have been valid, and Retry-After says when to come\nback. The limits are per network address (an IPv6 /64, with the /48 around it counted\nat sixteen times as much): clients behind one address share them, and so do callers\nwhose address is unknown.",
+        "tags": [
+          "network"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "code": "HNZ-7K9Q2-MXZ4P"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/network.InviteCheckIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "valid": true
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/network.InviteVerdict"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "security": [],
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/network/routers": {
+      "get": {
+        "operationId": "get_network_routers",
+        "summary": "Returns the Zero Trust routers the caller's org owns.",
+        "description": "Returns the Zero Trust routers the caller's org owns.\n\nOne row per real ZT edge-router tagged with the org's \"org-\u003corg\u003e\" role attribute,\ncarrying the controller's own health signal: \"online\" when connected, \"disabled\"\nwhen administratively disabled, \"offline\" otherwise. region is filled only from a\n\"region-\u003cslug\u003e\" role attribute and omitted when the router carries none, so the\ncolumn renders \"—\" rather than a guess.\n\nThe read degrades rather than erroring: a deployment with no ZT credential, and a\ncontroller that cannot be reached, both answer 200 with an empty list.",
+        "tags": [
+          "network"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/network.routerList"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/network/services": {
+      "get": {
+        "operationId": "get_network_services",
+        "summary": "Returns the Zero Trust edge services the caller's org owns.",
+        "description": "Returns the Zero Trust edge services the caller's org owns.\n\nOne row per real ZT edge service tagged with the org's \"org-\u003corg\u003e\" role\nattribute: mtls is \"required\" when the service mandates end-to-end encryption and\n\"enabled\" otherwise (the fabric always mutually authenticates every link), and\nstatus is \"active\" because a listed service is a configured, dialable entry. A\nservice tagged for another org, or tagged for none, is invisible here.\n\nUnlike the network and router reads this does NOT degrade: an unconfigured\ndeployment answers 503 and an unreachable controller surfaces the upstream's\nstatus, so a mesh page never renders \"no services\" for a fabric it simply could\nnot read.",
+        "tags": [
+          "network"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/network.meshServiceList"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      },
+      "post": {
+        "operationId": "post_network_services",
+        "summary": "Puts a name on the org's overlay: a fabric service forwarding to host:port on whichever of the org's devices carries the \"\u003cname\u003e-host\" role, dialable at \"\u003cname\u003e.\u003corg\u003e.zt\" by any of the org's identities — and by the cloud's own, which is what lets a BYO cluster's apiserver be attached to the fleet with a \".zt\" kubeconfig.",
+        "description": "Puts a name on the org's overlay: a fabric service forwarding\nto host:port on whichever of the org's devices carries the \"\u003cname\u003e-host\"\nrole, dialable at \"\u003cname\u003e.\u003corg\u003e.zt\" by any of the org's identities — and by\nthe cloud's own, which is what lets a BYO cluster's apiserver be attached to\nthe fleet with a \".zt\" kubeconfig.\n\nAnswers 201 with the service and its DNS name. The objects behind it are\ncreated in dependency order and unwound on failure, so a half-published\nservice never lingers on the fabric. Publishing is a steward's act — an\nadmin of the org or its own machine client — and a plain member is 403.\n\nA write, so it does not degrade: an unconfigured deployment answers 503.",
+        "tags": [
+          "network"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/network.serviceIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/network.publishedView"
+                }
+              }
+            },
+            "description": "created"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/network/services/{id}": {
+      "delete": {
+        "operationId": "delete_network_services_by_id",
+        "summary": "Takes a name off the org's overlay: the two policies, the service and its two configs that publishing made, in that order, and the \"\u003cname\u003e-host\" role from each of the org's identities — that role exists only for the bind policy to select, and a role naming no service is one the identities endpoint refuses to write.",
+        "description": "Takes a name off the org's overlay: the two policies, the\nservice and its two configs that publishing made, in that order, and the\n\"\u003cname\u003e-host\" role from each of the org's identities — that role exists\nonly for the bind policy to select, and a role naming no service is one\nthe identities endpoint refuses to write.\n\nOnly objects carrying this service's own names are deleted, so a policy\nthat selects the service by attribute is left alone. An id belonging to\nanother org — or to nothing — is 404 before any write, as for an identity.\nLike publishing it is a steward's act, and a plain member is 403 before the\ncontroller is read.",
+        "tags": [
+          "network"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the service id from the path. The URL is the addressing authority,\nso it binds from there whatever else the request carries.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "no content"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/network/waitlist": {
+      "post": {
+        "operationId": "post_network_waitlist",
+        "summary": "Puts an address or an X handle on the Hanzo Network waitlist and answers 202 pending.",
+        "description": "Puts an address or an X handle on the Hanzo Network waitlist and answers\n202 pending. Nothing is mailed. It gives the same answer for an identifier that is\nnew and one asked for before, however often, and with the same headers, so it says\nnothing about who is on the list; a repeat changes nothing, and the first entry\nstands. An X handle is never looked up anywhere and no wallet address is taken. No\naccount is needed, and the entry keeps nothing about the caller.\n\nA deployment that cannot hold the waitlist, or has issued no invite yet, answers 503;\nthen a caller past ten requests an hour is 429 (with Retry-After), a body over 4 KiB\n413, and a body that is not JSON, one with neither or both of email and xHandle, an\ninvalid one or a role that is not miner, builder, researcher or staker 400, in that\norder. The ten an hour are per network address: clients behind one address share them,\nand so do callers whose address is unknown. Nothing here is gated by an invite yet; the operations that will be answer with\nthe problem type invite_required.",
+        "tags": [
+          "network"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "email": "ada@example.com",
+                "locale": "en",
+                "role": "builder",
+                "source": "hanzo.network/join"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/network.WaitlistIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "status": "pending"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/network.WaitlistEntry"
+                }
+              }
+            },
+            "description": "accepted"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "security": [],
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/network/{id}": {
+      "get": {
+        "operationId": "get_network_by_id",
+        "summary": "Returns one overlay network by id, scoped to the caller's org.",
+        "description": "Returns one overlay network by id, scoped to the caller's org.\n\nThe org has exactly one overlay network and its id is derived from the org, so\nany other id — another tenant's, or one that does not exist — is 404 rather than\na peek across the tenant boundary. An org whose network exists but has no\nedge-routers is 404 too, for the same reason the list is empty: there is no\noverlay until something is on it.",
+        "tags": [
+          "network"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the network id from the path. The URL is the addressing authority, so\nit binds from there whatever else the request carries.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/network.networkView"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "network.InviteCheckIn": {
+        "properties": {
+          "code": {
+            "description": "Code is the invite code as the person has it, such as HNZ-7K9Q2-MXZ4P. Required.\nLetters may be upper or lower case, the hyphens and spaces may be left out or put\nanywhere, and I and L are read as 1 and O as 0, so a code copied by eye is found.\nAnything that is not a code is not an error: it is answered as a code that is not\nvalid.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "network.InviteIssueIn": {
+        "properties": {
+          "count": {
+            "description": "Count is how many codes to issue, 1 to 100. Absent or 0 means one.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "expires_days": {
+            "description": "ExpiresDays is how many days the codes last, 1 to 365. Absent or 0 means 30.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "note": {
+            "description": "Note says what the codes are for, such as \"launch week\". Optional; one line,\nclipped at 200 characters, and kept with each code.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "network.InviteIssued": {
+        "properties": {
+          "invites": {
+            "description": "Invites are the new codes, in clear, once.",
+            "items": {
+              "$ref": "#/components/schemas/network.IssuedInvite"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "network.InviteList": {
+        "properties": {
+          "data": {
+            "description": "Data is the page; an empty array when none has been issued.",
+            "items": {
+              "$ref": "#/components/schemas/network.InviteView"
+            },
+            "type": "array"
+          },
+          "next": {
+            "description": "Next continues Data: pass it back as cursor. Empty on the last page.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "network.InviteVerdict": {
+        "properties": {
+          "valid": {
+            "description": "Valid is true when the code was issued by this deployment, is not revoked and\nhas not expired, and false for every other reason, none of which is said.",
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
+      "network.InviteView": {
+        "properties": {
+          "created_by": {
+            "description": "CreatedBy is the SuperAdmin who issued it, by their IAM user.",
+            "type": "string"
+          },
+          "expires_at": {
+            "description": "ExpiresAt is when it stops being valid.",
+            "format": "date-time",
+            "type": "string"
+          },
+          "id": {
+            "description": "ID is the invite's id, which a revoke names.",
+            "type": "string"
+          },
+          "issued_at": {
+            "description": "IssuedAt is when it was issued.",
+            "format": "date-time",
+            "type": "string"
+          },
+          "note": {
+            "description": "Note is what the invite was issued for.",
+            "type": "string"
+          },
+          "status": {
+            "description": "Status is active, revoked, or expired: an active invite past its expiry.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "network.IssuedInvite": {
+        "properties": {
+          "code": {
+            "description": "Code is the invite code in clear, such as HNZ-7K9Q2-MXZ4P. This is the only time it\nis shown: nothing keeps it.",
+            "type": "string"
+          },
+          "expires_at": {
+            "description": "ExpiresAt is when the code stops being valid.",
+            "format": "date-time",
+            "type": "string"
+          },
+          "id": {
+            "description": "ID is the invite's id, which the list shows and a revoke names. It is not the\ncode and does not reveal it.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "network.WaitlistEntry": {
+        "properties": {
+          "status": {
+            "description": "Status is \"pending\": the entry is on the waitlist and will be told when there\nis room. It is the same answer whatever the identifier's standing.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "network.WaitlistIn": {
+        "properties": {
+          "email": {
+            "description": "Email is the address to put on the waitlist: at most 320 characters, one\naddress. Send this or xHandle, never both.",
+            "type": "string"
+          },
+          "locale": {
+            "description": "Locale is the person's language as a BCP 47 tag, such as en or pt-BR. Optional;\nany other value is recorded as none.",
+            "type": "string"
+          },
+          "role": {
+            "description": "Role is how the person comes: miner, builder, researcher or staker, in any case.\nRequired.",
+            "type": "string"
+          },
+          "source": {
+            "description": "Source is where the form was, such as hanzo.network/join. Optional; one line,\nclipped at 200 characters.",
+            "type": "string"
+          },
+          "xHandle": {
+            "description": "XHandle is the X handle to put on the waitlist: one to fifteen letters, digits\nand underscores, with or without a leading @. It is kept without the @ and in the\ncase it was given, and is never looked up. Send this or email, never both.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "network.identityIn": {
+        "properties": {
+          "name": {
+            "description": "Name is the identity's name within the org — a DNS label, stored on the\nfabric as \"\u003cname\u003e.\u003corg\u003e\". Absent, the identity is named by the caller's\nIAM subject. It is set when the identity is first made; an identity that\nalready exists keeps its name.",
+            "type": "string"
+          },
+          "roles": {
+            "description": "Roles are extra role attributes for the identity, each scoped to the\ncaller's org on the way in (\"k3s-host\" is written as \"k3s-host.\u003corg\u003e\") so\nno caller can claim an attribute another tenant's policy selects. A role\nof the form \"\u003cservice\u003e-host\" makes this identity a HOST of that published\nservice — the bind policy from POST /v1/network/services selects exactly\nthat attribute — and is refused when the org has no such service. Only a\nsteward (an admin of the org or its own machine client) takes roles; a\nplain member asking for one is 403.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "network.identityList": {
+        "properties": {
+          "identities": {
+            "description": "Identities is one row per fabric identity tagged with the caller's org role.",
+            "items": {
+              "$ref": "#/components/schemas/network.identityView"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "network.identityView": {
+        "properties": {
+          "externalId": {
+            "description": "ExternalID is the IAM subject the identity logs in as: the controller\nadmits a bearer whose `sub` equals it.",
+            "type": "string"
+          },
+          "id": {
+            "description": "ID is the identity's fabric id — the key DELETE addresses.",
+            "type": "string"
+          },
+          "name": {
+            "description": "Name is the identity's name within the org.",
+            "type": "string"
+          },
+          "roles": {
+            "description": "Roles are the identity's role attributes as the fabric holds them: the\n\"org-\u003corg\u003e\" of every org it was ensured in, plus any org-scoped roles.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "network.meshServiceList": {
+        "properties": {
+          "services": {
+            "description": "Services is one row per ZT edge service tagged with the caller's org role.",
+            "items": {
+              "$ref": "#/components/schemas/network.meshView"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "network.meshView": {
+        "properties": {
+          "id": {
+            "description": "ID is the ZT edge service's id.",
+            "type": "string"
+          },
+          "mtls": {
+            "description": "Mtls is \"required\" when the service mandates end-to-end encryption, else\n\"enabled\" — the fabric mutually authenticates every link, so it is never\ntruly off.",
+            "type": "string"
+          },
+          "service": {
+            "description": "Service is the edge service's name.",
+            "type": "string"
+          },
+          "status": {
+            "description": "Status is \"active\": a listed service is a configured, dialable mesh entry.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "network.networkList": {
+        "properties": {
+          "networks": {
+            "description": "Networks holds the org's overlay network, or is empty when the org has no\nedge-routers on the fabric (no nodes → no network, never a fabricated one).",
+            "items": {
+              "$ref": "#/components/schemas/network.networkView"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "network.networkView": {
+        "properties": {
+          "id": {
+            "description": "ID is the org-derived id of the overlay network — the key\nGET /v1/network/{id} addresses.",
+            "type": "string"
+          },
+          "name": {
+            "description": "Name is the org the overlay belongs to.",
+            "type": "string"
+          },
+          "nodes": {
+            "description": "Nodes is how many edge-routers the org has on the fabric.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "status": {
+            "description": "Status is \"connected\" once at least one of the org's edge-routers is\nonline, else \"provisioning\" (routers exist but none has dialed home).",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "network.publishedView": {
+        "properties": {
+          "dns": {
+            "description": "DNS is the name the fabric answers for this service — what a kubeconfig\nserver, or any client on the org's overlay, dials.",
+            "type": "string"
+          },
+          "id": {
+            "description": "ID is the fabric service's id.",
+            "type": "string"
+          },
+          "name": {
+            "description": "Name is the service's name within the org.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "network.routerList": {
+        "properties": {
+          "routers": {
+            "description": "Routers is one row per ZT edge-router tagged with the caller's org role.",
+            "items": {
+              "$ref": "#/components/schemas/network.routerView"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "network.routerView": {
+        "properties": {
+          "id": {
+            "description": "ID is the ZT edge-router's id.",
+            "type": "string"
+          },
+          "name": {
+            "description": "Name is the edge-router's name, falling back to its id when it has none.",
+            "type": "string"
+          },
+          "region": {
+            "description": "Region comes from a \"region-\u003cslug\u003e\" role attribute and is omitted when the\nrouter carries none, so the column renders \"—\" rather than a guess.",
+            "type": "string"
+          },
+          "status": {
+            "description": "Status is the controller's own health signal: \"online\" when connected,\n\"disabled\" when administratively disabled, \"offline\" otherwise.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "network.serviceIn": {
+        "properties": {
+          "host": {
+            "description": "Host is where the HOSTING identity forwards a connection — an address the\nhost device itself can reach, \"127.0.0.1\" for a server on the device.",
+            "type": "string"
+          },
+          "name": {
+            "description": "Name is the service's name within the org — a DNS label. The fabric knows\nthe service as \"\u003cname\u003e.\u003corg\u003e\" and answers for it at \"\u003cname\u003e.\u003corg\u003e.zt\".",
+            "type": "string"
+          },
+          "port": {
+            "description": "Port is the port beside Host, and the one the DNS name intercepts.",
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "problem-details": {
+        "description": "An RFC 9457 problem document.",
+        "properties": {
+          "code": {
+            "description": "A stable token a client can branch on, when the refusal names one.",
+            "type": "string"
+          },
+          "detail": {
+            "description": "What was refused, for a person to read.",
+            "type": "string"
+          },
+          "status": {
+            "description": "The HTTP status.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "title": {
+            "description": "The status's reason phrase.",
+            "type": "string"
+          },
+          "type": {
+            "description": "about:blank",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "status",
+          "detail"
+        ],
+        "type": "object"
+      }
+    },
+    "securitySchemes": {
+      "bearer": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "The caller's credential, sent as `Authorization: Bearer \u003ctoken\u003e`. It is either an access token minted by Hanzo IAM or an API key (pk-/sk-). X-Authorization, and HTTP Basic carrying the token as the password, are accepted spellings of the same header for clients that cannot set Authorization; a browser presents the session cookie instead. Every operation requires it unless it says `security: []`."
+      }
+    }
+  }
+}

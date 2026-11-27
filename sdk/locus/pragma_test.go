@@ -4,8 +4,8 @@ import (
 	"database/sql"
 	"testing"
 
-	"github.com/hanzoai/cek"
 	_ "github.com/hanzoai/cloud/sdk/kit/master"
+	"github.com/hanzoai/cek"
 	"github.com/hanzoai/namespace"
 	_ "github.com/hanzoai/sqlite"
 )

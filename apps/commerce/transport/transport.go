@@ -1,0 +1,216 @@
+package transport
+
+import (
+	"context"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
+	"net/url"
+	"runtime"
+	"strconv"
+	"strings"
+	"sync"
+	"sync/atomic"
+	"time"
+
+	fiber "github.com/zap-proto/fiber/v3"
+	"github.com/zap-proto/fiber/v3/middleware/adaptor"
+)
+
+// PlaceholderBase is the sentinel commerce base URL used when commerce is
+// co-resident and CLOUD_COMMERCE_HTTP_URL is unset (the post-retirement steady
+// state). The self-routing Transport ignores the host and dispatches by PATH, so
+// the value only has to be a parseable absolute URL; it is never dialed.
+const PlaceholderBase = "http://commerce.inproc"
+
+// placeholderHost is PlaceholderBase's host, derived once so the refusal below
+// and the base above can never drift apart. It is the ONE name that must never
+// reach a dialer.
+var placeholderHost = func() string {
+	u, err := url.Parse(PlaceholderBase)
+	if err != nil {
+		return "commerce.inproc"
+	}
+	return u.Host
+}()
+
+// handler holds the embedded commerce http.Handler. atomic so SetHandler (boot) and
+// RoundTrip (every request) race-free without a mutex on the hot path.
+var handler atomic.Pointer[http.Handler]
+
+// SetApp publishes the co-resident app commerce's routes live on (the SharedApp
+// contract). The S2S dispatch enters the app's fasthttp pipeline directly; the
+// http.Handler shape survives only inside this client for the bridge-building
+// subsystems that still speak *http.Request. Passing nil un-publishes.
+//
+// It takes the *fiber.App — cloud.Router.Fiber() — rather than the *zip.App: this
+// package is imported by cloud itself, so it cannot name cloud.Router, and the
+// engine is all the dispatch ever needed.
+func SetApp(app *fiber.App) {
+	if app == nil {
+		SetHandler(nil)
+		return
+	}
+	SetHandler(adaptor.FiberApp(app))
+}
+
+// SetHandler publishes the in-process commerce handler. SetApp is the
+// production path; this remains the client tests stub. Passing nil
+// un-publishes (used by tests).
+func SetHandler(h http.Handler) {
+	if h == nil {
+		handler.Store(nil)
+		return
+	}
+	handler.Store(&h)
+}
+
+// Available reports whether commerce is co-resident (a handler is published). A
+// subsystem uses this to keep its "configured" gate true even when
+// CLOUD_COMMERCE_HTTP_URL is unset — the standalone is gone but commerce still
+// answers, in-process.
+func Available() bool { return handler.Load() != nil }
+
+// BaseURL returns env when non-empty, else — when commerce is co-resident — the
+// in-process PlaceholderBase, else "". This lets a subsystem drop its dependence on
+// CLOUD_COMMERCE_HTTP_URL: once the standalone is retired and the env is removed,
+// the base becomes the placeholder and requests still route in-process.
+func BaseURL(env string) string {
+	if e := strings.TrimSpace(env); e != "" {
+		return e
+	}
+	if Available() {
+		return PlaceholderBase
+	}
+	return ""
+}
+
+// maxDepth caps how many co-resident dispatches may be NESTED on one goroutine.
+// The in-process handler is the WHOLE shared app (SetApp publishes
+// adaptor.FiberApp), so a dispatch re-runs every edge middleware — and any of
+// those middlewares (e.g. the per-org scope rate-limiter reading its rules from
+// commerce, or the ai per-tier gate) itself issues a commerce read, which
+// dispatches the whole app AGAIN. On a cold config/tier cache that read never
+// resolves before it re-enters, so it recurses without bound: synchronously it
+// overflows the goroutine stack (a fatal ~1e9-byte "stack overflow"); each level
+// also leaks the completion's net/http cancel watchdog, so under load the writer
+// accumulates tens of thousands of goroutines parked in setRequestCancel and OOMs.
+// A legitimate flow nests at most a couple of reads (a debit that first checks a
+// balance), so a small cap admits every real path while turning the runaway into a
+// bounded, fail-safe refusal at the client. Callers of the co-resident reads treat
+// the refusal as any transport error and fall safe (the tier gate ALLOWS, the
+// scope-rule fetch fails OPEN); the prepaid balance read is a direct in-process
+// ledger call, never this transport, so fail-closed billing is unaffected.
+const maxDepth = 8
+
+// depthByGoroutine tracks the current nested-dispatch depth per goroutine. The
+// dispatch is synchronous (ServeHTTP runs on the caller's goroutine), so a
+// goroutine-keyed counter measures exactly the nesting of the recursion; distinct
+// concurrent requests run on distinct goroutines and never share a count.
+var depthByGoroutine sync.Map // goid -> int
+
+// goroutineID returns the current goroutine's numeric id. It is used ONLY for
+// re-entrancy accounting (never identity or security); the runtime prints it at
+// the head of the per-goroutine stack, which is the one portable way to read it.
+func goroutineID() int64 {
+	var buf [64]byte
+	n := runtime.Stack(buf[:], false)
+	// "goroutine <id> [<state>]:"
+	s := string(buf[:n])
+	s = strings.TrimPrefix(s, "goroutine ")
+	if i := strings.IndexByte(s, ' '); i > 0 {
+		if id, err := strconv.ParseInt(s[:i], 10, 64); err == nil {
+			return id
+		}
+	}
+	return 0
+}
+
+// roundTripper dispatches to the in-process commerce handler when one is published,
+// else to fallback (plain HTTP). The gin engine routes on req.URL.Path, so the host
+// in the (placeholder or real) base is irrelevant when co-resident.
+// identity is how the caller crosses the in-process hop. The co-resident
+// commerce boundary authenticates from the gateway-minted identity headers, and
+// a request built here carries none of them, so a dispatch without this would
+// arrive as nobody. The root registers it at boot — only the root can reach the
+// request a context is bound to, and this package must not import the root
+// (build.go imports this package). It sets the headers the sender did not set,
+// and nothing else. It replaced a shared bearer every sender used to attach.
+var identity atomic.Pointer[func(context.Context, http.Header)]
+
+// SetIdentity registers the identity carrier. Called once, at boot, by the root.
+func SetIdentity(fn func(ctx context.Context, h http.Header)) { identity.Store(&fn) }
+
+type roundTripper struct{ fallback http.RoundTripper }
+
+func (rt roundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
+	if p := handler.Load(); p != nil {
+		// Re-entrancy guard: bound how deep co-resident dispatches may nest on
+		// this goroutine (see maxDepth). Without it a middleware that reads
+		// commerce while serving a commerce read re-runs the whole app forever.
+		id := goroutineID()
+		depth := 0
+		if v, ok := depthByGoroutine.Load(id); ok {
+			depth = v.(int)
+		}
+		if depth >= maxDepth {
+			return nil, fmt.Errorf("commerce transport: in-process dispatch depth %d exceeded (re-entrant commerce read refused: %s %s)", maxDepth, req.Method, req.URL.Path)
+		}
+		depthByGoroutine.Store(id, depth+1)
+		defer func() {
+			if depth == 0 {
+				depthByGoroutine.Delete(id)
+			} else {
+				depthByGoroutine.Store(id, depth)
+			}
+		}()
+
+		// Callers build CLIENT-style requests (http.NewRequest → empty
+		// RequestURI); the in-process dispatch is SERVER-side, and the fiber
+		// pipeline routes on RequestURI. Normalize here — the one client.
+		if fn := identity.Load(); fn != nil {
+			(*fn)(req.Context(), req.Header)
+		}
+		if req.RequestURI == "" {
+			req.RequestURI = req.URL.RequestURI()
+		}
+		rec := httptest.NewRecorder()
+		(*p).ServeHTTP(rec, req)
+		resp := rec.Result()
+		resp.Request = req
+		return resp, nil
+	}
+	// NO HANDLER PUBLISHED. Falling through to the network is right for a REAL
+	// commerce host and is never right for the placeholder: PlaceholderBase names
+	// no host, by construction, so dialing it can only ever fail — and it fails as
+	// `dial tcp: lookup commerce.inproc: no such host`, three layers away from the
+	// actual cause, which is that commerce never published its handler.
+	//
+	// That is exactly what happened on 2026-07-27. commerce.Embed refused to boot
+	// (COMMERCE_KMS_MASTER_KEY unset on a libsqlcipher build — a correct refusal),
+	// so Mount never reached SetApp. Metering had already pinned PlaceholderBase
+	// because Enabled("commerce") was true, and every balance read then DNS-failed.
+	// Every wallet read 0, every paid call 402'd against funded accounts, and the
+	// error blamed DNS. Enabled("commerce") is a CONFIG INTENT; a published handler
+	// is a RUNTIME FACT. They can disagree, and when they do the honest answer is
+	// to say so here rather than to guess at the network.
+	if req.URL != nil && req.URL.Host == placeholderHost {
+		return nil, fmt.Errorf("commerce transport: no in-process handler published; %s %s cannot be served (commerce is enabled but did not mount — check commerce.Embed for a bootstrap failure)", req.Method, req.URL.Path)
+	}
+	fb := rt.fallback
+	if fb == nil {
+		fb = http.DefaultTransport
+	}
+	return fb.RoundTrip(req)
+}
+
+// Transport returns the self-routing RoundTripper (in-process when co-resident,
+// plain HTTP otherwise). Give it to any subsystem's *http.Client.Transport.
+func Transport() http.RoundTripper { return roundTripper{fallback: http.DefaultTransport} }
+
+// Client returns an *http.Client wired to the self-routing Transport with the given
+// timeout (0 → no timeout; the in-process path is synchronous anyway). Drop-in for
+// the &http.Client{Timeout: …} every commerce proxy builds today.
+func Client(timeout time.Duration) *http.Client {
+	return &http.Client{Transport: Transport(), Timeout: timeout}
+}

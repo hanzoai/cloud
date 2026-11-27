@@ -1,0 +1,328 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Hanzo Cloud API",
+    "description": "Package sbom is what is inside a container image: every component, resolvable by digest or image ref.",
+    "version": "v1"
+  },
+  "servers": [
+    {
+      "url": "https://api.hanzo.ai"
+    }
+  ],
+  "security": [
+    {
+      "bearer": []
+    }
+  ],
+  "tags": [
+    {
+      "name": "sbom"
+    }
+  ],
+  "paths": {
+    "/v1/sbom": {
+      "post": {
+        "operationId": "post_sbom",
+        "summary": "Persists a CycloneDX SBOM's components keyed by image digest.",
+        "description": "Persists a CycloneDX SBOM's components keyed by image digest. Gated to a\nvalidated SuperAdmin (owner == AdminOrg) — the canonical cloud super-admin\ncheck, which the build fleet / CI carries. Re-ingest is idempotent: rows share\nthe (digest, name, version, purl) ORDER BY, so ReplacingMergeTree keeps the\nlatest by ingested_at (and resolve reads FINAL).",
+        "tags": [
+          "sbom"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "document": {
+                  "components": []
+                },
+                "format": "cyclonedx",
+                "imageDigest": "sha256:abc",
+                "imageRef": "oci.hanzo.ai/hanzo/cloud:v1"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/sbom.SbomIngest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/sbom.SbomIngested"
+                }
+              }
+            },
+            "description": "created"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/sbom/health": {
+      "get": {
+        "operationId": "get_sbom_health",
+        "summary": "Health is a pure liveness probe: the service is up; datastore reflects whether the datastore store is connected.",
+        "description": "Health is a pure liveness probe: the service is up; datastore reflects whether\nthe datastore store is connected. Not JWT-gated, always 200 (a disconnected\ndatastore is degraded-but-alive; the data endpoints report that as 503).",
+        "tags": [
+          "sbom"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/sbom.SbomHealth"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/sbom/{wildcard1}": {
+      "get": {
+        "operationId": "get_sbom_by_wildcard1",
+        "summary": "Returns everything inside one container image, addressed by its digest or by its image ref.",
+        "description": "Returns everything inside one container image, addressed by its digest\nor by its image ref.\n\nEach component comes back with its name, version, type, package URL and license.\n\nThis read is GLOBAL, not tenant-scoped, and deliberately so: a bill of materials\nbelongs to a content-addressed digest rather than to an org, so every caller\ndeploying the same image resolves the same components, and nothing tenant-owned\nis exposed by it. It still requires an attested caller — global is not public —\nand answers 401 without one. Ingest is the closed half of the pair.\n\nA miss is not the end of the lookup. The registry is the source of truth, so an\nunmaterialized ref is pulled from the SBOM attached to that image, persisted, and\nanswered from the store — the first read of a freshly built image pays for the\npull, later ones do not. The pull reads OUR registries and nothing else, which is\nwhat makes one shared answer trustworthy for every tenant: an attached document\nis whoever controls that repository speaking, so a ref outside them answers 404\nrather than a stranger's account of what is in their image. A bare digest with no\nrepository is not pullable and answers an honest 404, as does a ref with no\nattached document. Repeated ingests collapse to the latest, components come back\nordered by type then name, and a result over 5000 components is capped with\n`truncated` set. When the datastore is not connected the answer is 503 rather\nthan a fabricated empty image.",
+        "tags": [
+          "sbom"
+        ],
+        "parameters": [
+          {
+            "name": "wildcard1",
+            "in": "path",
+            "required": true,
+            "description": "Ref is the image to resolve, either its content-addressed digest\n(`sha256:…`) or its full reference (`oci.hanzo.ai/hanzo/cloud:v1`). Both are\nmatched, so either spelling of one image answers the same components. It is\nthe greedy tail of the address, so slashes, a tag and a digest all travel in\nit whole, and a percent-encoded ref is decoded before it is looked up. Empty\nis a 400, never a scan of the store.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/sbom.SbomView"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "problem-details": {
+        "description": "An RFC 9457 problem document.",
+        "properties": {
+          "code": {
+            "description": "A stable token a client can branch on, when the refusal names one.",
+            "type": "string"
+          },
+          "detail": {
+            "description": "What was refused, for a person to read.",
+            "type": "string"
+          },
+          "status": {
+            "description": "The HTTP status.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "title": {
+            "description": "The status's reason phrase.",
+            "type": "string"
+          },
+          "type": {
+            "description": "about:blank",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "status",
+          "detail"
+        ],
+        "type": "object"
+      },
+      "sbom.SbomComponent": {
+        "properties": {
+          "license": {
+            "description": "License is the FIRST license fact found for the component: its SPDX id, else\nits name, else the expression. Empty when the document declares none.",
+            "type": "string"
+          },
+          "name": {
+            "description": "Name is the dependency's package name as CycloneDX records it.",
+            "type": "string"
+          },
+          "purl": {
+            "description": "Purl is the package URL — the ecosystem-qualified identity a vulnerability\nfeed can be joined on.",
+            "type": "string"
+          },
+          "type": {
+            "description": "Type is the CycloneDX component type: library, application, framework, …",
+            "type": "string"
+          },
+          "version": {
+            "description": "Version is the resolved version of that package.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "sbom.SbomHealth": {
+        "properties": {
+          "datastore": {
+            "description": "Datastore reports whether the shared datastore connection this subsystem reads\nand writes through is established. False means the data endpoints answer 503.",
+            "type": "boolean"
+          },
+          "service": {
+            "description": "Service names the subsystem answering: always \"sbom\".",
+            "type": "string"
+          },
+          "status": {
+            "description": "Status is the liveness verdict: always \"ok\" here, because the process answering\nat all IS the liveness fact.",
+            "type": "string"
+          },
+          "table": {
+            "description": "Table is the fully-qualified datastore table the components live in.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "sbom.SbomIngest": {
+        "properties": {
+          "document": {
+            "description": "Document is the raw CycloneDX bill of materials, any JSON. Its components[]\nare flattened and persisted; nothing else is read or stored."
+          },
+          "format": {
+            "description": "Format names the document format; \"cyclonedx\" is the only one parsed.",
+            "type": "string"
+          },
+          "gitSha": {
+            "description": "GitSha is the commit the image was built from.",
+            "type": "string"
+          },
+          "imageDigest": {
+            "description": "ImageDigest is the content-addressed digest (sha256:…) the components are\nkeyed under. Required — it, not a tenant, is what an SBOM belongs to.",
+            "type": "string"
+          },
+          "imageRef": {
+            "description": "ImageRef is the human-readable image reference the digest was published as.\nA resolve matches on either this or the digest.",
+            "type": "string"
+          },
+          "sourceRepo": {
+            "description": "SourceRepo is the repository the image was built from.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "sbom.SbomIngested": {
+        "properties": {
+          "componentCount": {
+            "description": "ComponentCount is how many components the CycloneDX document yielded and this\ncall persisted.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "imageDigest": {
+            "description": "ImageDigest is the content-addressed digest the components were keyed under.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "sbom.SbomView": {
+        "properties": {
+          "componentCount": {
+            "description": "ComponentCount is how many components this response carries — after the cap,\nso it matches components exactly rather than the image's true total.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "components": {
+            "description": "Components is the flattened dependency set, ordered by type then name.",
+            "items": {
+              "$ref": "#/components/schemas/sbom.SbomComponent"
+            },
+            "type": "array"
+          },
+          "gitSha": {
+            "description": "GitSha is the commit the image was built from. Empty on the same terms as\nsourceRepo.",
+            "type": "string"
+          },
+          "imageDigest": {
+            "description": "ImageDigest is the content-addressed digest the components are keyed under,\nand is what identifies this bill of materials however it was asked for.",
+            "type": "string"
+          },
+          "imageRef": {
+            "description": "ImageRef is the image reference recorded alongside the digest. Empty when\nthe components were ingested against a digest with no ref.",
+            "type": "string"
+          },
+          "ingestedAt": {
+            "description": "IngestedAt is when the bill of materials was recorded, RFC 3339.",
+            "type": "string"
+          },
+          "sourceRepo": {
+            "description": "SourceRepo is the repository the image was built from. Empty unless the\ningest declared it — a pull from the registry does not learn it.",
+            "type": "string"
+          },
+          "truncated": {
+            "description": "Truncated is true when the image has MORE components than the cap returns.",
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      }
+    },
+    "securitySchemes": {
+      "bearer": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "The caller's credential, sent as `Authorization: Bearer \u003ctoken\u003e`. It is either an access token minted by Hanzo IAM or an API key (pk-/sk-). X-Authorization, and HTTP Basic carrying the token as the password, are accepted spellings of the same header for clients that cannot set Authorization; a browser presents the session cookie instead. Every operation requires it unless it says `security: []`."
+      }
+    }
+  }
+}

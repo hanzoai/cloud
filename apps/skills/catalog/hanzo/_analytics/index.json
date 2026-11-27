@@ -1,0 +1,56 @@
+{
+  "$schema": "https://schemas.agentskills.io/discovery/0.2.0/schema.json",
+  "base_url": "https://api.hanzo.ai",
+  "brand": "hanzo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://hanzo.id",
+  "mcp": {
+    "description": "Model Context Protocol over JSON-RPC 2.0 — one POST per message, stateless, protocol revision 2026-07-28. tools/list answers without a credential with one tool per subsystem (its operations in the \"op\" enum) plus \"describe\", which returns one operation's input schema. tools/call names a subsystem tool and carries {\"op\": <operation>, \"input\": <its arguments>}; it takes the same bearer the REST API does, and a call that carries none is answered 401 with a WWW-Authenticate header naming the resource metadata at /.well-known/oauth-protected-resource, which names the authorization server to sign in at. The tool surface is the public contract: the operator's admin product is not offered, and a name that would disclose a secret or mutate an identity is withheld — the list says how many, under _meta.",
+    "method": "POST",
+    "url": "https://api.hanzo.ai/v1/mcp"
+  },
+  "skill_count": 5,
+  "skills": [
+    {
+      "description": "Read analytics freshness: Reports per-pipeline watermarks, lag_ms, rows processed, and financial reconciliation drift from analytics.watermarks, accelerated by Hanzo KV with stale-on-outage fallback..",
+      "digest": "sha256:d347d788231e6d4871830aabb066bed40db2fc09fa650de06860e0d8c7a88e9a",
+      "name": "analytics_freshness",
+      "service": "analytics",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/analytics_freshness/SKILL.md"
+    },
+    {
+      "description": "Read analytics health: Reports Datastore reachability, active MergeTree parts and merge pressure, Hanzo KV cache status, bounded query semaphore utilization, and active SSE stream counts..",
+      "digest": "sha256:1a1588fc604fb336a40c8a4e70e0b8b4469c2c7e5d2b5667470a368857a2b3c4",
+      "name": "analytics_health",
+      "service": "analytics",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/analytics_health/SKILL.md"
+    },
+    {
+      "description": "Read analytics metrics: Lists all canonical registered metrics, their units, allowed group_by dimensions, upstream sources, freshness targets, accuracy classifications, and backing tables..",
+      "digest": "sha256:d7149e42e2acca6c42d605c54c7665828e98f8ece8b22239faea559d135a5004",
+      "name": "analytics_metrics",
+      "service": "analytics",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/analytics_metrics/SKILL.md"
+    },
+    {
+      "description": "Read analytics overview: Returns constant-cost global (SuperAdmin) or org-scoped executive KPIs directly from analytics.global_overview / analytics.org_overview with zero per-org RPCs, accelerated by Hanzo KV and degrading gracefully to the last-known KV snapshot if Datastore is ",
+      "digest": "sha256:a4cba7f5c54bc445a85a7fb9706e00cd4b9dc55ecf45bdc2be87136913bf3977",
+      "name": "analytics_overview",
+      "service": "analytics",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/analytics_overview/SKILL.md"
+    },
+    {
+      "description": "Read analytics stream: Stream coalesced real-time analytics updates as Server-Sent Events.",
+      "digest": "sha256:5c6b784478df1580fb7d70a5fa9872fc30c44aba3fd44ae70251eddf9ca55ea5",
+      "name": "analytics_stream",
+      "service": "analytics",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/analytics_stream/SKILL.md"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

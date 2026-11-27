@@ -1,0 +1,48 @@
+{
+  "$schema": "https://schemas.agentskills.io/discovery/0.2.0/schema.json",
+  "base_url": "https://api.zoo.ngo",
+  "brand": "zoo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://zoolabs.id",
+  "mcp": {
+    "description": "Model Context Protocol over JSON-RPC 2.0 — one POST per message, stateless, protocol revision 2026-07-28. tools/list answers without a credential with one tool per subsystem (its operations in the \"op\" enum) plus \"describe\", which returns one operation's input schema. tools/call names a subsystem tool and carries {\"op\": <operation>, \"input\": <its arguments>}; it takes the same bearer the REST API does, and a call that carries none is answered 401 with a WWW-Authenticate header naming the resource metadata at /.well-known/oauth-protected-resource, which names the authorization server to sign in at. The tool surface is the public contract: the operator's admin product is not offered, and a name that would disclose a secret or mutate an identity is withheld — the list says how many, under _meta.",
+    "method": "POST",
+    "url": "https://api.zoo.ngo/v1/mcp"
+  },
+  "skill_count": 4,
+  "skills": [
+    {
+      "description": "Read domain availability: Checks exact names rather than searching for them, and answers the same quote shape search does — purchasable, premium, first-term and renewal price in cents..",
+      "digest": "sha256:8dcd0a6073a5033e0b12c1b812b710ccf4f795b4af42fea5a4d06990360635fd",
+      "name": "domain_availability",
+      "service": "domain",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/domain_availability/SKILL.md"
+    },
+    {
+      "description": "Read domain domains: Is the domains your org has bought here, newest registration first, each carrying the name, when it was registered, when it expires, what the org paid, the registrar order id and the nameservers it points at..",
+      "digest": "sha256:ca4f79c7610f9d23fc37f94aaac193980a6f1c8d1ea104762cdd200748c29972",
+      "name": "domain_domains",
+      "service": "domain",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/domain_domains/SKILL.md"
+    },
+    {
+      "description": "Read domain health: Reports registrar reachability honestly: ok only when the wholesale credentials are present AND name.com accepted them on a live call made while you waited..",
+      "digest": "sha256:82b899ca919e021e09de75ae708d7d48b3138215d890a1d4b2c9a79ddc835da8",
+      "name": "domain_health",
+      "service": "domain",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/domain_health/SKILL.md"
+    },
+    {
+      "description": "Read domain search: Finds names built from the keyword q, plus the registrar's alternate-TLD suggestions, and answers a quote for each: the name, whether it is purchasable, whether it is premium, the first-term and renewal price in cents, and the TLD..",
+      "digest": "sha256:d519d1c7ed09b62de7ad3da92478e7c3b2cb7c15a2045b3a15688da3b03ba902",
+      "name": "domain_search",
+      "service": "domain",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/domain_search/SKILL.md"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

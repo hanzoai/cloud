@@ -1,0 +1,818 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Hanzo Cloud API",
+    "description": "Package flags is feature flags: ship it dark, then turn it on for who you pick.",
+    "version": "v1"
+  },
+  "servers": [
+    {
+      "url": "https://api.hanzo.ai"
+    }
+  ],
+  "security": [
+    {
+      "bearer": []
+    }
+  ],
+  "tags": [
+    {
+      "name": "flag"
+    }
+  ],
+  "paths": {
+    "/v1/flag": {
+      "post": {
+        "operationId": "post_flag",
+        "summary": "Runs the caller's flag definitions for one identity and returns the flag verdict: which flags are on (or which variant), their payloads, and whether any definition failed to compute.",
+        "description": "Runs the caller's flag definitions for one identity and returns the\nflag verdict: which flags are on (or which variant), their payloads,\nand whether any definition failed to compute. Evaluation is in-process over the\ncaller's own (org, project) definitions — no network hop, no shared KV — so a\ntenant can only ever evaluate its own flags.",
+        "tags": [
+          "flag"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "distinct_id": "u1",
+                "groups": {
+                  "0": {
+                    "key": "acme"
+                  }
+                },
+                "person_properties": {
+                  "plan": "pro"
+                }
+              },
+              "schema": {
+                "$ref": "#/components/schemas/flag.evaluateIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "errorsWhileComputingFlags": false,
+                  "featureFlagPayloads": {},
+                  "featureFlags": {
+                    "new-editor": true
+                  }
+                },
+                "schema": {}
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/flag/activity": {
+      "get": {
+        "operationId": "get_flag_activity",
+        "summary": "Returns the caller's flag change log newest-first: every create, update and delete, with the actor and the time.",
+        "description": "Returns the caller's flag change log newest-first: every\ncreate, update and delete, with the actor and the time.",
+        "tags": [
+          "flag"
+        ],
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Limit caps the rows returned. 1–500; anything else takes the default 100.",
+            "schema": {
+              "format": "int64",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/flag.activityOut"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/flag/decide": {
+      "post": {
+        "operationId": "post_flag_decide",
+        "summary": "Runs the caller's flag definitions for one identity and returns the flag verdict: which flags are on (or which variant), their payloads, and whether any definition failed to compute.",
+        "description": "Runs the caller's flag definitions for one identity and returns the\nflag verdict: which flags are on (or which variant), their payloads,\nand whether any definition failed to compute. Evaluation is in-process over the\ncaller's own (org, project) definitions — no network hop, no shared KV — so a\ntenant can only ever evaluate its own flags.",
+        "tags": [
+          "flag"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "distinct_id": "u1",
+                "groups": {
+                  "0": {
+                    "key": "acme"
+                  }
+                },
+                "person_properties": {
+                  "plan": "pro"
+                }
+              },
+              "schema": {
+                "$ref": "#/components/schemas/flag.evaluateIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "errorsWhileComputingFlags": false,
+                  "featureFlagPayloads": {},
+                  "featureFlags": {
+                    "new-editor": true
+                  }
+                },
+                "schema": {}
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/flag/defs": {
+      "get": {
+        "operationId": "get_flag_defs",
+        "summary": "Returns every flag definition in the caller's (org, project) store, by key, with its version and who last changed it.",
+        "description": "Returns every flag definition in the caller's (org,\nproject) store, by key, with its version and who last changed it.",
+        "tags": [
+          "flag"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/flag.defsOut"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/flag/defs/{key}": {
+      "delete": {
+        "operationId": "delete_flag_defs_by_key",
+        "summary": "Removes one flag definition by key and records the deletion in the change log.",
+        "description": "Removes one flag definition by key and records the\ndeletion in the change log. A key the caller's store does not hold is a 404.\nA staged capability's key is a SuperAdmin's to remove, as it is to set, and\nevery other key an owner's or admin's of the org.",
+        "tags": [
+          "flag"
+        ],
+        "parameters": [
+          {
+            "name": "key",
+            "in": "path",
+            "required": true,
+            "description": "Key is the flag key to act on, from the path.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/flag.deletedOut"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      },
+      "get": {
+        "operationId": "get_flag_defs_by_key",
+        "summary": "Returns one flag definition by key, or 404 when the caller's store has none under that key.",
+        "description": "Returns one flag definition by key, or 404 when the caller's\nstore has none under that key.",
+        "tags": [
+          "flag"
+        ],
+        "parameters": [
+          {
+            "name": "key",
+            "in": "path",
+            "required": true,
+            "description": "Key is the flag key to act on, from the path.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/flag.DefRow"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      },
+      "put": {
+        "operationId": "put_flag_defs_by_key",
+        "summary": "Creates or replaces the flag definition at the path's key and returns the stored row.",
+        "description": "Creates or replaces the flag definition at the path's key and\nreturns the stored row. The BODY IS THE DEFINITION DOCUMENT — the flag-definition\nJSON object the evaluator consumes — and it is stored verbatim except that its\n\"key\" is forced to the key in the URL, so a document can never be filed under a\nname other than the one it was addressed by. Every write bumps the version and\nappends to the change log under the caller's identity. A key that lets an org\ninto a capability that is not ga — research, machines — is a SuperAdmin's to\nset, never an org admin's, and its write is on the audit trail before it lands;\nevery other key is an owner's or admin's of the org, never a member's.",
+        "tags": [
+          "flag"
+        ],
+        "parameters": [
+          {
+            "name": "key",
+            "in": "path",
+            "required": true,
+            "description": "Key is the flag key to write, from the path.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "new-editor"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "active": true,
+                "filters": {
+                  "groups": [
+                    {
+                      "rollout_percentage": 25
+                    }
+                  ]
+                },
+                "key": "new-editor"
+              },
+              "schema": {}
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/flag.DefRow"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/flag/health": {
+      "get": {
+        "operationId": "get_flag_health",
+        "summary": "Reports that the flag engine is serving.",
+        "description": "Reports that the flag engine is serving. It is not gated: liveness must\nbe probe-able without a token.",
+        "tags": [
+          "flag"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "engine": "hanzo-flags",
+                  "ok": true
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/flag.healthOut"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/flag/optin": {
+      "get": {
+        "operationId": "get_flag_optin",
+        "summary": "Answers the signed-in caller's opt-in to public betas: whether they opted in, whether the org they act in blocked it, and which betas are public.",
+        "description": "Answers the signed-in caller's opt-in to public betas: whether they\nopted in, whether the org they act in blocked it, and which betas are public. A\nbeta not listed is private, granted person by person.",
+        "tags": [
+          "flag"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "blocked": false,
+                  "on": true,
+                  "public": [
+                    "koma",
+                    "iro"
+                  ]
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/flag.optinOut"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      },
+      "put": {
+        "operationId": "put_flag_optin",
+        "summary": "Sets the signed-in caller's OWN opt-in to public betas: on, every public beta and each one promoted later is on for them; off, none is.",
+        "description": "Sets the signed-in caller's OWN opt-in to public betas: on, every\npublic beta and each one promoted later is on for them; off, none is. Self only:\nthe row written is the caller's validated subject, whatever the request says.\nOpting in while the org they act in blocked it is refused; opting out never is.",
+        "tags": [
+          "flag"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "on": true
+              },
+              "schema": {
+                "$ref": "#/components/schemas/flag.optinIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "blocked": false,
+                  "on": true,
+                  "public": [
+                    "koma",
+                    "iro"
+                  ]
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/flag.optinOut"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/flag/optin/org": {
+      "put": {
+        "operationId": "put_flag_optin_org",
+        "summary": "Blocks or unblocks the opt-in to public betas for every member of the org the caller acts in.",
+        "description": "Blocks or unblocks the opt-in to public betas for every member of\nthe org the caller acts in. An owner or admin of that org, or a SuperAdmin, may;\na member may not. It only withholds: blocked, no member gets a public beta by\nopting in, and their own choices are kept for when it is lifted; it never turns\na beta on. A shared sign-up org has no admin to speak for its members and is\nrefused. The change is on the audit trail before it lands.",
+        "tags": [
+          "flag"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "blocked": true
+              },
+              "schema": {
+                "$ref": "#/components/schemas/flag.orgOptinIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "blocked": true
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/flag.orgOptinOut"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/flag/platform": {
+      "get": {
+        "operationId": "get_flag_platform",
+        "summary": "Answers the platform switches that are decided per caller — `beta`, whether the caller sees what is not yet generally available — as they apply to the signed-in caller: its validated org and user, never anything the request states.",
+        "description": "Answers the platform switches that are decided per caller — `beta`,\nwhether the caller sees what is not yet generally available — as they apply to\nthe signed-in caller: its validated org and user, never anything the request\nstates. A SuperAdmin targets them from the admin cockpit; nothing here changes\nthem. A request without a signed-in principal is refused, and a switch that\ncannot be read is 503, which a caller takes as off.",
+        "tags": [
+          "flag"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "flags": {
+                    "beta": false,
+                    "beta.crm": true,
+                    "beta.erp": false
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/flag.platformOut"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "flag.ActivityRow": {
+        "properties": {
+          "action": {
+            "description": "Action is one of created, updated, deleted.",
+            "type": "string"
+          },
+          "actor": {
+            "description": "Actor is the email of the principal who made the change. Empty for a write\nby an in-process composer; a project key can never appear here, because\nevaluating flags is all a key may do.",
+            "type": "string"
+          },
+          "at": {
+            "description": "At is when the change was made, RFC 3339 UTC.",
+            "type": "string"
+          },
+          "detail": {
+            "description": "Detail is free-form context about the change. Nothing writes it today, so\nit is absent from every row the store serves.",
+            "type": "string"
+          },
+          "id": {
+            "description": "ID is the log's own sequence number, rising with each entry. The log is\nserved newest-first, which is this descending.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "key": {
+            "description": "Key is the flag that changed. It survives a delete, so the log still names\nflags the definition store no longer holds.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "flag.DefRow": {
+        "properties": {
+          "definition": {
+            "description": "Definition is the flag-definition document the evaluator consumes, kept\nBYTE-FOR-BYTE as it was written. It is the engine's format rather than this\npackage's, so it carries fields no Go type here names — targeting groups,\nrollout percentages, variants, payloads — and a caller must round-trip it\nwhole rather than rebuilding it from the parts it recognizes."
+          },
+          "key": {
+            "description": "Key is the flag's primary key in the caller's (org, project) store, and the\nname evaluation looks it up by. On a write it is taken from the URL, never\nfrom the body: the stored document's own \"key\" is forced to match.",
+            "type": "string"
+          },
+          "updated_at": {
+            "description": "UpdatedAt is when the definition was last written, RFC 3339 UTC.",
+            "type": "string"
+          },
+          "updated_by": {
+            "description": "UpdatedBy is the email of the principal who last wrote it. Empty when the\nwrite came from an in-process composer (an experiment registering its own\nassignment flag) rather than from a signed-in person.",
+            "type": "string"
+          },
+          "version": {
+            "description": "Version is 1 when the key was created and rises by one on every overwrite.\nIt counts writes, not content changes: re-storing an identical document\nbumps it.",
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "flag.activityOut": {
+        "properties": {
+          "data": {
+            "description": "Data is the change log newest-first: who created, updated or deleted which key, when.",
+            "items": {
+              "$ref": "#/components/schemas/flag.ActivityRow"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "flag.defsOut": {
+        "properties": {
+          "data": {
+            "description": "Data is every definition in the caller's (org, project) store, by key.",
+            "items": {
+              "$ref": "#/components/schemas/flag.DefRow"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "flag.deletedOut": {
+        "properties": {
+          "deleted": {
+            "description": "Deleted is the key that no longer exists.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "flag.evaluateIn": {
+        "properties": {
+          "distinct_id": {
+            "description": "DistinctID is the identity the flags are evaluated for. Required.",
+            "type": "string"
+          },
+          "groups": {
+            "description": "Groups are the group-level properties, keyed by group type index."
+          },
+          "person_properties": {
+            "description": "PersonProperties are the person-level properties conditions match against."
+          }
+        },
+        "type": "object"
+      },
+      "flag.healthOut": {
+        "properties": {
+          "engine": {
+            "description": "Engine names the evaluator this deployment runs.",
+            "type": "string"
+          },
+          "ok": {
+            "description": "OK is true whenever the flag engine is serving.",
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
+      "flag.optinIn": {
+        "properties": {
+          "on": {
+            "description": "On opts the caller in to every public beta, current and future, when true,\nand out when false.",
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
+      "flag.optinOut": {
+        "properties": {
+          "blocked": {
+            "description": "Blocked is true when the org the caller acts in turned the opt-in off for\nits members. Their own choice is kept and applies again once unblocked.",
+            "type": "boolean"
+          },
+          "on": {
+            "description": "On is true when the caller opted in: every public beta, and each one\npromoted later, is on for them unless Blocked.",
+            "type": "boolean"
+          },
+          "public": {
+            "description": "Public is the id of every beta anyone may opt in to (beta.\u003cid\u003e). The rest are\nprivate: a SuperAdmin grants them, person by person.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "flag.orgOptinIn": {
+        "properties": {
+          "blocked": {
+            "description": "Blocked turns the opt-in off for every member of the org when true, and back\non when false. It never turns a beta on for anyone.",
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
+      "flag.orgOptinOut": {
+        "properties": {
+          "blocked": {
+            "description": "Blocked is true when the org's members do not get public betas by opting in.",
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
+      "flag.platformOut": {
+        "properties": {
+          "flags": {
+            "additionalProperties": {
+              "type": "boolean"
+            },
+            "description": "Flags maps each principal switch's key to whether it is on for the caller:\n`beta` is whether the caller sees products and catalog items that are not\nyet generally available, and beta.\u003cid\u003e whether they see that one app in\nbeta in the Hanzo app.",
+            "type": "object"
+          }
+        },
+        "type": "object"
+      },
+      "problem-details": {
+        "description": "An RFC 9457 problem document.",
+        "properties": {
+          "code": {
+            "description": "A stable token a client can branch on, when the refusal names one.",
+            "type": "string"
+          },
+          "detail": {
+            "description": "What was refused, for a person to read.",
+            "type": "string"
+          },
+          "status": {
+            "description": "The HTTP status.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "title": {
+            "description": "The status's reason phrase.",
+            "type": "string"
+          },
+          "type": {
+            "description": "about:blank",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "status",
+          "detail"
+        ],
+        "type": "object"
+      }
+    },
+    "securitySchemes": {
+      "bearer": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "The caller's credential, sent as `Authorization: Bearer \u003ctoken\u003e`. It is either an access token minted by Hanzo IAM or an API key (pk-/sk-). X-Authorization, and HTTP Basic carrying the token as the password, are accepted spellings of the same header for clients that cannot set Authorization; a browser presents the session cookie instead. Every operation requires it unless it says `security: []`."
+      }
+    }
+  }
+}

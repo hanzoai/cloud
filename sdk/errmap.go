@@ -383,7 +383,7 @@ func ErrorHandler(c fiber.Ctx, err error) error {
 	// A 401 names the scheme that would have been accepted (RFC 9110 §11.6.1),
 	// and where to learn how to get one: the resource metadata this host serves
 	// (RFC 9728 §5.1), which names the authorization server. Without it a client
-	// that met a 401 had to know hanzo.id already (#420). The
+	// that met a 401 had to know hanzo.id already (hanzo-inc/cloud#420). The
 	// origin is the request's own (brand.Origin of its Host header), as the MCP
 	// challenge's is (client/mcp.go), so a white-label host never points a client at
 	// a host it did not call, and a forwarded header names nothing here. A handler

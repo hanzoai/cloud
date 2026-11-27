@@ -1,0 +1,164 @@
+{
+ "sides": [
+  "hanzo",
+  "cloudflare"
+ ],
+ "suites": {
+  "text": {
+   "task": {
+    "docs": {
+     "n": 32,
+     "mean": 0.9999838,
+     "p1": 0.9999539,
+     "min": 0.9999474
+    },
+    "queries": {
+     "n": 32,
+     "mean": 0.9999697,
+     "p1": 0.9999289,
+     "min": 0.9999262
+    },
+    "top10_overlap": [
+     0.987,
+     0.99,
+     0.995,
+     0.99
+    ]
+   },
+   "none": {
+    "docs": {
+     "n": 32,
+     "mean": 0.999978,
+     "p1": 0.9999214,
+     "min": 0.9999074
+    },
+    "queries": {
+     "n": 32,
+     "mean": 0.9999743,
+     "p1": 0.9998942,
+     "min": 0.9998707
+    },
+    "top10_overlap": [
+     0.989,
+     0.989,
+     0.988,
+     0.981
+    ]
+   }
+  },
+  "code": {
+   "task": {
+    "docs": {
+     "n": 32,
+     "mean": 0.9999906,
+     "p1": 0.9999849,
+     "min": 0.999984
+    },
+    "queries": {
+     "n": 32,
+     "mean": 0.9999875,
+     "p1": 0.9999817,
+     "min": 0.9999812
+    },
+    "top10_overlap": [
+     0.995,
+     0.995,
+     0.998,
+     0.994
+    ]
+   },
+   "none": {
+    "docs": {
+     "n": 32,
+     "mean": 0.999991,
+     "p1": 0.9999847,
+     "min": 0.9999846
+    },
+    "queries": {
+     "n": 32,
+     "mean": 0.9999873,
+     "p1": 0.9999819,
+     "min": 0.9999814
+    },
+    "top10_overlap": [
+     0.997,
+     0.994,
+     0.988,
+     0.993
+    ]
+   }
+  }
+ },
+ "cost": {
+  "inference": [
+   {
+    "suite": "text",
+    "estimated": false,
+    "doc_tokens": 323.4,
+    "query_tokens": 25.7,
+    "rebuild_cf": 0.55,
+    "queries_cf": 0.0436,
+    "rebuild_owned_replica_h": 233.3,
+    "rebuild_owned": 54.01,
+    "queries_owned_replica_h": 18.51,
+    "queries_owned": 4.29,
+    "rebuild_cf_hours_at_measured_rate": 3.2
+   },
+   {
+    "suite": "code",
+    "estimated": false,
+    "doc_tokens": 240.2,
+    "query_tokens": 91.9,
+    "rebuild_cf": 0.41,
+    "queries_cf": 0.1563,
+    "rebuild_owned_replica_h": 173.3,
+    "rebuild_owned": 40.12,
+    "queries_owned_replica_h": 66.33,
+    "queries_owned": 15.36,
+    "rebuild_cf_hours_at_measured_rate": 2.5
+   },
+   {
+    "suite": "image",
+    "estimated": false,
+    "doc_tokens": 264.5,
+    "query_tokens": 23.8,
+    "rebuild_cf": 0.45,
+    "queries_cf": 0.0404,
+    "media_gb_per_rebuild": 190.2,
+    "media_s3_to_cf": 17.11,
+    "rebuild_cf_hours_at_measured_rate": 22.9
+   }
+  ],
+  "storage": [
+   {
+    "dim": 768,
+    "vectors_gb": 3.072,
+    "vectorize": 15.24,
+    "r2_vectors": 0.046,
+    "owned_store": 0.49
+   },
+   {
+    "dim": 512,
+    "vectors_gb": 2.048,
+    "vectorize": 9.99,
+    "r2_vectors": 0.031,
+    "owned_store": 0.33
+   },
+   {
+    "dim": 256,
+    "vectors_gb": 1.024,
+    "vectorize": 4.74,
+    "r2_vectors": 0.015,
+    "owned_store": 0.16
+   },
+   {
+    "dim": 128,
+    "vectors_gb": 0.512,
+    "vectorize": 2.12,
+    "r2_vectors": 0.008,
+    "owned_store": 0.08
+   }
+  ],
+  "owned_floor_month": 169.0
+ }
+}

@@ -70,9 +70,9 @@ func Unbind() {
 // It is the answer Peer always claimed to give and never could. zip dials lazily,
 // so a missing socket produced no error at all until the first Call, and then
 // arrived as a 502 indistinguishable from a peer that answered badly — so every
-// caller had to choose one meaning for both, which is a mistake in either direction
-// (a 403 read as "split deploy", an outage read as "nothing is priced"). Now the two
-// facts are two errors:
+// caller had to choose one meaning for both, and the fleet has shipped that
+// mistake in both directions (a 403 read as "split deploy", an outage read as
+// "nothing is priced"). Now the two facts are two errors:
 //
 //	ErrNoPeer          the app is not here — fall back, or stay inert
 //	anything else      the app is here and this call failed — that is an outage
@@ -164,11 +164,13 @@ func Reach(ctx context.Context, app string) error {
 	}
 	defer func() { _ = c.Close() }()
 	// EVERY error here is an outage, and only an ANSWER can say the app is absent.
-	// They rebuild into the same *HTTPError with an empty Code, so nothing but the
-	// message text separated them. On a rolling deploy the middle one is live: an
-	// older host answers "unknown op: host_start", the rail would have read version
-	// skew as "this fleet prices nothing", and every priced tool goes free until
-	// the last pod turns over.
+	// This used to read a 404 as absence, and three different things answer 404 on
+	// this wire — the router's own "no such app", zip's "unknown op" when the router
+	// predates this op, and any framework 404 for the path. They rebuild into the
+	// same *HTTPError with an empty Code, so nothing but the message text separated
+	// them. On a rolling deploy the middle one is live: an older host answers
+	// "unknown op: host_start", the rail would have read version skew as "this fleet
+	// prices nothing", and every priced tool goes free until the last pod turns over.
 	out, err := zip.Call[StartIn, Started](ctx, c, HostStart, &StartIn{App: app})
 	switch {
 	case err != nil:
@@ -206,12 +208,14 @@ func UnderRouter() bool { return strings.TrimSpace(os.Getenv("ZIP_ADDR")) != "" 
 // then carry. Both halves were wrong for a LAZY app, and the fleet runs 106 of them.
 //
 // A socket file outlives the process that bound it wherever the run directory is a
-// volume, so by stat a stale file is indistinguishable from an app that is up. For a
-// lazy app that difference is the entire answer: the file suppresses the wake that
-// would have PUT a listener there, so the peer is never started, and no number of
-// failed calls changes that — "here and broken" is learnable from the call, "here and
-// never coming up" is not. The money ops are fail-closed, so such a peer would refuse
-// every paid call.
+// volume, so by stat a pod that died last night is indistinguishable from an app
+// that is up. For a lazy app that difference is the entire answer: the file
+// suppresses the wake that would have PUT a listener there, so the peer is never
+// started, and no number of failed calls changes that — "here and broken" is
+// learnable from the call, "here and never coming up" is not. Prod ran that shape
+// for three days: /var/lib/cloud/run/commerce.sock left by a previous pod, commerce
+// never woken, every prepaid-balance read refused, and the balance gate being
+// fail-CLOSED, every paid completion in the fleet answering 503.
 //
 // It removes nothing. The listener already unlinks a stale path before it binds
 // (zaphttp.Server.ListenAndServe), so the wake this returns to repairs the run
@@ -383,9 +387,13 @@ func detach(v reflect.Value) {
 //
 // It lives in this package because both halves need it and neither may import the other:
 // a callee resolves where to LISTEN and a caller resolves where to DIAL, from the same
-// rule, or they miss each other in a way nothing reports: a caller dialing one path
-// while the callee listens on another sees "connection refused", which reads like the
-// callee is DOWN rather than somewhere else.
+// rule, or they miss each other in a way nothing reports. That is not hypothetical —
+// with the binding done only on the caller's side, plugins listened on private temp
+// paths (/tmp/zip-commerce-*/commerce.sock) while callers dialed
+// /var/lib/cloud/run/commerce.sock, and a stale socket file at the shared path turned
+// the miss into "connection refused" — which reads like the callee is DOWN rather than
+// somewhere else. Every cross-process call was unreachable, and because the money ops
+// are fail-closed, every AI completion answered 503 on a healthy fleet.
 //
 // Idempotent, and an externally-set ZIP_RUNTIME_DIR always wins — the operator's
 // choice is not ours to overwrite, and both halves read the same one either way.

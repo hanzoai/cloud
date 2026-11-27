@@ -3,12 +3,12 @@ package cloud
 // intent.go — whether a change was ASKED FOR by the caller, or merely carried by
 // their browser.
 //
-// A browser authenticates this API from a session COOKIE (middleware_identity's
-// cookieTokenNames), and a cookie is AMBIENT: it rides any request the browser
-// is made to send, including one composed by a page the caller never chose to
-// visit. SameSite=Lax withholds it from a cross-SITE POST, and that is worth
-// something, but SameSite is scoped to the registrable domain — so a page on any
-// *.hanzo.ai host sends it, and a request that arrives with it looks exactly
+// THE HOLE THIS CLOSES. A browser authenticates this API from a session COOKIE
+// (middleware_identity's cookieTokenNames), and a cookie is AMBIENT: it rides any
+// request the browser is made to send, including one composed by a page the caller
+// never chose to visit. SameSite=Lax withholds it from a cross-SITE POST, and that
+// is worth something, but SameSite is scoped to the registrable domain — so a page
+// on any *.hanzo.ai host sends it, and a request that arrives with it looks exactly
 // like the console's own.
 //
 // The estate already answers this, and answers it in the wrong PLACE. account.CSRF
@@ -170,8 +170,9 @@ func Intended(c *zip.Ctx) error {
 	// That key bought nothing this does not: it proved the caller had first read
 	// GET /v1/account/csrf from THIS origin, which is the same fact Sec-Fetch-Site
 	// states directly. What it cost was an agreement problem — one value, shared by
-	// every child of the fleet, which no probe can verify, because a key is a deployment
-	// fact and a header is a request fact.
+	// every child of the fleet, absent or blank in any of them. Nine surfaces
+	// answered 503 to every caller for exactly that reason, and no probe could see
+	// it, because a key is a deployment fact and a header is a request fact.
 	switch c.Header("Sec-Fetch-Site") {
 	case "same-origin", "none":
 		return nil

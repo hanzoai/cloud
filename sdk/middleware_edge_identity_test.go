@@ -2,10 +2,13 @@ package cloud
 
 // THE ADDRESS LIMIT IS FOR WHO HAS NOTHING ELSE TO BE LIMITED BY.
 //
-// These drive the whole order a request meets — EdgeRateLimit, SanitizeIdentity
-// against a stub IAM, then ScopeRateLimit — and pin each kind of caller to the
-// limiter that is theirs: anonymous to the address, a credential that is nobody
-// to the address on every bucket, a validated key to its own rate and its org's.
+// The edge runs before identity and used to charge every request to one per-IP
+// count, so a signed-in customer behind one address met the anonymous flood cap
+// before its own key or org ceiling was asked. These drive the whole order a
+// request meets — EdgeRateLimit, SanitizeIdentity against a stub IAM, then
+// ScopeRateLimit — and pin each kind of caller to the limiter that is theirs:
+// anonymous to the address, a credential that is nobody to the address on every
+// bucket, a validated key to its own rate and its org's.
 
 import (
 	"crypto/rsa"

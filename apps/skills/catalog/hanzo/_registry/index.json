@@ -1,0 +1,56 @@
+{
+  "$schema": "https://schemas.agentskills.io/discovery/0.2.0/schema.json",
+  "base_url": "https://api.hanzo.ai",
+  "brand": "hanzo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://hanzo.id",
+  "mcp": {
+    "description": "Model Context Protocol over JSON-RPC 2.0 — one POST per message, stateless, protocol revision 2026-07-28. tools/list answers without a credential with one tool per subsystem (its operations in the \"op\" enum) plus \"describe\", which returns one operation's input schema. tools/call names a subsystem tool and carries {\"op\": <operation>, \"input\": <its arguments>}; it takes the same bearer the REST API does, and a call that carries none is answered 401 with a WWW-Authenticate header naming the resource metadata at /.well-known/oauth-protected-resource, which names the authorization server to sign in at. The tool surface is the public contract: the operator's admin product is not offered, and a name that would disclose a secret or mutate an identity is withheld — the list says how many, under _meta.",
+    "method": "POST",
+    "url": "https://api.hanzo.ai/v1/mcp"
+  },
+  "skill_count": 5,
+  "skills": [
+    {
+      "description": "Read registry images: Lists the org's container repositories, read live from the OCI catalog and filtered server-side to the org's namespace — the page can only ever hold the caller's own images..",
+      "digest": "sha256:33c35c565b6579d638a1073746517ee44e3884a0cc82005f7e512796cde6a504",
+      "name": "registry_images",
+      "service": "registry",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/registry_images/SKILL.md"
+    },
+    {
+      "description": "Read registry packages: Lists the org's npm packages — `<org>` and `@<org>/…` — from the npm registry's search index, optionally narrowed by a query within that scope..",
+      "digest": "sha256:5637aba2b29f018a1b58779e2e7a5bd133002283deda9cb4b55258e7e2e0562c",
+      "name": "registry_packages",
+      "service": "registry",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/registry_packages/SKILL.md"
+    },
+    {
+      "description": "Read registry projects: Lists the namespaces the caller can see with what each holds: the org's slug, its repository count on the OCI catalog, and its package count on the npm registry..",
+      "digest": "sha256:ab5b739c72bebf445730ec87284a42af6da06d4930a18ff8c43960a02cd96d36",
+      "name": "registry_projects",
+      "service": "registry",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/registry_projects/SKILL.md"
+    },
+    {
+      "description": "Read registry status: Reports whether the OCI and npm registries are reachable and, when the OCI half is auth-gated, which token realm its challenge advertises — an honest lens for \"is the registry plane up\", never a fabricated ok..",
+      "digest": "sha256:15477700663286d527851e8fb609d42913769d90e7f3acb5394e8153afba13e2",
+      "name": "registry_status",
+      "service": "registry",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/registry_status/SKILL.md"
+    },
+    {
+      "description": "Read registry tags: Lists one org-owned repository's tags, read live from the OCI registry..",
+      "digest": "sha256:20cbc002abd53398773abd1a1fc1e81b8721b2a051ab526bb601026f90374ea2",
+      "name": "registry_tags",
+      "service": "registry",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/registry_tags/SKILL.md"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

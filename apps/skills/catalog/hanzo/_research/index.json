@@ -1,0 +1,195 @@
+{
+  "$schema": "https://schemas.agentskills.io/discovery/0.2.0/schema.json",
+  "base_url": "https://api.hanzo.ai",
+  "brand": "hanzo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://hanzo.id",
+  "mcp": {
+    "description": "Model Context Protocol over JSON-RPC 2.0 — one POST per message, stateless, protocol revision 2026-07-28. tools/list answers without a credential with one tool per subsystem (its operations in the \"op\" enum) plus \"describe\", which returns one operation's input schema. tools/call names a subsystem tool and carries {\"op\": <operation>, \"input\": <its arguments>}; it takes the same bearer the REST API does, and a call that carries none is answered 401 with a WWW-Authenticate header naming the resource metadata at /.well-known/oauth-protected-resource, which names the authorization server to sign in at. The tool surface is the public contract: the operator's admin product is not offered, and a name that would disclose a secret or mutate an identity is withheld — the list says how many, under _meta.",
+    "method": "POST",
+    "url": "https://api.hanzo.ai/v1/mcp"
+  },
+  "skill_count": 20,
+  "skills": [
+    {
+      "description": "Read research actions: Answers the org's actions, newest first, each in its latest state with its hash..",
+      "digest": "sha256:bed782287a78f7fc5c73db083fff9b6822f0e73ec86cfcb56c3bc82c9c71886a",
+      "name": "research_actions",
+      "service": "research",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/research_actions/SKILL.md"
+    },
+    {
+      "description": "Read research artifacts: Returns the caller org's research-diary feed newest-first — the snapshots and reports tied to its runs, as metadata and content addresses; the bytes themselves are fetched by hash., Fetch one recorded artifact's bytes by its content hash..",
+      "digest": "sha256:5e5bbd8ee97fefd49a5f50d8e2403f95aea4f1faa97a385101eeaf610027f4e4",
+      "name": "research_artifacts",
+      "service": "research",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/research_artifacts/SKILL.md"
+    },
+    {
+      "description": "Read research benchmarks: Returns the caller org's benchmark definitions — what each task is, which dataset it draws on under which licence, the splits it declares and the metric its authors score it by..",
+      "digest": "sha256:7efcdb350168153e673de1c9993b8334765494933606a828e988f76243c24689",
+      "name": "research_benchmarks",
+      "service": "research",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/research_benchmarks/SKILL.md"
+    },
+    {
+      "description": "Read research candidates: Returns the org's canonical EvolutionCandidates, newest sequence number first., Computes the multi-objective non-dominated Pareto frontier over active EvolutionCandidates with zero safety violations (HIP-1401 §4.1), maximizing verified_success and robust",
+      "digest": "sha256:18f4a4ab0fd37a65f9fc9ab67c7900e14f6a0d4f3ec80396f385c654cde3355e",
+      "name": "research_candidates",
+      "service": "research",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/research_candidates/SKILL.md"
+    },
+    {
+      "description": "Read research claims: Returns the org's canonical ResearchClaims newest-first..",
+      "digest": "sha256:b9d0ced9c1dd0f083076ef2f4d9c60c8702ef206360d8bf9fb33494cef9a0587",
+      "name": "research_claims",
+      "service": "research",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/research_claims/SKILL.md"
+    },
+    {
+      "description": "Read research commitments: Answers the org's commitments, newest first..",
+      "digest": "sha256:66378f76798dc7cd7c2d3dc305e0deb7516a5592e3018d2d16e1bc15b84a27e1",
+      "name": "research_commitments",
+      "service": "research",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/research_commitments/SKILL.md"
+    },
+    {
+      "description": "Read research compare: Reads two runs side by side and states FIRST the reasons they may not be compared — a different benchmark, a different split, different dataset bytes, or either run not established as complete..",
+      "digest": "sha256:63ae4b1fa49a641501544dd725c19f5c0b1723d6ea8366a21501395e64515299",
+      "name": "research_compare",
+      "service": "research",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/research_compare/SKILL.md",
+      "works": [
+        "research"
+      ]
+    },
+    {
+      "description": "Read research decisions: Answers every version of the org's decisions, newest first, each with its ordinal and the version it supersedes..",
+      "digest": "sha256:7f32416ea732d1a8b35de410567c08ab0bd851a2c245da7f4536a17f7813de79",
+      "name": "research_decisions",
+      "service": "research",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/research_decisions/SKILL.md"
+    },
+    {
+      "description": "Read research evaluations: Answers the org's evaluations, newest first, the latest filing of each Evaluation Run..",
+      "digest": "sha256:bcc93402d6a49bc0e5203c41f1f518edd14f1af86a2039ec568a1515b3d120cf",
+      "name": "research_evaluations",
+      "service": "research",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/research_evaluations/SKILL.md"
+    },
+    {
+      "description": "Read research evidence: Answers one uri's versions, newest first (?uri=), or every uri's newest version, without content., Answers the decisions and evaluations whose depends names a uri (?hash= narrows to those that read that version), each with the hash it read and stale: true ",
+      "digest": "sha256:d59d522c3f4c2ddf23928748f7481595ca57e0932ffc69888424d782f2d3e397",
+      "name": "research_evidence",
+      "service": "research",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/research_evidence/SKILL.md",
+      "works": [
+        "research"
+      ]
+    },
+    {
+      "description": "Read research experiments: Returns the caller org's CANONICAL experiments — the deterministic deduped view over the versioned history., Returns every retained version of an experiment stable id (`?id=<stable_id>`), ordered ascending by server `seq` so anyone can audit that a `pla",
+      "digest": "sha256:7d38fc8fe4517d61d419c3fb153ed2cbfd1d2410174c2bdac75e5e83939768aa",
+      "name": "research_experiments",
+      "service": "research",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/research_experiments/SKILL.md",
+      "works": [
+        "research"
+      ]
+    },
+    {
+      "description": "Read research hypotheses: Returns the org's pre-registered HypothesisRecords newest-first, each carrying its server-assigned sequence number so confirmatory run ordering is auditable..",
+      "digest": "sha256:0f716512674a7c28e4fb06835c5563f56c1ee49826612ea9036167e3fb6b3a76",
+      "name": "research_hypotheses",
+      "service": "research",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/research_hypotheses/SKILL.md"
+    },
+    {
+      "description": "Read research papers: Returns the caller org's papers and the runs each cites..",
+      "digest": "sha256:f19bf39ff99470f5718ac9922f394c9809fad58de93dc25dec25a507012dc0e0",
+      "name": "research_papers",
+      "service": "research",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/research_papers/SKILL.md",
+      "works": [
+        "research"
+      ]
+    },
+    {
+      "description": "Read research projects: Returns every research project in the caller's org with its real totals — canonical and retained side by side — which is the ops board's \"every project + real totals\" view..",
+      "digest": "sha256:96fff8f7003b78f7389be6595671fb1395860b9f41c1a03a041307203456e204",
+      "name": "research_projects",
+      "service": "research",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/research_projects/SKILL.md"
+    },
+    {
+      "description": "Read research regressions: Returns the org's canonical HIP-1404 RegressionRecords newest-first..",
+      "digest": "sha256:74abb65693c5e6f6cf0d282f26e00e5baae7bf1e8c15d945000d80f83d9cbf42",
+      "name": "research_regressions",
+      "service": "research",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/research_regressions/SKILL.md"
+    },
+    {
+      "description": "Read research runs: Returns the caller org's recorded executions with their derived completion..",
+      "digest": "sha256:cd18be7f90d772a4a58d694d9d12ea4808e1b36b06aa23be2c1d245aa54a90be",
+      "name": "research_runs",
+      "service": "research",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/research_runs/SKILL.md",
+      "works": [
+        "data"
+      ]
+    },
+    {
+      "description": "Read research standard: Returns the HIP-1400 component conformance manifest for the research, evolution, evidence, and XP plane..",
+      "digest": "sha256:feca65da9d01ab310fa6bf1e12adb4548dcb2e62d09628df479be6e2172affa7",
+      "name": "research_standard",
+      "service": "research",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/research_standard/SKILL.md"
+    },
+    {
+      "description": "Read research studies: Returns the caller org's studies — the question each set of runs was run to answer and what it found..",
+      "digest": "sha256:251d3e7f0c775102918ad989af286514a3624383a36f7f0ff845ef0ed2f0d697",
+      "name": "research_studies",
+      "service": "research",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/research_studies/SKILL.md",
+      "works": [
+        "product",
+        "research"
+      ]
+    },
+    {
+      "description": "Read research totals: Returns the caller org's headline aggregate plus a per-kind breakdown — the observatory's poll target..",
+      "digest": "sha256:4f4586b137d05bf3903ce30c80cff8492dff2a4557df0f8f17ea938bc751c8ec",
+      "name": "research_totals",
+      "service": "research",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/research_totals/SKILL.md"
+    },
+    {
+      "description": "Read research xp: GetResearchXP computes the deterministic, non-transferable Hanzo XP read projection (HIP-1402) from canonical qualified EvolutionCandidates and independently replicated confirmatory ResearchClaims..",
+      "digest": "sha256:5a4b232ed29fea6951871bd1031d3a4166fc2cbbd3bd46d69fc22514974a6661",
+      "name": "research_xp",
+      "service": "research",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/research_xp/SKILL.md"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

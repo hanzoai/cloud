@@ -1,0 +1,686 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Hanzo Cloud API",
+    "description": "Package tel is the telecommunications surface: phone numbers, calls and messages, on whatever carrier the deployment is configured for.",
+    "version": "v1"
+  },
+  "servers": [
+    {
+      "url": "https://api.hanzo.ai"
+    }
+  ],
+  "security": [
+    {
+      "bearer": []
+    }
+  ],
+  "tags": [
+    {
+      "name": "tel"
+    }
+  ],
+  "paths": {
+    "/v1/tel/calls": {
+      "get": {
+        "operationId": "get_tel_calls",
+        "summary": "Lists the calls this org has placed or received, newest first.",
+        "description": "Lists the calls this org has placed or received, newest first. Like the\nmessage list beside it, these are our own records rather than the carrier's.",
+        "tags": [
+          "tel"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/tel.callList"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      },
+      "post": {
+        "operationId": "post_tel_calls",
+        "summary": "Dials.",
+        "description": "Dials. An `agent` names a Hanzo assistant to answer it; the call is\nrefused up front when no assistant plane is configured, because a call that\nconnects to silence has already cost the person who answered it.",
+        "tags": [
+          "tel"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/tel.callInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/tel.Call"
+                }
+              }
+            },
+            "description": "created"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/tel/calls/{id}": {
+      "delete": {
+        "operationId": "delete_tel_calls_by_id",
+        "summary": "Ends a call this org placed.",
+        "description": "Ends a call this org placed. The holding is read for THIS org before the\ncarrier is asked, for the reason releaseNumber gives one surface up: an id\nbelonging to another tenant would otherwise be hung up by whoever guessed it.",
+        "tags": [
+          "tel"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "no content"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/tel/messages": {
+      "get": {
+        "operationId": "get_tel_messages",
+        "summary": "Lists the messages this org has sent or received, newest first.",
+        "description": "Lists the messages this org has sent or received, newest first. Records from\nour own store, not the carrier's — so it is what this platform did on the\norg's behalf, which is the set an audit or a bill has to agree with.",
+        "tags": [
+          "tel"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/tel.messageList"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      },
+      "post": {
+        "operationId": "post_tel_messages",
+        "summary": "Sends a message from one of this org's own numbers.",
+        "description": "Sends a message from one of this org's own numbers.\n\n`from` must be a number the org HOLDS, checked against the store rather than\ntaken on trust — a caller that could send from any number could impersonate\none, and the carrier would deliver it. `to` is required, and the body needs\ntext or media, because a message with neither is delivered as nothing and\nbilled as something.",
+        "tags": [
+          "tel"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/tel.messageInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/tel.SMS"
+                }
+              }
+            },
+            "description": "created"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/tel/numbers": {
+      "get": {
+        "operationId": "get_tel_numbers",
+        "summary": "Lists the phone numbers this org HOLDS — the ones it has bought and not released.",
+        "description": "Lists the phone numbers this org HOLDS — the ones it has bought and not\nreleased. Distinct from the availability search one path down\n(`/numbers/available`), which asks the carrier what could be bought: this\nanswers only from our own store, so it is what an org owns rather than what\nit could own.",
+        "tags": [
+          "tel"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/tel.numberList"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      },
+      "post": {
+        "operationId": "post_tel_numbers",
+        "summary": "Provisions with the carrier FIRST and records second.",
+        "description": "Provisions with the carrier FIRST and records second. The other order\nrecords a holding that may not exist, and a number the platform believes it owns\nbut cannot use is worse than one it failed to buy.",
+        "tags": [
+          "tel"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/tel.buyInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/tel.Number"
+                }
+              }
+            },
+            "description": "created"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/tel/numbers/available": {
+      "get": {
+        "operationId": "get_tel_numbers_available",
+        "summary": "Asks the carrier what is available to buy.",
+        "description": "Asks the carrier what is available to buy. Nothing is recorded —\na search is not a holding, and treating it as one is how inventory leaks.",
+        "tags": [
+          "tel"
+        ],
+        "parameters": [
+          {
+            "name": "Country",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Area",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Type",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "format": "int64",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/tel.numberList"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/tel/numbers/{id}": {
+      "delete": {
+        "operationId": "delete_tel_numbers_by_id",
+        "summary": "Checks the holding is THIS org's before it reaches the carrier.",
+        "description": "Checks the holding is THIS org's before it reaches the carrier.\nWithout that read, an id belonging to another tenant would be released by\nwhoever guessed it.",
+        "tags": [
+          "tel"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "no content"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/tel/summary": {
+      "get": {
+        "operationId": "get_tel_summary",
+        "summary": "Counts what this org holds on the telephony plane: its numbers, its calls and its messages.",
+        "description": "Counts what this org holds on the telephony plane: its numbers, its calls and\nits messages. The one read a dashboard makes before it asks for any list, so\nit answers three totals and no rows.",
+        "tags": [
+          "tel"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/tel.summary"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "problem-details": {
+        "description": "An RFC 9457 problem document.",
+        "properties": {
+          "code": {
+            "description": "A stable token a client can branch on, when the refusal names one.",
+            "type": "string"
+          },
+          "detail": {
+            "description": "What was refused, for a person to read.",
+            "type": "string"
+          },
+          "status": {
+            "description": "The HTTP status.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "title": {
+            "description": "The status's reason phrase.",
+            "type": "string"
+          },
+          "type": {
+            "description": "about:blank",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "status",
+          "detail"
+        ],
+        "type": "object"
+      },
+      "tel.Call": {
+        "properties": {
+          "agent": {
+            "description": "Agent names the Hanzo assistant handling the call. Set means the call was\nanswered by that assistant rather than connected to a person.",
+            "type": "string"
+          },
+          "from": {
+            "description": "From is the calling number in E.164. It must be one this org holds: a carrier\nrefuses an origination from a number nobody proved they own.",
+            "type": "string"
+          },
+          "id": {
+            "description": "ID is the carrier's handle for the call — what a hangup or a lookup names.",
+            "type": "string"
+          },
+          "org": {
+            "description": "Org is the tenant the call was placed for or received by.",
+            "type": "string"
+          },
+          "status": {
+            "description": "Status is where the call is: \"queued\", \"ringing\", \"answered\", \"completed\" or\n\"failed\". Only the last two are terminal.",
+            "type": "string"
+          },
+          "to": {
+            "description": "To is the called number in E.164.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "tel.Number": {
+        "properties": {
+          "capable": {
+            "description": "Capable is what the number can carry: any of \"voice\", \"sms\", \"mms\", \"fax\". A\nnumber missing \"sms\" cannot send one no matter what this platform does.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "country": {
+            "description": "Country is the ISO 3166-1 alpha-2 code the number is issued under. Numbering is\nnational, so this is what makes a search answerable at all.",
+            "type": "string"
+          },
+          "currency": {
+            "description": "Currency is the ISO 4217 code Monthly is denominated in. Without it the number\nbeside it means nothing, so the two are always read together.",
+            "type": "string"
+          },
+          "e164": {
+            "description": "E164 is the number in E.164: a leading + and digits only, no spaces or dashes.\nThat is what a carrier accepts and what a search result must be bought by.",
+            "type": "string"
+          },
+          "id": {
+            "description": "ID is the carrier's handle for the number, and the id every route here\naddresses it by. It is not the number itself — see E164.",
+            "type": "string"
+          },
+          "monthly": {
+            "description": "Monthly is the recurring rental in the MINOR unit of Currency (cents for USD),\nexactly as the carrier quoted it. It is a price, not a charge: nothing is billed\nby this field.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "org": {
+            "description": "Org is the tenant holding the number. A search result carries none — nobody\nholds it yet — which is how an available number is told from a held one.",
+            "type": "string"
+          },
+          "type": {
+            "description": "Type is what kind of number it is: \"local\", \"national\", \"tollfree\" or \"mobile\".\nIt decides both price and what a carrier will let it originate.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "tel.SMS": {
+        "properties": {
+          "from": {
+            "description": "From is the sending number in E.164, and must be one this org holds.",
+            "type": "string"
+          },
+          "id": {
+            "description": "ID is the carrier's handle for the message.",
+            "type": "string"
+          },
+          "org": {
+            "description": "Org is the tenant the message was sent for or received by.",
+            "type": "string"
+          },
+          "status": {
+            "description": "Status is where the message is: \"queued\", \"sent\", \"delivered\" or \"failed\".\n\"sent\" means the carrier took it; \"delivered\" means the handset got it, and\nnot every carrier or destination reports that.",
+            "type": "string"
+          },
+          "text": {
+            "description": "Text is the message body. Empty is legal when the message carried only media.",
+            "type": "string"
+          },
+          "to": {
+            "description": "To is the receiving number in E.164.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "tel.buyInput": {
+        "properties": {
+          "e164": {
+            "description": "E164 is the number to buy, in E.164 (a leading + and digits), exactly as the\nsearch returned it. This is the number itself, not the id from a search result.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "tel.callInput": {
+        "properties": {
+          "agent": {
+            "description": "Agent hands the answered call to a Hanzo assistant by name instead of\nconnecting it to a person. Empty places an ordinary call.",
+            "type": "string"
+          },
+          "from": {
+            "description": "From is the number to call FROM, in E.164. It must be one this org holds.",
+            "type": "string"
+          },
+          "record": {
+            "description": "Record is a per-call flag rather than a product. Where a recording lands and\nhow long it is kept is the org's retention policy, not this call's.",
+            "type": "boolean"
+          },
+          "to": {
+            "description": "To is the number to call, in E.164.",
+            "type": "string"
+          },
+          "webhook": {
+            "description": "Webhook is a URL the carrier posts this call's events to as it progresses.\nEmpty means the call's outcome is only visible by reading it back.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "tel.callList": {
+        "properties": {
+          "data": {
+            "description": "Data is this org's own calls, newest first — what this platform placed or\nreceived on its behalf, which is our record rather than the carrier's.",
+            "items": {
+              "$ref": "#/components/schemas/tel.Call"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "tel.messageInput": {
+        "properties": {
+          "from": {
+            "description": "From is the number to send FROM, in E.164. It must be one this org holds and it\nmust be sms-capable.",
+            "type": "string"
+          },
+          "media": {
+            "description": "Media are URLs to attach. A message with any is an MMS to the carrier — the\ndistinction is the carrier's to make, not something the caller declares.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "text": {
+            "description": "Text is the message body. It may be empty when Media carries the message.",
+            "type": "string"
+          },
+          "to": {
+            "description": "To is the number to send to, in E.164.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "tel.messageList": {
+        "properties": {
+          "data": {
+            "description": "Data is this org's own messages, newest first — from our store rather than the\ncarrier's, so it is the set an audit or a bill has to agree with.",
+            "items": {
+              "$ref": "#/components/schemas/tel.SMS"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "tel.numberList": {
+        "properties": {
+          "data": {
+            "description": "Data is the numbers, and which numbers depends on the route: a search answers\nwhat the carrier has available, a list answers what this org already holds.",
+            "items": {
+              "$ref": "#/components/schemas/tel.Number"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "tel.summary": {
+        "properties": {
+          "calls": {
+            "description": "Calls is how many calls this org has placed or received, over its whole\nhistory — a running total, not a window.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "messages": {
+            "description": "Messages is the same running total for messages.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "numbers": {
+            "description": "Numbers is how many numbers this org holds right now.",
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      }
+    },
+    "securitySchemes": {
+      "bearer": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "The caller's credential, sent as `Authorization: Bearer \u003ctoken\u003e`. It is either an access token minted by Hanzo IAM or an API key (pk-/sk-). X-Authorization, and HTTP Basic carrying the token as the password, are accepted spellings of the same header for clients that cannot set Authorization; a browser presents the session cookie instead. Every operation requires it unless it says `security: []`."
+      }
+    }
+  }
+}

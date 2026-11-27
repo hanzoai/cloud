@@ -1,0 +1,88 @@
+{
+  "$schema": "https://schemas.agentskills.io/discovery/0.2.0/schema.json",
+  "base_url": "https://api.zoo.ngo",
+  "brand": "zoo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://zoolabs.id",
+  "mcp": {
+    "description": "Model Context Protocol over JSON-RPC 2.0 — one POST per message, stateless, protocol revision 2026-07-28. tools/list answers without a credential with one tool per subsystem (its operations in the \"op\" enum) plus \"describe\", which returns one operation's input schema. tools/call names a subsystem tool and carries {\"op\": <operation>, \"input\": <its arguments>}; it takes the same bearer the REST API does, and a call that carries none is answered 401 with a WWW-Authenticate header naming the resource metadata at /.well-known/oauth-protected-resource, which names the authorization server to sign in at. The tool surface is the public contract: the operator's admin product is not offered, and a name that would disclose a secret or mutate an identity is withheld — the list says how many, under _meta.",
+    "method": "POST",
+    "url": "https://api.zoo.ngo/v1/mcp"
+  },
+  "skill_count": 9,
+  "skills": [
+    {
+      "description": "Read leaderboard activity: Returns the per-day usage series for ONE authorized subject — the points a contribution heatmap and a timeline are drawn from, gap-filled so every day in the range is present..",
+      "digest": "sha256:cf5bbd65305ffdb2bebddff7d52ca2c7190c7bb37850420b98a1ea82bfe81eb0",
+      "name": "leaderboard_activity",
+      "service": "leaderboard",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/leaderboard_activity/SKILL.md"
+    },
+    {
+      "description": "Read leaderboard beta: Ranks everyone on the zoo.ngo/beta waitlist by one score: 1 per star on GitHub verified for the record and 1 per founder link followed, plus 1 per org that signed up with its referral code, plus 20 per such org that has made metered spend, plus 1 per 100,00",
+      "digest": "sha256:fe29558fb11fc04298e01c112f643b09142c249ba3e38314f21fef90e324df5d",
+      "name": "leaderboard_beta",
+      "service": "leaderboard",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/leaderboard_beta/SKILL.md"
+    },
+    {
+      "description": "Read leaderboard bounty: Returns the ranked bug hunters and bounty contributors, and the recent bug and bounty awards..",
+      "digest": "sha256:af6f9eb8e18d546161851875d284b8b68a7df9182eb013113f1df4138b081eaa",
+      "name": "leaderboard_bounty",
+      "service": "leaderboard",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/leaderboard_bounty/SKILL.md"
+    },
+    {
+      "description": "Read leaderboard feed: Stream the board's live lines to anyone as Server-Sent Events.",
+      "digest": "sha256:a865a8f7f9ccf94fa3c5307c1685efea9d55998268ffff7809702c69cba23d4b",
+      "name": "leaderboard_feed",
+      "service": "leaderboard",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/leaderboard_feed/SKILL.md"
+    },
+    {
+      "description": "Read leaderboard galaxy: Returns every ranked org as a star, for a page to draw the community as a galaxy: each star holds its band in the reward program's level table, a coarse size (a factor of two), the star of the org that referred it, if any, and, only for the ranks the read",
+      "digest": "sha256:5aa1693b37526cb39107f6e1a1a79cab069f8f3b259b18768d9a45f3c4996898",
+      "name": "leaderboard_galaxy",
+      "service": "leaderboard",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/leaderboard_galaxy/SKILL.md"
+    },
+    {
+      "description": "Read leaderboard leaderboard: Ranks AI usage over a window, either the users of the caller's own org or organizations against each other, and always reports the caller's own standing even when it falls outside the returned page..",
+      "digest": "sha256:314c698188ba9eeed68f74b3dedc97a94917f74444ce6f61bff989f81245a964",
+      "name": "leaderboard_leaderboard",
+      "service": "leaderboard",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/leaderboard_leaderboard/SKILL.md"
+    },
+    {
+      "description": "Read leaderboard optin: Returns the caller's own public-listing preference and their org's, each with whether the caller may change it..",
+      "digest": "sha256:c0a8dd3f39381910e16593f973a97daf371ac7cfe79facdad50c0940c26908b1",
+      "name": "leaderboard_optin",
+      "service": "leaderboard",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/leaderboard_optin/SKILL.md"
+    },
+    {
+      "description": "Read leaderboard pulse: Returns how fast the platform is being used and is spreading, as counts by day for thirty days and by hour for the last day: tokens used, orgs active, orgs signed up, orgs that came through a referral link, orgs using a model for the first time (with the m",
+      "digest": "sha256:53f54ab004978df8de475b68fa3a51b377c0b597960787cf3c68caeb45723ea9",
+      "name": "leaderboard_pulse",
+      "service": "leaderboard",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/leaderboard_pulse/SKILL.md"
+    },
+    {
+      "description": "Read leaderboard standing: Returns the public board of who has used and built the most on Zoo, shown as a window around the reader..",
+      "digest": "sha256:ae373068b508fcec6188d618cf129e925bb4dedf29db9c1bceec1229e75c9097",
+      "name": "leaderboard_standing",
+      "service": "leaderboard",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/leaderboard_standing/SKILL.md"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

@@ -1,0 +1,108 @@
+package guide
+
+import (
+	"bytes"
+	"encoding/json"
+	"io"
+	"net/http/httptest"
+	"testing"
+
+	"github.com/hanzoai/cloud/sdk"
+	"github.com/hanzoai/cloud/sdk/principal"
+	luxlog "github.com/luxfi/log"
+	"github.com/zap-proto/zip"
+)
+
+// newApp mounts the guide subsystem on a fresh zip.App with a temp DataDir. No AI
+// or automations plane is wired, so the HTTP tests exercise the checklist engine,
+// per-org store, curriculum loader, dependency gating, and auto-detect — the "do it
+// for me" agent is exercised separately (agent_test.go) with injected fakes.
+func newApp(t *testing.T) *zip.App {
+	t.Helper()
+	app := zip.New(zip.Config{Logger: luxlog.New("test")})
+	compose(app)
+	t.Setenv("CLOUD_DATA_DIR", t.TempDir())
+	deps := cloud.Deps{MasterKey: testMaster}
+	if err := Use(app, deps); err != nil {
+		t.Fatalf("Use:  %v", err)
+	}
+	// Keep the real (store-backed) "acted" detector but drop "analytics" so the HTTP
+	// tests never depend on a live warehouse. The analytics detector is exercised in
+	// detect_test.go (firstCount + reconcile error semantics).
+	mounted.State.detectors = map[string]Detector{"acted": mounted.State.detectors["acted"]}
+	t.Cleanup(func() { _ = Shutdown() })
+	return app
+}
+
+type httpResult struct {
+	Code int
+	Body []byte
+}
+
+// req issues one request. org != "" sets the gateway identity headers (X-Org-Id +
+// a validated X-User-Id) exactly as SanitizeIdentity would; org == "" sends NO
+// identity — the anonymous-forge path the 403 tests need.
+func req(t *testing.T, app *zip.App, method, path, org string, body any) httpResult {
+	t.Helper()
+	var r io.Reader
+	if body != nil {
+		b, _ := json.Marshal(body)
+		r = bytes.NewReader(b)
+	}
+	rq := httptest.NewRequest(method, path, r)
+	if body != nil {
+		rq.Header.Set("Content-Type", "application/json")
+	}
+	if org != "" {
+		rq.Header.Set("X-Org-Id", org)
+		rq.Header.Set("X-User-Id", "u-"+org)
+	}
+	resp, err := app.Test(rq, zip.TestConfig{Timeout: 0})
+	if err != nil {
+		t.Fatalf("Test %s %s: %v", method, path, err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	b, _ := io.ReadAll(resp.Body)
+	return httpResult{Code: resp.StatusCode, Body: b}
+}
+
+// reqRaw issues one request with the body EXACTLY as given — no JSON marshal —
+// for the wire tests whose whole point is a non-JSON body (the YAML document
+// PUTs). Headers are the caller's own, so it serves the org identity and the
+// SuperAdmin planes alike.
+func reqRaw(t *testing.T, app *zip.App, method, path string, headers map[string]string, raw []byte) httpResult {
+	t.Helper()
+	rq := httptest.NewRequest(method, path, bytes.NewReader(raw))
+	for k, v := range headers {
+		rq.Header.Set(k, v)
+	}
+	resp, err := app.Test(rq, zip.TestConfig{Timeout: 0})
+	if err != nil {
+		t.Fatalf("Test %s %s: %v", method, path, err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	b, _ := io.ReadAll(resp.Body)
+	return httpResult{Code: resp.StatusCode, Body: b}
+}
+
+// testStore returns a real per-org *Store on a temp dir — the org isolation is
+// physical, so this exercises the exact production open path.
+func testStore(t *testing.T) *Store {
+	t.Helper()
+	stores := cloud.NewOrgStoreAt(cloud.Base{DataDir: t.TempDir()}, subsystem, openStore(testMaster))
+	t.Cleanup(func() { _ = stores.CloseAll() })
+	st, err := stores.For(principal.MustOrgNamespace("acme", ""))
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	return st
+}
+
+func decode[T any](t *testing.T, b []byte) T {
+	t.Helper()
+	var v T
+	if err := json.Unmarshal(b, &v); err != nil {
+		t.Fatalf("decode: %v (%s)", err, b)
+	}
+	return v
+}

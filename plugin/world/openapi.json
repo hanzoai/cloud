@@ -1,0 +1,477 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Hanzo Cloud API",
+    "description": "Package world is a live news feed filtered to what your project cares about.",
+    "version": "v1"
+  },
+  "servers": [
+    {
+      "url": "https://api.hanzo.ai"
+    }
+  ],
+  "security": [
+    {
+      "bearer": []
+    }
+  ],
+  "tags": [
+    {
+      "name": "world"
+    }
+  ],
+  "paths": {
+    "/v1/world": {
+      "get": {
+        "operationId": "get_world",
+        "summary": "Answers GET /v1/world — the product's public endpoint, naming every wire this surface answers on.",
+        "description": "Answers GET /v1/world — the product's public endpoint, naming every wire\nthis surface answers on.\n\nIt exists because two of those wires are INVISIBLE to the generated document.\n/v1/world/mcp and /v1/world/zap are carved off the cloud catch-all by the\ningress and answered by world-gw, so the cloud router never serves them — and\nopenapi.Describe renders prose only for a route the router actually serves,\nwhich is the very property that keeps the document from being able to claim an\noperation nothing answers. Both addresses are real and public, so without this\nop the only way to learn they exist is to read the ingress config. This is\nwhere that fact lives, in the product's own surface.\n\nPublic on purpose: discovery precedes credentials. It reports addresses and\nprotocols only — never feed data, and never the caller's plan, which\nGET /v1/world/limits owns — so there is nothing here to leak.",
+        "tags": [
+          "world"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/world.worldIndex"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/world/limits": {
+      "get": {
+        "operationId": "get_world_limits",
+        "summary": "Echoes a World plan's rate limits, alert quota and model-API grant, read straight from the live @hanzo/plans catalog, so agents and dashboards configure themselves against the catalog instead of hardcoding tier numbers.",
+        "description": "Echoes a World plan's rate limits, alert quota and model-API grant, read\nstraight from the live @hanzo/plans catalog, so agents and dashboards configure\nthemselves against the catalog instead of hardcoding tier numbers.\n\nAn empty or unknown plan resolves world-free, and a catalog failure serves that\nsame free floor rather than erroring — so this always answers 200, and it can only\never under-grant. It reports the contract; it does not enforce it.",
+        "tags": [
+          "world"
+        ],
+        "parameters": [
+          {
+            "name": "plan",
+            "in": "query",
+            "required": false,
+            "description": "Plan is a World plan id from the live @hanzo/plans catalog, e.g. world-pro.\nEmpty means world-free, and so does an id the catalog does not know — this\nnever fails on an unknown plan.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/world.limitsView"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/world/news": {
+      "get": {
+        "operationId": "get_world_news",
+        "summary": "Returns the caller's merged world-news feed: every source their project's pipeline names — GDELT once per keyword, plus each allowlisted RSS or Atom feed — fetched concurrently, narrowed by the pipeline's keyword/region/source filters, deduplicated by link and sorted freshest first, capped at 50 items.",
+        "description": "Returns the caller's merged world-news feed: every source their project's\npipeline names — GDELT once per keyword, plus each allowlisted RSS or Atom feed —\nfetched concurrently, narrowed by the pipeline's keyword/region/source filters,\ndeduplicated by link and sorted freshest first, capped at 50 items.\n\nA project with no stored pipeline gets a sensible default set of world feeds\nrather than an empty answer. A source that fails or times out is SKIPPED: the feed\ndegrades to honest partial results and never 5xxs because one outlet was down.\nReading also publishes the result to the /v1/world/stream subscribers of the same\n(org, project), so a dashboard's own refresh updates every open tab.",
+        "tags": [
+          "world"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/world.newsResponse"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/world/pipeline": {
+      "get": {
+        "operationId": "get_world_pipeline",
+        "summary": "Returns the caller project's news pipeline: which feeds it reads and how the merged result is filtered.",
+        "description": "Returns the caller project's news pipeline: which feeds it reads and how\nthe merged result is filtered. A project that has never written one is answered\nwith the built-in world feeds and `default: true`, so a fresh project sees the\nsame feed /v1/world/news would actually serve rather than an empty configuration.",
+        "tags": [
+          "world"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/world.pipelineView"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      },
+      "put": {
+        "operationId": "put_world_pipeline",
+        "summary": "Replaces the caller project's news pipeline and returns what was stored.",
+        "description": "Replaces the caller project's news pipeline and returns what was\nstored. It is a WHOLE replacement, not a patch: a field the request leaves out is\nstored empty, so sending only feeds clears the filters.\n\nEvery feed URL is validated HERE, at the write boundary — http(s) only, and the\nhost must be on the server's allowlist — so a stored pipeline can never name a\nhost the fetcher would later refuse, and the allowlist is one decision in one\nplace rather than a check at each fetch.",
+        "tags": [
+          "world"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/world.pipelineReq"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/world.pipelineView"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/world/stream": {
+      "get": {
+        "operationId": "get_world_stream",
+        "summary": "Live news refreshes for the caller's org and project, as Server-Sent Events.",
+        "description": "Holds the connection open as text/event-stream and pushes a `news` event — the same {items:[…]} body GET /v1/world/news answers — each time the caller's (org, project) feed refreshes, with a `: ping` heartbeat comment every 25s. Delivery is best-effort: a slow consumer is dropped on buffer overrun and reconnects, re-fetching GET /v1/world/news, which stays the source of truth. Requires a validated principal; 401 without one.",
+        "tags": [
+          "world"
+        ],
+        "x-public": true
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "problem-details": {
+        "description": "An RFC 9457 problem document.",
+        "properties": {
+          "code": {
+            "description": "A stable token a client can branch on, when the refusal names one.",
+            "type": "string"
+          },
+          "detail": {
+            "description": "What was refused, for a person to read.",
+            "type": "string"
+          },
+          "status": {
+            "description": "The HTTP status.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "title": {
+            "description": "The status's reason phrase.",
+            "type": "string"
+          },
+          "type": {
+            "description": "about:blank",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "status",
+          "detail"
+        ],
+        "type": "object"
+      },
+      "world.Filters": {
+        "properties": {
+          "keywords": {
+            "description": "Keywords keeps only items whose TITLE contains one of these,\ncase-insensitively. They are also the GDELT queries the feed fans out to,\none per keyword of three characters or more — so a keyword both widens what\nis fetched and narrows what is kept.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "regions": {
+            "description": "Regions keeps only items whose TITLE contains one of these, matched\ncase-insensitively as a substring. Empty keeps every region.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "sources": {
+            "description": "Sources keeps only items whose outlet name contains one of these,\ncase-insensitively. Empty keeps every outlet.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "world.NewsItem": {
+        "properties": {
+          "image": {
+            "description": "Image is a lead-image URL when the upstream carried one.",
+            "type": "string"
+          },
+          "lang": {
+            "description": "Lang is the article's language code when the upstream reported one.",
+            "type": "string"
+          },
+          "link": {
+            "description": "Link is the article's URL at the outlet.",
+            "type": "string"
+          },
+          "pubDate": {
+            "description": "PubDate is when the outlet published it, RFC3339 UTC. Empty when the\nupstream gave no date this could parse — items with no date sort last.",
+            "type": "string"
+          },
+          "source": {
+            "description": "Source is the outlet the item came from, as the upstream named it.",
+            "type": "string"
+          },
+          "title": {
+            "description": "Title is the headline.",
+            "type": "string"
+          },
+          "tone": {
+            "description": "Tone is GDELT's own sentiment score for the article, as text. Only GDELT\nitems carry it.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "world.limitsBlock": {
+        "properties": {
+          "apiRateLimit": {
+            "description": "APIRateLimit is requests per minute allowed against the REST /v1/world\nsurface. -1 means unlimited.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "maxAlerts": {
+            "description": "MaxAlerts is how many saved OSINT alert rules the plan allows. -1 means\nunlimited.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "mcpRateLimit": {
+            "description": "MCPRateLimit is requests per minute allowed against the MCP surface. -1\nmeans unlimited.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "modelApi": {
+            "description": "ModelAPI is whether the plan reaches the World model endpoint and the SSE\nstream. The free floor is false, and that is what a catalog outage\nresolves to.",
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
+      "world.limitsView": {
+        "properties": {
+          "limits": {
+            "$ref": "#/components/schemas/world.limitsBlock",
+            "description": "Limits is the plan's decision."
+          },
+          "plan": {
+            "description": "Plan echoes the plan id the limits were resolved for, after the empty-means-\nworld-free default.",
+            "type": "string"
+          },
+          "unit": {
+            "description": "Unit names what the two rate numbers are counted in: requests/minute.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "world.newsResponse": {
+        "properties": {
+          "items": {
+            "description": "Items is the merged, filtered, deduped feed, freshest first and capped at\n50. A source that failed is skipped rather than failing the read, so this\ncan be shorter than the pipeline's reach — it is never an error.",
+            "items": {
+              "$ref": "#/components/schemas/world.NewsItem"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "world.pipelineReq": {
+        "properties": {
+          "feeds": {
+            "description": "Feeds is the RSS/Atom feed URLs to read, at most 64. Each must be an\nhttp(s) URL whose host is on the server's allowlist — the SSRF guard is\napplied here, at the write, so a stored pipeline can never name a host the\nfetcher would refuse. Blank entries are dropped and duplicates collapse.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "filters": {
+            "$ref": "#/components/schemas/world.Filters",
+            "description": "Filters narrows the merged feed. Terms are trimmed, de-duplicated\ncase-insensitively, and capped at 64 per axis."
+          }
+        },
+        "type": "object"
+      },
+      "world.pipelineView": {
+        "properties": {
+          "createdAt": {
+            "description": "CreatedAt is when the pipeline was first stored, RFC3339 UTC. Absent on the\ndefault.",
+            "type": "string"
+          },
+          "default": {
+            "description": "Default is true when no pipeline is stored for this project and these are\nthe built-in world feeds. Writing one turns it false.",
+            "type": "boolean"
+          },
+          "feeds": {
+            "description": "Feeds is the RSS/Atom feed URLs the pipeline reads. Every host is on the\nserver's allowlist — a URL that is not cannot be stored.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "filters": {
+            "$ref": "#/components/schemas/world.Filters",
+            "description": "Filters narrows the merged feed."
+          },
+          "org": {
+            "description": "Org is the tenant the pipeline belongs to, resolved server-side from the\nvalidated principal.",
+            "type": "string"
+          },
+          "project": {
+            "description": "Project is the org sub-scope the pipeline belongs to.",
+            "type": "string"
+          },
+          "updatedAt": {
+            "description": "UpdatedAt is when it was last written, RFC3339 UTC. Absent on the default.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "world.worldIndex": {
+        "properties": {
+          "product": {
+            "description": "Product is the product's name as customers know it.",
+            "type": "string"
+          },
+          "summary": {
+            "description": "Summary is one sentence naming what this surface serves.",
+            "type": "string"
+          },
+          "wires": {
+            "description": "Wires is every protocol entry point onto World, REST first. It is\ndeliberately NOT a list of REST operations: GET /v1/openapi.json is the one\nenumeration of those, and a second copy here would be a second thing to keep\ntrue.",
+            "items": {
+              "$ref": "#/components/schemas/world.worldWire"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "world.worldWire": {
+        "properties": {
+          "auth": {
+            "description": "Auth states what the wire asks of the caller, including which parts of it\nanswer without a token.",
+            "type": "string"
+          },
+          "name": {
+            "description": "Name is the wire's short id — rest, mcp or zap.",
+            "type": "string"
+          },
+          "path": {
+            "description": "Path is the address the wire answers on, under this same origin.",
+            "type": "string"
+          },
+          "protocol": {
+            "description": "Protocol names what the wire speaks, so a caller knows which client to\npoint at it.",
+            "type": "string"
+          },
+          "spec": {
+            "description": "Spec is where this wire's operations are enumerated, when they are\nenumerated in a document at all. Empty for a wire that describes itself\nover its own protocol.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      }
+    },
+    "securitySchemes": {
+      "bearer": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "The caller's credential, sent as `Authorization: Bearer \u003ctoken\u003e`. It is either an access token minted by Hanzo IAM or an API key (pk-/sk-). X-Authorization, and HTTP Basic carrying the token as the password, are accepted spellings of the same header for clients that cannot set Authorization; a browser presents the session cookie instead. Every operation requires it unless it says `security: []`."
+      }
+    }
+  }
+}

@@ -5,37 +5,31 @@
 # the destination is the public repo:
 #
 #   HISTORY  no pushed commit may be reachable from a non-origin remote's ref.
-#   IMPORTS  no pushed .go / go.mod blob may reference a private module.
-#
-# Non-origin == every refs/remotes/ namespace that is not origin, including
-# ones left behind by removed remotes. The hook runs git, grep and awk only.
+#   IMPORTS  no pushed .go / go.mod blob may import or require a private module.
 
 set -u
 
 remote_name=${1-}
 remote_url=${2-}
 
-# Guard the public repo only.
 guard=no
 [ "$remote_name" = origin ] && guard=yes
 case $remote_url in
-	*github.com[:/]hanzoai/cloud*) guard=yes ;;   # bypasses `origin` by URL
+	*github.com[:/]hanzoai/cloud*) guard=yes ;;
 esac
 [ "$guard" = yes ] || exit 0
 
 is_zero() { case $1 in *[!0]*) return 1 ;; *) return 0 ;; esac; }
 
-# A module path is private if it lives under hanzo-inc, or is hanzoai/licensing.
-# The boundary class keeps `hanzoai/licensing` from matching a longer name.
-private_import='github\.com/hanzo-inc/|hanzoai/licensing([^0-9A-Za-z_-]|$)'
-# Same set, but matching the whole module path so the refusal can quote it.
-private_import_show='(github\.com/)?hanzo-inc/[0-9A-Za-z._/-]*|(github\.com/)?hanzoai/licensing[0-9A-Za-z._/-]*'
+# Match Go import literals ("github.com/...") or go.mod require/replace lines
+# naming any private module.
+private_mods='hanzo-inc/[0-9A-Za-z._/-]+|hanzoai/(plans|pricing|licensing|newsletter|git)([/ "]|$)|luxfi/(aml|private)([/ "]|$)|lux-private/[0-9A-Za-z._/-]+'
+private_import="\"github\.com/(${private_mods})|^[[:space:]]*(require[[:space:]]+|replace[[:space:]]+)?github\.com/(${private_mods})"
+private_import_show="github\.com/(hanzo-inc/[0-9A-Za-z._/-]*|hanzoai/(plans|pricing|licensing|newsletter|git)[0-9A-Za-z._/-]*|luxfi/(aml|private)[0-9A-Za-z._/-]*|lux-private/[0-9A-Za-z._/-]*)"
 
 tmp=$(mktemp -d "${TMPDIR:-/tmp}/prepush.XXXXXX") || exit 1
 trap 'rm -rf "$tmp"' EXIT HUP INT TERM
 
-# Tips of every private ref, as rev-list exclusions. Absent in a fresh clone
-# that never fetched them -- then the file is empty and HISTORY always passes.
 git for-each-ref --format='%(refname) %(objectname)' refs/remotes/ 2>/dev/null |
 	grep -vE '^refs/remotes/origin($|/)' |
 	awk '{print "^" $2}' >"$tmp/private"
@@ -44,12 +38,8 @@ fail=0
 
 while read -r local_ref local_sha remote_ref remote_sha; do
 	[ -n "${local_sha:-}" ] || continue
-
-	# Deleting a remote branch publishes nothing.
 	is_zero "$local_sha" && continue
 
-	# A new remote branch has no counterpart to diff against, so walk its
-	# whole history. Otherwise only what this push adds.
 	if is_zero "$remote_sha"; then
 		printf '%s\n' "$local_sha" >"$tmp/range"
 	else
@@ -81,13 +71,6 @@ while read -r local_ref local_sha remote_ref remote_sha; do
 	fi
 
 	# ---- IMPORTS ----------------------------------------------------
-	# Every version of every .go / go.mod introduced by these commits, not
-	# the working tree. blob<TAB>commit<TAB>path.
-	#
-	# --diff-merges=first-parent: without it git shows no diff for a merge, so
-	# content added by the merge resolution itself -- an evil merge whose two
-	# parents are both clean -- would never be read. Blobs are deduped by sha
-	# below, so re-listing a merged branch's blobs costs nothing.
 	git log --no-renames --diff-filter=AM --format='C %H' --raw --no-abbrev \
 		--diff-merges=first-parent \
 		--stdin -- '*.go' '*go.mod' <"$tmp/range" |
@@ -97,13 +80,9 @@ while read -r local_ref local_sha remote_ref remote_sha; do
 		' >"$tmp/blobs"
 	[ -s "$tmp/blobs" ] || continue
 
-	# Fast path: stream every distinct blob through one grep. The batch
-	# headers are "<sha> blob <size>" and cannot contain a module path, so a
-	# hit here is always a real hit in some blob's content.
 	cut -f1 "$tmp/blobs" | sort -u >"$tmp/uniq"
 	git cat-file --batch <"$tmp/uniq" | grep -qE "$private_import" || continue
 
-	# Slow path: only reached when refusing. Name the file.
 	echo "pre-push: REFUSED $local_ref -> $remote_ref ($remote_name)"
 	echo "  private imports:"
 	sort -u "$tmp/blobs" | while IFS="$(printf '\t')" read -r blob commit path; do
@@ -112,7 +91,7 @@ while read -r local_ref local_sha remote_ref remote_sha; do
 		[ -n "$hit" ] || continue
 		echo "    $path  ($(git rev-parse --short "$commit"))  ->  $hit"
 	done | sort -u | head -20
-	echo "  These modules are not public. This repo must not reference them."
+	echo "  These modules are not public. This repo must not import or require them."
 	fail=1
 done
 

@@ -1,0 +1,183 @@
+package index
+
+import (
+	"context"
+	"encoding/json"
+	"strings"
+
+	"github.com/hanzoai/cloud/client"
+	indexpeer "github.com/hanzoai/cloud/client/index"
+	"github.com/hanzoai/cloud/sdk"
+)
+
+// query.go is the lexical leg's client: Query reads; Put, Remove and Reconcile
+// write. Each serves in-process where the index is mounted and asks the index
+// peer where it is not.
+//
+// /v1/search (clients/search) fuses Query with the vector leg, and both legs reach
+// the SAME store the Meilisearch dialect serves — IN-PROCESS, no HTTP hop. That
+// matters twice: the fused query is an agent tool call whose latency budget is a
+// few hundred milliseconds, and a second network path to the same store would be a
+// second way to do one thing.
+
+// Query runs the org-scoped lexical search over one index. org MUST come from a
+// validated principal; the store pins every row to it, so a caller can never read
+// another tenant's documents. An index that does not exist yields no rows rather
+// than an error: "nothing indexed yet" is an empty result, not a failure.
+//
+// users bounds the rows by the `user` each was written with: nil reaches every
+// row, and a list reaches only rows whose user is in it — "" being the rows
+// written for everyone. A caller asking on a person's behalf passes {"", theirs}.
+func Query(ctx context.Context, org, uid, q string, users []string, limit, offset int) ([]json.RawMessage, error) {
+	if mounted == nil {
+		out, err := indexpeer.IndexQuery(cloud.For(ctx, org),
+			&client.IndexQueryIn{UID: uid, Q: q, Users: users, Limit: limit, Offset: offset})
+		if err != nil {
+			return nil, err
+		}
+		return out.Rows, nil
+	}
+	return mounted.State.store.Search(ctx, org, uid, q, users, limit, offset)
+}
+
+// Put writes one document into an index, creating the index on first use. It
+// is Reconcile for a single document: the write a subsystem makes from its own
+// save hook, so the lexical leg keeps step with the store without a full swap.
+func Put(ctx context.Context, org, uid, primaryKey string, doc map[string]any) error {
+	if mounted == nil {
+		raw, err := json.Marshal(doc)
+		if err != nil {
+			return err
+		}
+		_, err = indexpeer.IndexPut(cloud.For(ctx, org), &client.IndexPutIn{UID: uid, PrimaryKey: primaryKey, Doc: raw})
+		return err
+	}
+	s := mounted.State.store
+	if _, err := s.EnsureIndex(ctx, org, uid, primaryKey); err != nil {
+		return err
+	}
+	return s.Upsert(ctx, org, uid, primaryKey, []map[string]any{doc})
+}
+
+// Coverage is how many of query's words text holds, each matched by prefix the
+// way Search matches a document's terms: the rank Search gives a document, for a
+// caller scoring a handful of texts it already holds rather than asking the
+// index about every document in the org.
+func Coverage(query, text string) int {
+	words := tokenize(query)
+	if len(words) == 0 {
+		return 0
+	}
+	terms := tokenize(text)
+	n := 0
+	for _, w := range words {
+		for _, t := range terms {
+			if strings.HasPrefix(t, w) {
+				n++
+				break
+			}
+		}
+	}
+	return n
+}
+
+// PutAll upserts documents into an index in one write: one transaction, in this
+// process when it mounts the index, else one call over the peer.
+func PutAll(ctx context.Context, org, uid, primaryKey string, docs []map[string]any) error {
+	if len(docs) == 0 {
+		return nil
+	}
+	if mounted == nil {
+		raw := make([]json.RawMessage, 0, len(docs))
+		for _, d := range docs {
+			b, err := json.Marshal(d)
+			if err != nil {
+				return err
+			}
+			raw = append(raw, b)
+		}
+		_, err := indexpeer.IndexPutAll(cloud.For(ctx, org), &client.IndexPutAllIn{UID: uid, PrimaryKey: primaryKey, Docs: raw})
+		return err
+	}
+	s := mounted.State.store
+	if _, err := s.EnsureIndex(ctx, org, uid, primaryKey); err != nil {
+		return err
+	}
+	return s.Upsert(ctx, org, uid, primaryKey, docs)
+}
+
+// Remove deletes documents from an index by primary key. Keys that are not there
+// are not an error: the caller's intent is "gone", and they are.
+func Remove(ctx context.Context, org, uid string, pks ...string) error {
+	if mounted == nil {
+		_, err := indexpeer.IndexRemove(cloud.For(ctx, org), &client.IndexRemoveIn{UID: uid, Keys: pks})
+		return err
+	}
+	return mounted.State.store.Delete(ctx, org, uid, pks)
+}
+
+// Reconcile REPLACES one index's whole corpus in a single idempotent call: every
+// document is upserted and every key no longer present is deleted. It is Query's
+// mirror — the write a subsystem that OWNS a corpus uses instead of POSTing its
+// own documents back to itself through the Meilisearch dialect.
+//
+// A full swap rather than incremental writes because the corpus's truth lives
+// UPSTREAM (a git forge, a sites table): re-running a sync must converge, and a
+// repo deleted upstream must leave the index. Same prune-on-index contract the
+// code index already keeps.
+//
+// org is the corpus's owner and is pinned into every row exactly as it is for a
+// dialect write, so a corpus published under an org no principal can mint is
+// readable by anyone allowed to query it and writable by nothing else.
+func Reconcile(ctx context.Context, org, uid, primaryKey string, docs []map[string]any) (kept, removed int, err error) {
+	if mounted == nil {
+		raws := make([]json.RawMessage, 0, len(docs))
+		for _, d := range docs {
+			b, e := json.Marshal(d)
+			if e != nil {
+				return 0, 0, e
+			}
+			raws = append(raws, b)
+		}
+		out, e := indexpeer.IndexReconcile(cloud.For(ctx, org),
+			&client.IndexReconcileIn{UID: uid, PrimaryKey: primaryKey, Docs: raws})
+		if e != nil {
+			return 0, 0, e
+		}
+		return out.Kept, out.Removed, nil
+	}
+	s := mounted.State.store
+	if _, err := s.EnsureIndex(ctx, org, uid, primaryKey); err != nil {
+		return 0, 0, err
+	}
+	live := make(map[string]bool, len(docs))
+	for _, d := range docs {
+		if pk, _ := d[primaryKey].(string); pk != "" {
+			live[pk] = true
+		}
+	}
+	// Read the existing keys BEFORE the upsert: after it, a new document is
+	// indistinguishable from one that was already there, and nothing is stale.
+	before, err := s.PKs(ctx, org, uid)
+	if err != nil {
+		return 0, 0, err
+	}
+	if err := s.Upsert(ctx, org, uid, primaryKey, docs); err != nil {
+		return 0, 0, err
+	}
+	stale := make([]string, 0, len(before))
+	for _, pk := range before {
+		if !live[pk] {
+			stale = append(stale, pk)
+		}
+	}
+	if len(stale) > 0 {
+		if err := s.Delete(ctx, org, uid, stale); err != nil {
+			return len(live), 0, err
+		}
+	}
+	return len(live), len(stale), nil
+}
+
+// Ready reports whether the lexical leg can serve a query in this binary.
+func Ready() bool { return mounted != nil }

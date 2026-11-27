@@ -1,0 +1,48 @@
+{
+  "$schema": "https://schemas.agentskills.io/discovery/0.2.0/schema.json",
+  "base_url": "https://api.zoo.ngo",
+  "brand": "zoo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://zoolabs.id",
+  "mcp": {
+    "description": "Model Context Protocol over JSON-RPC 2.0 — one POST per message, stateless, protocol revision 2026-07-28. tools/list answers without a credential with one tool per subsystem (its operations in the \"op\" enum) plus \"describe\", which returns one operation's input schema. tools/call names a subsystem tool and carries {\"op\": <operation>, \"input\": <its arguments>}; it takes the same bearer the REST API does, and a call that carries none is answered 401 with a WWW-Authenticate header naming the resource metadata at /.well-known/oauth-protected-resource, which names the authorization server to sign in at. The tool surface is the public contract: the operator's admin product is not offered, and a name that would disclose a secret or mutate an identity is withheld — the list says how many, under _meta.",
+    "method": "POST",
+    "url": "https://api.zoo.ngo/v1/mcp"
+  },
+  "skill_count": 4,
+  "skills": [
+    {
+      "description": "Read framework doctypes: Returns every DocType defined in the caller's org., Returns one DocType definition — its fields, naming rule, permissions and lifecycle flags..",
+      "digest": "sha256:4be08b2fe8afc5149cca4df9be821038f98277ca07691ddc8069336db0107bd0",
+      "name": "framework_doctypes",
+      "service": "framework",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/framework_doctypes/SKILL.md"
+    },
+    {
+      "description": "Read framework framework: Returns the caller org's documents of one DocType, filtered, ordered and projected by the query., Returns one document by name, with Password fields redacted..",
+      "digest": "sha256:22f0ec539c8e9f4aab4857ab4a70eb67a184a25ef5198e01a4e34f7259af55da",
+      "name": "framework_framework",
+      "service": "framework",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/framework_framework/SKILL.md"
+    },
+    {
+      "description": "Read framework modules: Returns every app lane compiled into this deployment and the DocTypes each one installs., Returns one app lane's install state for the caller's org: the DocTypes the lane declares, and which of them already exist in the org..",
+      "digest": "sha256:04486895d0f94d3d6e15c00db9b0c1d7a58fe3d889a26616dd3fdb3b24608623",
+      "name": "framework_modules",
+      "service": "framework",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/framework_modules/SKILL.md"
+    },
+    {
+      "description": "Read framework summary: Reports how much of the DocType surface the caller's org uses: how many DocTypes it has defined, and how many documents exist across them..",
+      "digest": "sha256:a8c8930cf49b46fe41a361977c40cbf57e9e2f654d8b15c777509f94a47561da",
+      "name": "framework_summary",
+      "service": "framework",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/framework_summary/SKILL.md"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

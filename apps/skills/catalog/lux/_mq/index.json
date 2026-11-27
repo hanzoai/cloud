@@ -1,0 +1,40 @@
+{
+  "$schema": "https://schemas.agentskills.io/discovery/0.2.0/schema.json",
+  "base_url": "https://api.lux.network",
+  "brand": "lux",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://lux.id",
+  "mcp": {
+    "description": "Model Context Protocol over JSON-RPC 2.0 — one POST per message, stateless, protocol revision 2026-07-28. tools/list answers without a credential with one tool per subsystem (its operations in the \"op\" enum) plus \"describe\", which returns one operation's input schema. tools/call names a subsystem tool and carries {\"op\": <operation>, \"input\": <its arguments>}; it takes the same bearer the REST API does, and a call that carries none is answered 401 with a WWW-Authenticate header naming the resource metadata at /.well-known/oauth-protected-resource, which names the authorization server to sign in at. The tool surface is the public contract: the operator's admin product is not offered, and a name that would disclose a secret or mutate an identity is withheld — the list says how many, under _meta.",
+    "method": "POST",
+    "url": "https://api.lux.network/v1/mcp"
+  },
+  "skill_count": 3,
+  "skills": [
+    {
+      "description": "Read mq health: Reports whether the message plane behind this surface answers..",
+      "digest": "sha256:7e781093ea2337b88f7eb7cf1b78050a9f9c32c9ad07ecd0686d6d7045bfba62",
+      "name": "mq_health",
+      "service": "mq",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/mq_health/SKILL.md"
+    },
+    {
+      "description": "Read mq info: Returns the broker's identity and the org's stream count..",
+      "digest": "sha256:c787891790e67e43fd8ba7b5430f5b8c3fd125c2bb8c3cea6c30ff3d1ddf27b4",
+      "name": "mq_info",
+      "service": "mq",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/mq_info/SKILL.md"
+    },
+    {
+      "description": "Read mq stream: Returns the org's streams, name-ordered, with their live state., Returns one stream's configuration and live state., Reads stored messages without a consumer: by sequence, by newest on a subject, or walking a subject forward from a sequence..",
+      "digest": "sha256:a47ab727cc0287ce31c2ed46880cba8566233fc1d0c35f4c563843bb26f398e6",
+      "name": "mq_stream",
+      "service": "mq",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/mq_stream/SKILL.md"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

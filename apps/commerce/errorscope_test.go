@@ -1,0 +1,100 @@
+package commerce
+
+import (
+	"io"
+	"net/http"
+	"net/http/httptest"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/hanzoai/cloud/sdk/principal"
+
+	commercemid "github.com/hanzoai/commerce/middleware"
+	"github.com/zap-proto/zip"
+)
+
+// TestCommerceErrorScope proves commerceErrorScope() confines commerce's always-500
+// JSON envelope to commerce-owned prefixes: a post-commerce subsystem route
+// (/v1/project) that returns a typed 403 renders 403 (zip default), while a
+// commerce route (/v1/commerce/store/...) still gets commerce's envelope. Mirrors the frozen
+// order: kms (before commerce) → commerce group chain → projects + store (after).
+// Regression for the release-smoke failure where 14 post-commerce endpoints 500'd.
+func TestCommerceErrorScope(t *testing.T) {
+	app := zip.New(zip.Config{})
+
+	// kms (before commerce) — a clean 403 baseline (never wrapped by commerce).
+	app.Raw(http.MethodGet, "/v1/kms/health", func(c *zip.Ctx) error { return zip.ErrForbidden("kms says no") })
+
+	// commerce (position 39): the REAL group chain, now with the scoped envelope.
+	// The prefix is Mount's — /v1/commerce, since the merchant nouns folded under
+	// commerce's own root — and the scope still earns its place: the module
+	// installs its error handler at the ROOT of the shared app, so a sibling's
+	// typed 403 is still in reach of it.
+	sv1 := app.Group("/v1/commerce")
+	sv1.Use(commercemid.AddHost(), commercemid.RequestContext(), commerceErrorScope())
+
+	// projects (after commerce) — typed 403; must NOT be clobbered to 500. On the
+	// APP, not the group: that is the whole point of the case, a sibling subsystem
+	// whose routes are not beneath commerce's chain.
+	app.Raw(http.MethodGet, "/v1/project", func(c *zip.Ctx) error { return principal.Refused(c) })
+	// a commerce store route — typed 403; commerce envelope applies. Registered ON
+	// THE GROUP, which is both what production does (Mount's commerce group) and
+	// what makes this test a valid program: zip refuses to compose a definition
+	// that declares middleware and guards no routes, because middleware with an
+	// empty subtree silently never runs. Registering commerce's own route on the
+	// app left sv1.Use guarding nothing, so from zip v1.24 on this panicked at
+	// Registry() — before any assertion here could run. Its address is the group's
+	// prefix plus its leaf, so it follows the fold to /v1/commerce/store/current
+	// exactly as production's does.
+	sv1.Raw(http.MethodGet, "/store/current", func(c *zip.Ctx) error { return zip.ErrForbidden("store needs org") })
+
+	probe := func(path string) (int, string) {
+		req := httptest.NewRequest("GET", path, nil)
+		resp, err := app.Test(req, zip.TestConfig{Timeout: 30 * time.Second, FailOnTimeout: true})
+		if err != nil {
+			t.Fatalf("%s: %v", path, err)
+		}
+		defer resp.Body.Close()
+		b, _ := io.ReadAll(resp.Body)
+		return resp.StatusCode, string(b)
+	}
+
+	// The invariant the scope guards: a typed zip.HTTPError (4xx) a subsystem returns
+	// is NEVER flattened to a 500 — not before commerce, not after it. (commerce
+	// >=1.48.10 honors the status itself; the scope keeps commerce's error handler off
+	// other subsystems' routes regardless, so a future commerce regression can't
+	// re-clobber them.)
+	for _, tc := range []struct {
+		path     string
+		wantCode int
+	}{
+		{"/v1/kms/health", 403},             // before commerce
+		{"/v1/project", 401},                // after commerce — must NOT be clobbered to 500
+		{"/v1/commerce/store/current", 403}, // commerce's own route — its handler still honors 403
+	} {
+		code, body := probe(tc.path)
+		t.Logf("%-20s -> %d  %s", tc.path, code, body)
+		if code != tc.wantCode {
+			t.Errorf("%s: got %d, want %d (%s)", tc.path, code, tc.wantCode, body)
+		}
+		if strings.Contains(body, "\"status\":5") || code >= 500 {
+			t.Errorf("%s: a typed 403 was flattened to a 5xx (%s)", tc.path, body)
+		}
+	}
+
+	for _, p := range []struct {
+		path string
+		own  bool
+	}{
+		{"/v1/commerce/store/current", true},
+		{"/v1/commerce/checkout", true},
+		{"/v1/project", false},
+		{"/v1/agent/presets", false},
+		{"/v1/agent", false},
+	} {
+		if got := hasCommercePrefix(p.path); got != p.own {
+			t.Errorf("hasCommercePrefix(%q) = %v, want %v", p.path, got, p.own)
+		}
+	}
+}

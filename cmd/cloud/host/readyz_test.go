@@ -1,0 +1,384 @@
+package host
+
+import (
+	"os"
+	"strings"
+	"testing"
+
+	"github.com/hanzoai/cloud/manifest"
+	"github.com/hanzoai/cloud/sdk"
+	"github.com/hanzoai/cloud/sdk/kit"
+	"github.com/zap-proto/zip"
+)
+
+// This file is about ONE property, and it is the complement of mount_test.go's.
+// That file pins "a subsystem that cannot start must not take the others down".
+// This one pins "…and it must not be HIDDEN either".
+//
+// Written against 2026-08-01. o11y v1.5.41 linked a zapingest service that
+// defaulted enabled on :4317-:4319 — the ports cloud's own planesink binds. The
+// host won the race, so the `ai` CHILD's listen failed, serve.go made that
+// fatal, and mount() degraded `ai` to absent, which is correct. What was not
+// correct is what a probe could see: `ai` owns the greedy "/v1", so
+// api.hanzo.ai/v1/models and /v1/chat/completions answered
+//
+//	503 {"error":"mount /v1: no instance running"}
+//
+// for ~30 minutes while the pod reported Ready with 0 restarts. The reason was
+// in /healthz's `absent` FIELD; the probe reads the STATUS CODE. Every
+// specifically-mounted prefix (/v1/o11y/sentinel, /v1/o11y, /v1/commerce/catalog,
+// /v1/admin/*) kept answering from its own subsystem, so nothing else showed it.
+//
+// The tests use the REAL app name "ai" rather than a fixture, because the
+// property under test is a claim about THIS fleet's manifest: that the row
+// owning "/v1" is the row marked Vital. A fixture would pass while the manifest
+// said anything at all.
+
+// TestVitalAbsenceIsNotReadyButStaysAlive is the outage, as a test.
+func TestVitalAbsenceIsNotReadyButStaysAlive(t *testing.T) {
+	app := zip.New(zip.Config{AppName: "cloud", DisableStartupMessage: true})
+
+	// The product API, dead exactly as it died: a child that exits before it
+	// binds. Mounting it must still succeed — degrading to absent is the fix
+	// mount_test.go pins, and this test depends on it.
+	booted(t, app, dead(t, "ai", "/v1"))
+	if err := mount(app, good(t, "flags", "/v1/flag", `{"flag":"on"}`), false); err != nil {
+		t.Fatal(err)
+	}
+	health(app)
+
+	// 1. LIVENESS STAYS 200. Restarting cannot help: the cause is in the image or
+	// the config, so the replacement fails identically — and the restart would
+	// take the console, the log stream and every healthy sibling with it.
+	code, _, body := do(t, app, "/healthz")
+	if code != 200 {
+		t.Errorf("GET /healthz = %d, want 200 — liveness must not flap for an absent child, that is a restart loop", code)
+	}
+	if !strings.Contains(body, "absent") || !strings.Contains(body, "ai") {
+		t.Errorf("/healthz body = %q, want the absence and its reason still reported", body)
+	}
+
+	// 2. READINESS IS 503. This is the signal that did not exist on 08-01.
+	code, ctype, body := do(t, app, "/readyz")
+	if code != 503 {
+		t.Fatalf("GET /readyz = %d, want 503 — the entire product API is absent and this pod is "+
+			"advertising itself as fit to serve it. That is the 30-minute outage: green probe, dead /v1", code)
+	}
+	if !strings.Contains(ctype, "application/json") {
+		t.Errorf("/readyz Content-Type = %q, want JSON", ctype)
+	}
+	// The code takes the pod out of rotation; the body is what tells an operator
+	// WHICH promise broke and why. A bare 503 would just relocate the mystery.
+	if !strings.Contains(body, "ai") {
+		t.Errorf("/readyz body = %q, want it to name the absent subsystem", body)
+	}
+	if !strings.Contains(body, "unfit") {
+		t.Errorf("/readyz body = %q, want status \"unfit\" — distinguishable from \"draining\"", body)
+	}
+
+	// 3. THE SIBLINGS STILL SERVE. NotReady is about routing, not about killing
+	// the process: an operator can still reach the console, the logs and every
+	// healthy subsystem on this pod.
+	code, _, body = do(t, app, "/v1/flag")
+	if code != 200 || !strings.Contains(body, `"flag":"on"`) {
+		t.Errorf("GET /v1/flag = %d %q, want the healthy sibling still serving on a NotReady pod", code, body)
+	}
+}
+
+// TestNonVitalAbsenceStaysReady is the guard against overcorrecting. Taking a
+// pod out of rotation because one minor subsystem died turns a partial failure
+// into a total one — the same mistake as aborting the host, made later.
+func TestNonVitalAbsenceStaysReady(t *testing.T) {
+	app := zip.New(zip.Config{AppName: "cloud", DisableStartupMessage: true})
+
+	booted(t, app, dead(t, "pubsub", "/v1/pubsub"))
+	health(app)
+
+	code, _, body := do(t, app, "/readyz")
+	if code != 200 {
+		t.Errorf("GET /readyz = %d with only a NON-vital subsystem absent, want 200 — "+
+			"pulling the pod for pubsub would make a minor failure a total outage", code)
+	}
+	// Ready, but not silent: the absence is still on the wire, it just is not a
+	// reason to stop routing.
+	if !strings.Contains(body, "absent") || !strings.Contains(body, "pubsub") {
+		t.Errorf("/readyz body = %q, want the non-vital absence still reported", body)
+	}
+}
+
+// TestAHealthyHostIsReadyAndSaysNothingElse — the negative control. A probe that
+// cannot pass is as useless as one that cannot fail.
+func TestAHealthyHostIsReadyAndSaysNothingElse(t *testing.T) {
+	app := zip.New(zip.Config{AppName: "cloud", DisableStartupMessage: true})
+	if err := mount(app, good(t, "flags", "/v1/flag", `{}`), false); err != nil {
+		t.Fatal(err)
+	}
+	health(app)
+
+	code, _, body := do(t, app, "/readyz")
+	if code != 200 {
+		t.Errorf("GET /readyz on a healthy host = %d, want 200", code)
+	}
+	if strings.Contains(body, "absent") || strings.Contains(body, "unfit") {
+		t.Errorf("/readyz on a healthy host = %q, want a bare ok", body)
+	}
+}
+
+// TestDrainingIsNotReady closes the loop drain.go describes and nothing
+// delivered. drain.go states the contract — "on SIGTERM the process flips to
+// draining and /readyz returns 503, so Kubernetes marks the pod NotReady" — and
+// the root package implements it on the ops listener at :9090. The k8s probes
+// point at :8000, where /readyz did not exist, so a rolling upgrade never
+// observed the drain at all and the M3 writer-election handoff it guards ran on
+// a signal nobody read.
+func TestDrainingIsNotReady(t *testing.T) {
+	app := zip.New(zip.Config{AppName: "cloud", DisableStartupMessage: true})
+	health(app)
+
+	draining.Store(true)
+	t.Cleanup(func() { draining.Store(false) })
+
+	code, _, body := do(t, app, "/readyz")
+	if code != 503 {
+		t.Errorf("GET /readyz while draining = %d, want 503 — a pod on its way out must stop taking new work", code)
+	}
+	if !strings.Contains(body, "draining") {
+		t.Errorf("/readyz body = %q, want status \"draining\" — an operator must be able to tell "+
+			"a planned rollout from a broken subsystem, both of which are 503 here", body)
+	}
+
+	// Liveness must NOT flip: the process has to stay up long enough to finish
+	// in-flight work, which is the entire point of draining rather than exiting.
+	if code, _, _ := do(t, app, "/healthz"); code != 200 {
+		t.Errorf("GET /healthz while draining = %d, want 200 — killing a draining pod loses the requests it is finishing", code)
+	}
+}
+
+// TestAiIsTheOnlyVitalApp is the argued declaration, pinned — the counterpart of
+// TestNothingIsRequiredByDefault.
+//
+// Adding a name here must be a deliberate diff with a reason. The bar is NOT
+// Required's ("serving without it is unsafe") but a narrower one: serving
+// without it is POINTLESS, because the traffic that arrives will not be
+// answered. `ai` qualifies because "/v1" is not a subsystem's prefix, it is the
+// product API's remainder. A subsystem owning a named prefix does not: its
+// absence 503s its own routes and leaves the other 111 working, which is a
+// degraded pod, not an unroutable one.
+func TestAiIsTheOnlyVitalApp(t *testing.T) {
+	var vital []string
+	for _, a := range manifest.Apps {
+		if a.Vital {
+			vital = append(vital, a.Name)
+		}
+	}
+	if len(vital) != 1 || vital[0] != "ai" {
+		t.Errorf("Vital apps = %v, want exactly [ai]. Vital pulls the whole pod out of the "+
+			"Service, so each name costs every other subsystem's availability: justify it here "+
+			"or drop it", vital)
+	}
+}
+
+// TestVitalNamesARoutedApp is the trap this would otherwise walk into. Vital
+// only means anything for an app the host actually mounts and can find missing:
+// a Coresident app routes no prefix and mount() returns before it can ever be
+// recorded absent, so marking one Vital would be a readiness gate that can
+// never fire — decoration that reads as protection.
+func TestVitalNamesARoutedApp(t *testing.T) {
+	for _, a := range manifest.Apps {
+		if !a.Vital {
+			continue
+		}
+		if a.Coresident {
+			t.Errorf("%s is Vital and Coresident: it routes no prefix, so mount() never records "+
+				"it absent and the gate can never fire", a.Name)
+		}
+		if len(a.Prefixes) == 0 {
+			t.Errorf("%s is Vital but claims no prefix: there is nothing whose absence could be detected", a.Name)
+		}
+	}
+}
+
+// TestUnfitIgnoresAbsencesTheManifestDoesNotCallVital keeps the intersection
+// honest in the one direction the other tests cannot reach: a name in the
+// absence set that the manifest has never heard of must not become a readiness
+// failure. Absence is keyed by whatever the mount loop was handed; vitality is
+// keyed by the manifest. Only the intersection may stop traffic.
+func TestUnfitIgnoresAbsencesTheManifestDoesNotCallVital(t *testing.T) {
+	if u := unfit(map[string]string{"not-an-app": "boom", "pubsub": "boom"}); len(u) != 0 {
+		t.Errorf("unfit(non-vital absences) = %v, want empty", u)
+	}
+	if u := unfit(map[string]string{"ai": "listen tcp :4317: bind: address already in use"}); len(u) != 1 || u["ai"] == "" {
+		t.Errorf("unfit(ai absent) = %v, want ai carrying its reason", u)
+	}
+}
+
+// TestProbeAnswersAreByteStable pins the exact bodies and statuses of both
+// probes. They became typed ops, and the conversion must be invisible to every
+// caller: the raw handlers marshalled a map, encoding/json writes map keys
+// sorted, and probeOut declares its fields in that same order — so every body a
+// dashboard, a script or the kubelet has ever parsed is the same bytes still.
+func TestProbeAnswersAreByteStable(t *testing.T) {
+	const why = "exited before listening: exit status 1"
+	for _, tc := range []struct {
+		name  string
+		host  func(t *testing.T, app *zip.App)
+		drain bool
+		path  string
+		code  int
+		body  string
+	}{
+		{"healthz clean", nil, false, "/healthz", 200, `{"status":"ok"}`},
+		{"healthz reports an absence", deadPubsub, false, "/healthz", 200,
+			`{"absent":{"pubsub":"` + why + `"},"status":"ok"}`},
+		{"healthz stays alive while draining", nil, true, "/healthz", 200, `{"status":"ok"}`},
+		{"readyz clean", nil, false, "/readyz", 200, `{"status":"ok"}`},
+		{"readyz with a non-vital absence", deadPubsub, false, "/readyz", 200,
+			`{"absent":{"pubsub":"` + why + `"},"status":"ok"}`},
+		{"readyz with the vital app absent", deadAI, false, "/readyz", 503,
+			`{"absent":{"ai":"` + why + `"},"status":"unfit"}`},
+		{"readyz while the vital app starts", coldAI, false, "/readyz", 503,
+			`{"starting":["ai"],"status":"starting"}`},
+		{"readyz while draining", nil, true, "/readyz", 503, `{"status":"draining"}`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			app := zip.New(zip.Config{AppName: "cloud", DisableStartupMessage: true})
+			if tc.host != nil {
+				tc.host(t, app)
+			}
+			health(app)
+			if tc.drain {
+				draining.Store(true)
+				t.Cleanup(func() { draining.Store(false) })
+			}
+			code, ctype, body := do(t, app, tc.path)
+			if code != tc.code {
+				t.Errorf("GET %s = %d, want %d", tc.path, code, tc.code)
+			}
+			if !strings.Contains(ctype, "application/json") {
+				t.Errorf("GET %s Content-Type = %q, want JSON", tc.path, ctype)
+			}
+			if body != tc.body {
+				t.Errorf("GET %s body = %s, want %s — the typed op changed the bytes", tc.path, body, tc.body)
+			}
+		})
+	}
+}
+
+func deadPubsub(t *testing.T, app *zip.App) { booted(t, app, dead(t, "pubsub", "/v1/pubsub")) }
+func deadAI(t *testing.T, app *zip.App)     { booted(t, app, dead(t, "ai", "/v1")) }
+
+// coldAI mounts the vital app and starts nothing, which is the host between its
+// bind and boot reaching the vital set.
+func coldAI(t *testing.T, app *zip.App) {
+	t.Helper()
+	if err := mount(app, lazyDead(t, "ai", "/v1"), true); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// TestReadyWaitsForTheVitalChildrenOnly is the bind-first boot, as a test. The
+// port binds before any child starts, so /readyz is the only thing between a
+// fresh pod and traffic it cannot answer yet: 503 while `ai` is coming up, 200
+// the moment it runs — and a pinned non-vital child that has not started holds
+// nothing, because a request that reaches it starts it.
+func TestReadyWaitsForTheVitalChildrenOnly(t *testing.T) {
+	dir := kit.Sockets(t)
+	t.Setenv("ZIP_RUNTIME_DIR", dir)
+	t.Setenv(wakeChildEnv, "ai") // the child this binary becomes serves as ai
+	t.Setenv("CLOUD_AI_BIN", os.Args[0])
+	cloud.ResetPlane()
+
+	app := zip.New(zip.Config{AppName: "cloud", DisableStartupMessage: true})
+	ai := manifest.App{Name: "ai", Prefixes: []string{"/v1"}, Vital: true}
+	if err := mount(app, ai, true); err != nil {
+		t.Fatal(err)
+	}
+	if err := mount(app, lazyDead(t, "pubsub", "/v1/pubsub"), true); err != nil {
+		t.Fatal(err)
+	}
+	health(app)
+	t.Cleanup(func() { _ = app.Shutdown() })
+
+	if code, _, body := do(t, app, "/readyz"); code != 503 || !strings.Contains(body, `"starting":["ai"]`) {
+		t.Fatalf("GET /readyz before the vital child runs = %d %s, want 503 naming ai as starting", code, body)
+	}
+	if err := startAll(app, []manifest.App{ai}); err != nil {
+		t.Fatalf("start ai: %v", err)
+	}
+	if code, _, body := do(t, app, "/readyz"); code != 200 {
+		t.Fatalf("GET /readyz with ai running = %d %s, want 200 — pubsub has not started and must hold nothing", code, body)
+	}
+}
+
+// TestProbesAreTypedOps is the other half of the conversion: the routes must be
+// IN the registry every projection reads, or typing them bought nothing. The
+// registry is read through the CLI projection, the same a.ops the OpenAPI
+// subset and the MCP tool list are built from.
+func TestProbesAreTypedOps(t *testing.T) {
+	app := zip.New(zip.Config{AppName: "cloud", DisableStartupMessage: true})
+	health(app)
+
+	got := map[string]bool{}
+	for _, c := range app.Commands() {
+		got[c.Method+" "+c.Path] = true
+	}
+	for _, want := range []string{"GET /healthz", "GET /readyz"} {
+		if !got[want] {
+			t.Errorf("%s is not a registered op — it slipped back to a raw handler and is invisible "+
+				"to OpenAPI, MCP, the CLI and typed Call", want)
+		}
+	}
+}
+
+// TestALazySubsystemThatDiesOnItsFirstRequestIsReported closes the gap that let a
+// nine-surface outage read as a healthy host.
+//
+// mount_test.go pins that a dead subsystem must not take the host down, and this
+// file's own opening line says it must not be HIDDEN either. Both were true only
+// for EAGER subsystems: their failure happens in the mount loop, in front of the
+// caller, and lands in the boot-time set. A LAZY one mounts with no process behind
+// it — by design — and dies on its first request, in the child, where boot's set
+// cannot reach it.
+//
+// So /healthz answered {"status":"ok"} while /v1/billing, /v1/s3, /v1/todo and six
+// more answered 503 "no instance running" to every caller.
+func TestALazySubsystemThatDiesOnItsFirstRequestIsReported(t *testing.T) {
+	app := zip.New(zip.Config{AppName: "cloud", DisableStartupMessage: true})
+
+	// Nothing failed at boot — exactly the state the old code could not see past.
+	if err := mount(app, lazyDead(t, "billing", "/v1/billing"), false); err != nil {
+		t.Fatalf("a lazy subsystem refused to MOUNT: %v — lazy means the mount stands", err)
+	}
+	health(app)
+
+	// COLD IS NOT BROKEN. Before anything asks, the plugin is legitimately not
+	// running and there is nothing to report. A host that cried wolf here would do
+	// it on every deployment that had not been used yet.
+	_, _, body := do(t, app, "/healthz")
+	if strings.Contains(body, "billing") {
+		t.Errorf("GET /healthz = %q before any request — a lazy subsystem nobody has "+
+			"asked for is cold, not absent", body)
+	}
+
+	// The request that starts it, and fails.
+	if code, _, _ := do(t, app, "/v1/billing/plans"); code != 503 {
+		t.Fatalf("a subsystem that cannot start answered %d, want 503", code)
+	}
+
+	// AND NOW THE HOST SAYS SO. This is the whole fix: the 503 repeats for every
+	// later caller, so the reason has to be readable after the log line scrolled.
+	_, _, body = do(t, app, "/healthz")
+	if !strings.Contains(body, "billing") {
+		t.Errorf("GET /healthz = %q after a lazy subsystem failed to start — "+
+			"this is the outage reading as a healthy host", body)
+	}
+}
+
+// TestNoApiPrefix: every route is /v1; nothing answers under /api.
+func TestNoApiPrefix(t *testing.T) {
+	app := zip.New(zip.Config{AppName: "cloud", DisableStartupMessage: true})
+	health(app)
+	if code, _, _ := do(t, app, "/api/hello"); code != 404 {
+		t.Fatalf("GET /api/hello = %d, want 404", code)
+	}
+}

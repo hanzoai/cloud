@@ -1,0 +1,30 @@
+package main
+
+import (
+	"fmt"
+	"os"
+
+	"github.com/hanzoai/cloud/apps/auto"
+	_ "github.com/hanzoai/cloud/internal/driver"
+	_ "github.com/hanzoai/cloud/internal/host"
+	"github.com/hanzoai/cloud/sdk"
+)
+
+// Standalone entry for the auto app.
+//
+// This is the app's OWN composition root: it links only its own subsystem and
+// the cloud request tier, never the whole fleet, so the build is this one app
+// and not the ~3040-package union the fused binary was. The light host loads it
+// as a plugin; run directly it serves standalone. Its OpenAPI subset comes from
+// `auto openapi`. Hand-owned — edit the spec below directly.
+func main() {
+	if err := cloud.Listen([]cloud.Plugin{{
+		Name:     "auto",
+		Price:    cloud.Metered,
+		Use:      auto.Use,
+		Shutdown: auto.Shutdown,
+	}}, []string{"auto"}); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+}

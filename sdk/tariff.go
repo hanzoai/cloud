@@ -11,12 +11,14 @@ package cloud
 // its own, which is what stops a breakdown naming a component no price list
 // mentions.
 //
-// A completion and a second of compute can both be bounded from above before
-// they happen, so an agent is refused before it breaches its budget instead of
-// after. A web call is priced from what the provider charged, and a render's
-// cost is not knowable until it has rendered — so both are booked from what they
-// used, and a render is admitted against the headroom under the agent's per-task
-// cap, which is what lets a job run with no quote to check it against.
+// TWO ARE QUOTED, TWO ARE MEASURED, and the split is a property of the work
+// rather than a policy someone chose. A completion and a second of compute can
+// both be bounded from above before they happen, so an agent is refused before it
+// breaches its budget instead of after. A web call is priced from what the
+// provider charged, and a render's cost is not knowable until it has rendered —
+// so both are booked from what they used, and a render is admitted against the
+// headroom under the agent's per-task cap, which is what lets a job run with no
+// quote to check it against.
 //
 // EVERY RATE HERE IS THE ONE THE LEDGER BOOKS. This card is not a second copy of
 // the price list: each priced row is read through [RateMicros] — the same
@@ -121,7 +123,9 @@ type Component struct {
 	Title string `json:"title"`
 	// Basis is what it is metered by, in the fewest words that are true.
 	Basis string `json:"basis"`
-	// Quoted says whether a call is priced BEFORE it runs.
+	// Quoted says whether a call is priced BEFORE it runs. A quoted component can
+	// refuse a call that would breach a budget; a measured one is booked from what
+	// it used and is bounded by the headroom under the per-task cap instead.
 	Quoted bool `json:"quoted"`
 	// Tiers are the disjoint tiers this component meters in, where it has them.
 	Tiers []string `json:"tiers,omitempty"`

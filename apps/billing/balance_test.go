@@ -1,0 +1,411 @@
+package billing
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
+	"testing"
+	"time"
+
+	"github.com/hanzoai/account"
+	"github.com/zap-proto/zip"
+
+	"github.com/hanzoai/cloud/finance"
+	"github.com/hanzoai/cloud/money"
+)
+
+// fakeFinance is the co-resident finance ledger client (money.FinanceClient). It records
+// the exact (org, subject) the handler read so a test can prove WHICH wallet the console
+// shows, and can be made to fail so a test can prove an unreadable balance is never
+// rendered as zero.
+type fakeFinance struct {
+	wallets   map[string]int64 // "org|subject" -> cents of credit
+	cash      map[string]int64 // "org|subject" -> cents of cash
+	refs      map[string]bool  // idempotency refs seen by Deposit
+	usageRows []finance.UsageRow
+	err       error
+	gotOrg    string
+	gotSubj   string
+	calls     int
+}
+
+// ListUsage satisfies the optional co-resident usage-read capability coResidentUsage
+// resolves; returns the seeded rows so a test can prove the usage view answers from the
+// ledger instead of the self-dispatching commerce hop.
+func (f *fakeFinance) ListUsage(context.Context, string, bool, int) ([]finance.UsageRow, error) {
+	return f.usageRows, f.err
+}
+
+func (f *fakeFinance) Balance(_ context.Context, org, subject, _ string, _ bool) (money.Amount, error) {
+	f.calls++
+	f.gotOrg, f.gotSubj = org, subject
+	if f.err != nil {
+		return money.Zero(), f.err
+	}
+	return money.FromCents(f.wallets[org+"|"+subject]), nil
+}
+
+// Funds is the split the balance route reads: what the wallet holds in cash, and in
+// credit. The balance is their sum, as the real ledger's is.
+func (f *fakeFinance) Funds(_ context.Context, org, subject string, _ bool) (finance.Funds, error) {
+	f.calls++
+	f.gotOrg, f.gotSubj = org, subject
+	if f.err != nil {
+		return finance.Funds{Cash: money.Zero(), Credit: money.Zero()}, f.err
+	}
+	return finance.Funds{
+		Cash:   money.FromCents(f.cash[org+"|"+subject]),
+		Credit: money.FromCents(f.wallets[org+"|"+subject]),
+	}, nil
+}
+
+func (f *fakeFinance) Deposit(_ context.Context, in money.DepositInput) (string, error) {
+	if f.err != nil {
+		return "", f.err
+	}
+	if f.refs == nil {
+		f.refs = map[string]bool{}
+	}
+	if in.Ref != "" {
+		if f.refs[in.Ref] {
+			return "tx-dup", nil
+		}
+		f.refs[in.Ref] = true
+	}
+	if f.wallets == nil {
+		f.wallets = map[string]int64{}
+	}
+	f.wallets[in.Org+"|"+in.Subject] += in.Amount.Cents()
+	return "tx-1", nil
+}
+func (f *fakeFinance) RecordUsage(context.Context, money.UsageInput) error { return nil }
+func (f *fakeFinance) SumUsageSince(context.Context, string, bool, string, string, int64) (int64, error) {
+	return 0, nil
+}
+
+func publishFinance(t *testing.T, f *fakeFinance) {
+	t.Helper()
+	finance.Publish(f)
+	t.Cleanup(func() { finance.Publish(nil) })
+}
+
+// TestBalance_ReadsFinanceLedgerNotCommerce is the regression for the live incident:
+// GET /v1/billing/balance proxied to commerce at the SAME path, which re-entered THIS
+// handler (the commerce transport dispatches the shared app by path; commerce's own billing
+// routes are never registered in the co-resident binary), answered "sign in to view
+// billing", and surfaced as "billing upstream status 500".
+//
+// Co-resident the balance now comes from the finance ledger — the wallet the ai gate
+// actually reads — and commerce is NOT called at all, so there is nothing to self-dispatch.
+func TestBalance_ReadsFinanceLedgerNotCommerce(t *testing.T) {
+	fin := &fakeFinance{wallets: map[string]int64{"maxpower|maxpower": 6875}}
+	publishFinance(t, fin)
+
+	f := &fakeCommerce{status: 200, body: `{"balance":1,"holds":0,"available":1}`}
+	app := mountApp(t)
+
+	code, body := call(t, app, http.MethodGet, "/v1/billing/balance", "maxpower/dave", "maxpower")
+	if code != 200 {
+		t.Fatalf("balance: want 200, got %d (%s)", code, body)
+	}
+	var got commerceBalance
+	if err := json.Unmarshal(body, &got); err != nil {
+		t.Fatalf("decode: %v (%s)", err, body)
+	}
+	if got.Available != 6875 || got.Balance != 6875 {
+		t.Fatalf("balance not read from the finance ledger: %s", body)
+	}
+	// The proof there is no self-dispatch: the commerce hop never happened.
+	if f.gotPath != "" {
+		t.Fatalf("commerce was called at %q — the self-dispatching proxy is back", f.gotPath)
+	}
+	if fin.gotOrg != "maxpower" {
+		t.Fatalf("read org %q, want the validated principal's org", fin.gotOrg)
+	}
+}
+
+// TestBalance_SubjectIsTheGateSubject pins the invariant this incident broke: the wallet
+// the console SHOWS must be the wallet the ai prepaid gate READS. Both derive it from the
+// one function, ai/object.Payer, so they cannot drift apart again — cloud keeping its own
+// copy of this rule is exactly what let the console show a funded org while the gate
+// refused the member.
+func TestBalance_SubjectIsTheGateSubject(t *testing.T) {
+	// The allowlists are gone; set them to values that WOULD have flipped the resolution
+	// to prove they are inert — nothing reads them, the signup org still bills per-person.
+	t.Setenv("PERSONAL_BILLING_ORGS", "")
+	t.Setenv("ORG_BILLING_ORGS", "hanzo")
+
+	// The gate's subject for this principal, from ai itself — not a value this test invents.
+	// This is what routers/filter_balance.go resolveBillingKey computes from the JWT claims:
+	// a person in the signup org bills their OWN account, hanzo/z.
+	want := account.Payer(account.Credential{Owner: "hanzo", Name: "z"}).Subject()
+	if want != "hanzo/z" {
+		t.Fatalf("precondition: ai resolves a signup-org person to %q, want hanzo/z", want)
+	}
+
+	// Every identity shape a validated principal can arrive in must land on that ONE wallet.
+	for _, tc := range []struct{ name, userName, userID string }{
+		// Production: the identity boundary mints X-User-Name from the `name` claim.
+		{"gateway mints X-User-Name", "z", "8f14e45f-ea1b-4c2a-9f3d-000000000001"},
+		// In-binary direct-Bearer: X-User-Id is the UUID subject, X-User-Name carries the name.
+		{"in-binary direct bearer", "z", "hanzo/z"},
+		// No X-User-Name: the "<owner>/<name>" key form folds back via PayerOf.
+		{"owner/name id, no X-User-Name", "", "hanzo/z"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			fin := &fakeFinance{wallets: map[string]int64{}}
+			publishFinance(t, fin)
+			app := mountApp(t)
+
+			req := httptest.NewRequest(http.MethodGet, "/v1/billing/balance", nil)
+			req.Header.Set("X-User-Id", tc.userID)
+			req.Header.Set("X-Org-Id", "hanzo")
+			if tc.userName != "" {
+				req.Header.Set("X-User-Name", tc.userName)
+			}
+			resp, err := app.Test(req, zip.TestConfig{Timeout: 30 * time.Second, FailOnTimeout: true})
+			if err != nil {
+				t.Fatalf("Test: %v", err)
+			}
+			_ = resp.Body.Close()
+
+			if fin.calls == 0 {
+				t.Fatal("finance ledger was never read")
+			}
+			if fin.gotSubj != want {
+				t.Fatalf("console read wallet %q but the ai gate reads %q — the view and the gate disagree", fin.gotSubj, want)
+			}
+		})
+	}
+}
+
+// TestBalance_UnreadableIsNotZero is the fail-closed guard. A balance that cannot be read
+// is UNKNOWN, and unknown must never render as a zero balance (a fabricated "you're broke")
+// nor as a fabricated positive. It surfaces as an upstream failure.
+func TestBalance_UnreadableIsNotZero(t *testing.T) {
+	publishFinance(t, &fakeFinance{err: fmt.Errorf("ledger open failed")})
+	app := mountApp(t)
+
+	code, body := call(t, app, http.MethodGet, "/v1/billing/balance", "maxpower/dave", "maxpower")
+	if code != http.StatusBadGateway {
+		t.Fatalf("unreadable balance: want 502, got %d (%s)", code, body)
+	}
+	// The body must be an honest error, never a balance object — a caller must not be able
+	// to mistake "unknown" for "zero".
+	var got map[string]any
+	if err := json.Unmarshal(body, &got); err != nil {
+		t.Fatalf("decode: %v (%s)", err, body)
+	}
+	if _, isBalance := got["available"]; isBalance {
+		t.Fatalf("an unreadable balance was rendered as a balance object: %s", body)
+	}
+	if got["error"] == nil && got["detail"] == nil {
+		t.Fatalf("want an honest error body, got: %s", body)
+	}
+}
+
+// TestBalance_RequiresSignIn proves the browser-facing sign-in gate is intact: no
+// validated principal ⇒ 401, and the ledger is never touched. A forged service-token
+// header cannot reach a wallet, because the org comes from the validated principal only.
+func TestBalance_RequiresSignIn(t *testing.T) {
+	fin := &fakeFinance{wallets: map[string]int64{"hanzo|hanzo": 14953300}}
+	publishFinance(t, fin)
+	app := mountApp(t)
+
+	// No principal at all.
+	if code, _ := call(t, app, http.MethodGet, "/v1/billing/balance", "", ""); code != http.StatusUnauthorized {
+		t.Fatalf("anonymous: want 401, got %d", code)
+	}
+	// A client-supplied X-Org-Id with NO validated user is not a principal either — this
+	// is the off-cluster forge Red will try.
+	if code, _ := call(t, app, http.MethodGet, "/v1/billing/balance", "", "hanzo"); code != http.StatusUnauthorized {
+		t.Fatalf("forged org, no principal: want 401, got %d", code)
+	}
+	if fin.calls != 0 {
+		t.Fatalf("the ledger was read %d times without a validated principal", fin.calls)
+	}
+}
+
+// TestBalance_ScopedToCallerOrg proves tenant isolation: the org is taken from the
+// VALIDATED principal, so a caller reads only its OWN org's ledger no matter what the
+// request says. There is no client-supplied input that can widen it.
+func TestBalance_ScopedToCallerOrg(t *testing.T) {
+	fin := &fakeFinance{wallets: map[string]int64{
+		"victim|victim":     999999,
+		"attacker|attacker": 5,
+	}}
+	publishFinance(t, fin)
+	app := mountApp(t)
+
+	// Attacker is validated in its OWN org and tries to name the victim's org/subject
+	// through every client-controlled channel the old proxy forwarded.
+	code, body := call(t, app, http.MethodGet,
+		"/v1/billing/balance?user=victim&userId=victim&customerId=victim&org=victim&currency=usd",
+		"attacker/mallory", "attacker")
+	if code != 200 {
+		t.Fatalf("want 200, got %d (%s)", code, body)
+	}
+	if fin.gotOrg != "attacker" {
+		t.Fatalf("cross-org read: ledger org = %q, want attacker", fin.gotOrg)
+	}
+	var got commerceBalance
+	_ = json.Unmarshal(body, &got)
+	if got.Available == 999999 {
+		t.Fatalf("attacker read the victim's balance: %s", body)
+	}
+}
+
+// TestBalance_ReportsTheAccountItRead is the honesty guard on the `account` field. A
+// checkout has to tell the customer WHICH account it is about to fund, and the only
+// trustworthy answer is the subject the server actually resolved — the same one the
+// wallet was read from and the same one the ai gate debits. A browser decoding its own
+// token is a guess, and a guess that disagrees is how money lands in an account the gate
+// never reads. So the reported account must equal the subject handed to the ledger, for
+// every identity shape a validated principal can arrive in.
+func TestBalance_ReportsTheAccountItRead(t *testing.T) {
+	t.Setenv("PERSONAL_BILLING_ORGS", "")
+	t.Setenv("ORG_BILLING_ORGS", "hanzo")
+
+	want := account.Payer(account.Credential{Owner: "hanzo", Name: "z"}).Subject()
+
+	for _, tc := range []struct{ name, userName, userID string }{
+		{"gateway mints X-User-Name", "z", "8f14e45f-ea1b-4c2a-9f3d-000000000001"},
+		{"in-binary direct bearer", "z", "hanzo/z"},
+		{"owner/name id, no X-User-Name", "", "hanzo/z"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			fin := &fakeFinance{wallets: map[string]int64{want: 6875}}
+			publishFinance(t, fin)
+			app := mountApp(t)
+
+			req := httptest.NewRequest(http.MethodGet, "/v1/billing/balance", nil)
+			req.Header.Set("X-User-Id", tc.userID)
+			req.Header.Set("X-Org-Id", "hanzo")
+			if tc.userName != "" {
+				req.Header.Set("X-User-Name", tc.userName)
+			}
+			resp, err := app.Test(req, zip.TestConfig{Timeout: 30 * time.Second, FailOnTimeout: true})
+			if err != nil {
+				t.Fatalf("Test: %v", err)
+			}
+			defer func() { _ = resp.Body.Close() }()
+
+			var got struct {
+				Available int64  `json:"available"`
+				Account   string `json:"account"`
+			}
+			if err := json.NewDecoder(resp.Body).Decode(&got); err != nil {
+				t.Fatalf("decode: %v", err)
+			}
+			if got.Account == "" {
+				t.Fatal("no account reported — a checkout cannot name the payer it is about to charge")
+			}
+			if got.Account != want {
+				t.Fatalf("reported account %q, want %q (the gate's subject)", got.Account, want)
+			}
+			// The reported account must be the one the LEDGER was read with, not a
+			// second, independently-resolved value that could drift from it.
+			if got.Account != fin.gotSubj {
+				t.Fatalf("reported account %q but read wallet %q — display and read disagree", got.Account, fin.gotSubj)
+			}
+		})
+	}
+}
+
+// The balance says where it came from: cash is what the customer paid, credit what
+// Hanzo minted, and the two add up to what is available.
+func TestBalance_SplitsCashFromCredit(t *testing.T) {
+	fin := &fakeFinance{
+		wallets: map[string]int64{"acme|acme": 500, "hanzo|hanzo/hanzo": 1_498_958_800},
+		cash:    map[string]int64{"acme|acme": 2000},
+	}
+	publishFinance(t, fin)
+	app := mountApp(t)
+
+	for _, c := range []struct {
+		org, user           string
+		cash, credit, avail int64
+	}{
+		{"acme", "acme/owner", 2000, 500, 2500},
+		{"hanzo", "hanzo", 0, 1_498_958_800, 1_498_958_800}, // Hanzo's own balance is minted
+	} {
+		code, body := call(t, app, http.MethodGet, "/v1/billing/balance", c.user, c.org)
+		if code != 200 {
+			t.Fatalf("%s: want 200, got %d (%s)", c.org, code, body)
+		}
+		var got commerceBalance
+		if err := json.Unmarshal(body, &got); err != nil {
+			t.Fatalf("decode: %v (%s)", err, body)
+		}
+		if got.Cash != c.cash || got.Credit != c.credit || got.Available != c.avail || got.Cash+got.Credit != got.Available {
+			t.Fatalf("%s: cash %d credit %d available %d; want %d/%d/%d (%s)", c.org, got.Cash, got.Credit, got.Available, c.cash, c.credit, c.avail, body)
+		}
+	}
+}
+
+// TestCreditBalanceAndBreakdownSynthesizeCoResidentFinanceLedger verifies that when
+// IssueGrant wrote granted credit ($156,761.13 = 15,676,113 cents) to the co-resident
+// finance ledger while commercepeer's CreditGrant store holds none (or is absent),
+// GET /v1/billing/credit-balance and /v1/billing/credit-balance/breakdown return the
+// real spendable USD credit instead of `balances: null`, and GET /v1/billing/balance
+// carries Cache-Control: no-store as a typed zip op.
+func TestCreditBalanceAndBreakdownSynthesizeCoResidentFinanceLedger(t *testing.T) {
+	const grantedCents = int64(15_676_113)
+	fin := &fakeFinance{
+		wallets: map[string]int64{"hanzo|hanzo/hanzo": grantedCents},
+	}
+	publishFinance(t, fin)
+	planeDir(t) // no commerce peer needed when co-resident finance holds the grant
+	app := mountApp(t)
+
+	// 1. Typed /v1/billing/balance keeps Cache-Control: no-store and wire shape.
+	status, hdr, body := callRoute(t, app, http.MethodGet, "/v1/billing/balance", "hanzo", "hanzo")
+	if status != http.StatusOK {
+		t.Fatalf("balance status=%d body=%s", status, body)
+	}
+	if cc := hdr.Get("Cache-Control"); cc != "no-store" {
+		t.Fatalf("balance Cache-Control=%q, want no-store", cc)
+	}
+
+	// 2. /v1/billing/credit-balance synthesizes usd entry instead of balances:null.
+	code, cbBody := call(t, app, http.MethodGet, "/v1/billing/credit-balance", "hanzo", "hanzo")
+	if code != http.StatusOK {
+		t.Fatalf("credit-balance status=%d body=%s", code, cbBody)
+	}
+	var cb struct {
+		UserID   string `json:"userId"`
+		Balances []struct {
+			Currency  string `json:"currency"`
+			Available int64  `json:"available"`
+		} `json:"balances"`
+	}
+	if err := json.Unmarshal(cbBody, &cb); err != nil {
+		t.Fatalf("decode credit-balance: %v (%s)", err, cbBody)
+	}
+	if len(cb.Balances) != 1 || cb.Balances[0].Currency != "usd" || cb.Balances[0].Available != grantedCents {
+		t.Fatalf("credit-balance = %s, want 1 usd entry of %d cents", cbBody, grantedCents)
+	}
+
+	// 3. /v1/billing/credit-balance/breakdown synthesizes breakdown + total.cents.
+	code, bdBody := call(t, app, http.MethodGet, "/v1/billing/credit-balance/breakdown", "hanzo", "hanzo")
+	if code != http.StatusOK {
+		t.Fatalf("credit-balance/breakdown status=%d body=%s", code, bdBody)
+	}
+	var bd struct {
+		UserID    string `json:"userId"`
+		Breakdown map[string]struct {
+			Cents int64 `json:"cents"`
+		} `json:"breakdown"`
+		Total struct {
+			Cents int64 `json:"cents"`
+		} `json:"total"`
+	}
+	if err := json.Unmarshal(bdBody, &bd); err != nil {
+		t.Fatalf("decode breakdown: %v (%s)", err, bdBody)
+	}
+	if bd.Total.Cents != grantedCents || bd.Breakdown["credit"].Cents != grantedCents {
+		t.Fatalf("credit-balance/breakdown = %s, want %d cents under credit", bdBody, grantedCents)
+	}
+}

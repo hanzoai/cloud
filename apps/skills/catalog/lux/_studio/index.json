@@ -1,0 +1,87 @@
+{
+  "$schema": "https://schemas.agentskills.io/discovery/0.2.0/schema.json",
+  "base_url": "https://api.lux.network",
+  "brand": "lux",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://lux.id",
+  "mcp": {
+    "description": "Model Context Protocol over JSON-RPC 2.0 — one POST per message, stateless, protocol revision 2026-07-28. tools/list answers without a credential with one tool per subsystem (its operations in the \"op\" enum) plus \"describe\", which returns one operation's input schema. tools/call names a subsystem tool and carries {\"op\": <operation>, \"input\": <its arguments>}; it takes the same bearer the REST API does, and a call that carries none is answered 401 with a WWW-Authenticate header naming the resource metadata at /.well-known/oauth-protected-resource, which names the authorization server to sign in at. The tool surface is the public contract: the operator's admin product is not offered, and a name that would disclose a secret or mutate an identity is withheld — the list says how many, under _meta.",
+    "method": "POST",
+    "url": "https://api.lux.network/v1/mcp"
+  },
+  "skill_count": 7,
+  "skills": [
+    {
+      "description": "Read studio brands: Lists the brands you may read — palettes and type systems as design tokens., Reads one brand you may read..",
+      "digest": "sha256:5dec40a25b627ae83b0dc1eac25c8a8b6a24d5ef09412fa83b6db0abcd18b184",
+      "name": "studio_brands",
+      "service": "studio",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/studio_brands/SKILL.md",
+      "works": [
+        "design"
+      ]
+    },
+    {
+      "description": "Read studio documents: Lists the documents and decks you may read, most recently changed first., Reads one document you may read..",
+      "digest": "sha256:04b09dc7e17ca3ce5774d14efa4ed61bc03289f47ee954c069d2d14a51a2e12e",
+      "name": "studio_documents",
+      "service": "studio",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/studio_documents/SKILL.md",
+      "works": [
+        "design"
+      ]
+    },
+    {
+      "description": "Read studio flows: Lists the flows you may read, most recently changed first., Reads one flow you may read..",
+      "digest": "sha256:4c2ea80fecb00dc61ca009587265402e345fdbc50faaafe79c301a5fadc49f77",
+      "name": "studio_flows",
+      "service": "studio",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/studio_flows/SKILL.md",
+      "works": [
+        "design"
+      ]
+    },
+    {
+      "description": "Read studio gpus: Lists the GPUs your org has linked with `hanzo link` that can take a studio.render step, each with whether it is free now..",
+      "digest": "sha256:6e26a9edcff524de0d7b5409dfec4943637cb95c638acc61f25522e4aee0af70",
+      "name": "studio_gpus",
+      "service": "studio",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/studio_gpus/SKILL.md"
+    },
+    {
+      "description": "Read studio runs: Lists the runs you may read — your own and those your org shares — newest first., Reads one run: its graph, its input, every step's state, the assets it made and what it cost., Stream a run's progress as Server-Sent Events.",
+      "digest": "sha256:bfca29d38f357e8ab76505f388e00b4ed8d302b1f6d5fd52200f3dba7c7989cb",
+      "name": "studio_runs",
+      "service": "studio",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/studio_runs/SKILL.md",
+      "works": [
+        "design"
+      ]
+    },
+    {
+      "description": "Read studio templates: Lists templates: the public catalog (org empty) first, then your org's own that you may read., Reads one template: a catalog slug or one of your org's templates you may read..",
+      "digest": "sha256:f5d026cd55715e414db1b48afaff0eb5589bdffbe8fdea5d2de6e6e31d4d2b1d",
+      "name": "studio_templates",
+      "service": "studio",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/studio_templates/SKILL.md",
+      "works": [
+        "design"
+      ]
+    },
+    {
+      "description": "Read studio threads: Lists your chat threads, most recent first., Reads one of your threads and its messages, oldest first..",
+      "digest": "sha256:48f8575f69d3268d53bfbef1a928e4ddf0eda23f27f0ea1662afc918090bec88",
+      "name": "studio_threads",
+      "service": "studio",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/studio_threads/SKILL.md"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

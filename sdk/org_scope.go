@@ -29,25 +29,25 @@ package cloud
 // per request. With no registry mounted, nothing is ever "foreign", so the guard
 // is a no-op passthrough (an unmounted registry owns nothing), never a crash.
 
-// "With no registry mounted, nothing is ever foreign" was written as a safe
-// default and was not one, because no registry is EVER mounted where this is
-// read. The boundary is edge middleware in every process; the registry belongs
-// to `projects`, which runs as its own plugin. So the guard consulted an empty
-// list, concluded "not foreign", and passed every asserted X-Project-Id through
-// — the cross-org project impersonation check was off fleet-wide, and its own
-// passing tests only ever exercised the co-resident case.
+// THE HOLE THIS CLOSED. "With no registry mounted, nothing is ever foreign" was
+// written as a safe default and was not one, because no registry is EVER mounted
+// where this is read. The boundary is edge middleware in every process; the
+// registry belongs to `projects`, which runs as its own plugin. So the guard
+// consulted an empty list, concluded "not foreign", and passed every asserted
+// X-Project-Id through — the cross-org project impersonation check was off
+// fleet-wide, and its own passing tests only ever exercised the co-resident case.
 //
 // Absence of an ANSWER may never read as permission. The registry is now ASKED,
 // over the plane, and the three outcomes stay three:
 //
-// 	the answer says mine        keep      (provably the caller's own)
-// 	the answer says other       refuse    (a cross-org claim)
-// 	the answer says neither     keep      (an unregistered within-org label)
-// 	no registry in the fleet    keep      — and this is now PROVEN rather than
-// 	                                       assumed: ErrNoPeer means no projects
-// 	                                       app exists anywhere, so no project id
-// 	                                       is registered and none can be foreign
-// 	the registry failed         REFUSE    (fail closed, as before)
+//	the answer says mine        keep      (provably the caller's own)
+//	the answer says other       refuse    (a cross-org claim)
+//	the answer says neither     keep      (an unregistered within-org label)
+//	no registry in the fleet    keep      — and this is now PROVEN rather than
+//	                                       assumed: ErrNoPeer means no projects
+//	                                       app exists anywhere, so no project id
+//	                                       is registered and none can be foreign
+//	the registry failed         REFUSE    (fail closed, as before)
 //
 // The read is cached per (org, project) with a short TTL, on a detached context,
 // exactly like the scope-rule read in middleware_ratelimit.go — this runs on

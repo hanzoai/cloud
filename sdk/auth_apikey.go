@@ -483,7 +483,11 @@ func (k *iamKeys) lookupIn(ctx context.Context, key, org string) (keyAnswer, boo
 	// row lives elsewhere, so a consumer that resolves the caller (their roles, their
 	// memberships) finds them and not a same-named stranger in the key's org.
 	//
-	// A home key is no different. A token's `sub` is a UUID and never holds a
+	// A home key is no different. It used to keep no subject, so its user id fell
+	// through to the bare username — and a username is the holder's to choose: IAM
+	// admits a UUID-shaped one, so a key minted by a user named after a colleague's
+	// token `sub` WAS that colleague to everything keyed on the id, their sandboxes
+	// and their sessions included. A token's `sub` is a UUID and never holds a
 	// slash, an application's is marked (idClaims.userID), so this one shape is
 	// disjoint from both.
 	return keyAnswer{claims: &idClaims{

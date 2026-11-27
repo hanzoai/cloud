@@ -1,0 +1,48 @@
+{
+  "$schema": "https://schemas.agentskills.io/discovery/0.2.0/schema.json",
+  "base_url": "https://api.lux.network",
+  "brand": "lux",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://lux.id",
+  "mcp": {
+    "description": "Model Context Protocol over JSON-RPC 2.0 — one POST per message, stateless, protocol revision 2026-07-28. tools/list answers without a credential with one tool per subsystem (its operations in the \"op\" enum) plus \"describe\", which returns one operation's input schema. tools/call names a subsystem tool and carries {\"op\": <operation>, \"input\": <its arguments>}; it takes the same bearer the REST API does, and a call that carries none is answered 401 with a WWW-Authenticate header naming the resource metadata at /.well-known/oauth-protected-resource, which names the authorization server to sign in at. The tool surface is the public contract: the operator's admin product is not offered, and a name that would disclose a secret or mutate an identity is withheld — the list says how many, under _meta.",
+    "method": "POST",
+    "url": "https://api.lux.network/v1/mcp"
+  },
+  "skill_count": 4,
+  "skills": [
+    {
+      "description": "Read network identities: Returns the fabric identities the caller's org owns..",
+      "digest": "sha256:c46ba26782979e49b7daef679096d6f9665652b91d89d2cd4933f25a475f9dde",
+      "name": "network_identities",
+      "service": "network",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/network_identities/SKILL.md"
+    },
+    {
+      "description": "Read network network: Returns the caller's org overlay network on the Zero Trust fabric., Returns one overlay network by id, scoped to the caller's org..",
+      "digest": "sha256:6a1ee53dedc343e4153c95d8459cfcb174d328b2efdaec1976c237671339cc0d",
+      "name": "network_network",
+      "service": "network",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/network_network/SKILL.md"
+    },
+    {
+      "description": "Read network routers: Returns the Zero Trust routers the caller's org owns..",
+      "digest": "sha256:506a7ecd2e7f759d79832c02e54c09204997d509169deb7a7e26c8bd318279f0",
+      "name": "network_routers",
+      "service": "network",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/network_routers/SKILL.md"
+    },
+    {
+      "description": "Read network services: Returns the Zero Trust edge services the caller's org owns..",
+      "digest": "sha256:8ff49c7b36c8907f90dc822c9a1280e7770a4f100da33385b5605e27d48424a7",
+      "name": "network_services",
+      "service": "network",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/network_services/SKILL.md"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

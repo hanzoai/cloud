@@ -1,0 +1,48 @@
+{
+  "$schema": "https://schemas.agentskills.io/discovery/0.2.0/schema.json",
+  "base_url": "https://api.hanzo.ai",
+  "brand": "hanzo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://hanzo.id",
+  "mcp": {
+    "description": "Model Context Protocol over JSON-RPC 2.0 — one POST per message, stateless, protocol revision 2026-07-28. tools/list answers without a credential with one tool per subsystem (its operations in the \"op\" enum) plus \"describe\", which returns one operation's input schema. tools/call names a subsystem tool and carries {\"op\": <operation>, \"input\": <its arguments>}; it takes the same bearer the REST API does, and a call that carries none is answered 401 with a WWW-Authenticate header naming the resource metadata at /.well-known/oauth-protected-resource, which names the authorization server to sign in at. The tool surface is the public contract: the operator's admin product is not offered, and a name that would disclose a secret or mutate an identity is withheld — the list says how many, under _meta.",
+    "method": "POST",
+    "url": "https://api.hanzo.ai/v1/mcp"
+  },
+  "skill_count": 4,
+  "skills": [
+    {
+      "description": "Read channel analytics: Returns post delivery counts and upstream engagement metrics for one social channel..",
+      "digest": "sha256:1ad735a56f5cfd6cf71aa53f46a23f32752ff87bfc72598f26a185d863318b4f",
+      "name": "channel_analytics",
+      "service": "channel",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/channel_analytics/SKILL.md"
+    },
+    {
+      "description": "Read channel channel: Returns the caller organization's connected and registered social channels, optionally filtered by provider (`?provider=x`) or employee/brand group (`?group=Antje%20Worring`)., Returns one connected social channel by id for the caller's organization..",
+      "digest": "sha256:33f479355428aaa97712270ee4a4e55dcc5343dd80a9b6b373d25370c83e978b",
+      "name": "channel_channel",
+      "service": "channel",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/channel_channel/SKILL.md"
+    },
+    {
+      "description": "Read channel groups: Lists the employee and brand channel groups configured across the caller organization's channels (such as executive profiles and brand accounts) with channel counts..",
+      "digest": "sha256:10f9e8d5a769c50c7991ca6157aa7e5f78f9f5fec410ccd25d55fc9c35a73021",
+      "name": "channel_groups",
+      "service": "channel",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/channel_groups/SKILL.md"
+    },
+    {
+      "description": "Read channel providers: Lists every supported social and publishing network along with whether OAuth application credentials are ready on this deployment or sealed for the org..",
+      "digest": "sha256:f083932393c10fb50213438cc259c8da1e90269c0b86c45477edd0158d1e8984",
+      "name": "channel_providers",
+      "service": "channel",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/channel_providers/SKILL.md"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

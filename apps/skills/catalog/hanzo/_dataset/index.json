@@ -1,0 +1,46 @@
+{
+  "$schema": "https://schemas.agentskills.io/discovery/0.2.0/schema.json",
+  "base_url": "https://api.hanzo.ai",
+  "brand": "hanzo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://hanzo.id",
+  "mcp": {
+    "description": "Model Context Protocol over JSON-RPC 2.0 — one POST per message, stateless, protocol revision 2026-07-28. tools/list answers without a credential with one tool per subsystem (its operations in the \"op\" enum) plus \"describe\", which returns one operation's input schema. tools/call names a subsystem tool and carries {\"op\": <operation>, \"input\": <its arguments>}; it takes the same bearer the REST API does, and a call that carries none is answered 401 with a WWW-Authenticate header naming the resource metadata at /.well-known/oauth-protected-resource, which names the authorization server to sign in at. The tool surface is the public contract: the operator's admin product is not offered, and a name that would disclose a secret or mutate an identity is withheld — the list says how many, under _meta.",
+    "method": "POST",
+    "url": "https://api.hanzo.ai/v1/mcp"
+  },
+  "skill_count": 3,
+  "skills": [
+    {
+      "description": "Read dataset dataset: List this org's datasets, Describe every version of one dataset.",
+      "digest": "sha256:acfed12abc75a3e73b8aff5e2257a6fde68d5e8cdd9326aa3b70ec25741d1290",
+      "name": "dataset_dataset",
+      "service": "dataset",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/dataset_dataset/SKILL.md",
+      "works": [
+        "data"
+      ]
+    },
+    {
+      "description": "Read dataset export: Read a version's rows back, one page at a time.",
+      "digest": "sha256:c0d171718d8618d00ca7285de1cd86c539ac2761dd478c797afd1a9dcf9029ed",
+      "name": "dataset_export",
+      "service": "dataset",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/dataset_export/SKILL.md"
+    },
+    {
+      "description": "Read dataset lineage: Show where a version's rows came from, and whether that can still be demonstrated.",
+      "digest": "sha256:9f2caf336b401369ac4c9d1f66c7d46a3a89ac1c23672cd44c98f8c71f721eea",
+      "name": "dataset_lineage",
+      "service": "dataset",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/dataset_lineage/SKILL.md",
+      "works": [
+        "data"
+      ]
+    }
+  ],
+  "spec_version": "8.0.0"
+}

@@ -1,0 +1,528 @@
+{
+ "side": "hanzo",
+ "url": "http://127.0.0.1:1234/v1/embeddings",
+ "model": "google/embeddinggemma-2",
+ "label": "hanzo-server 079edc61 (1.7.108 + engine#119), F32 CPU, NUM_THREADS=4",
+ "started": "2026-11-20T01:40:01Z",
+ "client": {
+  "python": "3.14.7",
+  "numpy": false,
+  "cpus": 8,
+  "machine": "x86_64"
+ },
+ "settings": {
+  "batch": 4,
+  "image_batch": 8,
+  "concurrency": 2,
+  "max_docs": 300,
+  "max_queries": 100,
+  "probe": 8,
+  "latency": 30,
+  "policies": [
+   "task",
+   "none"
+  ],
+  "dims": [
+   768,
+   512,
+   256,
+   128
+  ]
+ },
+ "suites": {
+  "text": {
+   "dataset": "mteb/scifact",
+   "revision": "cf10ab6856b15b0e670ef8ae5dae4e266c12d035",
+   "data_sha256": {
+    "corpus.jsonl": "2b37c383eaab6226df61fc52058396d91c2fb027f4c1bbd75aa15a2928316066",
+    "queries.jsonl": "b3a87da17d18cba4f99921c4a7feaa60837b2027290962b97fe746a829c5b0ef",
+    "qrels.jsonl": "4f3b8900188996b73b5de19261b7f5af6ac44c88fb5688bf57961eea22fe7193"
+   },
+   "docs": 300,
+   "queries": 100,
+   "policies": {
+    "task": {
+     "inputs_sha256_docs": "152f9afb4bf8fbdb7402ee2228d68e3f26a3c9cc79d28d0c0ffe11e5047b5502",
+     "docs_embed": {
+      "inputs": 300,
+      "requests": 75,
+      "batch": 4,
+      "concurrency": 2,
+      "wall_s": 1724.063,
+      "inputs_per_s": 0.174,
+      "tokens": 97008,
+      "bytes_sent": 473194,
+      "bytes_received": 1251503,
+      "retries": 0,
+      "request_s": {
+       "n": 75,
+       "mean": 45.7983,
+       "p50": 44.3578,
+       "p90": 70.6353,
+       "p99": 107.6008,
+       "max": 111.614
+      },
+      "tokens_per_s": 56.3
+     },
+     "inputs_sha256_queries": "bb7ea7878fe730894cd4d782a63bd66ef72e0cd367e850052d6a00080f86f8e2",
+     "queries_embed": {
+      "inputs": 100,
+      "requests": 25,
+      "batch": 4,
+      "concurrency": 2,
+      "wall_s": 62.044,
+      "inputs_per_s": 1.612,
+      "tokens": 2566,
+      "bytes_sent": 13760,
+      "bytes_received": 417105,
+      "retries": 0,
+      "request_s": {
+       "n": 25,
+       "mean": 4.8631,
+       "p50": 4.6088,
+       "p90": 7.0358,
+       "p99": 8.6435,
+       "max": 9.0289
+      },
+      "tokens_per_s": 41.4
+     },
+     "dim_probe": {
+      "768": {
+       "norm_min": 1.0,
+       "norm_max": 1.0
+      },
+      "512": {
+       "n": 16,
+       "cos_min": 1.0,
+       "norm_min": 1.0,
+       "norm_max": 1.0
+      },
+      "256": {
+       "n": 16,
+       "cos_min": 1.0,
+       "norm_min": 1.0,
+       "norm_max": 1.0
+      },
+      "128": {
+       "n": 16,
+       "cos_min": 1.0,
+       "norm_min": 1.0,
+       "norm_max": 1.0
+      }
+     },
+     "query_latency_s": {
+      "n": 30,
+      "mean": 0.913,
+      "p50": 0.8526,
+      "p90": 1.2412,
+      "p99": 1.4114,
+      "max": 1.4384
+     },
+     "metrics": {
+      "768": {
+       "ndcg@10": 0.96233,
+       "recall@1": 0.88283,
+       "recall@5": 0.98,
+       "recall@10": 0.99,
+       "recall@100": 1.0,
+       "mrr@10": 0.9575,
+       "queries": 100
+      },
+      "512": {
+       "ndcg@10": 0.96879,
+       "recall@1": 0.89783,
+       "recall@5": 0.99,
+       "recall@10": 0.99,
+       "recall@100": 1.0,
+       "mrr@10": 0.9645,
+       "queries": 100
+      },
+      "256": {
+       "ndcg@10": 0.95188,
+       "recall@1": 0.86283,
+       "recall@5": 0.98,
+       "recall@10": 0.99,
+       "recall@100": 1.0,
+       "mrr@10": 0.94028,
+       "queries": 100
+      },
+      "128": {
+       "ndcg@10": 0.9467,
+       "recall@1": 0.86783,
+       "recall@5": 0.96467,
+       "recall@10": 0.98,
+       "recall@100": 1.0,
+       "mrr@10": 0.94067,
+       "queries": 100
+      }
+     }
+    },
+    "none": {
+     "inputs_sha256_docs": "6c2e32221a6d1bc7a641b4edb8ba2434eb839b4dfbad4ce7e86296ced5629d37",
+     "docs_embed": {
+      "inputs": 300,
+      "requests": 75,
+      "batch": 4,
+      "concurrency": 2,
+      "wall_s": 1494.965,
+      "inputs_per_s": 0.201,
+      "tokens": 95556,
+      "bytes_sent": 468694,
+      "bytes_received": 1251499,
+      "retries": 0,
+      "request_s": {
+       "n": 75,
+       "mean": 39.6806,
+       "p50": 36.3878,
+       "p90": 66.6931,
+       "p99": 90.0033,
+       "max": 90.2765
+      },
+      "tokens_per_s": 63.9
+     },
+     "inputs_sha256_queries": "1425621e0d4ee96dac0b5209758f7da0449972b7a2ba3aad97bd06a42a46290e",
+     "queries_embed": {
+      "inputs": 100,
+      "requests": 25,
+      "batch": 4,
+      "concurrency": 2,
+      "wall_s": 53.633,
+      "inputs_per_s": 1.865,
+      "tokens": 1868,
+      "bytes_sent": 10860,
+      "bytes_received": 417077,
+      "retries": 0,
+      "request_s": {
+       "n": 25,
+       "mean": 4.2051,
+       "p50": 3.9624,
+       "p90": 6.2043,
+       "p99": 7.9176,
+       "max": 8.3505
+      },
+      "tokens_per_s": 34.8
+     },
+     "dim_probe": {
+      "768": {
+       "norm_min": 1.0,
+       "norm_max": 1.0
+      },
+      "512": {
+       "n": 16,
+       "cos_min": 1.0,
+       "norm_min": 1.0,
+       "norm_max": 1.0
+      },
+      "256": {
+       "n": 16,
+       "cos_min": 1.0,
+       "norm_min": 1.0,
+       "norm_max": 1.0
+      },
+      "128": {
+       "n": 16,
+       "cos_min": 1.0,
+       "norm_min": 1.0,
+       "norm_max": 1.0
+      }
+     },
+     "metrics": {
+      "768": {
+       "ndcg@10": 0.96109,
+       "recall@1": 0.88283,
+       "recall@5": 0.98,
+       "recall@10": 0.98,
+       "recall@100": 1.0,
+       "mrr@10": 0.95833,
+       "queries": 100
+      },
+      "512": {
+       "ndcg@10": 0.96303,
+       "recall@1": 0.88783,
+       "recall@5": 0.98,
+       "recall@10": 0.98,
+       "recall@100": 1.0,
+       "mrr@10": 0.95833,
+       "queries": 100
+      },
+      "256": {
+       "ndcg@10": 0.95514,
+       "recall@1": 0.86783,
+       "recall@5": 0.98,
+       "recall@10": 0.98,
+       "recall@100": 1.0,
+       "mrr@10": 0.94833,
+       "queries": 100
+      },
+      "128": {
+       "ndcg@10": 0.92571,
+       "recall@1": 0.82783,
+       "recall@5": 0.953,
+       "recall@10": 0.975,
+       "recall@100": 0.99,
+       "mrr@10": 0.91469,
+       "queries": 100
+      }
+     }
+    }
+   }
+  },
+  "code": {
+   "dataset": "mteb/CodeSearchNetRetrieval",
+   "revision": "68e8f0731a656fa4bd5b7c81936d95ad48a39bfe",
+   "data_sha256": {
+    "corpus.jsonl": "47a8d1a1b2a5136f4e43a13664e1e322248ce9d6b3da4110804b4a8cbda14544",
+    "queries.jsonl": "a4c17c4fbd92bba1b3298fd1432ec5965dc03ee1ee08ef413419d636d4ca8337",
+    "qrels.jsonl": "40fdbd652939af9ac2fbb1a65470a54d173f0ca7c5cb18b01993c679865156d5"
+   },
+   "docs": 300,
+   "queries": 100,
+   "policies": {
+    "task": {
+     "inputs_sha256_docs": "691b45f9f01bfed27f7f2cc52db3249dbeb75c430d8c259c8de7f2d5fb2d4bf8",
+     "docs_embed": {
+      "inputs": 300,
+      "requests": 75,
+      "batch": 4,
+      "concurrency": 2,
+      "wall_s": 990.591,
+      "inputs_per_s": 0.303,
+      "tokens": 72054,
+      "bytes_sent": 274059,
+      "bytes_received": 1251425,
+      "retries": 0,
+      "request_s": {
+       "n": 75,
+       "mean": 26.3611,
+       "p50": 21.6172,
+       "p90": 46.758,
+       "p99": 73.2534,
+       "max": 77.9018
+      },
+      "tokens_per_s": 72.7
+     },
+     "inputs_sha256_queries": "41bee63dfdb3065fadf35c786ec1ee82983c2d60a6fb575bcf554bbefe91a082",
+     "queries_embed": {
+      "inputs": 100,
+      "requests": 25,
+      "batch": 4,
+      "concurrency": 2,
+      "wall_s": 149.594,
+      "inputs_per_s": 0.668,
+      "tokens": 9194,
+      "bytes_sent": 40711,
+      "bytes_received": 417127,
+      "retries": 0,
+      "request_s": {
+       "n": 25,
+       "mean": 11.7327,
+       "p50": 10.012,
+       "p90": 19.0624,
+       "p99": 25.894,
+       "max": 26.8928
+      },
+      "tokens_per_s": 61.5
+     },
+     "dim_probe": {
+      "768": {
+       "norm_min": 1.0,
+       "norm_max": 1.0
+      },
+      "512": {
+       "n": 16,
+       "cos_min": 1.0,
+       "norm_min": 1.0,
+       "norm_max": 1.0
+      },
+      "256": {
+       "n": 16,
+       "cos_min": 1.0,
+       "norm_min": 1.0,
+       "norm_max": 1.0
+      },
+      "128": {
+       "n": 16,
+       "cos_min": 1.0,
+       "norm_min": 1.0,
+       "norm_max": 1.0
+      }
+     },
+     "query_latency_s": {
+      "n": 30,
+      "mean": 1.3321,
+      "p50": 1.1128,
+      "p90": 2.4186,
+      "p99": 3.4036,
+      "max": 3.5117
+     },
+     "metrics": {
+      "768": {
+       "ndcg@10": 0.96042,
+       "recall@1": 0.92,
+       "recall@5": 0.99,
+       "recall@10": 0.99,
+       "recall@100": 1.0,
+       "mrr@10": 0.95033,
+       "queries": 100
+      },
+      "512": {
+       "ndcg@10": 0.95773,
+       "recall@1": 0.91,
+       "recall@5": 0.98,
+       "recall@10": 0.99,
+       "recall@100": 1.0,
+       "mrr@10": 0.94667,
+       "queries": 100
+      },
+      "256": {
+       "ndcg@10": 0.96155,
+       "recall@1": 0.92,
+       "recall@5": 0.99,
+       "recall@10": 0.99,
+       "recall@100": 1.0,
+       "mrr@10": 0.95167,
+       "queries": 100
+      },
+      "128": {
+       "ndcg@10": 0.94334,
+       "recall@1": 0.88,
+       "recall@5": 0.98,
+       "recall@10": 0.99,
+       "recall@100": 1.0,
+       "mrr@10": 0.9275,
+       "queries": 100
+      }
+     }
+    },
+    "none": {
+     "inputs_sha256_docs": "c37de283e00b3298ee005579e92aa54fb963be54b15d04ef2f714d56fcac3bf0",
+     "docs_embed": {
+      "inputs": 300,
+      "requests": 75,
+      "batch": 4,
+      "concurrency": 2,
+      "wall_s": 986.116,
+      "inputs_per_s": 0.304,
+      "tokens": 70254,
+      "bytes_sent": 268059,
+      "bytes_received": 1251425,
+      "retries": 0,
+      "request_s": {
+       "n": 75,
+       "mean": 26.2439,
+       "p50": 21.9047,
+       "p90": 48.7767,
+       "p99": 71.6869,
+       "max": 74.6023
+      },
+      "tokens_per_s": 71.2
+     },
+     "inputs_sha256_queries": "666daaac63b33faac75357be262956996614d425e3b8cc71c58254d332c773b5",
+     "queries_embed": {
+      "inputs": 100,
+      "requests": 25,
+      "batch": 4,
+      "concurrency": 2,
+      "wall_s": 143.646,
+      "inputs_per_s": 0.696,
+      "tokens": 8502,
+      "bytes_sent": 37711,
+      "bytes_received": 417127,
+      "retries": 0,
+      "request_s": {
+       "n": 25,
+       "mean": 11.2362,
+       "p50": 8.9341,
+       "p90": 19.0545,
+       "p99": 25.4139,
+       "max": 26.218
+      },
+      "tokens_per_s": 59.2
+     },
+     "dim_probe": {
+      "768": {
+       "norm_min": 1.0,
+       "norm_max": 1.0
+      },
+      "512": {
+       "n": 16,
+       "cos_min": 1.0,
+       "norm_min": 1.0,
+       "norm_max": 1.0
+      },
+      "256": {
+       "n": 16,
+       "cos_min": 1.0,
+       "norm_min": 1.0,
+       "norm_max": 1.0
+      },
+      "128": {
+       "n": 16,
+       "cos_min": 1.0,
+       "norm_min": 1.0,
+       "norm_max": 1.0
+      }
+     },
+     "metrics": {
+      "768": {
+       "ndcg@10": 0.96075,
+       "recall@1": 0.92,
+       "recall@5": 0.98,
+       "recall@10": 0.99,
+       "recall@100": 1.0,
+       "mrr@10": 0.951,
+       "queries": 100
+      },
+      "512": {
+       "ndcg@10": 0.95706,
+       "recall@1": 0.91,
+       "recall@5": 0.98,
+       "recall@10": 0.99,
+       "recall@100": 1.0,
+       "mrr@10": 0.946,
+       "queries": 100
+      },
+      "256": {
+       "ndcg@10": 0.95172,
+       "recall@1": 0.9,
+       "recall@5": 0.99,
+       "recall@10": 0.99,
+       "recall@100": 1.0,
+       "mrr@10": 0.93867,
+       "queries": 100
+      },
+      "128": {
+       "ndcg@10": 0.94334,
+       "recall@1": 0.88,
+       "recall@5": 0.98,
+       "recall@10": 0.99,
+       "recall@100": 1.0,
+       "mrr@10": 0.9275,
+       "queries": 100
+      }
+     }
+    }
+   }
+  },
+  "image": {
+   "dataset": "nlphuji/flickr_1k_test_image_text_retrieval",
+   "revision": "c4a4cdc67b77fce148b45484a067957bf75ec4c3",
+   "data_sha256": {
+    "corpus.jsonl": "6ed2da72bfae8d24e6118739258aadeae75ba4fd7ed023f726e1cea38333f04b",
+    "queries.jsonl": "f7f7ca1417a2657242c71769a9cec5b78f02a69abe8f15be89f07f9d91279fe3",
+    "qrels.jsonl": "7bca201c59950ee5abb8dbba73a2f90169e9c17c8ac520647fcac7df7e87bc71",
+    "images": "b931804b4db6be3efed5ce621fce5767a739766310f3e5f53e8b0b8a92f11807"
+   },
+   "docs": 300,
+   "queries": 100,
+   "policies": {},
+   "image_bytes": {
+    "raw_total": 42780755,
+    "raw_mean": 142603,
+    "data_uri_total": 57048332
+   },
+   "unsupported": "HTTP 200 with an all-zero vector (1 prompt tokens): not an embedding"
+  }
+ },
+ "finished": "2026-11-20T03:23:28Z"
+}

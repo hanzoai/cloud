@@ -11,7 +11,8 @@ package cloud
 // service and defaultServiceRPM[""] is zero.
 //
 // So the same operation, asked for the same way by the same org, is bounded
-// through one door and unbounded through the two an agent uses.
+// through one door and unbounded through the two an agent uses. Measured here
+// rather than argued.
 
 import (
 	"encoding/json"

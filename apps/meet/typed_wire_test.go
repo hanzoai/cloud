@@ -1,0 +1,89 @@
+package meet
+
+// typed_wire_test.go is the ledger: every operation this app serves is either a
+// typed op or a NAMED refusal carrying the wire fact that keeps it raw, and the two
+// must SUM to the served surface.
+//
+// It exists because a reason written only at a registration cannot fail. Two
+// refusals in this fleet outlived their cause by months — the agents session writes
+// and the guide step transitions both named a capability that zip then shipped —
+// and nothing noticed, because a comment is not a gate.
+
+import (
+	"sort"
+	"strings"
+	"testing"
+
+	"github.com/hanzoai/cloud/sdk/spec"
+)
+
+// untypedByDesign is the CLOSED list, each entry re-read against the PINNED zip
+// rather than inherited.
+var untypedByDesign = map[string]string{
+	"POST /v1/meet/getToken": "answers the raw join token as text/plain — the office client reads it " +
+		"with res.text(). A typed op always marshals its Out to JSON, so typing this turns `<token>` " +
+		"into `\"<token>\"` under application/json and breaks every published bundle in the field.",
+	"GET /v1/meet/session": "its gate is principal.Minted — the identity boundary's OWN attestation, " +
+		"parked on the REQUEST — and a typed op holds a context, not a request. The context-side facts " +
+		"a typed op CAN read (OrgFrom / ValidatedFrom) derive from headers nothing strips in a " +
+		"hand-written plugin main, which is the forgeable signal this route was fixed to stop " +
+		"selecting on. Typing it would put the weaker fact back in front of the same rows.",
+}
+
+// TestEveryRouteIsTypedOrNamed fails three ways: a served route that is neither
+// typed nor named, a name this app no longer serves, and a name that has BECOME a
+// typed op — which is how a refusal that stops being true gets noticed.
+func TestEveryRouteIsTypedOrNamed(t *testing.T) {
+	app := mount(t, "k", "s")
+	doc, err := spec.Of(app, spec.Info{Title: "meet", Version: "v1"})
+	if err != nil {
+		t.Fatalf("spec: %v", err)
+	}
+	reg, err := spec.Typed(app)
+	if err != nil {
+		t.Fatalf("typed: %v", err)
+	}
+
+	served, typed := map[string]bool{}, map[string]bool{}
+	for path, item := range doc.Paths {
+		if !strings.HasPrefix(path, "/v1/meet") {
+			continue
+		}
+		for method := range item {
+			served[strings.ToUpper(method)+" "+path] = true
+		}
+	}
+	for key := range reg.Ops {
+		if _, path, ok := strings.Cut(key, " "); ok && strings.HasPrefix(path, "/v1/meet") {
+			typed[key] = true
+		}
+	}
+
+	var untyped []string
+	for key := range served {
+		if !typed[key] {
+			if _, named := untypedByDesign[key]; !named {
+				untyped = append(untyped, key)
+			}
+		}
+	}
+	if len(untyped) > 0 {
+		sort.Strings(untyped)
+		t.Errorf("served but neither typed nor named: %s\n"+
+			"A raw route publishes no schema, no MCP tool, no CLI command and no typed SDK method. "+
+			"Convert it, or name it in untypedByDesign with the wire fact that keeps it raw.",
+			strings.Join(untyped, ", "))
+	}
+	for key := range untypedByDesign {
+		if !served[key] {
+			t.Errorf("untypedByDesign names %q, which this app no longer serves", key)
+		}
+		if typed[key] {
+			t.Errorf("untypedByDesign names %q, which IS a typed op — delete the entry", key)
+		}
+	}
+	if got, want := len(typed)+len(untypedByDesign), len(served); got != want {
+		t.Errorf("the two ledgers must sum to the served surface: typed %d + named %d = %d, served %d",
+			len(typed), len(untypedByDesign), got, want)
+	}
+}

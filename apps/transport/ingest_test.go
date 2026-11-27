@@ -1,0 +1,885 @@
+package transport
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"io"
+	"net/http"
+	"net/http/httptest"
+	"strconv"
+	"strings"
+	"sync"
+	"testing"
+	"time"
+
+	"github.com/hanzoai/cloud/client"
+	"github.com/hanzoai/cloud/internal/sqltest"
+	"github.com/hanzoai/cloud/sdk"
+	luxlog "github.com/luxfi/log"
+	"github.com/zap-proto/zip"
+)
+
+// ingest_test.go owns the shared package harness (mounted app, identity
+// requests, transport spies, client fixtures) plus the ingress-gate behavior
+// tests.
+// ingest is driven DIRECTLY: the goroutine hop lives in
+// provider.emitIngress and is proven in clients/integrations/
+// ingress_test.go, so every test here is deterministic.
+
+// ── harness ──────────────────────────────────────────────────────────────────
+
+// syncBuf is a mutex-guarded log sink so tests can assert never-log
+// invariants (pairing codes, sender ids) without a data race.
+type syncBuf struct {
+	mu  sync.Mutex
+	buf bytes.Buffer
+}
+
+func (b *syncBuf) Write(p []byte) (int, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.Write(p)
+}
+
+func (b *syncBuf) String() string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.String()
+}
+
+// testEnv is one mounted transport app: the zip app, captured subsystem logs,
+// and the DataDir holding transports.db.
+type testEnv struct {
+	app     *zip.App
+	logs    *syncBuf
+	dataDir string
+}
+
+// compose gives the test app what every real composer gives its program: the
+// fused host installs cloud.Bridge at its root and a plugin program's
+// constructor does the same, so a bare test app that skipped it would answer
+// 403 for a reason production can never produce.
+func compose(app *zip.App) { app.Use(cloud.Bridge()) }
+
+// newApp mounts transports exactly as apps.go does. Integrations stays
+// unmounted on purpose: identity fails soft (empty UserID),
+// OrgForExternalID / ConnectionFor answer not-found — the fail-closed side
+// every gate must survive.
+func newApp(t *testing.T) *testEnv {
+	t.Helper()
+	// The subsystem logs through the process default now, not an injected
+	// logger, so capturing its output means pointing the default at this buffer
+	// for the life of the test.
+	logs := &syncBuf{}
+	prev := luxlog.Default()
+	luxlog.SetDefault(luxlog.NewWriter(logs))
+	t.Cleanup(func() { luxlog.SetDefault(prev) })
+
+	app := zip.New(zip.Config{Logger: luxlog.New("test")})
+	compose(app)
+	dataDir := t.TempDir()
+	t.Setenv("CLOUD_DATA_DIR", dataDir)
+	t.Setenv("CLOUD_DOMAIN", "api.hanzo.ai")
+	deps := cloud.Deps{}
+	if err := Use(app, deps); err != nil {
+		t.Fatalf("Use:  %v", err)
+	}
+	t.Cleanup(func() { _ = Shutdown(context.Background()) })
+	return &testEnv{app: app, logs: logs, dataDir: dataDir}
+}
+
+func (e *testEnv) store(t *testing.T) *store {
+	t.Helper()
+	s := mounted.Load()
+	if s == nil {
+		t.Fatal("transports not mounted")
+	}
+	return s.State.store
+}
+
+type httpResult struct {
+	Code int
+	Body []byte
+}
+
+// doReq issues one request with the gateway identity headers the middleware
+// would mint (the integrations_test.go req idiom). org == "" sends NO
+// identity — the anonymous-forge path the 403 tests need. admin adds the
+// org-admin bit (X-User-IsOrgAdmin, principal.IsOrgAdmin).
+func doReq(t *testing.T, e *testEnv, method, path, org string, admin bool, body any) httpResult {
+	t.Helper()
+	var r io.Reader
+	if body != nil {
+		b, err := json.Marshal(body)
+		if err != nil {
+			t.Fatalf("marshal body: %v", err)
+		}
+		r = bytes.NewReader(b)
+	}
+	rq := httptest.NewRequest(method, path, r)
+	if body != nil {
+		rq.Header.Set("Content-Type", "application/json")
+	}
+	if org != "" {
+		rq.Header.Set("X-Org-Id", org)
+		rq.Header.Set("X-User-Id", "u-"+org)
+	}
+	if admin {
+		rq.Header.Set("X-User-IsOrgAdmin", "true")
+	}
+	resp, err := e.app.Test(rq, zip.TestConfig{Timeout: 30 * time.Second, FailOnTimeout: true})
+	if err != nil {
+		t.Fatalf("Test %s %s: %v", method, path, err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	b, _ := io.ReadAll(resp.Body)
+	return httpResult{Code: resp.StatusCode, Body: b}
+}
+
+func req(t *testing.T, e *testEnv, method, path, org string, body any) httpResult {
+	t.Helper()
+	return doReq(t, e, method, path, org, false, body)
+}
+
+func reqAdmin(t *testing.T, e *testEnv, method, path, org string, body any) httpResult {
+	t.Helper()
+	return doReq(t, e, method, path, org, true, body)
+}
+
+func decodeJSON(t *testing.T, body []byte, out any) {
+	t.Helper()
+	if err := json.Unmarshal(body, out); err != nil {
+		t.Fatalf("json: %v (%s)", err, body)
+	}
+}
+
+func putAllowlist(t *testing.T, e *testEnv, org string, body map[string]any) {
+	t.Helper()
+	res := reqAdmin(t, e, http.MethodPut, "/v1/transport/allowlist", org, body)
+	if res.Code != http.StatusOK {
+		t.Fatalf("PUT allowlist: %d (%s)", res.Code, res.Body)
+	}
+}
+
+// ── transport spies ──────────────────────────────────────────────────────────
+
+// endpointCall is one recorded transport invocation.
+type endpointCall struct {
+	org     string
+	root    string
+	channel string
+	replyTo string
+	text    string
+}
+
+// endpointRec records transport invocations. Mutex-guarded so recorders stay
+// race-clean if a caller ever drives them from a goroutine.
+type endpointRec struct {
+	mu    sync.Mutex
+	id    string
+	fail  error
+	calls []endpointCall
+}
+
+func (r *endpointRec) hit(c endpointCall) (string, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.calls = append(r.calls, c)
+	return r.id, r.fail
+}
+
+func (r *endpointRec) setFail(err error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.fail = err
+}
+
+func (r *endpointRec) count() int {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return len(r.calls)
+}
+
+// find returns the ONE recorded call whose text contains substr.
+//
+// Assertions read as "what was said" rather than "how many times a transport
+// was touched", which is what they actually mean — and unlike an index it does
+// not depend on a turn's reply losing a race with the message under test. An
+// allowed message is answered now, so both arrive on the same transport.
+func (r *endpointRec) find(t *testing.T, substr string) endpointCall {
+	t.Helper()
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	var hit []endpointCall
+	for _, c := range r.calls {
+		if strings.Contains(c.text, substr) {
+			hit = append(hit, c)
+		}
+	}
+	if len(hit) != 1 {
+		t.Fatalf("want exactly one call saying %q, got %d of %d recorded", substr, len(hit), len(r.calls))
+	}
+	return hit[0]
+}
+
+func (r *endpointRec) call(t *testing.T, i int) endpointCall {
+	t.Helper()
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if i >= len(r.calls) {
+		t.Fatalf("transport call %d not recorded (have %d)", i, len(r.calls))
+	}
+	return r.calls[i]
+}
+
+// The spy installers swap the package transport vars for recorders and
+// restore them on cleanup. EVERY transport is a spy in this package —
+// Discord's real HTTP path is proven in apps/integrations/ingress_test.go
+// (C2-4), symmetric with the other transports' existing send-path tests.
+
+func spyTelegram(t *testing.T) *endpointRec {
+	t.Helper()
+	rec := &endpointRec{}
+	saved := telegramEndpoint
+	telegramEndpoint = func(_ context.Context, org string, chatID, replyTo int64, text string) error {
+		_, err := rec.hit(endpointCall{org: org, channel: strconv.FormatInt(chatID, 10), replyTo: strconv.FormatInt(replyTo, 10), text: text})
+		return err
+	}
+	t.Cleanup(func() { telegramEndpoint = saved })
+	return rec
+}
+
+func spySlack(t *testing.T) *endpointRec {
+	t.Helper()
+	rec := &endpointRec{}
+	saved := slackEndpoint
+	slackEndpoint = func(_ context.Context, org, transport, threadTS, _, text string, _ client.Controls) (string, error) {
+		return rec.hit(endpointCall{org: org, channel: transport, replyTo: threadTS, text: text})
+	}
+	t.Cleanup(func() { slackEndpoint = saved })
+	return rec
+}
+
+func spyTeams(t *testing.T) *endpointRec {
+	t.Helper()
+	rec := &endpointRec{}
+	saved := teamsEndpoint
+	teamsEndpoint = func(_ context.Context, org, serviceURL, conversationID, text string) error {
+		_, err := rec.hit(endpointCall{org: org, root: serviceURL, channel: conversationID, text: text})
+		return err
+	}
+	t.Cleanup(func() { teamsEndpoint = saved })
+	return rec
+}
+
+func spyDiscord(t *testing.T) *endpointRec {
+	t.Helper()
+	rec := &endpointRec{id: "m-1"}
+	saved := discordEndpoint
+	discordEndpoint = func(_ context.Context, org, channelID, replyTo, text string) (string, error) {
+		return rec.hit(endpointCall{org: org, channel: channelID, replyTo: replyTo, text: text})
+	}
+	t.Cleanup(func() { discordEndpoint = saved })
+	return rec
+}
+
+func spyGitHub(t *testing.T) *endpointRec {
+	t.Helper()
+	rec := &endpointRec{id: "gh-c-1"}
+	saved := githubEndpoint
+	githubEndpoint = func(_ context.Context, org, channel, text string) (string, error) {
+		return rec.hit(endpointCall{org: org, channel: channel, text: text})
+	}
+	t.Cleanup(func() { githubEndpoint = saved })
+	return rec
+}
+
+func spyLinear(t *testing.T) *endpointRec {
+	t.Helper()
+	rec := &endpointRec{id: "ln-c-1"}
+	saved := linearEndpoint
+	linearEndpoint = func(_ context.Context, org, channel, text string) (string, error) {
+		return rec.hit(endpointCall{org: org, channel: channel, text: text})
+	}
+	t.Cleanup(func() { linearEndpoint = saved })
+	return rec
+}
+
+func spyWhatsApp(t *testing.T) *endpointRec {
+	t.Helper()
+	rec := &endpointRec{id: "wamid.1"}
+	saved := whatsappEndpoint
+	whatsappEndpoint = func(_ context.Context, org, to, replyTo, text string, _ bool) (string, error) {
+		return rec.hit(endpointCall{org: org, channel: to, replyTo: replyTo, text: text})
+	}
+	t.Cleanup(func() { whatsappEndpoint = saved })
+	return rec
+}
+
+// ingressEv builds one client event; realistic per-transport values live at the
+// call sites.
+func ingressEv(org, provider, externalID, user, transport, thread, text, key, replyRoot string) client.TransportIngestIn {
+	return client.TransportIngestIn{
+		Org: org, Provider: provider, ExternalID: externalID, User: user,
+		Channel: transport, ThreadID: thread, Text: text, DedupeKey: key,
+		ReplyRoot: replyRoot,
+	}
+}
+
+// ── ingest behavior ──────────────────────────────────────────────────────────
+
+func TestIngestPairingDefault(t *testing.T) {
+	sqltest.Engines(t, func(t *testing.T, _ sqltest.Open) {
+		e := newApp(t)
+		tg := spyTelegram(t)
+		sl := spySlack(t)
+		ctx := context.Background()
+		const org = "acme-pair"
+		st := e.store(t)
+
+		// Telegram DM from an unknown sender: pairing request minted, message dropped.
+		ingest(ctx, ingressEv(org, "telegram", "hanzobot", "42", "777", "", "hi", "k1", ""))
+		rows, err := listPairing(ctx, st, org, time.Now().Unix())
+		if err != nil {
+			t.Fatalf("listPairing: %v", err)
+		}
+		if len(rows) != 1 || rows[0].Transport != "telegram" || rows[0].Sender != "42" {
+			t.Fatalf("pending = %+v, want one telegram/42 request", rows)
+		}
+		tgCode := rows[0].Code
+		if len(tgCode) != pairCodeLen || tgCode != strings.ToUpper(tgCode) {
+			t.Fatalf("code %q: want %d uppercase chars", tgCode, pairCodeLen)
+		}
+		if inbox, _ := stored(ctx, st, org); len(inbox) != 0 {
+			t.Fatalf("inbox = %d rows; a pairing-gated message is never stored", len(inbox))
+		}
+		// The pairing reply GOES OUT. This asserted the opposite, and its own comment
+		// gave the reason: "integrations is unmounted here, so the chat has NO org
+		// bind" — an expectation built on a nil package global reached from another
+		// process, which is the defect and not the contract. The comment even named
+		// the truth next to it: in prod the bind exists by construction, because the
+		// adapter resolved this org from this very chat.
+		//
+		// What actually protects a send to a chat this org does not own is the absence
+		// of a channel_route row, and TestSendTelegramBinding covers that directly.
+		tg.find(t, "Pairing code: ")
+
+		// Same sender again: the request is refreshed — same code, one row.
+		ingest(ctx, ingressEv(org, "telegram", "hanzobot", "42", "777", "", "hi again", "k2", ""))
+		if rows2, _ := listPairing(ctx, st, org, time.Now().Unix()); len(rows2) != 1 || rows2[0].Code != tgCode {
+			t.Fatalf("refresh must keep the pending code: %+v", rows2)
+		}
+
+		// Slack DM: a member of the connected workspace is admitted with no policy
+		// stored — no pairing request, no code sent.
+		ingest(ctx, ingressEv(org, "slack", "T024ABC", "u1", "D024BE91L", "", "hello", "s1", ""))
+		rows3, _ := listPairing(ctx, st, org, time.Now().Unix())
+		for _, r := range rows3 {
+			if r.Transport == "slack" {
+				t.Fatalf("a Slack member was asked to pair: %+v", rows3)
+			}
+		}
+		for i := 0; i < sl.count(); i++ {
+			if strings.Contains(sl.call(t, i).text, "Pairing code") {
+				t.Fatal("a Slack member was sent a pairing code")
+			}
+		}
+
+		// Codes are bearer capabilities: admin surface only, never logs.
+		logs := e.logs.String()
+		for _, c := range []string{tgCode} {
+			if strings.Contains(logs, c) {
+				t.Fatalf("pairing code %q leaked into logs", c)
+			}
+		}
+
+	})
+}
+
+func TestIngestApproveRoundtrip(t *testing.T) {
+	sqltest.Engines(t, func(t *testing.T, _ sqltest.Open) {
+		e := newApp(t)
+		_ = spyTelegram(t) // absorb the (bind-gated) pairing reply attempt
+		ctx := context.Background()
+		const org = "acme-approve"
+
+		ingest(ctx, ingressEv(org, "telegram", "hanzobot", "42", "777", "", "hi", "k1", ""))
+
+		res := reqAdmin(t, e, http.MethodGet, "/v1/transport/pairing", org, nil)
+		if res.Code != http.StatusOK {
+			t.Fatalf("pairing list: %d (%s)", res.Code, res.Body)
+		}
+		var pending struct {
+			Pending []struct {
+				Transport string `json:"transport"`
+				Sender    string `json:"sender"`
+				Code      string `json:"code"`
+			} `json:"pending"`
+		}
+		decodeJSON(t, res.Body, &pending)
+		if len(pending.Pending) != 1 || pending.Pending[0].Sender != "42" {
+			t.Fatalf("pending = %s", res.Body)
+		}
+		code := pending.Pending[0].Code
+
+		// Only the org's admins read the queue; plain members and anonymous callers
+		// may not.
+		if r := req(t, e, http.MethodGet, "/v1/transport/pairing", org, nil); r.Code != http.StatusForbidden {
+			t.Fatalf("member pairing read: %d, want 403", r.Code)
+		}
+		if r := req(t, e, http.MethodGet, "/v1/transport/pairing", "", nil); r.Code != http.StatusUnauthorized {
+			t.Fatalf("anonymous pairing read: %d, want 401", r.Code)
+		}
+
+		// Approval is admin-gated.
+		approveBody := map[string]any{"transport": "telegram", "code": code}
+		if r := req(t, e, http.MethodPost, "/v1/transport/pairing/approve", org, approveBody); r.Code != http.StatusForbidden {
+			t.Fatalf("non-admin approve: %d, want 403", r.Code)
+		}
+		res = reqAdmin(t, e, http.MethodPost, "/v1/transport/pairing/approve", org, approveBody)
+		if res.Code != http.StatusOK {
+			t.Fatalf("approve: %d (%s)", res.Code, res.Body)
+		}
+		var approved struct {
+			Sender            string `json:"sender"`
+			OwnerBootstrapped bool   `json:"ownerBootstrapped"`
+		}
+		decodeJSON(t, res.Body, &approved)
+		if approved.Sender != "42" || !approved.OwnerBootstrapped {
+			t.Fatalf("approve = %+v, want sender 42 + first-approval owner bootstrap", approved)
+		}
+		// A consumed code is gone.
+		if r := reqAdmin(t, e, http.MethodPost, "/v1/transport/pairing/approve", org, approveBody); r.Code != http.StatusNotFound {
+			t.Fatalf("re-approve: %d, want 404", r.Code)
+		}
+
+		// The paired sender's next message is stored, and it is stored with no owner:
+		// identity is not resolved at ingest, so no person is recorded on the row.
+		ingest(ctx, ingressEv(org, "telegram", "hanzobot", "42", "777", "", "hello", "k2", ""))
+		rows, err := stored(ctx, e.store(t), org)
+		if err != nil || len(rows) != 1 {
+			t.Fatalf("stored = %+v err=%v, want the one allowed message", rows, err)
+		}
+		m := rows[0]
+		if m.Transport != "telegram" || m.ChannelID != "777" || m.ChannelKind != ChannelDM || m.Sender != "42" || m.Text != "hello" {
+			t.Fatalf("inbox row = %+v", m)
+		}
+		if m.SenderUser != "" {
+			t.Fatalf("senderUser = %q; unlinked identity (integrations unmounted) must stay empty", m.SenderUser)
+		}
+		// A row that names no person is nobody's: a member of the org lists nothing,
+		// and the empty page answers the cursor it was asked from.
+		res = req(t, e, http.MethodGet, "/v1/transport/inbox", org, nil)
+		if res.Code != http.StatusOK {
+			t.Fatalf("inbox: %d (%s)", res.Code, res.Body)
+		}
+		var page struct {
+			Messages []json.RawMessage `json:"messages"`
+			Cursor   int64             `json:"cursor"`
+		}
+		decodeJSON(t, res.Body, &page)
+		if len(page.Messages) != 0 || page.Cursor != 0 {
+			t.Fatalf("member inbox = %s, want an empty page at cursor 0", res.Body)
+		}
+
+	})
+}
+
+func TestIngestAllowlistMode(t *testing.T) {
+	sqltest.Engines(t, func(t *testing.T, _ sqltest.Open) {
+		e := newApp(t)
+		_ = spyTelegram(t)
+		ctx := context.Background()
+		const org = "acme-allow"
+		st := e.store(t)
+
+		putAllowlist(t, e, org, map[string]any{"transport": "telegram", "dmPolicy": "allowlist", "dm": []string{"42"}})
+
+		ingest(ctx, ingressEv(org, "telegram", "hanzobot", "42", "700", "", "yo", "a1", ""))
+		if rows, _ := stored(ctx, st, org); len(rows) != 1 {
+			t.Fatalf("allowlisted sender: %d inbox rows, want 1", len(rows))
+		}
+
+		// A stranger is dropped silently: no inbox row AND no pairing request —
+		// pairing-source grants exist only under the pairing policy.
+		ingest(ctx, ingressEv(org, "telegram", "hanzobot", "u-sneak", "701", "", "let me in", "a2", ""))
+		if rows, _ := stored(ctx, st, org); len(rows) != 1 {
+			t.Fatal("blocked sender reached the inbox")
+		}
+		if pend, _ := listPairing(ctx, st, org, time.Now().Unix()); len(pend) != 0 {
+			t.Fatal("allowlist policy must not mint pairing requests")
+		}
+		// Blocked drops log the closed reason code only — never sender ids.
+		logs := e.logs.String()
+		if !strings.Contains(logs, string(dmNotAllowlisted)) {
+			t.Fatal("blocked drop must log its reason code")
+		}
+		if strings.Contains(logs, "u-sneak") {
+			t.Fatal("sender ids must never appear in logs")
+		}
+
+	})
+}
+
+func TestIngestOpenMode(t *testing.T) {
+	sqltest.Engines(t, func(t *testing.T, _ sqltest.Open) {
+		e := newApp(t)
+		_ = spyTelegram(t)
+		ctx := context.Background()
+		const org = "acme-open"
+		st := e.store(t)
+
+		// Open without `*` (or an explicit entry) admits nobody — and never pairs.
+		putAllowlist(t, e, org, map[string]any{"transport": "telegram", "dmPolicy": "open"})
+		ingest(ctx, ingressEv(org, "telegram", "hanzobot", "50", "500", "", "x", "o1", ""))
+		if rows, _ := stored(ctx, st, org); len(rows) != 0 {
+			t.Fatal("open without a wildcard must block")
+		}
+		if pend, _ := listPairing(ctx, st, org, time.Now().Unix()); len(pend) != 0 {
+			t.Fatal("open policy must not mint pairing requests")
+		}
+
+		putAllowlist(t, e, org, map[string]any{"transport": "telegram", "dmPolicy": "open", "dm": []string{"*"}})
+		ingest(ctx, ingressEv(org, "telegram", "hanzobot", "50", "500", "", "x", "o2", ""))
+		if rows, _ := stored(ctx, st, org); len(rows) != 1 {
+			t.Fatal("open + wildcard must admit")
+		}
+
+	})
+}
+
+func TestIngestGroupPolicy(t *testing.T) {
+	sqltest.Engines(t, func(t *testing.T, _ sqltest.Open) {
+		e := newApp(t)
+		sl := spySlack(t)
+		ctx := context.Background()
+		const org = "acme-group"
+		st := e.store(t)
+		group := func(key, text string) client.TransportIngestIn {
+			return ingressEv(org, "slack", "T024ABC", "u9", "C024BE91L", "", text, key, "")
+		}
+
+		// Default groupPolicy=open: a group message is stored.
+		ingest(ctx, group("g1", "hi"))
+		rows, _ := stored(ctx, st, org)
+		if len(rows) != 1 || rows[0].ChannelKind != ChannelGroup {
+			t.Fatalf("rows = %+v, want one group row", rows)
+		}
+
+		putAllowlist(t, e, org, map[string]any{"transport": "slack", "groupPolicy": "disabled"})
+		ingest(ctx, group("g2", "anyone?"))
+		if rows, _ := stored(ctx, st, org); len(rows) != 1 {
+			t.Fatal("disabled group surface must drop")
+		}
+
+		putAllowlist(t, e, org, map[string]any{"transport": "slack", "groupPolicy": "allowlist"})
+		ingest(ctx, group("g3", "empty allowlist"))
+		if rows, _ := stored(ctx, st, org); len(rows) != 1 {
+			t.Fatal("an empty group allowlist admits nobody")
+		}
+
+		// Pair + approve the same sender over DM, under the pairing policy the org chose…
+		putAllowlist(t, e, org, map[string]any{"transport": "slack", "dmPolicy": "pairing"})
+		ingest(ctx, ingressEv(org, "slack", "T024ABC", "u9", "D9", "", "pair me", "d1", ""))
+		sl.find(t, "Pairing code: ")
+		pend, _ := listPairing(ctx, st, org, time.Now().Unix())
+		if len(pend) != 1 {
+			t.Fatalf("pending = %+v", pend)
+		}
+		res := reqAdmin(t, e, http.MethodPost, "/v1/transport/pairing/approve", org,
+			map[string]any{"transport": "slack", "code": pend[0].Code})
+		if res.Code != http.StatusOK {
+			t.Fatalf("approve: %d (%s)", res.Code, res.Body)
+		}
+		ingest(ctx, ingressEv(org, "slack", "T024ABC", "u9", "D9", "", "dm ok", "d2", ""))
+		if rows, _ := stored(ctx, st, org); len(rows) != 2 {
+			t.Fatal("approved sender's DM must land in the inbox")
+		}
+		// …and the DM approval STILL does not open the group allowlist.
+		ingest(ctx, group("g4", "group again"))
+		if rows, _ := stored(ctx, st, org); len(rows) != 2 {
+			t.Fatal("a DM pairing approval must never grant group access")
+		}
+
+	})
+}
+
+func TestIngestRouteAfterGate(t *testing.T) {
+	sqltest.Engines(t, func(t *testing.T, _ sqltest.Open) {
+		e := newApp(t)
+		tm := spyTeams(t)
+		ctx := context.Background()
+		const org = "acme-teams"
+		st := e.store(t)
+		const conv = "19:abc@thread.tacv2"
+		const root = "https://smba.example/amer/"
+
+		// C1-F4: a blocked sender mints NO route — route presence is a send
+		// capability.
+		putAllowlist(t, e, org, map[string]any{"transport": "teams", "groupPolicy": "disabled"})
+		ingest(ctx, ingressEv(org, "teams", "tenant-1", "u1", conv, "", "hi", "t1", root))
+		if _, ok, _ := st.routeFor(ctx, org, "teams", conv, time.Now().Unix()); ok {
+			t.Fatal("blocked inbound must not mint a route")
+		}
+		if tm.count() != 0 {
+			t.Fatal("no transport traffic for a blocked event")
+		}
+
+		// Allowed inbound stores the JWT-verified reply root; egress rides it.
+		putAllowlist(t, e, org, map[string]any{"transport": "teams", "groupPolicy": "open"})
+		ingest(ctx, ingressEv(org, "teams", "tenant-1", "u1", conv, "", "hi again", "t2", root))
+		got, ok, err := st.routeFor(ctx, org, "teams", conv, time.Now().Unix())
+		if err != nil || !ok || got != root {
+			t.Fatalf("route = %q ok=%v err=%v, want the stored reply root", got, ok, err)
+		}
+		res := req(t, e, http.MethodPost, "/v1/transport/teams/send", org,
+			map[string]any{"channel": map[string]any{"id": conv}, "text": "reply"})
+		if res.Code != http.StatusOK {
+			t.Fatalf("send: %d (%s)", res.Code, res.Body)
+		}
+		sent := tm.call(t, 0)
+		if sent.root != root || sent.channel != conv {
+			t.Fatalf("send rode %+v, want the learned root", sent)
+		}
+
+		// The PAIR branch mints the route too — the pairing reply must be able to
+		// ride the teams transport.
+		const dmConv = "a:1a2b"
+		const root2 = "https://smba.example/emea/"
+		ingest(ctx, ingressEv(org, "teams", "tenant-1", "u7", dmConv, "", "hello", "t3", root2))
+		got2, ok2, _ := st.routeFor(ctx, org, "teams", dmConv, time.Now().Unix())
+		if !ok2 || got2 != root2 {
+			t.Fatalf("pair-branch route = %q ok=%v, want %q", got2, ok2, root2)
+		}
+		reply := tm.find(t, "Pairing code: ")
+		if reply.root != root2 || reply.channel != dmConv || !strings.Contains(reply.text, "Pairing code: ") {
+			t.Fatalf("pairing reply = %+v", reply)
+		}
+
+	})
+}
+
+func TestIngestEventKeyIdempotent(t *testing.T) {
+	sqltest.Engines(t, func(t *testing.T, _ sqltest.Open) {
+		e := newApp(t)
+		_ = spyTelegram(t)
+		ctx := context.Background()
+		const org = "acme-dup"
+		st := e.store(t)
+
+		putAllowlist(t, e, org, map[string]any{"transport": "telegram", "dmPolicy": "open", "dm": []string{"*"}})
+		ev := ingressEv(org, "telegram", "hanzobot", "9", "900", "", "same", "dup-1", "")
+		ingest(ctx, ev)
+		ingest(ctx, ev)
+		if rows, _ := stored(ctx, st, org); len(rows) != 1 {
+			t.Fatalf("redelivered event key stored %d rows, want 1", len(rows))
+		}
+
+	})
+}
+
+func TestIngestOrgIsolation(t *testing.T) {
+	sqltest.Engines(t, func(t *testing.T, _ sqltest.Open) {
+		e := newApp(t)
+		_ = spyTelegram(t)
+		_ = spySlack(t)
+		ctx := context.Background()
+		const orgA = "acme-iso-a"
+		const orgB = "acme-iso-b"
+		st := e.store(t)
+
+		putAllowlist(t, e, orgA, map[string]any{"transport": "telegram", "dmPolicy": "open", "dm": []string{"*"}})
+		ingest(ctx, ingressEv(orgA, "telegram", "hanzobot", "1", "100", "", "secret-a", "i1", ""))
+		ingest(ctx, ingressEv(orgA, "slack", "T1", "u1", "D1", "", "pair", "i2", ""))
+
+		// Org B sees neither A's inbox nor A's pending pairings.
+		res := req(t, e, http.MethodGet, "/v1/transport/inbox", orgB, nil)
+		var inbox struct {
+			Messages []json.RawMessage `json:"messages"`
+		}
+		decodeJSON(t, res.Body, &inbox)
+		if len(inbox.Messages) != 0 {
+			t.Fatalf("org-b inbox = %s, want empty", res.Body)
+		}
+		res = reqAdmin(t, e, http.MethodGet, "/v1/transport/pairing", orgB, nil)
+		var pending struct {
+			Pending []json.RawMessage `json:"pending"`
+		}
+		decodeJSON(t, res.Body, &pending)
+		if len(pending.Pending) != 0 {
+			t.Fatalf("org-b pending = %s, want empty", res.Body)
+		}
+		// And A's open policy does not leak into B: the same sender pairs there.
+		ingest(ctx, ingressEv(orgB, "telegram", "hanzobot", "1", "100", "", "hi", "i3", ""))
+		if rows, _ := stored(ctx, st, orgB); len(rows) != 0 {
+			t.Fatal("org-b must keep the strict pairing default")
+		}
+		if pend, _ := listPairing(ctx, st, orgB, time.Now().Unix()); len(pend) != 1 {
+			t.Fatalf("org-b pending = %+v, want its own pairing request", pend)
+		}
+
+	})
+}
+
+func TestIngestDiscordRoute(t *testing.T) {
+	sqltest.Engines(t, func(t *testing.T, _ sqltest.Open) {
+		e := newApp(t)
+		dc := spyDiscord(t)
+		ctx := context.Background()
+		const org = "acme-disc"
+		st := e.store(t)
+
+		// Allowed guild inbound (groupPolicy default open) stores the message AND
+		// mints the discord route — presence with reply_root '' IS the send
+		// capability (C1-F1).
+		ingest(ctx, ingressEv(org, "discord", "GUILD9", "u5", "c-99", "", "hi", "dk1", ""))
+		rows, _ := stored(ctx, st, org)
+		if len(rows) != 1 || rows[0].ChannelKind != ChannelGroup || rows[0].Account != "guild9" {
+			t.Fatalf("rows = %+v", rows)
+		}
+		root, ok, err := st.routeFor(ctx, org, "discord", "c-99", time.Now().Unix())
+		if err != nil || !ok || root != "" {
+			t.Fatalf("route = %q ok=%v err=%v, want present with empty root", root, ok, err)
+		}
+		res := req(t, e, http.MethodPost, "/v1/transport/discord/send", org,
+			map[string]any{"channel": map[string]any{"id": "c-99"}, "text": "pong"})
+		if res.Code != http.StatusOK {
+			t.Fatalf("send: %d (%s)", res.Code, res.Body)
+		}
+		var d Delivery
+		decodeJSON(t, res.Body, &d)
+		if d.MessageID != "m-1" {
+			t.Fatalf("delivery = %+v, want the transport's message id", d)
+		}
+		if got := dc.find(t, "pong"); got.channel != "c-99" {
+			t.Fatalf("transport call = %+v, want channel c-99", got)
+		}
+
+	})
+}
+
+// A route minted so a PAIRING REPLY could be delivered lasts exactly as long as
+// the pairing request does. The sender is one the org has explicitly not
+// approved, and nothing else here ever deletes a route — so before this, one
+// message from a stranger left a permanent reply target that outlived the
+// pairing's hour, an admin's refusal to approve, and retention GC, addressable
+// by any principal in that org.
+func TestPairRouteLapsesWithThePairing(t *testing.T) {
+	sqltest.Engines(t, func(t *testing.T, _ sqltest.Open) {
+		e := newApp(t)
+		tm := spyTeams(t)
+		ctx := context.Background()
+		const org = "acme-lapse"
+		st := e.store(t)
+		const stranger = "a:stranger"
+		const approved = "19:known@thread.tacv2"
+		const root = "https://smba.example/amer/"
+		now := time.Now().Unix()
+		lapsed := now + int64(pairTTL/time.Second) + 1
+
+		// A stranger's DM pairs (the default policy), and the reply rides the route
+		// the pair branch minted.
+		ingest(ctx, ingressEv(org, "teams", "tenant-1", "u-stranger", stranger, "", "hello", "p1", root))
+		tm.find(t, "Pairing code: ")
+		if _, ok, _ := st.routeFor(ctx, org, "teams", stranger, now); !ok {
+			t.Fatal("the pairing reply needs a route to ride")
+		}
+
+		// The pairing lapses, and the capability lapses with it — read-side, because
+		// gc rides inbound traffic and a channel nobody writes to again would keep an
+		// expired route for as long as the org stayed quiet.
+		if _, ok, _ := st.routeFor(ctx, org, "teams", stranger, lapsed); ok {
+			t.Fatal("an unapproved sender's route outlived their pairing request")
+		}
+		if err := st.gc(ctx, lapsed); err != nil {
+			t.Fatalf("gc: %v", err)
+		}
+		var rows int
+		if err := st.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM channel_route
+  WHERE org = $1 AND channel = 'teams' AND room_id = $2`, org, stranger).Scan(&rows); err != nil || rows != 0 {
+			t.Fatalf("lapsed route rows = %d err=%v, want collected", rows, err)
+		}
+		if r := req(t, e, http.MethodPost, "/v1/transport/teams/send", org,
+			map[string]any{"channel": map[string]any{"id": stranger}, "text": "still here?"}); r.Code != http.StatusConflict {
+			t.Fatalf("send to a lapsed route: %d, want 409", r.Code)
+		}
+
+		// An ALLOWED sender's route is the other grant and it lasts: the group policy
+		// defaults open, so this one is admitted rather than paired.
+		ingest(ctx, ingressEv(org, "teams", "tenant-1", "u-known", approved, "", "hi", "p2", root))
+		if err := st.gc(ctx, lapsed); err != nil {
+			t.Fatalf("gc: %v", err)
+		}
+		if got, ok, _ := st.routeFor(ctx, org, "teams", approved, lapsed); !ok || got != root {
+			t.Fatalf("allowed route = %q ok=%v, want it to last", got, ok)
+		}
+
+	})
+}
+
+// Approving a pairing makes the sender's next message an ALLOWED one, and that
+// message is what makes their route lasting — so the grant and the capability
+// have one lifetime, not two.
+func TestApprovalMakesThePairRouteLast(t *testing.T) {
+	sqltest.Engines(t, func(t *testing.T, _ sqltest.Open) {
+		e := newApp(t)
+		_ = spyTeams(t)
+		ctx := context.Background()
+		const org = "acme-promote"
+		st := e.store(t)
+		const dm = "a:promote"
+		const root = "https://smba.example/amer/"
+		now := time.Now().Unix()
+		lapsed := now + int64(pairTTL/time.Second) + 1
+
+		ingest(ctx, ingressEv(org, "teams", "tenant-1", "u-p", dm, "", "let me in", "q1", root))
+		pend, _ := listPairing(ctx, st, org, now)
+		if len(pend) != 1 {
+			t.Fatalf("pending = %+v, want one request", pend)
+		}
+		if r := reqAdmin(t, e, http.MethodPost, "/v1/transport/pairing/approve", org,
+			map[string]any{"transport": "teams", "code": pend[0].Code}); r.Code != http.StatusOK {
+			t.Fatalf("approve: %d (%s)", r.Code, r.Body)
+		}
+		ingest(ctx, ingressEv(org, "teams", "tenant-1", "u-p", dm, "", "thanks", "q2", root))
+		if got, ok, _ := st.routeFor(ctx, org, "teams", dm, lapsed); !ok || got != root {
+			t.Fatalf("approved sender's route = %q ok=%v, want it to last", got, ok)
+		}
+
+	})
+}
+
+// A member of the workspace an org connected direct-messages the app with no
+// policy stored; editing the group policy afterwards keeps them admitted, because
+// the stored row carries the members default rather than an open DM with no
+// allowlist.
+func TestASlackMemberDirectMessagesWithNoPolicy(t *testing.T) {
+	sqltest.Engines(t, func(t *testing.T, _ sqltest.Open) {
+		e := newApp(t)
+		_ = spySlack(t)
+		ctx := context.Background()
+		const org = "acme-members"
+		st := e.store(t)
+
+		v, err := dmGate(ctx, st, org, "slack", "Umember", "Uinstaller", true)
+		if err != nil || !v.Allow || v.Reason != dmMember {
+			t.Fatalf("member verdict = %+v (%v), want allow/dmMember", v, err)
+		}
+		putAllowlist(t, e, org, map[string]any{"transport": "slack", "groupPolicy": "disabled"})
+		if p, _ := policyFor(ctx, st, org, "slack"); p.DM != DMMembers {
+			t.Fatalf("stored dm policy = %s after a group edit, want members", p.DM)
+		}
+		if v, _ := dmGate(ctx, st, org, "slack", "Umember", "Uinstaller", true); !v.Allow {
+			t.Fatalf("a group edit shut members out of DMs: %+v", v)
+		}
+		if v, _ := dmGate(ctx, st, org, "telegram", "42", "", true); v.Allow || !v.Pair {
+			t.Fatalf("telegram verdict = %+v, want a pairing request", v)
+		}
+		res := reqAdmin(t, e, http.MethodPut, "/v1/transport/allowlist", org, map[string]any{"transport": "telegram", "dmPolicy": "members"})
+		if res.Code != http.StatusBadRequest {
+			t.Fatalf("members on telegram: %d, want 400", res.Code)
+		}
+
+	})
+}

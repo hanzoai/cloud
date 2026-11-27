@@ -1,0 +1,510 @@
+package provisioning
+
+// Tests for the dedicated-instance strategy: a datastore/docdb create launches
+// the org's OWN operator Datastore CR + admin Secret in tenant-<org>, isolated
+// by instance, metered to the org, reconciled provisioning->ready off the CR
+// status, and torn down on drop. A fake orchestrator stands in for the cluster
+// so the whole control-plane path is exercised hermetically.
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"io"
+	"maps"
+	"net/http"
+	"slices"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/hanzoai/cloud/internal/sqltest"
+	"github.com/hanzoai/cloud/sdk"
+	"github.com/hanzoai/cloud/sdk/meter"
+	"github.com/hanzoai/account"
+	luxlog "github.com/luxfi/log"
+	"github.com/zap-proto/zip"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+)
+
+// fakeOrch is an in-memory orchestrator: it records the CRs/Secrets applied and
+// deleted, and returns a controllable instance phase.
+type fakeOrch struct {
+	ready              error
+	ensureErr          error
+	phase              string
+	patchErr           error // injected failure for PatchAddonSecret
+	patchErrAfterWrite bool  // when set with patchErr, the write LANDS then the call reports failure (models a committed-but-errored PATCH)
+	datastores         map[string]*unstructured.Unstructured
+	secrets            map[string]*unstructured.Unstructured
+	addons             map[string]map[string]string // ns/name -> key -> value (the <instance>-addons Secret data)
+	ensured            []string
+	deletedDS          []string
+	deletedSec         []string
+	deletedPVC         []string
+	ops                []string // ordered trace of injection/teardown ops (drop-order assertions)
+}
+
+func newFakeOrch() *fakeOrch {
+	return &fakeOrch{
+		datastores: map[string]*unstructured.Unstructured{},
+		secrets:    map[string]*unstructured.Unstructured{},
+		addons:     map[string]map[string]string{},
+	}
+}
+
+// PatchAddonSecret merges key=value into the in-memory addons Secret, preserving
+// other keys — mirroring the strategic-merge the real orchestrator performs.
+func (f *fakeOrch) PatchAddonSecret(_ context.Context, ns, name, _, key, value string) error {
+	if f.patchErr != nil && !f.patchErrAfterWrite {
+		return f.patchErr
+	}
+	k := ns + "/" + name
+	if f.addons[k] == nil {
+		f.addons[k] = map[string]string{}
+	}
+	f.addons[k][key] = value
+	f.ops = append(f.ops, "inject:"+k+":"+key)
+	// patchErrAfterWrite: the key LANDED server-side but the call reports an
+	// error (dropped response / post-commit timeout) — the exact partial failure
+	// createDedicated's rollback must scrub so no orphan <KIND>_URL survives.
+	if f.patchErr != nil {
+		return f.patchErr
+	}
+	return nil
+}
+
+// RemoveAddonSecretKey deletes one key from the in-memory addons Secret. Missing
+// Secret/key is a no-op success (idempotent), like the real JSON-merge delete.
+func (f *fakeOrch) RemoveAddonSecretKey(_ context.Context, ns, name, key string) error {
+	k := ns + "/" + name
+	if f.addons[k] != nil {
+		delete(f.addons[k], key)
+	}
+	f.ops = append(f.ops, "remove:"+k+":"+key)
+	return nil
+}
+
+func (f *fakeOrch) Ready() error { return f.ready }
+func (f *fakeOrch) EnsureTenant(_ context.Context, ns, _ string) error {
+	f.ensured = append(f.ensured, ns)
+	return f.ensureErr
+}
+func (f *fakeOrch) ApplySecret(_ context.Context, ns, name string, obj *unstructured.Unstructured) error {
+	f.secrets[ns+"/"+name] = obj
+	return nil
+}
+func (f *fakeOrch) ApplyDatastore(_ context.Context, ns, name string, obj *unstructured.Unstructured) error {
+	f.datastores[ns+"/"+name] = obj
+	return nil
+}
+func (f *fakeOrch) DatastorePhase(context.Context, string, string) (string, error) {
+	return f.phase, nil
+}
+func (f *fakeOrch) DeleteDatastore(_ context.Context, ns, name string) error {
+	f.deletedDS = append(f.deletedDS, ns+"/"+name)
+	f.ops = append(f.ops, "teardown:"+ns+"/"+name)
+	delete(f.datastores, ns+"/"+name)
+	return nil
+}
+func (f *fakeOrch) DeleteSecret(_ context.Context, ns, name string) error {
+	f.deletedSec = append(f.deletedSec, ns+"/"+name)
+	delete(f.secrets, ns+"/"+name)
+	return nil
+}
+func (f *fakeOrch) DeletePVC(_ context.Context, ns, name string) error {
+	f.deletedPVC = append(f.deletedPVC, ns+"/"+name)
+	return nil
+}
+
+func newDedicatedService(t *testing.T, orch orchestrator) *cloud.Service[state] {
+	t.Helper()
+	t.Setenv("CLOUD_KMS_NODES", "")
+	t.Setenv("CLOUD_KMS_PASSPHRASE", "")
+	log := luxlog.New("module", "provdedtest")
+	return &cloud.Service[state]{Log: log, State: state{store: newTestStore(t), sec: newSecrets(nil, log), reg: newRegistry(cloud.Deps{}), orch: orch}}
+}
+
+// doReq serves ONE request against ONE route that mount registers. mount takes
+// the app rather than a handler because the reads and the delete are TYPED ops
+// (typed.go) — zip.Get/zip.Delete are package-level registrars, not values a
+// caller can hand over — and cloud.Bridge is installed first, exactly as Serve
+// installs it ahead of every mount: a typed op resolves its tenant off the
+// context Bridge parks, so an app without it would exercise a router the binary
+// never runs.
+func doReq(t *testing.T, mount func(*zip.App), method, path, org, bodyStr string) *http.Response {
+	t.Helper()
+	app := zip.New(zip.Config{DisableStartupMessage: true})
+	app.Use(cloud.Bridge())
+	mount(app)
+	var rdr io.Reader
+	if bodyStr != "" {
+		rdr = strings.NewReader(bodyStr)
+	}
+	req, _ := http.NewRequest(method, path, rdr)
+	if bodyStr != "" {
+		req.Header.Set("Content-Type", "application/json")
+	}
+	if org != "" {
+		req.Header.Set("X-Org-Id", org)
+		req.Header.Set("X-User-Id", "u-"+org)       // validated principal (tenant() gates on X-User-Id)
+		req.Header.Set("X-User-IsOrgAdmin", "true") // an admin of the org: provisioning is theirs (administers)
+	}
+	resp, err := app.Test(req, zip.TestConfig{Timeout: 30 * time.Second, FailOnTimeout: true})
+	if err != nil {
+		t.Fatalf("Test: %v", err)
+	}
+	return resp
+}
+
+// TestDedicated_CreateLaunchesInstance: a datastore create writes a Datastore CR
+// + admin Secret into tenant-<org>, persists a "provisioning" row with the size
+// dimension, and returns a DSN pointing at the instance's OWN in-cluster Service.
+func TestDedicated_CreateLaunchesInstance(t *testing.T) {
+	sqltest.Engines(t, func(t *testing.T, _ sqltest.Open) {
+		orch := newFakeOrch()
+		s := newDedicatedService(t, orch)
+
+		resp := postCreate(t, s, "datastore", "acme", "analytics")
+		if resp.StatusCode != http.StatusCreated {
+			body, _ := io.ReadAll(resp.Body)
+			t.Fatalf("status = %d body=%s, want 201", resp.StatusCode, body)
+		}
+		var cr provisionResult
+		_ = json.NewDecoder(resp.Body).Decode(&cr)
+
+		if cr.Status != statusProvisioning {
+			t.Fatalf("status = %q, want %q", cr.Status, statusProvisioning)
+		}
+		ns := "tenant-acme"
+		inst := instanceName("datastore", "acme", "analytics")
+		wantHost := inst + "." + ns + ".svc"
+		if cr.Host != wantHost || cr.Port != 8123 {
+			t.Fatalf("endpoint = %s:%d, want %s:8123 (the instance's own service)", cr.Host, cr.Port, wantHost)
+		}
+		if !strings.HasPrefix(cr.ConnectionString, "datastore://admin:") || !strings.Contains(cr.ConnectionString, wantHost+":8123") {
+			t.Fatalf("dsn %q does not target the dedicated instance", cr.ConnectionString)
+		}
+
+		// The Datastore CR landed in the tenant namespace with the right shape.
+		ds := orch.datastores[ns+"/"+inst]
+		if ds == nil {
+			t.Fatalf("no Datastore CR applied at %s/%s; have %v", ns, inst, slices.Collect(maps.Keys(orch.datastores)))
+		}
+		if got, _, _ := unstructured.NestedString(ds.Object, "kind"); got != "Datastore" {
+			t.Fatalf("CR kind = %q, want Datastore (writes status.phase)", got)
+		}
+		if got, _, _ := unstructured.NestedString(ds.Object, "spec", "type"); got != "datastore" {
+			t.Fatalf("spec.type = %q, want datastore", got)
+		}
+		if got, _, _ := unstructured.NestedString(ds.Object, "spec", "image", "repository"); got != "ghcr.io/hanzoai/datastore" {
+			t.Fatalf("image = %q, want ghcr.io/hanzoai/datastore", got)
+		}
+		if got, _, _ := unstructured.NestedString(ds.Object, "metadata", "labels", "hanzo.ai/org"); got != "acme" {
+			t.Fatalf("CR org label = %q, want acme (ownership boundary)", got)
+		}
+		if got, _, _ := unstructured.NestedString(ds.Object, "metadata", "labels", "hanzo.ai/resource"); got != cr.ID {
+			t.Fatalf("CR resource label = %q, want %q", got, cr.ID)
+		}
+		// envFrom references the admin Secret by name only (no inline plaintext).
+		envFrom, _, _ := unstructured.NestedSlice(ds.Object, "spec", "envFrom")
+		if len(envFrom) != 1 {
+			t.Fatalf("spec.envFrom = %v, want one secretRef", envFrom)
+		}
+
+		// The admin Secret carries the image's env keys and is NOT the CR.
+		sec := orch.secrets[ns+"/"+inst+"-admin"]
+		if sec == nil {
+			t.Fatalf("no admin Secret applied at %s/%s-admin", ns, inst)
+		}
+		sd, _, _ := unstructured.NestedStringMap(sec.Object, "stringData")
+		for _, k := range []string{"DATASTORE_DB", "DATASTORE_USER", "DATASTORE_PASSWORD"} {
+			if sd[k] == "" {
+				t.Fatalf("admin Secret missing %q (image env); have %v", k, sd)
+			}
+		}
+		if cr.Password == "" || sd["DATASTORE_PASSWORD"] != cr.Password {
+			t.Fatalf("returned password must match the Secret the instance boots with")
+		}
+
+		// The row is persisted "provisioning" with the size dimension.
+		r, err := s.State.store.Get(context.Background(), "acme", "datastore", "analytics")
+		if err != nil {
+			t.Fatalf("get row: %v", err)
+		}
+		if r.Status != statusProvisioning || r.Size != "10Gi" || r.PhysicalName != inst {
+			t.Fatalf("row = %+v, want status=provisioning size=10Gi physical=%s", r, inst)
+		}
+	})
+}
+
+// TestDedicated_TwoOrgsSeparateInstances proves isolation-by-instance: the same
+// resource name for two orgs yields two DISTINCT instances in two DISTINCT
+// namespaces — no shared backend, no cross-tenant reachability.
+func TestDedicated_TwoOrgsSeparateInstances(t *testing.T) {
+	sqltest.Engines(t, func(t *testing.T, _ sqltest.Open) {
+		orch := newFakeOrch()
+		s := newDedicatedService(t, orch)
+
+		if resp := postCreate(t, s, "docdb", "acme", "events"); resp.StatusCode != http.StatusCreated {
+			t.Fatalf("acme create = %d", resp.StatusCode)
+		}
+		if resp := postCreate(t, s, "docdb", "globex", "events"); resp.StatusCode != http.StatusCreated {
+			t.Fatalf("globex create = %d", resp.StatusCode)
+		}
+
+		acme := instanceName("docdb", "acme", "events")
+		globex := instanceName("docdb", "globex", "events")
+		if acme == globex {
+			t.Fatalf("two orgs collided on one instance name %q", acme)
+		}
+		if orch.datastores["tenant-acme/"+acme] == nil {
+			t.Fatalf("acme instance missing in tenant-acme")
+		}
+		if orch.datastores["tenant-globex/"+globex] == nil {
+			t.Fatalf("globex instance missing in tenant-globex")
+		}
+		// Neither instance can appear in the other's namespace.
+		if orch.datastores["tenant-acme/"+globex] != nil || orch.datastores["tenant-globex/"+acme] != nil {
+			t.Fatalf("cross-tenant instance leak")
+		}
+	})
+}
+
+// TestDedicated_ReadyReconcile: a provisioning row flips to ready on GET once the
+// operator reports the instance StatefulSet Running — never before.
+func TestDedicated_ReadyReconcile(t *testing.T) {
+	sqltest.Engines(t, func(t *testing.T, _ sqltest.Open) {
+		orch := newFakeOrch()
+		s := newDedicatedService(t, orch)
+
+		if resp := postCreate(t, s, "datastore", "acme", "warehouse"); resp.StatusCode != http.StatusCreated {
+			t.Fatalf("create = %d", resp.StatusCode)
+		}
+
+		// Instance not up yet -> GET still reports provisioning.
+		orch.phase = "Creating"
+		resp := doReq(t, mountGet("/v1/datastore/:name", ops{s}.getDatastore), http.MethodGet, "/v1/datastore/warehouse", "acme", "")
+		var g provisionedResource
+		_ = json.NewDecoder(resp.Body).Decode(&g)
+		if g.Status != statusProvisioning {
+			t.Fatalf("status = %q, want provisioning while instance is Creating", g.Status)
+		}
+
+		// Operator reports Running -> GET reconciles to ready and persists it.
+		orch.phase = phaseRunning
+		resp = doReq(t, mountGet("/v1/datastore/:name", ops{s}.getDatastore), http.MethodGet, "/v1/datastore/warehouse", "acme", "")
+		_ = json.NewDecoder(resp.Body).Decode(&g)
+		if g.Status != statusReady {
+			t.Fatalf("status = %q, want ready once instance is Running", g.Status)
+		}
+		r, _ := s.State.store.Get(context.Background(), "acme", "datastore", "warehouse")
+		if r.Status != statusReady {
+			t.Fatalf("row status = %q, want ready (persisted)", r.Status)
+		}
+	})
+}
+
+// TestDedicated_DropTearsDownInstance: delete removes the CR + admin Secret + row.
+func TestDedicated_DropTearsDownInstance(t *testing.T) {
+	sqltest.Engines(t, func(t *testing.T, _ sqltest.Open) {
+		orch := newFakeOrch()
+		s := newDedicatedService(t, orch)
+
+		if resp := postCreate(t, s, "docdb", "acme", "sessions"); resp.StatusCode != http.StatusCreated {
+			t.Fatalf("create = %d", resp.StatusCode)
+		}
+		inst := instanceName("docdb", "acme", "sessions")
+
+		resp := doReq(t, mountDelete("/v1/docdb/:name", ops{s}.dropDocDB), http.MethodDelete, "/v1/docdb/sessions", "acme", "")
+		if resp.StatusCode != http.StatusNoContent {
+			body, _ := io.ReadAll(resp.Body)
+			t.Fatalf("drop = %d body=%s, want 204", resp.StatusCode, body)
+		}
+		if orch.datastores["tenant-acme/"+inst] != nil {
+			t.Fatalf("Datastore CR not deleted")
+		}
+		if orch.secrets["tenant-acme/"+inst+"-admin"] != nil {
+			t.Fatalf("admin Secret not deleted")
+		}
+		// The retained data volume is reaped too (no storage footprint left behind).
+		wantPVC := "tenant-acme/data-" + inst + "-0"
+		if len(orch.deletedPVC) != 1 || orch.deletedPVC[0] != wantPVC {
+			t.Fatalf("drop deleted PVCs %v, want [%s]", orch.deletedPVC, wantPVC)
+		}
+		if _, err := s.State.store.Get(context.Background(), "acme", "docdb", "sessions"); err == nil {
+			t.Fatalf("row still present after drop")
+		}
+	})
+}
+
+// TestDedicated_BillsProvisionAndFootprintToOrg proves the two billing
+// invariants: the provision debit carries the size dimension and lands on the
+// CALLER's org (never the client-default "hanzo"), and the recurring footprint
+// meter charges each ready instance's OWN org a size-derived GB-day amount.
+func TestDedicated_BillsProvisionAndFootprintToOrg(t *testing.T) {
+	sqltest.Engines(t, func(t *testing.T, _ sqltest.Open) {
+		bs := &billServer{available: 100000}
+		log := luxlog.New("module", "proddedbill")
+		t.Setenv("CLOUD_KMS_NODES", "")
+		t.Setenv("CLOUD_KMS_PASSPHRASE", "")
+		m, err := meter.New(meter.Config{BaseURL: bs.start(t)})
+		if err != nil {
+			t.Fatalf("metering.New: %v", err)
+		}
+		orch := newFakeOrch()
+		t.Setenv("CLOUD_ENV", "mainnet")
+		s := &cloud.Service[state]{
+			Log: log, Bill: cloud.NewMeter(cloud.Deps{Metering: m}, "provisioning"),
+			State: state{store: newTestStore(t), sec: newSecrets(nil, log), reg: newRegistry(cloud.Deps{}), orch: orch},
+		}
+
+		// Provision debit -> caller org "acme", size in Model.
+		resp := postCreate(t, s, "datastore", "acme", "metrics")
+		if resp.StatusCode != http.StatusCreated {
+			body, _ := io.ReadAll(resp.Body)
+			t.Fatalf("create = %d body=%s", resp.StatusCode, body)
+		}
+		if !waitForDebit(func() bool { return bs.debits() >= 1 }) {
+			t.Fatalf("provision was not billed")
+		}
+		org, body := bs.lastDebit()
+		if org != "acme" {
+			t.Fatalf("provision debited org %q, want caller acme (never default hanzo)", org)
+		}
+		var u struct {
+			User  string `json:"user"`
+			Model string `json:"model"`
+		}
+		_ = json.Unmarshal(body, &u)
+		if u.User != "acme" || !strings.HasPrefix(u.Model, "datastore:") {
+			t.Fatalf("provision debit user=%q model=%q, want user=acme model=datastore:<size>", u.User, u.Model)
+		}
+
+		// Mark the instance ready, then run one footprint sweep -> a GB-day debit to
+		// acme carrying the size dimension.
+		if _, err := s.State.store.UpdateStatus(context.Background(), "acme", "datastore", "metrics", statusReady); err != nil {
+			t.Fatalf("mark ready: %v", err)
+		}
+		before := bs.debits()
+		s.State.charged = &gbDays{}
+		free := func(context.Context) error { return nil }
+		meterDedicatedFootprint(s, context.Background(), time.Now(), free, s.Bill.Debit)
+		if !waitForDebit(func() bool { return bs.debits() > before }) {
+			t.Fatalf("footprint sweep did not bill the running instance")
+		}
+		org, body = bs.lastDebit()
+		_ = json.Unmarshal(body, &u)
+		if org != "acme" || !strings.Contains(u.Model, "gbday") {
+			t.Fatalf("footprint debit org=%q model=%q, want org=acme model=…gbday", org, u.Model)
+		}
+		// The hourly sweeps after the first in a day ask nothing: the day is charged,
+		// whatever the size or price has become since.
+		charged := bs.debits()
+		meterDedicatedFootprint(s, context.Background(), time.Now(), free, s.Bill.Debit)
+		meterDedicatedFootprint(s, context.Background(), time.Now(), free, s.Bill.Debit)
+		time.Sleep(200 * time.Millisecond)
+		if n := bs.debits(); n != charged {
+			t.Fatalf("two more sweeps in the day posted %d more debits; the day is charged once", n-charged)
+		}
+
+		// A DEBIT THAT FAILED LEAVES THE DAY OPEN. The next day's first sweep reaches a
+		// ledger that refuses; the sweep after asks again and the day is charged, and
+		// then it is not asked again. A refusal that names the day as already charged
+		// (another amount under its name) closes it too.
+		tomorrow := time.Now().Add(24 * time.Hour)
+		asked, fail := 0, true
+		flaky := func(ctx context.Context, p account.Account, u meter.Usage) error {
+			asked++
+			if fail {
+				fail = false
+				return errors.New("ledger unreachable")
+			}
+			return nil
+		}
+		meterDedicatedFootprint(s, context.Background(), tomorrow, free, flaky)
+		meterDedicatedFootprint(s, context.Background(), tomorrow, free, flaky)
+		meterDedicatedFootprint(s, context.Background(), tomorrow, free, flaky)
+		if asked != 2 {
+			t.Fatalf("a failed debit then a good one: the ledger was asked %d times, want 2", asked)
+		}
+		reused := func(ctx context.Context, p account.Account, u meter.Usage) error {
+			asked++
+			return zip.Errorf(http.StatusConflict, "record: names a different charge")
+		}
+		asked = 0
+		after := tomorrow.Add(24 * time.Hour)
+		meterDedicatedFootprint(s, context.Background(), after, free, reused)
+		meterDedicatedFootprint(s, context.Background(), after, free, reused)
+		if asked != 1 {
+			t.Fatalf("a day the ledger holds under another amount was asked %d times, want 1", asked)
+		}
+	})
+}
+
+// TestDedicated_PricingPure exercises the pure sizing/pricing helpers.
+func TestDedicated_PricingPure(t *testing.T) {
+	for _, c := range []struct {
+		size   string
+		wantGB int
+	}{
+		{"10Gi", 10}, {"1Ti", 1024}, {"512Mi", 1}, {"", 0}, {"100G", 100}, {"garbage", 0},
+	} {
+		if got := sizeToGB(c.size); got != c.wantGB {
+			t.Fatalf("sizeToGB(%q) = %d, want %d", c.size, got, c.wantGB)
+		}
+	}
+	ctx := context.Background()
+
+	// Nothing published and no commerce beside this process: the floor is the
+	// price. 10 GiB * $0.08/GB-month / 30 = 2.67 -> 3 cents/day; empty -> 0.
+	if got := gbDayCents(ctx, 10); got != 3 {
+		t.Fatalf("gbDayCents(10) at the floor = %d, want 3", got)
+	}
+	if got := gbDayCents(ctx, 0); got != 0 {
+		t.Fatalf("gbDayCents(0) = %d, want 0", got)
+	}
+	if got := gbDayCents(ctx, -4); got != 0 {
+		t.Fatalf("a negative footprint is not storage, got %d", got)
+	}
+
+	saved := storageMonthlyCents
+	t.Cleanup(func() { storageMonthlyCents = saved })
+
+	// A running instance is never free while it is priced: a footprint too small
+	// to reach a cent a day still bills the floored 1.
+	storageMonthlyCents = func(context.Context) int64 { return 8 }
+	if got := gbDayCents(ctx, 1); got != 1 {
+		t.Fatalf("1 GiB/day = %d, want the floored 1 cent — a running instance is billed", got)
+	}
+
+	// A published price is charged instead of the floor.
+	storageMonthlyCents = func(context.Context) int64 { return 30 }
+	if got := gbDayCents(ctx, 10); got != 10 {
+		t.Fatalf("10 GiB at 30c/GB-month = %d, want 10 cents/day", got)
+	}
+
+	// Zero is a legal published price and makes storage free — the 1-cent floor
+	// must not charge for what an operator said to give away.
+	storageMonthlyCents = func(context.Context) int64 { return 0 }
+	if got := gbDayCents(ctx, 10_000); got != 0 {
+		t.Fatalf("a published price of 0 billed %d; storage was given away", got)
+	}
+}
+
+// A DAY IS ONE CHARGE. Every sweep in one UTC day names the same act for an
+// instance, so the ledger takes the first and the rest move nothing, on any pod and
+// across any restart; the next day is a new act.
+func TestDedicated_OneChargePerInstancePerDay(t *testing.T) {
+	morning := time.Date(2026, 10, 2, 0, 5, 0, 0, time.UTC)
+	night := time.Date(2026, 10, 2, 23, 55, 0, 0, time.UTC)
+	if gbDayRef("i1", morning) != gbDayRef("i1", night) {
+		t.Fatal("two sweeps in one day name two charges")
+	}
+	if gbDayRef("i1", night) == gbDayRef("i1", night.Add(10*time.Minute)) {
+		t.Fatal("two days name one charge")
+	}
+	if gbDayRef("i1", night) == gbDayRef("i2", night) {
+		t.Fatal("two instances name one charge")
+	}
+}

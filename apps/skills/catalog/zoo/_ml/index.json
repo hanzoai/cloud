@@ -1,0 +1,32 @@
+{
+  "$schema": "https://schemas.agentskills.io/discovery/0.2.0/schema.json",
+  "base_url": "https://api.zoo.ngo",
+  "brand": "zoo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://zoolabs.id",
+  "mcp": {
+    "description": "Model Context Protocol over JSON-RPC 2.0 — one POST per message, stateless, protocol revision 2026-07-28. tools/list answers without a credential with one tool per subsystem (its operations in the \"op\" enum) plus \"describe\", which returns one operation's input schema. tools/call names a subsystem tool and carries {\"op\": <operation>, \"input\": <its arguments>}; it takes the same bearer the REST API does, and a call that carries none is answered 401 with a WWW-Authenticate header naming the resource metadata at /.well-known/oauth-protected-resource, which names the authorization server to sign in at. The tool surface is the public contract: the operator's admin product is not offered, and a name that would disclose a secret or mutate an identity is withheld — the list says how many, under _meta.",
+    "method": "POST",
+    "url": "https://api.zoo.ngo/v1/mcp"
+  },
+  "skill_count": 2,
+  "skills": [
+    {
+      "description": "Read ml health: Whether model serving can actually work right now.",
+      "digest": "sha256:b9c6ec57b0723933adc3a7f85b785918197fdd3ac90c4fd83da88f8022a00db0",
+      "name": "ml_health",
+      "service": "ml",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/ml_health/SKILL.md"
+    },
+    {
+      "description": "Read ml models: Lists the inference models deployed in the caller's org., Returns one deployed inference model..",
+      "digest": "sha256:633230f14990316e78ea903ad31a5f42633fa9e09fa829803e90d478fed16113",
+      "name": "ml_models",
+      "service": "ml",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/ml_models/SKILL.md"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

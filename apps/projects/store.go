@@ -1,0 +1,1781 @@
+package projects
+
+import (
+	"cmp"
+	"context"
+	"database/sql"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"strings"
+	"time"
+
+	"github.com/hanzoai/cloud/apps/sites"
+	"github.com/hanzoai/cloud/internal/escrow"
+	"github.com/hanzoai/cloud/internal/remote"
+	"github.com/hanzoai/cloud/sdk/dialect"
+	"github.com/hanzoai/cloud/sdk/tenure"
+
+	// locus.Open is the ONE opener: on hanzo-sql (CLOUD_SQL_DSN) a schema, otherwise
+	// the SQLite file this subsystem renders from the system namespace, opened under
+	// the key cek derives for that name and capped to a single connection.
+	"github.com/hanzoai/cloud/sdk/locus"
+	tenant "github.com/hanzoai/namespace"
+
+	// github.com/hanzoai/sqlite is the ONE Hanzo SQLite driver: it registers
+	// the "sqlite" database/sql name under both build tags. Importing modernc
+	// directly instead would double-register "sqlite" under CGO and panic at
+	// init. Blank import registers the driver.
+	_ "github.com/hanzoai/sqlite"
+)
+
+// errConflict is returned by CreateProject when (org,slug) already exists;
+// errNotFound when a lookup misses. Handlers map these to HTTP 409 / 404.
+var (
+	errConflict = errors.New("projects: project already exists")
+	errNotFound = errors.New("projects: project not found")
+	// errHostTaken is returned by BindHost when the requested public name is
+	// already held by anyone else: another project, in any org, or an app. Names
+	// are first-come and globally unique, claimed when a project is created, so
+	// a create that loses is the 409, never a renumbered slug.
+	errHostTaken = errors.New("projects: site host already bound to another project")
+	// errReservedHost is returned by BindHost for a name the platform holds: a
+	// reserved LABEL (api, admin, a brand/auth term, …) or a HOSTNAME at or under a
+	// domain we run (login.hanzo.ai). Together with the createProject reject, this
+	// makes the global site_hosts table PHYSICALLY UNABLE to hold one — so it can
+	// never resolve to a project even if the ingress regex drifts. See
+	// apps/sites/reserved.go (Ours) for the ONE source of both halves.
+	errReservedHost = errors.New("projects: site host is a name the platform holds")
+)
+
+// Release is an IMMUTABLE, content-addressed snapshot of a site's bytes at one
+// S3 prefix. It is a VALUE, not an event: its ID is a digest of the object
+// manifest it was built from, so publishing identical content twice yields the
+// SAME release (idempotence for free) and different content can never reuse an
+// ID. Nothing mutates a release after PutRelease — a rollback is a pointer flip
+// to an older one, never a rewrite. (Distinct from Deployment, which is the
+// EVENT log of deploy attempts: attempts fail and are still recorded; releases
+// only exist once their bytes are fully copied.)
+type Release struct {
+	ID     string
+	Org    string
+	Slug   string
+	Prefix string
+	// Source is the org-relative build-output prefix this release was promoted
+	// from, kept for provenance. It is never re-read to serve.
+	Source    string
+	Objects   int
+	Bytes     int64
+	CreatedAt int64
+}
+
+// Project is the org-scoped, canonical record of a buildable/deployable site.
+// It is the SAME record whether read from hanzo.app (the builder) or
+// console.hanzo.ai (the Projects module): org isolation is the org column,
+// enforced at the query layer, and the gateway-minted X-Org-Id selects the
+// org. Repo fields are flat columns here; the HTTP surface nests them under
+// "repo" (see projects.go). It never stores a secret: RepoURL is written and
+// read through remote.Clean, so a clone credential is neither kept nor served.
+//
+// Distinct from todo.Project (not a duplicate): this is the Slug-keyed
+// deployable site; a todo.Project is a KEY-prefixed issue team that lives
+// INSIDE one of these (the IAM/deploy project is the todo's tenant boundary).
+type Project struct {
+	ID   string
+	Org  string
+	Slug string
+	// Namespace is the first segment of every storage prefix the site has: the
+	// live site at `<namespace>/<slug>/` and its releases at
+	// `<namespace>/.releases/<slug>/`. It is the GitHub org the project's
+	// repository lives in when the project's org holds that GitHub account's
+	// connection, and the org itself otherwise (namespace.go). It is decided when
+	// the repository is linked and moves only when the link does.
+	Namespace     string
+	Name          string
+	Description   string
+	RepoURL       string
+	RepoBranch    string
+	RepoProvider  string
+	Framework     string
+	Status        string
+	LiveURL       string
+	Bucket        string
+	CurrentDeploy string
+	// CurrentRelease is the site's serving POINTER — the id of the immutable
+	// Release whose prefix the site edge reads. Empty means "serve the legacy
+	// mutable <org>/<slug>/ prefix" (every site published before releases, and
+	// every site whose last go-live was a full-artifact deploy). Flipping this one
+	// field is the whole of activation and rollback.
+	CurrentRelease string
+	// CacheControl is the per-project override for the HTML/document Cache-Control
+	// header applied to deployed objects (and honored by the site server). Empty =
+	// the honest default (public, max-age=60, s-maxage=86400). Content-hashed
+	// assets are always immutable regardless of this override.
+	CacheControl string
+	// LastPurgeAt is the unix time of the last successful (or attempted) edge
+	// edge purge for this site. Surfaced on the API so a console can show cache freshness.
+	LastPurgeAt int64
+	CreatedAt   int64
+	UpdatedAt   int64
+	// Analytics is the per-project web-analytics flag, wired ON by default: a
+	// freshly created project collects analytics unless the caller opts out
+	// (analytics:false at create). It is the source of truth the app's
+	// static-builder reads as deployment.analytics, so the beacon is injected with
+	// no opt-in. Mutable via update (read-modify-write); immutable columns are
+	// org/slug/id/created_at.
+	Analytics bool
+	// KeepLocal keeps the events a developer's own machine sends (localhost, 127.0.0.1, *.local).
+	// The zero value drops them at ingest, which is the default for every project.
+	KeepLocal bool
+	// InternalNetworks are the project's own addresses, as CIDRs: a visit from one
+	// is the site's own team (event.Audience). Empty by default, and never nil.
+	InternalNetworks []string
+	// Key is the project's publishable ingest key (pk-…) — the ONE thing that
+	// attributes this site's beacons. Minted at create, immutable, and the value
+	// the injected beacon carries; ResolveKey reads it back to answer which
+	// (org, project) a write belongs to. Delete the project and the key resolves
+	// to nothing, which is how "no site ⇒ no recording" is structural rather than
+	// a policy someone has to remember.
+	//
+	// It is publishable in the same sense IAM's pk- is: it names a write scope and
+	// mints no principal (cloud.IsPublishableKey keeps it off the identity path),
+	// so shipping it in a page's source is what it is FOR.
+	Key string
+	// SpaceId is the project's Base data space — the "<org>/<slug>" namespace under
+	// which its deployed site's form/forum/data submissions live in Hanzo Base
+	// (/v1/base). Set once at create (the app's namespace/repoId convention);
+	// immutable thereafter. A Base space is provisioned best-effort at create.
+	SpaceId string
+	// ForkedFrom is this project's PARENT — the published example it was forked
+	// from: "<org>/<slug>" for a live project, or a bare catalog template slug.
+	// Empty for an original. Set by the fork path only (never by the caller, so
+	// lineage cannot be forged) and immutable after create; it is the attribution
+	// edge the gallery credits back to the author.
+	ForkedFrom string
+	// Visibility is the PUBLISHER's choice, and the only thing that decides
+	// whether a project appears in the community catalogue: "public" (the
+	// default) or "private". Public means the world can see it, fork it, and
+	// find its source mirrored into hanzo-community. There is no application to
+	// approve and no badge to be granted — a community that makes you ask
+	// permission to appear in it does not grow.
+	//
+	// Authorship is NOT stored here. Who published a project is its Org, which
+	// the tenancy boundary already enforces and which no request can forge; a
+	// second field restating it could only ever disagree with it. (It did: an
+	// admin-gated `official` flag meant the platform's own apps, published by a
+	// script holding an ordinary org token, were filed as somebody else's work.)
+	Visibility string
+	// Hidden is the platform's MODERATION action, taken from admin.hanzo.ai: it
+	// removes a public project from the catalogue without touching the
+	// publisher's own visibility choice, so lifting the moderation restores
+	// exactly what they asked for.
+	//
+	// This is the one admin-only field in this struct, and it is safe to be one
+	// precisely because it only ever SUBTRACTS. An allowlist an admin must add
+	// you to gates growth and rots the moment nobody tends it; a denylist costs
+	// nothing until it is used. It is the same shape as Apex's reserved-host
+	// list: everyone is in, except what we took out.
+	Hidden bool
+	// HiddenReason records WHY, so moderation is reviewable rather than a silent
+	// disappearance. Empty whenever Hidden is false.
+	HiddenReason string
+	// Upstream and License are provenance: the third-party work this project was
+	// published FROM, and the terms it carries.
+	//
+	// They are free for the publisher to set, because they can only ever
+	// SUBTRACT credit from the publisher — a claim that the work is somebody
+	// else's. A platform that lets you claim authorship more easily than you can
+	// disclaim it is a platform that launders provenance.
+	Upstream string
+	License  string
+	// Tags is the site's per-project browser tag config: platform slug → its
+	// non-secret pixel/measurement id (e.g. {"ga4":"G-…","meta":"…"}). The per-SITE
+	// half of the tag manager — track.js fetches it from /v1/project/tags (by this project's
+	// pk-, or derived from the request host) and injects those pixels, and the
+	// server-side CAPI fan-out reads the same ids, so hanzo.ai and hanzo.chat carry
+	// different tags under one org. The API SECRET (a CAPI token/api_secret) is NOT
+	// here; it stays per-org in KMS. Empty until a destination is connected for the site.
+	Tags map[string]string
+}
+
+// Deployment is one deploy attempt for a project, versioned monotonically per
+// project. A deploy moves through queued→building→uploading→live (or →error);
+// the upload path (tar body) lands directly in "live", the git/CI path starts
+// "queued" and is flipped by the CI completion call.
+type Deployment struct {
+	ID        string
+	ProjectID string
+	Org       string
+	Version   int
+	Status    string
+	Source    string
+	Commit    string
+	LiveURL   string
+	Bucket    string
+	Prefix    string
+	Files     int
+	Bytes     int64
+	Message   string
+	CreatedAt int64
+	UpdatedAt int64
+}
+
+// Store is the projects metadata database. ONE database — the system
+// namespace's "projects", a SQLite file or a schema on hanzo-sql — holds every
+// org's records; org-scoping is the org column. On a file, one connection
+// serializes writes against the file lock without busy retries; on hanzo-sql a
+// transaction that reads and then writes begins with Dialect.BeginWrite, which is
+// that serialization. Its SQL is the dialect both engines share
+// (sdk/dialect).
+type Store struct {
+	db     *sql.DB
+	fields *tenure.Fields // opens a challenge a file held before KMS; nil on a process with no data-plane master
+	esc    *escrow.Escrow // keeps the challenges
+}
+
+// subsystem names the store in the system namespace; manifest.SQLStores lists it.
+const subsystem = "projects"
+
+// site_hosts.token, the DNS challenge a pending custom host's owner publishes, is a KMS value
+// (internal/escrow), kept at orgs/<org>/projects/<host>/token@default while the claim is
+// pending; the column holds that path and no byte of the challenge. A verified host has none:
+// the column is empty and KMS forgets the value. No WHERE or ORDER BY reads it. Left plain:
+// ids, slugs, the status vocabulary, timestamps, and repo_url, which remote.Clean strips of
+// any clone credential on the way in and on the way out and which the catalog reads by
+// equality and joins on.
+//
+// A file from before holds the challenge in plaintext or sealed as a field (internal/org),
+// bound to the row's (org, host). The open writes each to KMS and replaces the column with
+// its path; a column that holds a path is left alone, so a second open does nothing.
+var hostKey = []string{"org", "host"}
+
+// bit is a flag as the integer a column holds: 1 is true, on both engines.
+func bit(b bool) int64 {
+	if b {
+		return 1
+	}
+	return 0
+}
+
+// openStore opens the database and moves what it held before KMS into KMS. master is
+// cloud.Deps.MasterKey and opens only that old value; k is cloud.Deps.KMS and keeps every
+// challenge. With no KMS a challenge is neither kept nor read.
+func openStore(dir string, master []byte, k escrow.KMS) (*Store, error) {
+	var fields *tenure.Fields
+	if c, err := tenure.NewCipher(master); err == nil {
+		if fields, err = c.Fields(tenant.System(), subsystem); err != nil {
+			return nil, fmt.Errorf("projects: %w", err)
+		}
+	}
+	return locus.Use(context.Background(), nil, tenant.System(), subsystem, dir, func(db *sql.DB) (*Store, error) {
+		s := &Store{db: db, fields: fields, esc: escrow.New(k, "projects")}
+		if err := s.migrate(); err != nil {
+			return nil, err
+		}
+		return s, nil
+	})
+}
+
+func (s *Store) migrate() error {
+	d := dialect.Of(s.db)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	defer cancel()
+	if err := d.Migrate(ctx, s.db, func(tx *sql.Tx) error { return s.migrateIn(ctx, d, tx) }); err != nil {
+		return err
+	}
+	return s.moveToKMS(ctx)
+}
+
+// moveToKMS writes, once, the challenges a file holds from before KMS (plain, or sealed as a
+// field) to KMS and replaces each column with its path. It runs outside the schema's
+// transaction, because it calls KMS; it compares what it read, so another replica that
+// moved the row first leaves nothing to change.
+func (s *Store) moveToKMS(ctx context.Context) error {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT org, host, token FROM site_hosts WHERE token <> '' AND substr(token, 1, 4) <> 'kms:'`)
+	if err != nil {
+		return fmt.Errorf("migrate: %w", err)
+	}
+	type held struct{ org, host, token string }
+	var found []held
+	for rows.Next() {
+		var h held
+		if err := rows.Scan(&h.org, &h.host, &h.token); err != nil {
+			_ = rows.Close()
+			return fmt.Errorf("migrate: %w", err)
+		}
+		found = append(found, h)
+	}
+	err = rows.Err()
+	_ = rows.Close()
+	if err != nil {
+		return fmt.Errorf("migrate: %w", err)
+	}
+	for _, h := range found {
+		token := h.token
+		if strings.HasPrefix(token, "seal:") {
+			if s.fields == nil {
+				return fmt.Errorf("migrate: host %s: no data-plane master on this process, so a challenge the file held before KMS cannot be opened", h.host)
+			}
+			r := s.fields.Row("site_hosts", h.org, h.host)
+			if token = r.Open("token", token); r.Err() != nil {
+				return fmt.Errorf("migrate: host %s: %w", h.host, r.Err())
+			}
+		}
+		ref, err := s.esc.Put(ctx, h.org, h.host, "token", token)
+		if err != nil {
+			return fmt.Errorf("migrate: host %s: %w", h.host, err)
+		}
+		if _, err := s.db.ExecContext(ctx, `UPDATE site_hosts SET token = $1 WHERE host = $2 AND org = $3 AND token = $4`,
+			ref, h.host, h.org, h.token); err != nil {
+			return fmt.Errorf("migrate: %w", err)
+		}
+	}
+	return nil
+}
+
+// migrateIn brings the database to the current schema inside the migration
+// transaction. Everything goes through tx: it is the connection that holds the
+// lock, and on a file the only one there is.
+func (s *Store) migrateIn(ctx context.Context, d dialect.Dialect, tx *sql.Tx) error {
+	// Every integer is BIGINT: PostgreSQL's INTEGER is 32 bits, and SQLite gives
+	// BIGINT the same 64-bit affinity it gives INTEGER, so one word serves both.
+	const ddl = `
+CREATE TABLE IF NOT EXISTS projects (
+  id              TEXT PRIMARY KEY,
+  org             TEXT NOT NULL,
+  slug            TEXT NOT NULL,
+  name            TEXT NOT NULL,
+  description     TEXT NOT NULL DEFAULT '',
+  repo_url        TEXT NOT NULL DEFAULT '',
+  repo_branch     TEXT NOT NULL DEFAULT '',
+  repo_provider   TEXT NOT NULL DEFAULT '',
+  framework       TEXT NOT NULL DEFAULT 'static',
+  status          TEXT NOT NULL DEFAULT 'draft',
+  live_url        TEXT NOT NULL DEFAULT '',
+  bucket          TEXT NOT NULL DEFAULT '',
+  current_deploy  TEXT NOT NULL DEFAULT '',
+  created_at      BIGINT NOT NULL,
+  updated_at      BIGINT NOT NULL,
+  analytics       BIGINT NOT NULL DEFAULT 1,
+  space_id        TEXT NOT NULL DEFAULT ''
+);
+CREATE UNIQUE INDEX IF NOT EXISTS ux_projects_org_slug ON projects(org, slug);
+CREATE INDEX IF NOT EXISTS ix_projects_org_updated ON projects(org, updated_at);
+
+CREATE TABLE IF NOT EXISTS deployments (
+  id          TEXT PRIMARY KEY,
+  project_id  TEXT NOT NULL,
+  org         TEXT NOT NULL,
+  version     BIGINT NOT NULL,
+  status      TEXT NOT NULL,
+  source      TEXT NOT NULL DEFAULT 'upload',
+  commit_sha  TEXT NOT NULL DEFAULT '',
+  live_url    TEXT NOT NULL DEFAULT '',
+  bucket      TEXT NOT NULL DEFAULT '',
+  prefix      TEXT NOT NULL DEFAULT '',
+  files       BIGINT NOT NULL DEFAULT 0,
+  bytes       BIGINT NOT NULL DEFAULT 0,
+  message     TEXT NOT NULL DEFAULT '',
+  created_at  BIGINT NOT NULL,
+  updated_at  BIGINT NOT NULL
+);
+CREATE UNIQUE INDEX IF NOT EXISTS ux_deployments_project_version ON deployments(project_id, version);
+CREATE INDEX IF NOT EXISTS ix_deployments_project_created ON deployments(project_id, created_at);
+CREATE INDEX IF NOT EXISTS ix_deployments_org_source_created ON deployments(org, source, created_at);
+CREATE INDEX IF NOT EXISTS ix_deployments_building ON deployments(created_at) WHERE status='building';
+
+-- site_hosts is the GLOBAL public-hostname namespace: it binds a globally-unique
+-- host (the subdomain slug for <slug>.hanzo.app; a full custom domain later) to
+-- exactly one project (org, slug). Project slugs are only org-unique, so this
+-- separate table is what makes a bare subdomain resolve deterministically to one
+-- org — the authoritative binding the site server keys on. First-come wins;
+-- the PK enforces one owner per host.
+--
+-- status separates HOLDING a name from SERVING it, so an org can claim a BYO
+-- custom domain before it has proven it owns one:
+--
+--   verified  the row routes. ResolveHost returns it; the edge serves it.
+--   pending   the row holds the name against the PK (nobody else may claim it)
+--             and carries the challenge token, but NEVER routes.
+--
+-- A pending row that routed would be a hostname hijack — claim yourco.com, serve
+-- it immediately — so ResolveHost filters on status and that filter is the whole
+-- boundary. Structural subdomain binds are verified by construction: the org owns
+-- its own slug, so there is nothing to prove.
+CREATE TABLE IF NOT EXISTS site_hosts (
+  host        TEXT PRIMARY KEY,
+  org         TEXT NOT NULL,
+  slug        TEXT NOT NULL,
+  status      TEXT NOT NULL DEFAULT 'verified',
+  token       TEXT NOT NULL DEFAULT '',
+  verified_at BIGINT NOT NULL DEFAULT 0,
+  created_at  BIGINT NOT NULL,
+  updated_at  BIGINT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS ix_site_hosts_org_slug ON site_hosts(org, slug);
+
+-- releases holds the IMMUTABLE content-addressed snapshots a site can serve.
+-- The PK is (org, slug, id): the id alone is a content digest, so scoping it by
+-- tenant keeps two orgs that publish byte-identical content as two independent
+-- rows over two independent object copies — a release row is never shared across
+-- a tenant boundary, and a lookup that forgets the org scope cannot compile to a
+-- hit. Rows are INSERT-only; the serving pointer is projects.current_release.
+CREATE TABLE IF NOT EXISTS releases (
+  id          TEXT NOT NULL,
+  org         TEXT NOT NULL,
+  slug        TEXT NOT NULL,
+  prefix      TEXT NOT NULL,
+  source      TEXT NOT NULL DEFAULT '',
+  objects     BIGINT NOT NULL DEFAULT 0,
+  bytes       BIGINT NOT NULL DEFAULT 0,
+  created_at  BIGINT NOT NULL,
+  PRIMARY KEY (org, slug, id)
+);
+CREATE INDEX IF NOT EXISTS ix_releases_org_slug_created ON releases(org, slug, created_at DESC);
+`
+	if _, err := tx.ExecContext(ctx, ddl); err != nil {
+		return fmt.Errorf("migrate: %w", err)
+	}
+	// Stars live in their OWN table, not a column: a star is per-person and a
+	// project row is per-org, so a column could only hold one person's answer.
+	// See stars.go.
+	if _, err := tx.ExecContext(ctx, starsDDL); err != nil {
+		return err
+	}
+	// The record of the forge namespace the platform made for each org
+	// (workspace.go), in its own table for the reason stars are: it is per-org,
+	// not per-project.
+	if _, err := tx.ExecContext(ctx, workspacesDDL); err != nil {
+		return fmt.Errorf("migrate workspaces: %w", err)
+	}
+	// What each org's sites hold and how far it has been billed (storage.go), in
+	// its own table because it is per-org, not per-project.
+	if _, err := tx.ExecContext(ctx, storageDDL); err != nil {
+		return fmt.Errorf("migrate storage: %w", err)
+	}
+
+	// Additive column migrations for existing databases. Neither engine has ADD
+	// COLUMN IF NOT EXISTS that both read, so each column is asked for in the
+	// catalog and added once — the idempotent forward-only migration pattern.
+	for _, add := range []struct{ table, column, definition string }{
+		{"projects", "cache_control", `TEXT NOT NULL DEFAULT ''`},
+		{"projects", "last_purge_at", `BIGINT NOT NULL DEFAULT 0`},
+		// current_release is the site's serving POINTER: the id of the release whose
+		// immutable prefix the site edge reads. Empty (the default every existing row
+		// gets) means "serve the legacy mutable <org>/<slug>/ prefix".
+		{"projects", "current_release", `TEXT NOT NULL DEFAULT ''`},
+		// analytics is wired ON by default (DEFAULT 1) so existing projects collect
+		// too; space_id backfills empty and the deploy/serve paths re-derive it.
+		{"projects", "analytics", `BIGINT NOT NULL DEFAULT 1`},
+		{"projects", "space_id", `TEXT NOT NULL DEFAULT ''`},
+		// forked_from is the attribution edge (parent "<org>/<slug>" or template
+		// slug). It backfills to the honest default for every pre-existing row:
+		// unknown lineage.
+		{"projects", "forked_from", `TEXT NOT NULL DEFAULT ''`},
+		// visibility backfills to 'public' because every row that exists when this
+		// runs is already serving on the public internet — defaulting to 'private'
+		// would silently retract a catalogue the world can already reach, which is
+		// a lie in the other direction. hidden backfills to 0: nothing has been
+		// moderated yet, and moderation is an act, never an initial condition.
+		{"projects", "visibility", `TEXT NOT NULL DEFAULT 'public'`},
+		{"projects", "hidden", `BIGINT NOT NULL DEFAULT 0`},
+		{"projects", "hidden_reason", `TEXT NOT NULL DEFAULT ''`},
+		// upstream/license credit the third-party work a project was published
+		// from. Empty backfills to "no third party declared", which is the honest
+		// default: it says nothing, rather than asserting the work is ours.
+		{"projects", "upstream", `TEXT NOT NULL DEFAULT ''`},
+		{"projects", "license", `TEXT NOT NULL DEFAULT ''`},
+		// key is the project's publishable ingest key. It backfills EMPTY and is
+		// then minted per row by backfillKeys below, because a shared default would
+		// be one key for every tenant — the column default cannot be the credential.
+		{"projects", "key", `TEXT NOT NULL DEFAULT ''`},
+		// tags is the per-project browser tag config (platform → non-secret pixel id)
+		// as JSON. '{}' backfills every existing row: no tags until a site connects one.
+		{"projects", "tags", `TEXT NOT NULL DEFAULT '{}'`},
+		// keep_local is 0 for every project: events from localhost are dropped at ingest.
+		{"projects", "keep_local", `BIGINT NOT NULL DEFAULT 0`},
+		// internal_networks is '[]' for every project: no address is the team's until
+		// the project names one.
+		{"projects", "internal_networks", `TEXT NOT NULL DEFAULT '[]'`},
+		// namespace backfills to the org below: every site that exists when this
+		// runs keeps the prefix it already serves from.
+		{"projects", "namespace", `TEXT NOT NULL DEFAULT ''`},
+		// Every site_hosts row that exists when this migration runs is ALREADY
+		// SERVING, so the default must be 'verified'. Defaulting to 'pending'
+		// would take every live custom domain and subdomain off the air the
+		// moment the new binary boots.
+		// release_id is the release a live deployment's files were kept as
+		// (record.go). Empty backfills every existing row: nothing was kept then.
+		{"deployments", "release_id", `TEXT NOT NULL DEFAULT ''`},
+		{"site_hosts", "status", `TEXT NOT NULL DEFAULT 'verified'`},
+		{"site_hosts", "token", `TEXT NOT NULL DEFAULT ''`},
+		{"site_hosts", "verified_at", `BIGINT NOT NULL DEFAULT 0`},
+	} {
+		has, err := d.HasColumn(ctx, tx, add.table, add.column)
+		if err != nil {
+			return fmt.Errorf("migrate alter: %w", err)
+		}
+		if has {
+			continue
+		}
+		if _, err := tx.ExecContext(ctx, `ALTER TABLE `+add.table+` ADD COLUMN `+add.column+` `+add.definition); err != nil {
+			return fmt.Errorf("migrate alter %s.%s: %w", add.table, add.column, err)
+		}
+	}
+	// created_at has second granularity and a CI job can publish twice inside one
+	// second, so the order of two releases of one second is a fact the table records:
+	// seq, the next number PutRelease takes under the store's write lock. A file made
+	// before the column has its rows numbered by rowid, once, and an older binary's
+	// inserts (seq 0) the next time the store opens.
+	if err := d.Sequence(ctx, tx, "releases"); err != nil {
+		return fmt.Errorf("migrate release order: %w", err)
+	}
+	// `official` was an admin-gated boolean restating what the org column already
+	// says, and it disagreed with it: the platform's own apps, published by a
+	// script holding an ordinary org token, could never raise it. Authorship is
+	// the org that paid for the project, so the column is dropped rather than
+	// migrated. Left alone when it is already absent (a converged database).
+	if official, err := d.HasColumn(ctx, tx, "projects", "official"); err != nil {
+		return fmt.Errorf("migrate drop official: %w", err)
+	} else if official {
+		if _, err := tx.ExecContext(ctx, `ALTER TABLE projects DROP COLUMN official`); err != nil {
+			return fmt.Errorf("migrate drop official: %w", err)
+		}
+	}
+	if _, err := tx.ExecContext(ctx, `UPDATE projects SET namespace=org WHERE namespace=''`); err != nil {
+		return fmt.Errorf("migrate backfill namespace: %w", err)
+	}
+	// One site per prefix. Unique already for every row this backfills, because
+	// the namespace is the org there and (org, slug) is unique.
+	if _, err := tx.ExecContext(ctx,
+		`CREATE UNIQUE INDEX IF NOT EXISTS ux_projects_namespace_slug ON projects(namespace, slug)`); err != nil {
+		return fmt.Errorf("migrate index namespace: %w", err)
+	}
+	if err := s.backfillKeys(ctx, tx); err != nil {
+		return err
+	}
+	// Unique over the keys that EXIST. A partial index is what makes this
+	// expressible at all: '' is the pre-backfill state and would collide with
+	// itself on a plain UNIQUE, so the constraint names the invariant that
+	// matters — one project per issued key — and says nothing about rows that
+	// have none. Created after the backfill so it never has to tolerate one.
+	if _, err := tx.ExecContext(ctx,
+		`CREATE UNIQUE INDEX IF NOT EXISTS ux_projects_key ON projects(key) WHERE key != ''`); err != nil {
+		return fmt.Errorf("migrate index key: %w", err)
+	}
+	return nil
+}
+
+// backfillKeys mints a key for every project that predates the column. Without it
+// every site published before this migration ingests nothing: its beacon resolves
+// to no project and is refused, which is the correct answer to a missing key and
+// the wrong answer to a live site. Forward-only and idempotent — a row with a key
+// is never revisited, so re-running it cannot rotate a credential already serving.
+func (s *Store) backfillKeys(ctx context.Context, tx *sql.Tx) error {
+	rows, err := tx.QueryContext(ctx, `SELECT id FROM projects WHERE key = ''`)
+	if err != nil {
+		return fmt.Errorf("migrate backfill keys: %w", err)
+	}
+	var ids []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			_ = rows.Close()
+			return fmt.Errorf("migrate backfill keys: scan: %w", err)
+		}
+		ids = append(ids, id)
+	}
+	if err := rows.Err(); err != nil {
+		_ = rows.Close()
+		return fmt.Errorf("migrate backfill keys: %w", err)
+	}
+	if err := rows.Close(); err != nil {
+		return fmt.Errorf("migrate backfill keys: close: %w", err)
+	}
+	for _, id := range ids {
+		key, err := mintKey()
+		if err != nil {
+			return fmt.Errorf("migrate backfill keys: %w", err)
+		}
+		if _, err := tx.ExecContext(ctx, `UPDATE projects SET key=$1 WHERE id=$2 AND key=''`, key, id); err != nil {
+			return fmt.Errorf("migrate backfill keys: update: %w", err)
+		}
+	}
+	return nil
+}
+
+// Close closes the underlying database.
+func (s *Store) Close() error { return s.db.Close() }
+
+// encodeTags / decodeTags are the JSON codec for a project's per-site browser tag
+// config (platform → non-secret pixel id). Empty ⇒ "{}"; a malformed or empty column ⇒
+// an empty map (never nil), so callers never nil-check.
+func encodeTags(t map[string]string) string {
+	if len(t) == 0 {
+		return "{}"
+	}
+	b, err := json.Marshal(t)
+	if err != nil {
+		return "{}"
+	}
+	return string(b)
+}
+
+func decodeTags(s string) map[string]string {
+	if s == "" {
+		return map[string]string{}
+	}
+	var t map[string]string
+	if json.Unmarshal([]byte(s), &t) != nil || t == nil {
+		return map[string]string{}
+	}
+	return t
+}
+
+// encodeNetworks / decodeNetworks are the JSON codec for a project's internal
+// networks. A malformed or empty column is an empty list (never nil).
+func encodeNetworks(n []string) string {
+	if len(n) == 0 {
+		return "[]"
+	}
+	b, err := json.Marshal(n)
+	if err != nil {
+		return "[]"
+	}
+	return string(b)
+}
+
+func decodeNetworks(s string) []string {
+	var n []string
+	if json.Unmarshal([]byte(s), &n) != nil || n == nil {
+		return []string{}
+	}
+	return n
+}
+
+const projectCols = `id,org,slug,name,description,repo_url,repo_branch,repo_provider,framework,status,live_url,bucket,current_deploy,current_release,cache_control,last_purge_at,created_at,updated_at,analytics,space_id,forked_from,visibility,hidden,hidden_reason,upstream,license,key,tags,keep_local,internal_networks,namespace`
+
+func scanProject(sc interface{ Scan(...any) error }) (Project, error) {
+	var p Project
+	var tagsJSON, networksJSON string
+	err := sc.Scan(&p.ID, &p.Org, &p.Slug, &p.Name, &p.Description,
+		&p.RepoURL, &p.RepoBranch, &p.RepoProvider, &p.Framework,
+		&p.Status, &p.LiveURL, &p.Bucket, &p.CurrentDeploy, &p.CurrentRelease,
+		&p.CacheControl, &p.LastPurgeAt, &p.CreatedAt, &p.UpdatedAt,
+		&p.Analytics, &p.SpaceId, &p.ForkedFrom, &p.Visibility, &p.Hidden, &p.HiddenReason,
+		&p.Upstream, &p.License, &p.Key, &tagsJSON, &p.KeepLocal, &networksJSON, &p.Namespace)
+	if err != nil {
+		return p, err
+	}
+	p.RepoURL = remote.Clean(p.RepoURL)
+	p.Tags = decodeTags(tagsJSON)
+	p.InternalNetworks = decodeNetworks(networksJSON)
+	return p, nil
+}
+
+// projectText refuses, before it is stored, text PostgreSQL would: a NUL byte or
+// bytes that are not UTF-8 in any field a caller supplies.
+func projectText(p Project) error {
+	err := dialect.Text(p.ID, p.Org, p.Slug, p.Namespace, p.Name, p.Description, p.RepoURL, p.RepoBranch,
+		p.RepoProvider, p.Framework, p.Status, p.LiveURL, p.Bucket, p.CurrentDeploy, p.CurrentRelease,
+		p.CacheControl, p.SpaceId, p.ForkedFrom, p.Visibility, p.HiddenReason, p.Upstream, p.License, p.Key,
+		encodeTags(p.Tags), encodeNetworks(p.InternalNetworks))
+	if err != nil {
+		return err
+	}
+	for k, v := range p.Tags {
+		if err := dialect.Text(k, v); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// CreateProject inserts one project. A UNIQUE(org,slug) violation surfaces as
+// errConflict. A project with no namespace is kept under its org's.
+func (s *Store) CreateProject(ctx context.Context, p Project) error {
+	if p.Namespace == "" {
+		p.Namespace = p.Org
+	}
+	if err := projectText(p); err != nil {
+		return fmt.Errorf("insert project: %w", err)
+	}
+	_, err := s.db.ExecContext(ctx,
+		`INSERT INTO projects (`+projectCols+`) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31)`,
+		p.ID, p.Org, p.Slug, p.Name, p.Description,
+		remote.Clean(p.RepoURL), p.RepoBranch, p.RepoProvider, p.Framework,
+		p.Status, p.LiveURL, p.Bucket, p.CurrentDeploy, p.CurrentRelease,
+		p.CacheControl, p.LastPurgeAt, p.CreatedAt, p.UpdatedAt,
+		bit(p.Analytics), p.SpaceId, p.ForkedFrom, p.Visibility, bit(p.Hidden), p.HiddenReason,
+		p.Upstream, p.License, p.Key, encodeTags(p.Tags), bit(p.KeepLocal), encodeNetworks(p.InternalNetworks), p.Namespace)
+	if err != nil {
+		if dialect.Unique(err) {
+			return errConflict
+		}
+		return fmt.Errorf("insert project: %w", err)
+	}
+	return nil
+}
+
+// GetProject returns the project for (org,slug) or errNotFound.
+func (s *Store) GetProject(ctx context.Context, org, slug string) (Project, error) {
+	row := s.db.QueryRowContext(ctx,
+		`SELECT `+projectCols+` FROM projects WHERE org=$1 AND slug=$2`, org, slug)
+	p, err := scanProject(row)
+	if errors.Is(err, sql.ErrNoRows) {
+		return Project{}, errNotFound
+	}
+	if err != nil {
+		return Project{}, fmt.Errorf("get project: %w", err)
+	}
+	return p, nil
+}
+
+// ProjectByRepo returns org's project that builds from the repository at url, or
+// errNotFound. The address matches with or without its `.git` and in any case,
+// the spellings one repository's clone address takes.
+func (s *Store) ProjectByRepo(ctx context.Context, org, url string) (Project, error) {
+	bare := strings.TrimSuffix(strings.TrimRight(remote.Clean(url), "/"), ".git")
+	row := s.db.QueryRowContext(ctx,
+		`SELECT `+projectCols+` FROM projects WHERE org=$1 AND (lower(repo_url)=lower($2) OR lower(repo_url)=lower($3))
+		 ORDER BY created_at ASC, id ASC LIMIT 1`, org, bare, bare+".git")
+	p, err := scanProject(row)
+	if errors.Is(err, sql.ErrNoRows) {
+		return Project{}, errNotFound
+	}
+	if err != nil {
+		return Project{}, fmt.Errorf("project by repo: %w", err)
+	}
+	return p, nil
+}
+
+// ResolveKey returns the project holding this publishable ingest key, or
+// errNotFound. It is the whole of ingest attribution: the key names the project,
+// the project names the org, and a key no project holds resolves to nothing.
+//
+// An empty key is refused before the query rather than by it. Every pre-backfill
+// row stored ” and the partial index deliberately permits duplicates there, so a
+// blank lookup is the one input that could match rows it has no relationship to.
+func (s *Store) ResolveKey(ctx context.Context, key string) (Project, error) {
+	if strings.TrimSpace(key) == "" {
+		return Project{}, errNotFound
+	}
+	row := s.db.QueryRowContext(ctx, `SELECT `+projectCols+` FROM projects WHERE key=$1`, key)
+	p, err := scanProject(row)
+	if errors.Is(err, sql.ErrNoRows) {
+		return Project{}, errNotFound
+	}
+	if err != nil {
+		return Project{}, fmt.Errorf("resolve key: %w", err)
+	}
+	return p, nil
+}
+
+// ListProjects returns every project for org, most-recently-updated first.
+func (s *Store) ListProjects(ctx context.Context, org string) ([]Project, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT `+projectCols+` FROM projects WHERE org=$1 ORDER BY updated_at DESC, id ASC`, org)
+	if err != nil {
+		return nil, fmt.Errorf("list projects: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	var out []Project
+	for rows.Next() {
+		p, err := scanProject(rows)
+		if err != nil {
+			return nil, fmt.Errorf("scan project: %w", err)
+		}
+		out = append(out, p)
+	}
+	return out, rows.Err()
+}
+
+// UpdateProject overwrites the mutable fields of an existing project. The caller
+// reads-modifies-writes the whole Project; org+slug+id+created_at are immutable.
+func (s *Store) UpdateProject(ctx context.Context, p Project) error {
+	if err := projectText(p); err != nil {
+		return fmt.Errorf("update project: %w", err)
+	}
+	res, err := s.db.ExecContext(ctx,
+		`UPDATE projects SET name=$1,description=$2,repo_url=$3,repo_branch=$4,repo_provider=$5,framework=$6,status=$7,live_url=$8,bucket=$9,current_deploy=$10,current_release=$11,cache_control=$12,last_purge_at=$13,analytics=$14,visibility=$15,hidden=$16,hidden_reason=$17,upstream=$18,license=$19,tags=$20,keep_local=$21,internal_networks=$22,namespace=$23,updated_at=$24
+		 WHERE org=$25 AND slug=$26`,
+		p.Name, p.Description, remote.Clean(p.RepoURL), p.RepoBranch, p.RepoProvider, p.Framework,
+		p.Status, p.LiveURL, p.Bucket, p.CurrentDeploy, p.CurrentRelease, p.CacheControl, p.LastPurgeAt,
+		bit(p.Analytics), p.Visibility, bit(p.Hidden), p.HiddenReason, p.Upstream, p.License, encodeTags(p.Tags), bit(p.KeepLocal), encodeNetworks(p.InternalNetworks), cmp.Or(p.Namespace, p.Org), p.UpdatedAt, p.Org, p.Slug)
+	if err != nil {
+		return fmt.Errorf("update project: %w", err)
+	}
+	n, _ := res.RowsAffected()
+	if n == 0 {
+		return errNotFound
+	}
+	return nil
+}
+
+// DeleteProject removes a project and all its deployment rows. Reports whether a
+// project row was deleted.
+func (s *Store) DeleteProject(ctx context.Context, org, slug string) (Project, bool, error) {
+	tx, err := dialect.Of(s.db).BeginWrite(ctx, s.db)
+	if err != nil {
+		return Project{}, false, fmt.Errorf("begin: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	row := tx.QueryRowContext(ctx, `SELECT `+projectCols+` FROM projects WHERE org=$1 AND slug=$2`, org, slug)
+	p, err := scanProject(row)
+	if errors.Is(err, sql.ErrNoRows) {
+		return Project{}, false, nil
+	}
+	if err != nil {
+		return Project{}, false, fmt.Errorf("get for delete: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM deployments WHERE project_id=$1`, p.ID); err != nil {
+		return Project{}, false, fmt.Errorf("delete deployments: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM projects WHERE id=$1`, p.ID); err != nil {
+		return Project{}, false, fmt.Errorf("delete project: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return Project{}, false, fmt.Errorf("commit: %w", err)
+	}
+	return p, true, nil
+}
+
+const deploymentCols = `id,project_id,org,version,status,source,commit_sha,live_url,bucket,prefix,files,bytes,message,created_at,updated_at`
+
+func scanDeployment(sc interface{ Scan(...any) error }) (Deployment, error) {
+	var d Deployment
+	err := sc.Scan(&d.ID, &d.ProjectID, &d.Org, &d.Version, &d.Status, &d.Source,
+		&d.Commit, &d.LiveURL, &d.Bucket, &d.Prefix, &d.Files, &d.Bytes, &d.Message,
+		&d.CreatedAt, &d.UpdatedAt)
+	return d, err
+}
+
+// NextVersion returns the next monotonic deploy version for a project (1-based).
+func (s *Store) NextVersion(ctx context.Context, projectID string) (int, error) {
+	var v sql.NullInt64
+	err := s.db.QueryRowContext(ctx, `SELECT MAX(version) FROM deployments WHERE project_id=$1`, projectID).Scan(&v)
+	if err != nil {
+		return 0, fmt.Errorf("max version: %w", err)
+	}
+	return int(v.Int64) + 1, nil
+}
+
+// deploymentText refuses, before it is stored, text PostgreSQL would.
+func deploymentText(d Deployment) error {
+	return dialect.Text(d.ID, d.ProjectID, d.Org, d.Status, d.Source, d.Commit, d.LiveURL, d.Bucket, d.Prefix, d.Message)
+}
+
+// InsertDeployment writes one deployment row.
+func (s *Store) InsertDeployment(ctx context.Context, d Deployment) error {
+	if err := deploymentText(d); err != nil {
+		return fmt.Errorf("insert deployment: %w", err)
+	}
+	_, err := s.db.ExecContext(ctx,
+		`INSERT INTO deployments (`+deploymentCols+`) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)`,
+		d.ID, d.ProjectID, d.Org, d.Version, d.Status, d.Source, d.Commit, d.LiveURL,
+		d.Bucket, d.Prefix, d.Files, d.Bytes, d.Message, d.CreatedAt, d.UpdatedAt)
+	if err != nil {
+		if dialect.Unique(err) {
+			return errConflict
+		}
+		return fmt.Errorf("insert deployment: %w", err)
+	}
+	return nil
+}
+
+// UpdateDeployment overwrites the mutable fields of a deployment (status flow).
+func (s *Store) UpdateDeployment(ctx context.Context, d Deployment) error {
+	if err := deploymentText(d); err != nil {
+		return fmt.Errorf("update deployment: %w", err)
+	}
+	res, err := s.db.ExecContext(ctx,
+		`UPDATE deployments SET status=$1,commit_sha=$2,live_url=$3,bucket=$4,prefix=$5,files=$6,bytes=$7,message=$8,updated_at=$9
+		 WHERE id=$10 AND org=$11`,
+		d.Status, d.Commit, d.LiveURL, d.Bucket, d.Prefix, d.Files, d.Bytes, d.Message, d.UpdatedAt, d.ID, d.Org)
+	if err != nil {
+		return fmt.Errorf("update deployment: %w", err)
+	}
+	n, _ := res.RowsAffected()
+	if n == 0 {
+		return errNotFound
+	}
+	return nil
+}
+
+// EndDeployment writes a deployment's ending only while it still has the status
+// from: errConflict when another ending landed first, so two never interleave.
+func (s *Store) EndDeployment(ctx context.Context, d Deployment, from string) error {
+	if err := deploymentText(d); err != nil {
+		return fmt.Errorf("end deployment: %w", err)
+	}
+	res, err := s.db.ExecContext(ctx,
+		`UPDATE deployments SET status=$1,commit_sha=$2,live_url=$3,bucket=$4,prefix=$5,files=$6,bytes=$7,message=$8,updated_at=$9
+		 WHERE id=$10 AND org=$11 AND status=$12`,
+		d.Status, d.Commit, d.LiveURL, d.Bucket, d.Prefix, d.Files, d.Bytes, d.Message, d.UpdatedAt, d.ID, d.Org, from)
+	if err != nil {
+		return fmt.Errorf("end deployment: %w", err)
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return errConflict
+	}
+	return nil
+}
+
+// Building reports whether project holds a deployment still building that is
+// newer than version.
+func (s *Store) Building(ctx context.Context, org, projectID string, version int) (bool, error) {
+	var one int
+	err := s.db.QueryRowContext(ctx,
+		`SELECT 1 FROM deployments WHERE org=$1 AND project_id=$2 AND status='building' AND version>$3 LIMIT 1`,
+		org, projectID, version).Scan(&one)
+	if errors.Is(err, sql.ErrNoRows) {
+		return false, nil
+	}
+	if err != nil {
+		return false, fmt.Errorf("newer build: %w", err)
+	}
+	return true, nil
+}
+
+// GetDeployment returns one deployment scoped to (org, project, id).
+func (s *Store) GetDeployment(ctx context.Context, org, projectID, id string) (Deployment, error) {
+	row := s.db.QueryRowContext(ctx,
+		`SELECT `+deploymentCols+` FROM deployments WHERE org=$1 AND project_id=$2 AND id=$3`, org, projectID, id)
+	d, err := scanDeployment(row)
+	if errors.Is(err, sql.ErrNoRows) {
+		return Deployment{}, errNotFound
+	}
+	if err != nil {
+		return Deployment{}, fmt.Errorf("get deployment: %w", err)
+	}
+	return d, nil
+}
+
+// Host statuses. A row is either serving or merely held; see the site_hosts DDL.
+const (
+	HostVerified = "verified"
+	HostPending  = "pending"
+)
+
+// HostClaim is one row of the public-hostname namespace as reported to its owner.
+// Token is the DNS challenge value for a pending claim, and empty once verified —
+// the proof has been consumed and the record can be retired.
+type HostClaim struct {
+	Host       string
+	Org        string
+	Slug       string
+	Status     string
+	Token      string
+	CreatedAt  int64
+	VerifiedAt int64
+}
+
+// BindHost binds the global public host to (org, slug) as VERIFIED — the
+// structural path: an org's own subdomain, or a custom host an operator has
+// vouched for. First-come; idempotent for the SAME owner (a re-deploy just
+// refreshes updated_at). If host is already held by a DIFFERENT project it
+// returns errHostTaken WITHOUT overwriting — a losing bind must never hijack
+// another org's live subdomain. A pending claim by the SAME owner is promoted.
+func (s *Store) BindHost(ctx context.Context, host, org, slug string, now int64) error {
+	return s.bindHost(ctx, host, org, slug, HostVerified, "", now)
+}
+
+// Claim takes a free name for (org, slug) at create: errHostTaken when anyone
+// else holds it (HostFree), else a verified bind, whose primary key settles two
+// creates racing for one name.
+func (s *Store) Claim(ctx context.Context, host, org, slug string, now int64) error {
+	free, err := s.HostFree(ctx, host, org, slug)
+	if err != nil {
+		return err
+	}
+	if !free {
+		if sites.Ours(host) {
+			return errReservedHost
+		}
+		return errHostTaken
+	}
+	return s.BindHost(ctx, host, org, slug, now)
+}
+
+// ClaimHost records a PENDING claim on host for (org, slug), carrying the DNS
+// challenge token the owner must publish. It takes the name against the PK, so a
+// claim blocks anyone else from claiming it, but the row does NOT route until
+// VerifyHost promotes it.
+//
+// Re-claiming keeps the EXISTING token, so a repeat call returns the same
+// challenge rather than invalidating a record the customer already published. A
+// claim over an ALREADY-VERIFIED row of the same owner is a no-op: verification
+// is never walked backwards, or a re-claim would take a live host off the air.
+func (s *Store) ClaimHost(ctx context.Context, host, org, slug, token string, now int64) error {
+	return s.bindHost(ctx, host, org, slug, HostPending, token, now)
+}
+
+func (s *Store) bindHost(ctx context.Context, host, org, slug, status, token string, now int64) error {
+	// A name the PLATFORM holds may never enter site_hosts, whatever the caller —
+	// the storage invariant that makes the serve-time gate a mere backstop.
+	//
+	// sites.Ours, not sites.IsReserved: this argument is a bare slug on the deploy
+	// path and a full hostname on the custom-domain path, and IsReserved compares
+	// against bare LABELS, so every FQDN matched nothing and the backstop held for
+	// only half the table. `login.hanzo.ai` passed it. Ours splits on shape and
+	// answers both — and it is the SAME predicate the claim gate asks (domains.go
+	// ours), so a vouch that skips the gate still cannot write a name we hold.
+	if sites.Ours(host) {
+		return errReservedHost
+	}
+	if err := dialect.Text(host, org, slug, status, token); err != nil {
+		return fmt.Errorf("bind host: %w", err)
+	}
+	tx, err := dialect.Of(s.db).BeginWrite(ctx, s.db)
+	if err != nil {
+		return fmt.Errorf("begin: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	// The challenge is kept in KMS only for a claim that is, or becomes, pending; what is
+	// kept is forgotten again if the row is not written, and a host that is verified
+	// forgets the one it had once the row says so.
+	var kept, curOrg, curSlug, curStatus, curToken string
+	committed, forget := false, false
+	defer func() {
+		if !committed && kept != "" {
+			_ = s.esc.Drop(ctx, org, kept)
+		}
+		if committed && forget {
+			_ = s.esc.Drop(ctx, org, curToken)
+		}
+	}()
+
+	row := tx.QueryRowContext(ctx, `SELECT org, slug, status, token FROM site_hosts WHERE host=$1`, host)
+	switch err := row.Scan(&curOrg, &curSlug, &curStatus, &curToken); {
+	case errors.Is(err, sql.ErrNoRows):
+		verifiedAt := int64(0)
+		if status == HostVerified {
+			verifiedAt = now
+		}
+		ref, err := s.esc.Put(ctx, org, host, "token", token)
+		if err != nil {
+			return fmt.Errorf("bind host: %w", err)
+		}
+		kept = ref
+		if _, err := tx.ExecContext(ctx,
+			`INSERT INTO site_hosts (host, org, slug, status, token, verified_at, created_at, updated_at)
+			 VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+			host, org, slug, status, ref, verifiedAt, now, now); err != nil {
+			return fmt.Errorf("bind host: %w", err)
+		}
+	case err != nil:
+		return fmt.Errorf("bind host lookup: %w", err)
+	default:
+		if curOrg != org || curSlug != slug {
+			return errHostTaken
+		}
+		// Never walk a verified host back to pending: a re-claim of a host that
+		// is already serving must not take it off the air.
+		if status == HostPending && curStatus == HostVerified {
+			status = HostVerified
+		}
+		if status == HostVerified {
+			if _, err := tx.ExecContext(ctx,
+				`UPDATE site_hosts SET status=$1, token='', verified_at=CASE WHEN verified_at=0 THEN $2 ELSE verified_at END, updated_at=$3
+				 WHERE host=$4`, HostVerified, now, now, host); err != nil {
+				return fmt.Errorf("touch host: %w", err)
+			}
+			forget = curToken != ""
+			break
+		}
+		// Still pending: keep whatever token the customer is already publishing. Only a
+		// claim that has none is given this one.
+		if curToken == "" {
+			ref, err := s.esc.Put(ctx, org, host, "token", token)
+			if err != nil {
+				return fmt.Errorf("bind host: %w", err)
+			}
+			kept = ref
+			if _, err := tx.ExecContext(ctx, `UPDATE site_hosts SET token=$1, updated_at=$2 WHERE host=$3`, ref, now, host); err != nil {
+				return fmt.Errorf("touch host: %w", err)
+			}
+			break
+		}
+		if _, err := tx.ExecContext(ctx, `UPDATE site_hosts SET updated_at=$1 WHERE host=$2`, now, host); err != nil {
+			return fmt.Errorf("touch host: %w", err)
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+	committed = true
+	return nil
+}
+
+// VerifyHost promotes (org, slug)'s pending claim on host to verified, so it
+// begins routing. Scoped to the owner: another org's row is never touched, and a
+// host that is not claimed by this project is errNotFound. Idempotent — verifying
+// an already-verified host succeeds without moving verified_at.
+func (s *Store) VerifyHost(ctx context.Context, host, org, slug string, now int64) error {
+	var ref string
+	err := s.db.QueryRowContext(ctx, `SELECT token FROM site_hosts WHERE host=$1 AND org=$2 AND slug=$3`, host, org, slug).Scan(&ref)
+	if errors.Is(err, sql.ErrNoRows) {
+		return errNotFound
+	}
+	if err != nil {
+		return fmt.Errorf("verify host: %w", err)
+	}
+	res, err := s.db.ExecContext(ctx,
+		`UPDATE site_hosts SET status=$1, token='', verified_at=CASE WHEN verified_at=0 THEN $2 ELSE verified_at END, updated_at=$3
+		 WHERE host=$4 AND org=$5 AND slug=$6`, HostVerified, now, now, host, org, slug)
+	if err != nil {
+		return fmt.Errorf("verify host: %w", err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("verify host: %w", err)
+	}
+	if n == 0 {
+		return errNotFound
+	}
+	// The host is verified: it has no challenge to publish, and KMS forgets it.
+	return s.esc.Drop(ctx, org, ref)
+}
+
+// HostClaimFor returns (org, slug)'s claim on host. Scoped to the owner, so a
+// host held by another org reads as errNotFound — existence is never confirmed
+// across a tenant boundary.
+func (s *Store) HostClaimFor(ctx context.Context, host, org, slug string) (HostClaim, error) {
+	var h HostClaim
+	row := s.db.QueryRowContext(ctx,
+		`SELECT host, org, slug, status, token, created_at, verified_at FROM site_hosts
+		 WHERE host=$1 AND org=$2 AND slug=$3`, host, org, slug)
+	switch err := row.Scan(&h.Host, &h.Org, &h.Slug, &h.Status, &h.Token, &h.CreatedAt, &h.VerifiedAt); {
+	case errors.Is(err, sql.ErrNoRows):
+		return HostClaim{}, errNotFound
+	case err != nil:
+		return HostClaim{}, fmt.Errorf("host claim: %w", err)
+	}
+	if err := s.openClaim(ctx, &h); err != nil {
+		return HostClaim{}, fmt.Errorf("host claim: %w", err)
+	}
+	return h, nil
+}
+
+// openClaim fills in the challenge a claim's row names in KMS. A verified host has none.
+func (s *Store) openClaim(ctx context.Context, h *HostClaim) error {
+	token, err := s.esc.Get(ctx, h.Org, h.Token)
+	if err != nil {
+		return fmt.Errorf("host %s: %w", h.Host, err)
+	}
+	h.Token = token
+	return nil
+}
+
+// ListHostClaims returns every custom host a project holds, verified and pending
+// alike, for the domains panel. Its own name (the bare slug, held from creation)
+// is not a custom host and is not here. ListHostsForProject is the routing view
+// (verified only); this is the ownership view.
+func (s *Store) ListHostClaims(ctx context.Context, org, slug string) ([]HostClaim, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT host, org, slug, status, token, created_at, verified_at FROM site_hosts
+		 WHERE org=$1 AND slug=$2 AND host<>slug ORDER BY created_at ASC, host ASC`, org, slug)
+	if err != nil {
+		return nil, fmt.Errorf("list host claims: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	var out []HostClaim
+	for rows.Next() {
+		var h HostClaim
+		if err := rows.Scan(&h.Host, &h.Org, &h.Slug, &h.Status, &h.Token, &h.CreatedAt, &h.VerifiedAt); err != nil {
+			return nil, fmt.Errorf("list host claims: %w", err)
+		}
+		out = append(out, h)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("list host claims: %w", err)
+	}
+	// Opened once the cursor is closed: a file's one connection serves one query at a
+	// time, and the open may wait on KMS.
+	_ = rows.Close()
+	for i := range out {
+		if err := s.openClaim(ctx, &out[i]); err != nil {
+			return nil, fmt.Errorf("list host claims: %w", err)
+		}
+	}
+	return out, nil
+}
+
+// UnbindHost releases a host binding, but only the row owned by (org, slug) — so
+// deleting project A can never drop project B's host even if they somehow shared
+// a row (they cannot, but the scoping makes the guarantee explicit).
+func (s *Store) UnbindHost(ctx context.Context, host, org, slug string) error {
+	var ref string
+	err := s.db.QueryRowContext(ctx, `SELECT token FROM site_hosts WHERE host=$1 AND org=$2 AND slug=$3`, host, org, slug).Scan(&ref)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("unbind host: %w", err)
+	}
+	res, err := s.db.ExecContext(ctx, `DELETE FROM site_hosts WHERE host=$1 AND org=$2 AND slug=$3`, host, org, slug)
+	if err != nil {
+		return fmt.Errorf("unbind host: %w", err)
+	}
+	if n, _ := res.RowsAffected(); n > 0 {
+		if err := s.esc.Drop(ctx, org, ref); err != nil {
+			return fmt.Errorf("unbind host: the claim is gone but KMS still holds its challenge: %w", err)
+		}
+	}
+	return nil
+}
+
+// ResolveHost returns the project a public host is bound to, joining the global
+// site_hosts binding to the org-scoped project. This is the authoritative
+// slug→project resolution the site server uses; the org and bucket come ONLY from
+// here, never from the request. Missing binding OR missing project ⇒ errNotFound.
+//
+// The status filter is THE hostname-hijack boundary and the only read that
+// enforces it: a pending claim holds its name against the PK but must never
+// serve, or claiming yourco.com would be enough to answer for it. It is the sole
+// routing read of site_hosts — ResolveUniqueLiveSlug resolves bare slugs out of
+// `projects` and never sees this table — so gating it here gates everything.
+func (s *Store) ResolveHost(ctx context.Context, host string) (Project, error) {
+	row := s.db.QueryRowContext(ctx,
+		`SELECT `+prefixCols("p")+` FROM site_hosts h JOIN projects p ON p.org=h.org AND p.slug=h.slug
+		 WHERE h.host=$1 AND h.status='verified'`, host)
+	p, err := scanProject(row)
+	if errors.Is(err, sql.ErrNoRows) {
+		return Project{}, errNotFound
+	}
+	if err != nil {
+		return Project{}, fmt.Errorf("resolve host: %w", err)
+	}
+	return p, nil
+}
+
+// ResolveUniqueLiveSlug resolves a BARE subdomain slug (`<slug>.hanzo.app`) to
+// the single LIVE project owning that slug across all orgs. Slugs are only
+// org-unique, so the bare host is servable ONLY when unambiguous: zero or 2+
+// live owners ⇒ errNotFound (each project still serves at its org-scoped host
+// and its S3 URL). LIMIT 2 — a second row is the whole ambiguity signal; we
+// never enumerate. This is what keeps pre-binding publishes servable with no
+// backfill migration.
+func (s *Store) ResolveUniqueLiveSlug(ctx context.Context, slug string) (Project, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT `+projectCols+` FROM projects WHERE slug=$1 AND status='live' LIMIT 2`, slug)
+	if err != nil {
+		return Project{}, fmt.Errorf("resolve slug: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	var out []Project
+	for rows.Next() {
+		p, err := scanProject(rows)
+		if err != nil {
+			return Project{}, fmt.Errorf("resolve slug: %w", err)
+		}
+		out = append(out, p)
+	}
+	if err := rows.Err(); err != nil {
+		return Project{}, fmt.Errorf("resolve slug: %w", err)
+	}
+	if len(out) != 1 {
+		return Project{}, errNotFound
+	}
+	return out[0], nil
+}
+
+// ResolveOrgLiveSlug resolves a bare slug PINNED to a specific org — the LIVE
+// project that org owns with that slug. Unlike ResolveUniqueLiveSlug (unique
+// across ALL orgs), this can never return another org's project, so a first-party
+// site host (cd.hanzo.ai → org "hanzo", slug "cd") is served ONLY by OUR project,
+// never shadowed by a customer who named their project "cd". (org,slug) is unique
+// in the store, so LIMIT 1.
+func (s *Store) ResolveOrgLiveSlug(ctx context.Context, org, slug string) (Project, error) {
+	row := s.db.QueryRowContext(ctx,
+		`SELECT `+projectCols+` FROM projects WHERE org=$1 AND slug=$2 AND status='live' LIMIT 1`, org, slug)
+	p, err := scanProject(row)
+	if errors.Is(err, sql.ErrNoRows) {
+		return Project{}, errNotFound
+	}
+	if err != nil {
+		return Project{}, fmt.Errorf("resolve org slug: %w", err)
+	}
+	return p, nil
+}
+
+// ListHostsForProject returns every custom host that (org, slug) actually SERVES,
+// oldest first — its verified custom domains; its own `<slug>.<apex>` is its
+// live URL, not a domain it bound. This is the routing view, so it excludes
+// pending claims: reporting a
+// name the edge will not answer for as a "domain" would be a lie the customer
+// debugs for an hour. ListHostClaims is the ownership view that shows both.
+func (s *Store) ListHostsForProject(ctx context.Context, org, slug string) ([]string, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT host FROM site_hosts WHERE org=$1 AND slug=$2 AND status='verified' AND host<>slug
+		 ORDER BY created_at ASC, host ASC`, org, slug)
+	if err != nil {
+		return nil, fmt.Errorf("list hosts: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	var out []string
+	for rows.Next() {
+		var h string
+		if err := rows.Scan(&h); err != nil {
+			return nil, fmt.Errorf("scan host: %w", err)
+		}
+		out = append(out, h)
+	}
+	return out, rows.Err()
+}
+
+const releaseCols = `id,org,slug,prefix,source,objects,bytes,created_at`
+
+func scanRelease(sc interface{ Scan(...any) error }) (Release, error) {
+	var r Release
+	err := sc.Scan(&r.ID, &r.Org, &r.Slug, &r.Prefix, &r.Source, &r.Objects, &r.Bytes, &r.CreatedAt)
+	return r, err
+}
+
+// PutRelease records a fully-copied release. It is INSERT-only and idempotent on
+// the content address: re-publishing identical bytes hits the (org,slug,id) PK
+// and is a no-op rather than a conflict, because the row already describes
+// exactly those bytes at exactly that prefix. Call it ONLY after every object has
+// landed — the existence of the row is the promise that the prefix is complete,
+// and ActivateRelease will not flip to a release that has no row.
+func (s *Store) PutRelease(ctx context.Context, r Release) error {
+	if err := dialect.Text(r.ID, r.Org, r.Slug, r.Prefix, r.Source); err != nil {
+		return fmt.Errorf("insert release: %w", err)
+	}
+	// The next position is read and written under the store's write lock, so two
+	// releases of one second are numbered in the order they landed.
+	tx, err := dialect.Of(s.db).BeginWrite(ctx, s.db)
+	if err != nil {
+		return fmt.Errorf("insert release: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	if _, err := tx.ExecContext(ctx,
+		`INSERT INTO releases (`+releaseCols+`, seq) VALUES ($1,$2,$3,$4,$5,$6,$7,$8, `+dialect.NextSeq("releases")+`)
+		 ON CONFLICT(org, slug, id) DO NOTHING`,
+		r.ID, r.Org, r.Slug, r.Prefix, r.Source, r.Objects, r.Bytes, r.CreatedAt); err != nil {
+		return fmt.Errorf("insert release: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("insert release: %w", err)
+	}
+	return nil
+}
+
+// GetRelease returns one release scoped to (org, slug, id), or errNotFound. The
+// org is part of the key, not a filter applied afterwards, so a foreign release
+// id is indistinguishable from a nonexistent one — no existence oracle.
+func (s *Store) GetRelease(ctx context.Context, org, slug, id string) (Release, error) {
+	row := s.db.QueryRowContext(ctx,
+		`SELECT `+releaseCols+` FROM releases WHERE org=$1 AND slug=$2 AND id=$3`, org, slug, id)
+	r, err := scanRelease(row)
+	if errors.Is(err, sql.ErrNoRows) {
+		return Release{}, errNotFound
+	}
+	if err != nil {
+		return Release{}, fmt.Errorf("get release: %w", err)
+	}
+	return r, nil
+}
+
+// ListReleases returns a site's releases, newest first — the rollback menu.
+//
+// The tiebreak is seq DESC, i.e. INSERTION order, because created_at has
+// second granularity and a CI job can publish twice inside one second. It is the
+// same order PruneReleases applies, and that is the point: the menu a caller
+// sees must be exactly the set retention keeps, or a tie would show one release
+// and reclaim another.
+func (s *Store) ListReleases(ctx context.Context, org, slug string, limit int) ([]Release, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT `+releaseCols+` FROM releases WHERE org=$1 AND slug=$2 ORDER BY created_at DESC, seq DESC LIMIT $3`,
+		org, slug, limit)
+	if err != nil {
+		return nil, fmt.Errorf("list releases: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	var out []Release
+	for rows.Next() {
+		r, err := scanRelease(rows)
+		if err != nil {
+			return nil, fmt.Errorf("scan release: %w", err)
+		}
+		out = append(out, r)
+	}
+	return out, rows.Err()
+}
+
+// PruneReleases drops a site's release rows beyond the newest keep and returns
+// EXACTLY the rows it removed, so the caller frees exactly those bytes and no
+// others. Retention is per site; keep<=0 prunes nothing (a misconfigured depth
+// must not shred a site's history).
+//
+// The live release is protected TWICE, and the second guard is the one that
+// holds under concurrency:
+//
+//   - it is excluded from the candidate query (`id <> current_release`), so it
+//     never even counts against the keep budget — a rollback to an ancient
+//     release keeps that release alive however deep it has sunk;
+//   - every DELETE additionally requires the row NOT be the project's
+//     current_release AT DELETE TIME. So a rollback that activates a doomed
+//     release between the scan and the delete makes that delete match zero rows,
+//     and the row (with its bytes) survives. The deletes and ActivateRelease run
+//     under the store's write lock (Dialect.BeginWrite: a file's one connection, a
+//     lock on hanzo-sql), so there is no interleaving in which activation wins the
+//     pointer and prune still wins the row. The deletes are one transaction: an
+//     error removes none, and the caller frees none.
+//
+// Rows go FIRST and bytes after (the caller's half), which is exactly promote's
+// ordering run backwards: a row's existence keeps meaning "the prefix is
+// complete", so no reader can ever reach a half-reclaimed release. A crash
+// between the two leaks objects nothing points at — the same convergent failure
+// promote already accepts — never a live 404.
+func (s *Store) PruneReleases(ctx context.Context, org, slug string, keep int) ([]Release, error) {
+	if keep <= 0 {
+		return nil, nil
+	}
+	// The deletes and the activation both run under the store's write lock, so there
+	// is no interleaving in which activation wins the pointer and prune still wins
+	// the row: on a file that is its one connection, on hanzo-sql it is BeginWrite.
+	tx, err := dialect.Of(s.db).BeginWrite(ctx, s.db)
+	if err != nil {
+		return nil, fmt.Errorf("prune releases: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	rows, err := tx.QueryContext(ctx,
+		`SELECT `+releaseCols+` FROM releases
+		 WHERE org=$1 AND slug=$2
+		   AND id <> COALESCE((SELECT current_release FROM projects WHERE org=$3 AND slug=$4), '')
+		 ORDER BY created_at DESC, seq DESC`,
+		org, slug, org, slug)
+	if err != nil {
+		return nil, fmt.Errorf("scan prunable releases: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	var all []Release
+	for rows.Next() {
+		r, err := scanRelease(rows)
+		if err != nil {
+			return nil, fmt.Errorf("scan prunable release: %w", err)
+		}
+		all = append(all, r)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("scan prunable releases: %w", err)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, fmt.Errorf("scan prunable releases: %w", err)
+	}
+	// Everything past the newest keep. (OFFSET without LIMIT is PostgreSQL's, and
+	// LIMIT -1 is SQLite's; the list is a site's own releases, so it is cut here.)
+	if len(all) <= keep {
+		return nil, nil
+	}
+	var pruned []Release
+	for _, r := range all[keep:] {
+		res, err := tx.ExecContext(ctx,
+			`DELETE FROM releases WHERE org=$1 AND slug=$2 AND id=$3
+			   AND NOT EXISTS (SELECT 1 FROM projects WHERE org=$4 AND slug=$5 AND current_release=$6)`,
+			org, slug, r.ID, org, slug, r.ID)
+		if err != nil {
+			return nil, fmt.Errorf("prune release: %w", err)
+		}
+		if n, _ := res.RowsAffected(); n == 1 {
+			pruned = append(pruned, r)
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return nil, fmt.Errorf("prune releases: %w", err)
+	}
+	return pruned, nil
+}
+
+// ActivateRelease flips a site's serving pointer to a release. This is the whole
+// of activation, and it is ATOMIC in the strongest available sense: ONE statement
+// whose WHERE clause both scopes the project to the tenant AND requires a
+// matching release row to exist in the same tenant. There is no read-then-write
+// window in which the pointer could name a release that was never fully copied,
+// and two concurrent activations serialize into one winner (never a blend) —
+// under the store's write lock, with PruneReleases: a file runs them one at a time
+// on its single connection, hanzo-sql by Dialect.BeginWrite.
+//
+// A release row exists only after every object was copied (PutRelease) and is
+// dropped before its bytes are reclaimed (PruneReleases), so "pointer set"
+// implies "content complete" by construction. Retention makes that a NECESSARY
+// but no longer SUFFICIENT check — bytes can also vanish out of band (an
+// operator purge, a bucket lifecycle rule, a prune that died mid-purge) — so
+// activate() stats the release's entry point before calling this. n==0 means the
+// project or the release does not exist FOR THIS TENANT; the caller renders the
+// same 404 for both, so a foreign id yields no signal. Re-activating the
+// already-active release matches a row and succeeds — activation is idempotent.
+func (s *Store) ActivateRelease(ctx context.Context, org, slug, id string, now int64) error {
+	if err := dialect.Text(org, slug, id); err != nil {
+		return fmt.Errorf("activate release: %w", err)
+	}
+	tx, err := dialect.Of(s.db).BeginWrite(ctx, s.db)
+	if err != nil {
+		return fmt.Errorf("activate release: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	res, err := tx.ExecContext(ctx,
+		`UPDATE projects SET current_release=$1, updated_at=$2
+		 WHERE org=$3 AND slug=$4
+		   AND EXISTS (SELECT 1 FROM releases WHERE org=$5 AND slug=$6 AND id=$7)`,
+		id, now, org, slug, org, slug, id)
+	if err != nil {
+		return fmt.Errorf("activate release: %w", err)
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return errNotFound
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("activate release: %w", err)
+	}
+	return nil
+}
+
+// MarkLive refreshes ONLY the denormalized go-live display fields of a site. It
+// deliberately does NOT touch current_release: ActivateRelease is the SOLE
+// writer of the serving pointer on the activate path, so a slow activation can
+// never lose a race to a newer one and leave the pointer disagreeing with the
+// last atomic flip. (The two full-artifact go-live paths clear the pointer
+// through UpdateProject — that is their intent, not a side effect.)
+func (s *Store) MarkLive(ctx context.Context, org, slug, liveURL, bucket string, lastPurgeAt, now int64) error {
+	res, err := s.db.ExecContext(ctx,
+		`UPDATE projects SET status='live', live_url=$1, bucket=$2, last_purge_at=$3, updated_at=$4
+		 WHERE org=$5 AND slug=$6`,
+		liveURL, bucket, lastPurgeAt, now, org, slug)
+	if err != nil {
+		return fmt.Errorf("mark live: %w", err)
+	}
+	n, _ := res.RowsAffected()
+	if n == 0 {
+		return errNotFound
+	}
+	return nil
+}
+
+// Kept links a live deployment to the release its files were kept as
+// (record.go). It is the one writer of deployments.release_id.
+func (s *Store) Kept(ctx context.Context, org, projectID, deployID, releaseID string) error {
+	if err := dialect.Text(releaseID, org, projectID, deployID); err != nil {
+		return fmt.Errorf("keep release: %w", err)
+	}
+	if _, err := s.db.ExecContext(ctx,
+		`UPDATE deployments SET release_id=$1 WHERE org=$2 AND project_id=$3 AND id=$4`,
+		releaseID, org, projectID, deployID); err != nil {
+		return fmt.Errorf("keep release: %w", err)
+	}
+	return nil
+}
+
+// KeptRelease is one live deployment of a site and the release it was kept as.
+type KeptRelease struct {
+	Deploy  string
+	Version int
+	Commit  string
+	At      int64 // when the deployment went live, Unix seconds
+	Release Release
+}
+
+// KeptReleases is a site's live deployments whose kept release is still
+// retained, newest version first: what the site can be rolled back to. A
+// deployment whose release retention reclaimed is left out, because nothing can
+// serve it again.
+func (s *Store) KeptReleases(ctx context.Context, org string, p Project, limit int) ([]KeptRelease, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT d.id, d.version, d.commit_sha, d.updated_at, `+qualify(releaseCols, "r")+`
+		 FROM deployments d JOIN releases r ON r.org=d.org AND r.slug=$1 AND r.id=d.release_id
+		 WHERE d.org=$2 AND d.project_id=$3 AND d.release_id <> ''
+		 ORDER BY d.version DESC LIMIT $4`,
+		p.Slug, org, p.ID, limit)
+	if err != nil {
+		return nil, fmt.Errorf("kept releases: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	var out []KeptRelease
+	for rows.Next() {
+		var k KeptRelease
+		r := &k.Release
+		if err := rows.Scan(&k.Deploy, &k.Version, &k.Commit, &k.At,
+			&r.ID, &r.Org, &r.Slug, &r.Prefix, &r.Source, &r.Objects, &r.Bytes, &r.CreatedAt); err != nil {
+			return nil, fmt.Errorf("scan kept release: %w", err)
+		}
+		out = append(out, k)
+	}
+	return out, rows.Err()
+}
+
+// KeptPrefixes is the release prefix of every release org's deployments were kept
+// as, for the storage measure to leave out (footprint).
+func (s *Store) KeptPrefixes(ctx context.Context, org string) (map[string]bool, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT DISTINCT p.namespace, p.slug, d.release_id
+		 FROM deployments d JOIN projects p ON p.org=d.org AND p.id=d.project_id
+		 WHERE d.org=$1 AND d.release_id <> ''`, org)
+	if err != nil {
+		return nil, fmt.Errorf("kept prefixes: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	out := map[string]bool{}
+	for rows.Next() {
+		var ns, slug, id string
+		if err := rows.Scan(&ns, &slug, &id); err != nil {
+			return nil, fmt.Errorf("scan kept prefix: %w", err)
+		}
+		out[releasePrefix(cmp.Or(ns, org), slug, id)] = true
+	}
+	return out, rows.Err()
+}
+
+// LiveDeploy is the deployment a site last went live with: its version, commit
+// and the release it was kept as ("" when none was).
+type LiveDeploy struct {
+	Version int
+	Commit  string
+	Release string
+}
+
+// LiveDeploys is every site of org's live deployment, by slug, in one read.
+func (s *Store) LiveDeploys(ctx context.Context, org string) (map[string]LiveDeploy, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT p.slug, d.version, d.commit_sha, d.release_id
+		 FROM projects p JOIN deployments d ON d.org=p.org AND d.project_id=p.id AND d.id=p.current_deploy
+		 WHERE p.org=$1`, org)
+	if err != nil {
+		return nil, fmt.Errorf("live deploys: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	out := map[string]LiveDeploy{}
+	for rows.Next() {
+		var slug string
+		var l LiveDeploy
+		if err := rows.Scan(&slug, &l.Version, &l.Commit, &l.Release); err != nil {
+			return nil, fmt.Errorf("scan live deploy: %w", err)
+		}
+		out[slug] = l
+	}
+	return out, rows.Err()
+}
+
+// DeleteReleases drops every release row for a site. Called on project delete,
+// alongside the purge of the release object space.
+func (s *Store) DeleteReleases(ctx context.Context, org, slug string) error {
+	_, err := s.db.ExecContext(ctx, `DELETE FROM releases WHERE org=$1 AND slug=$2`, org, slug)
+	if err != nil {
+		return fmt.Errorf("delete releases: %w", err)
+	}
+	return nil
+}
+
+// prefixCols qualifies each projectCols name with a table alias (for JOINs).
+func prefixCols(alias string) string { return qualify(projectCols, alias) }
+
+// qualify prefixes each name of a column list with a table alias.
+func qualify(cols, alias string) string {
+	parts := strings.Split(cols, ",")
+	for i, c := range parts {
+		parts[i] = alias + "." + c
+	}
+	return strings.Join(parts, ",")
+}
+
+// HostFree reports whether host is free for (org, slug) to take: the platform
+// does not hold the name, nothing else is bound to it, and no project but
+// (org, slug) itself answers to it as a bare slug — one made before names were
+// claimed at create still holds its own. A create asks this, then BindHost,
+// whose primary key settles a race between two creates.
+func (s *Store) HostFree(ctx context.Context, host, org, slug string) (bool, error) {
+	if sites.Ours(host) {
+		return false, nil
+	}
+	var o, sl string
+	switch err := s.db.QueryRowContext(ctx, `SELECT org, slug FROM site_hosts WHERE host=$1`, host).Scan(&o, &sl); {
+	case err == nil:
+		if o != org || sl != slug {
+			return false, nil
+		}
+	case !errors.Is(err, sql.ErrNoRows):
+		return false, fmt.Errorf("host lookup: %w", err)
+	}
+	var one int
+	switch err := s.db.QueryRowContext(ctx,
+		`SELECT 1 FROM projects WHERE slug=$1 AND NOT (org=$2 AND slug=$3) LIMIT 1`, host, org, slug).Scan(&one); {
+	case err == nil:
+		return false, nil
+	case !errors.Is(err, sql.ErrNoRows):
+		return false, fmt.Errorf("host lookup: %w", err)
+	}
+	return true, nil
+}
+
+// Built is one sandbox-built deployment beside the project it deploys.
+type Built struct {
+	Deployment Deployment
+	Slug, Repo string
+}
+
+// ListBuilds returns org's sandbox-built deployments, newest first, at most limit.
+func (s *Store) ListBuilds(ctx context.Context, org string, limit int) ([]Built, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT `+qualify(deploymentCols, "d")+`, p.slug, p.repo_url FROM deployments d JOIN projects p ON p.id=d.project_id AND p.org=d.org
+		 WHERE d.org=$1 AND d.source=$2 ORDER BY d.created_at DESC, d.version DESC LIMIT $3`, org, sourceBuild, limit)
+	if err != nil {
+		return nil, fmt.Errorf("list builds: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	var out []Built
+	for rows.Next() {
+		var b Built
+		d := &b.Deployment
+		if err := rows.Scan(&d.ID, &d.ProjectID, &d.Org, &d.Version, &d.Status, &d.Source, &d.Commit, &d.LiveURL,
+			&d.Bucket, &d.Prefix, &d.Files, &d.Bytes, &d.Message, &d.CreatedAt, &d.UpdatedAt, &b.Slug, &b.Repo); err != nil {
+			return nil, fmt.Errorf("scan build: %w", err)
+		}
+		out = append(out, b)
+	}
+	return out, rows.Err()
+}
+
+// StaleBuilds returns every org's sandbox-built deployments still building that
+// were opened before the unix second before, oldest first.
+func (s *Store) StaleBuilds(ctx context.Context, before int64) ([]Built, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT `+qualify(deploymentCols, "d")+`, p.slug, p.repo_url FROM deployments d JOIN projects p ON p.id=d.project_id AND p.org=d.org
+		 WHERE d.source=$1 AND d.status='building' AND d.created_at<$2 ORDER BY d.created_at`, sourceBuild, before)
+	if err != nil {
+		return nil, fmt.Errorf("stale builds: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	var out []Built
+	for rows.Next() {
+		var b Built
+		d := &b.Deployment
+		if err := rows.Scan(&d.ID, &d.ProjectID, &d.Org, &d.Version, &d.Status, &d.Source, &d.Commit, &d.LiveURL,
+			&d.Bucket, &d.Prefix, &d.Files, &d.Bytes, &d.Message, &d.CreatedAt, &d.UpdatedAt, &b.Slug, &b.Repo); err != nil {
+			return nil, fmt.Errorf("scan build: %w", err)
+		}
+		out = append(out, b)
+	}
+	return out, rows.Err()
+}
+
+// ListDeployments returns deployments for a project, newest version first.
+func (s *Store) ListDeployments(ctx context.Context, org, projectID string) ([]Deployment, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT `+deploymentCols+` FROM deployments WHERE org=$1 AND project_id=$2 ORDER BY version DESC`, org, projectID)
+	if err != nil {
+		return nil, fmt.Errorf("list deployments: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	var out []Deployment
+	for rows.Next() {
+		d, err := scanDeployment(rows)
+		if err != nil {
+			return nil, fmt.Errorf("scan deployment: %w", err)
+		}
+		out = append(out, d)
+	}
+	return out, rows.Err()
+}

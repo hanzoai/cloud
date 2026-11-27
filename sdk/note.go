@@ -2,17 +2,18 @@ package cloud
 
 // note.go — which operation a request reached, kept where the trail can read it.
 //
-// The audit trail is written by transport middleware, and transport middleware
-// reads the path the TRANSPORT carried. That is the same value toll.go found the
-// money gate reading, and it goes wrong in the same place: one typed op,
-// `probe_run`, registered once at /v1/probe/run, reached four ways, is seen by
-// the edge as four different things. Driven against a real recorder and read
-// back (audit_doors_test.go), the trail said:
+// THE HOLE THIS CLOSES, MEASURED. The audit trail is written by transport
+// middleware, and transport middleware reads the path the TRANSPORT carried.
+// That is the same value toll.go found the money gate reading, and it goes wrong
+// in the same place: one typed op, `probe_run`, registered once at
+// /v1/probe/run, reached four ways, is seen by the edge as four different things.
+// Driven against a real recorder and read back (audit_doors_test.go), the trail
+// said:
 //
-// 	REST   action "POST /v1/probe/run"                   <- the operation
-// 	MCP    action "POST /mcp"                            <- an envelope
-// 	ZAP    action "POST /.well-known/zip/op/probe_run"   <- an envelope
-// 	CLI    no record at all                              <- no request to wrap
+//	REST   action "POST /v1/probe/run"                   <- the operation
+//	MCP    action "POST /mcp"                            <- an envelope
+//	ZAP    action "POST /.well-known/zip/op/probe_run"   <- an envelope
+//	CLI    no record at all                              <- no request to wrap
 //
 // Two of those name the door rather than what came through it. On the MCP row
 // the operation is not recoverable at all: every tools/call in the fleet writes
@@ -116,12 +117,13 @@ func Reach() zip.Authorizer {
 
 // Trail returns the op-invoke hook that records an operation no request carried.
 //
-// Three of them write a record, because a request exists and AuditTrail wraps
-// it. The fourth — an in-process invoke, the CLI dispatching against ops
-// registered in this process — has no request, so no transport middleware runs
-// and the operation left no trace of having happened. That is an operator on a
-// pod running a privileged operation, and it is exactly the kind of act a trail
-// is kept for.
+// THE DOOR THIS CLOSES, MEASURED. audit_doors_test.go drives one operation over
+// every door and reads the trail back. Three of them write a record, because a
+// request exists and AuditTrail wraps it. The fourth — an in-process invoke, the
+// CLI dispatching against ops registered in this process — has no request, so no
+// transport middleware runs and the operation left no trace of having happened.
+// That is an operator on a pod running a privileged operation, and it is exactly
+// the kind of act a trail is kept for.
 //
 // It stands down whenever a request exists. The middleware is the better witness
 // there: it sees the response the client actually got, while this sees only

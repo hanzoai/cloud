@@ -1,0 +1,18 @@
+{
+  "version": 3,
+  "floor": 2,
+  "purposes": ["essential", "analytics", "personalization", "advertising"],
+  "cookie": {
+    "analytics": ["analytics"],
+    "personalization": ["ads"],
+    "advertising": ["marketing"],
+    "sale_share": ["ads"]
+  },
+  "eu": [
+    "AT", "BE", "BG", "HR", "CY", "CZ", "DK", "EE", "FI", "FR", "DE", "GR", "HU", "IE", "IT", "LV", "LT", "LU", "MT", "NL", "PL", "PT", "RO", "SK", "SI", "ES", "SE",
+    "GB", "IS", "LI", "NO", "CH"
+  ],
+  "us_privacy": {
+    "US": ["CA", "CO", "CT", "VA", "UT", "TX", "OR", "MT", "FL", "DE", "IA", "NE", "NH", "NJ", "TN", "MN", "MD", "IN", "KY", "RI"]
+  }
+}

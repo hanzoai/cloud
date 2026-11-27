@@ -50,9 +50,13 @@ func TestClientCredentialsPrincipalResolvesItsOwnerOrg(t *testing.T) {
 	}
 }
 
-// A machine token carries an owner and no `orgs`, so Home() would return "" and
-// SanitizeIdentity would mint X-User-Id with no X-Org-Id, which every org-scoped gate
-// refuses. A machine token is therefore not org-less: its owner is its home org.
+// The failure this fixes, stated as the thing that used to happen.
+//
+// studio's token carries owner=hanzo and no `orgs`, so Home() returned "" and
+// SanitizeIdentity minted X-User-Id with no X-Org-Id. Every org-scoped gate refused
+// it; the one that mattered was the durable queue, which answered 403 "identity
+// required" — so no render could be enqueued at all, and thirteen jobs sat queued for
+// up to nineteen hours while both GPUs polled an empty namespace and reported healthy.
 func TestMachineTokenWithNoOrgsIsNotOrgless(t *testing.T) {
 	c := machineClaims("hanzo-studio", "hanzo", time.Now().Add(time.Hour))
 	if len(c.Orgs) != 0 {
@@ -82,7 +86,9 @@ func TestAppPrincipalNarrowings(t *testing.T) {
 	})
 
 	// The two kinds are exclusive from BOTH sides, and a membership set does not
-	// move a token between them.
+	// move a token between them. IAM signs the kind; carrying memberships as well
+	// used to be enough to read a program as a person, and a person in the
+	// reserved org is an operator.
 	t.Run("a program in the reserved org is never an operator", func(t *testing.T) {
 		c := machineClaims("hanzo-kms", "admin", exp)
 		c.Orgs = []authz.Membership{{Org: authz.AdminOrg, Role: authz.Admin}}
@@ -150,11 +156,14 @@ func TestAProgramIsOneWhateverItsTokenIsAddressedTo(t *testing.T) {
 
 // THE SHAPE ALONE IS NOT THE PROOF.
 //
+// A person's token can wear every mark this file used to read as a machine: a
+// subject that looks like "<org>/<app>", one audience equal to azp, and no
+// membership set — which is what an unresolved membership lookup leaves behind.
 // Reading that as an application handed it the org off `owner` and a build
 // endpoint's whole registry namespace.
 //
 // IAM signs the kind, so the answer no longer depends on a shape anyone can
-// arrange.
+// arrange. This pins the exact claims that used to pass.
 func TestATokenShapedLikeAMachineIsNotOneWithoutTheClaim(t *testing.T) {
 	c := machineClaims("hanzo-console", "hanzo", time.Now().Add(time.Hour))
 	c.Subject = "acme/hanzo-console"

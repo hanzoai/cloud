@@ -1,0 +1,75 @@
+{
+  "$schema": "https://schemas.agentskills.io/discovery/0.2.0/schema.json",
+  "base_url": "https://api.lux.network",
+  "brand": "lux",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://lux.id",
+  "mcp": {
+    "description": "Model Context Protocol over JSON-RPC 2.0 — one POST per message, stateless, protocol revision 2026-07-28. tools/list answers without a credential with one tool per subsystem (its operations in the \"op\" enum) plus \"describe\", which returns one operation's input schema. tools/call names a subsystem tool and carries {\"op\": <operation>, \"input\": <its arguments>}; it takes the same bearer the REST API does, and a call that carries none is answered 401 with a WWW-Authenticate header naming the resource metadata at /.well-known/oauth-protected-resource, which names the authorization server to sign in at. The tool surface is the public contract: the operator's admin product is not offered, and a name that would disclose a secret or mutate an identity is withheld — the list says how many, under _meta.",
+    "method": "POST",
+    "url": "https://api.lux.network/v1/mcp"
+  },
+  "skill_count": 7,
+  "skills": [
+    {
+      "description": "Read compliance accreditation: Returns the org's tracked accreditation-state records, newest first — evidence entries the org keeps, never a platform certification., Returns one tracked accreditation record..",
+      "digest": "sha256:d834a01c5c68b17085378438a2f58d58c970abbc8bb48ed609b7a8370f0645de",
+      "name": "compliance_accreditation",
+      "service": "compliance",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/compliance_accreditation/SKILL.md"
+    },
+    {
+      "description": "Read compliance audit: AuditRead is the compliance read of the SHARED tamper-evident audit plane — the SOC 2 posture surface (privileged actions: who started/decided what, when)..",
+      "digest": "sha256:30d6219f09ca9a1259281903d605d33723bb6613e1d63bdab43ea80b8c558c2c",
+      "name": "compliance_audit",
+      "service": "compliance",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/compliance_audit/SKILL.md"
+    },
+    {
+      "description": "Read compliance health: Reports subsystem liveness and the wired verification provider..",
+      "digest": "sha256:98cf8683229ce44442079a21addb33b7bf4cfb7a23dd15b6f4bd915b9434ab06",
+      "name": "compliance_health",
+      "service": "compliance",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/compliance_health/SKILL.md"
+    },
+    {
+      "description": "Read compliance records: ListRecords is the unified compliance-record view for the org: its verifications and accreditation records together, each provider-reported or tracked, never platform-asserted..",
+      "digest": "sha256:c6c11dd34e6d4a4c1dd664412ffc23051dddb3dcfa00a1cfa457fe4a4b8a2677",
+      "name": "compliance_records",
+      "service": "compliance",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/compliance_records/SKILL.md"
+    },
+    {
+      "description": "Read compliance status: Status is the org's honest posture read: the wired provider and the per-status tally of its verifications..",
+      "digest": "sha256:da1a11a9c6f303c4271b3f779d659f116dad9d2a629c483584b594a6854d7361",
+      "name": "compliance_status",
+      "service": "compliance",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/compliance_status/SKILL.md",
+      "works": [
+        "operations"
+      ]
+    },
+    {
+      "description": "Read compliance subjects: Returns the org's subjects as PII-MINIMIZED summaries — no name or email, only whether an email is on file., Returns one subject WITH its contact PII — the only surface that returns it, and only to the owning org..",
+      "digest": "sha256:ef189d916418bba52c5309a67caadeec02e8c6d00e643851d235a6220e24b33b",
+      "name": "compliance_subjects",
+      "service": "compliance",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/compliance_subjects/SKILL.md"
+    },
+    {
+      "description": "Read compliance verifications: Returns the org's KYC/KYB verifications, newest first — opaque subject references and provider-reported statuses only, no subject PII., Returns one verification — its opaque subject reference and provider-reported status, no subject PII..",
+      "digest": "sha256:38b72de71f7275dc25d894bbd0a1f1e89250d96c8d16d1f9ae0625d63f3d0359",
+      "name": "compliance_verifications",
+      "service": "compliance",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/compliance_verifications/SKILL.md"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

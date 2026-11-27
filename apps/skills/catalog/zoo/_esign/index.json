@@ -1,0 +1,40 @@
+{
+  "$schema": "https://schemas.agentskills.io/discovery/0.2.0/schema.json",
+  "base_url": "https://api.zoo.ngo",
+  "brand": "zoo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://zoolabs.id",
+  "mcp": {
+    "description": "Model Context Protocol over JSON-RPC 2.0 — one POST per message, stateless, protocol revision 2026-07-28. tools/list answers without a credential with one tool per subsystem (its operations in the \"op\" enum) plus \"describe\", which returns one operation's input schema. tools/call names a subsystem tool and carries {\"op\": <operation>, \"input\": <its arguments>}; it takes the same bearer the REST API does, and a call that carries none is answered 401 with a WWW-Authenticate header naming the resource metadata at /.well-known/oauth-protected-resource, which names the authorization server to sign in at. The tool surface is the public contract: the operator's admin product is not offered, and a name that would disclose a secret or mutate an identity is withheld — the list says how many, under _meta.",
+    "method": "POST",
+    "url": "https://api.zoo.ngo/v1/mcp"
+  },
+  "skill_count": 3,
+  "skills": [
+    {
+      "description": "Read esign documents: Returns your org's documents, newest first., Returns one document with its recipients and field layout., Returns the document's full audit trail, oldest first..",
+      "digest": "sha256:0091e7bd32672a15a4c87c9eca40ab50be9e675175165b05d2a45e0c59b8ae95",
+      "name": "esign_documents",
+      "service": "esign",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/esign_documents/SKILL.md"
+    },
+    {
+      "description": "Read esign health: Reports whether the e-signature surface is mounted..",
+      "digest": "sha256:e732691168a532de0089b859ec3a1d0d6d0db0bd0e8106f093e3263e1cae826b",
+      "name": "esign_health",
+      "service": "esign",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/esign_health/SKILL.md"
+    },
+    {
+      "description": "Read esign o: Opens a document you were asked to sign, using your signing link..",
+      "digest": "sha256:f88f95342f20ec3150c08b7711e6de06f2ae0ce629e535dc5eb8eb6210951047",
+      "name": "esign_o",
+      "service": "esign",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/esign_o/SKILL.md"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

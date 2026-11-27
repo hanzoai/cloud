@@ -8,11 +8,16 @@ import (
 	"github.com/hanzoai/cloud/sdk/kit"
 )
 
-// A no-op dispatch client is not safe when no releaser is registered: platform runs as
-// its own plugin and every plugin main mounts exactly one app, so "no releaser
-// registered" is the state of every process that calls this, and each would be told its
-// release had rolled out while no CR was patched. The dispatch therefore reports the
-// absence instead of passing silently.
+// TestOnServiceReleaseAbsenceIsAnError asserts the exact OPPOSITE of what this
+// file used to assert.
+//
+// The test that stood here was called TestOnServiceReleaseNoop and it proved
+// "the dispatch client is a safe no-op when no releaser is registered". It passed
+// for as long as it existed, and it is why the defect shipped: the no-op was
+// never safe. platform runs as its own plugin and every plugin main mounts
+// exactly one app, so "no releaser registered" was the state of every process
+// that ever called this — and each was told its release had rolled out while no
+// CR was patched. A green test asserted the silence was intended.
 //
 // Absence is now an error, and the error says the app is not deployed here.
 func TestOnServiceReleaseAbsenceIsAnError(t *testing.T) {

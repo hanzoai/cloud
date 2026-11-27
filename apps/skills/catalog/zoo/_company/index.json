@@ -1,0 +1,40 @@
+{
+  "$schema": "https://schemas.agentskills.io/discovery/0.2.0/schema.json",
+  "base_url": "https://api.zoo.ngo",
+  "brand": "zoo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://zoolabs.id",
+  "mcp": {
+    "description": "Model Context Protocol over JSON-RPC 2.0 — one POST per message, stateless, protocol revision 2026-07-28. tools/list answers without a credential with one tool per subsystem (its operations in the \"op\" enum) plus \"describe\", which returns one operation's input schema. tools/call names a subsystem tool and carries {\"op\": <operation>, \"input\": <its arguments>}; it takes the same bearer the REST API does, and a call that carries none is answered 401 with a WWW-Authenticate header naming the resource metadata at /.well-known/oauth-protected-resource, which names the authorization server to sign in at. The tool surface is the public contract: the operator's admin product is not offered, and a name that would disclose a secret or mutate an identity is withheld — the list says how many, under _meta.",
+    "method": "POST",
+    "url": "https://api.zoo.ngo/v1/mcp"
+  },
+  "skill_count": 3,
+  "skills": [
+    {
+      "description": "Read company company: Returns the caller org's formation and the stages reachable from it, or 404 when the org has not begun one..",
+      "digest": "sha256:f2bc542f17206fc4dc78567e03131ad92d4c4ae180bb87753e18ccf4c54d3841",
+      "name": "company_company",
+      "service": "company",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/company_company/SKILL.md"
+    },
+    {
+      "description": "Read company register: Returns the platform's whole formation register, newest activity first — every org's formation, not the caller's., Counts the platform's formations by stage — the register's shape in one read, so a queue that is growing is visible as a number rather than in",
+      "digest": "sha256:5bc5219ad89ab41c972d4202c9e969908904a29d4217444c1e8b5fc6d318170a",
+      "name": "company_register",
+      "service": "company",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/company_register/SKILL.md"
+    },
+    {
+      "description": "Read company review: Reports the founders whose KYC is not yet settled, oldest formation first, so the queue drains in the order founders have been waiting..",
+      "digest": "sha256:8886942bae644006e5f2226d5c25b5ae35c0bdfe7bd98033791b37d0efbe69d5",
+      "name": "company_review",
+      "service": "company",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/company_review/SKILL.md"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

@@ -1,0 +1,113 @@
+// Copyright © 2026 Hanzo AI. MIT License.
+
+package flags
+
+import (
+	"context"
+	"encoding/json"
+	"net/http"
+	"strings"
+
+	"github.com/hanzoai/cloud/client"
+	"github.com/hanzoai/cloud/sdk"
+	"github.com/hanzoai/cloud/sdk/principal"
+	"github.com/zap-proto/zip"
+)
+
+// The operator switchboard and its one write, published on the internal plane.
+//
+// [Board] reads the process's own definition registry and resolves each value
+// through `mounted`, the client this app's Use fills. In the admin binary the
+// registry holds only admin's own declarations and that client is nil, so the
+// cockpit rendered an EMPTY board with configured:false — and
+// [SetPlatformSwitch] answered "flags: engine not configured", refusing every
+// write. Loudly, which is the only reason this was a visibly broken feature
+// rather than a silently wrong one.
+//
+// NEITHER OP CARRIES AN ORG. The tenant is the validated caller, read from the
+// peer context; a board that took one as an argument would render any tenant's
+// switches for whoever asked, and a write that took one would let a caller edit
+// somebody else's.
+
+// exposeBoard publishes the switchboard and its write. Use calls it.
+func exposeBoard() {
+	cloud.Plane().Post("/flags/board",
+		board,
+		zip.WithOperationID(client.FlagsBoard),
+		zip.WithSummary("The operator switchboard for the caller's org"))
+	cloud.Plane().Post("/flags/set",
+		set,
+		zip.WithOperationID(client.FlagsSet),
+		zip.WithSummary("Write one platform switch"))
+}
+
+// board answers the switchboard through this app's own [Board], so the plane and
+// /v1/flag render one value. A second projection here would be a second answer to
+// "what is in force", and the two would disagree the day a default moves.
+func board(ctx context.Context, _ *client.Unit) (*client.FlagBoard, error) {
+	if cloud.Who(ctx).Org == "" {
+		return nil, zip.ErrUnauthorized("board: no org on the call")
+	}
+	b := Board()
+	out := &client.FlagBoard{
+		Engine:     b.Engine,
+		Configured: b.Configured,
+		ManageURL:  b.ManageURL,
+		AuditURL:   b.AuditURL,
+		Switches:   make([]client.FlagSwitch, 0, len(b.Switches)),
+	}
+	for _, s := range b.Switches {
+		out.Switches = append(out.Switches, client.FlagSwitch{
+			Key: s.Key, Category: s.Category, Label: s.Label,
+			Description: s.Description, Type: s.Type, Value: s.Value,
+			Source: s.Source, Env: s.Env, ReadOnly: s.ReadOnly,
+			Principal: s.Principal, Definition: s.Definition,
+			Users: s.Users, Orgs: s.Orgs,
+		})
+	}
+	return out, nil
+}
+
+// set writes one switch through [SetPlatformSwitch], the ONE write path, so the
+// store's audit records this exactly as it records a write made here.
+//
+// A platform switch is the platform's, so only a SuperAdmin (owner == "admin")
+// writes one, whichever process carries the call: the cockpit, the usage policy
+// and the launch registry all act for one, and a caller acting for anyone else —
+// an org admin included — is refused here rather than trusted to have been
+// refused upstream.
+//
+// The definition is kept byte-for-byte: it is the engine's document rather than
+// this package's, carrying fields no Go type here names, and re-encoding it would
+// drop whatever we do not model.
+func set(ctx context.Context, in *client.FlagSetIn) (*client.Unit, error) {
+	if cloud.Who(ctx).Org == "" {
+		return nil, zip.ErrUnauthorized("set: no org on the call")
+	}
+	if !principal.SuperFrom(ctx) {
+		return nil, zip.ErrForbidden("set: a platform switch is a SuperAdmin's to write")
+	}
+	if in == nil {
+		return nil, zip.ErrBadRequest("set: a flag key is required")
+	}
+	key := strings.TrimSpace(in.Key)
+	if key == "" {
+		return nil, zip.ErrBadRequest("set: a flag key is required")
+	}
+	if len(in.Definition) == 0 {
+		return nil, zip.ErrBadRequest("set: a definition is required")
+	}
+	if d, ok := lookupDef(key); ok && d.Principal {
+		canon, err := targetable(in.Definition)
+		if err != nil {
+			return nil, zip.ErrBadRequest("set: " + key + ": " + err.Error())
+		}
+		if err := mounted.record(ctx, key, mounted.stored(key), canon); err != nil {
+			return nil, zip.Errorf(http.StatusServiceUnavailable, "set: this change could not be audited")
+		}
+	}
+	if err := SetPlatformSwitch(key, json.RawMessage(in.Definition), in.Actor); err != nil {
+		return nil, err
+	}
+	return &client.Unit{}, nil
+}

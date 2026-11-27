@@ -1,0 +1,56 @@
+{
+  "$schema": "https://schemas.agentskills.io/discovery/0.2.0/schema.json",
+  "base_url": "https://api.lux.network",
+  "brand": "lux",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://lux.id",
+  "mcp": {
+    "description": "Model Context Protocol over JSON-RPC 2.0 — one POST per message, stateless, protocol revision 2026-07-28. tools/list answers without a credential with one tool per subsystem (its operations in the \"op\" enum) plus \"describe\", which returns one operation's input schema. tools/call names a subsystem tool and carries {\"op\": <operation>, \"input\": <its arguments>}; it takes the same bearer the REST API does, and a call that carries none is answered 401 with a WWW-Authenticate header naming the resource metadata at /.well-known/oauth-protected-resource, which names the authorization server to sign in at. The tool surface is the public contract: the operator's admin product is not offered, and a name that would disclose a secret or mutate an identity is withheld — the list says how many, under _meta.",
+    "method": "POST",
+    "url": "https://api.lux.network/v1/mcp"
+  },
+  "skill_count": 5,
+  "skills": [
+    {
+      "description": "Read transport agent: Returns which agent answers the caller org's transport: the default and every channel bound to another agent..",
+      "digest": "sha256:9be1f875459f3f62333cea155b82e44c8a153d5061dbaa867c138346f53ae7ed",
+      "name": "transport_agent",
+      "service": "transport",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/transport_agent/SKILL.md"
+    },
+    {
+      "description": "Read transport allowlist: Returns the caller org's access policy for one transport: whether DMs are pairing-gated, allowlisted or open, whether group channels are open, allowlisted or disabled, the config-managed DM and group allow entries, the senders approved through PAIRING (r",
+      "digest": "sha256:cbae1120dfdda1bb383207f1749a5b61d409af3466f0d0c5b119eb1b2a234508",
+      "name": "transport_allowlist",
+      "service": "transport",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/transport_allowlist/SKILL.md"
+    },
+    {
+      "description": "Read transport inbox: Returns the caller's own messages to the org's connected chat bots — those recorded on the caller's linked account — oldest first, in the portable envelope shape every transport normalises into..",
+      "digest": "sha256:2b8f52d49d5f3cd9249ea1c786526e7e255ab40f71155dc9524481afdcaaca49",
+      "name": "transport_inbox",
+      "service": "transport",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/transport_inbox/SKILL.md"
+    },
+    {
+      "description": "Read transport pairing: Returns the pairing requests waiting for the caller org to approve — one per person who messaged a connected bot on a transport whose DM policy is \"pairing\" and who is not allowed yet..",
+      "digest": "sha256:dbe37c98f7052d29bcf4f747f6f4b0eea621f68f029b302492fc7748906a7d63",
+      "name": "transport_pairing",
+      "service": "transport",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/transport_pairing/SKILL.md"
+    },
+    {
+      "description": "Read transport transport: Reports every chat transport this org can send through, and whether it can send through it right now..",
+      "digest": "sha256:ea2181f951f2278cca0c094c8a71e96d73abee418fbfe016c8d236c38758a413",
+      "name": "transport_transport",
+      "service": "transport",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/transport_transport/SKILL.md"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

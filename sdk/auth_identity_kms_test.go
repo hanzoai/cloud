@@ -50,9 +50,10 @@ func TestIdentityValidator_KMSMachinePrincipal(t *testing.T) {
 		}
 	})
 
-	// THE PROPERTY THIS FILE EXISTS FOR. The audience is no longer read: a program
-	// is one because IAM said so, and sudo refuses every machine, so the denial is
-	// the same fact rather than a second one.
+	// THE PROPERTY THIS FILE EXISTS FOR. It used to be enforced by recognising an
+	// owner-bound audience and subtracting sudo afterwards. The audience is no
+	// longer read: a program is one because IAM said so, and sudo refuses every
+	// machine, so the denial is the same fact rather than a second one.
 	t.Run("a machine in the reserved org holds no platform authority", func(t *testing.T) {
 		c, err := v.validate(signWith(t, key, program("admin-platform-kms", "admin", true, future)))
 		if err != nil {

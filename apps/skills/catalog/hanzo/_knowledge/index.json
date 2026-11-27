@@ -1,0 +1,48 @@
+{
+  "$schema": "https://schemas.agentskills.io/discovery/0.2.0/schema.json",
+  "base_url": "https://api.hanzo.ai",
+  "brand": "hanzo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://hanzo.id",
+  "mcp": {
+    "description": "Model Context Protocol over JSON-RPC 2.0 — one POST per message, stateless, protocol revision 2026-07-28. tools/list answers without a credential with one tool per subsystem (its operations in the \"op\" enum) plus \"describe\", which returns one operation's input schema. tools/call names a subsystem tool and carries {\"op\": <operation>, \"input\": <its arguments>}; it takes the same bearer the REST API does, and a call that carries none is answered 401 with a WWW-Authenticate header naming the resource metadata at /.well-known/oauth-protected-resource, which names the authorization server to sign in at. The tool surface is the public contract: the operator's admin product is not offered, and a name that would disclose a secret or mutate an identity is withheld — the list says how many, under _meta.",
+    "method": "POST",
+    "url": "https://api.hanzo.ai/v1/mcp"
+  },
+  "skill_count": 3,
+  "skills": [
+    {
+      "description": "Read knowledge connectors: Returns every supported knowledge connector with THIS org's connection state and the REAL number of documents each has ingested into the org's store., Returns the ONE catalog of everything a caller can connect: every first-party connector and every long",
+      "digest": "sha256:1379a29bbf539e411390a3f4d49711e6f8e3f079c01b531b3624a9aa0607eaed",
+      "name": "knowledge_connectors",
+      "service": "knowledge",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/knowledge_connectors/SKILL.md"
+    },
+    {
+      "description": "Read knowledge files: Answers the caller's org files, most recently changed first, each with its status and stage — optionally only those in one bucket, which is how Drive shows a folder's files with their index state., Answers one of the caller's org files: what it is, where its",
+      "digest": "sha256:faa388dcb111f00f0ff0ba6024de349671aea3e565d1db408e7cce3bf1b70fa5",
+      "name": "knowledge_files",
+      "service": "knowledge",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/knowledge_files/SKILL.md",
+      "works": [
+        "education",
+        "research"
+      ]
+    },
+    {
+      "description": "Read knowledge graph: Returns the caller org's knowledge as a node/edge graph shaped for a force-directed renderer: pages, memories and synced sources as nodes; the page parent tree, the wikilinks between pages, and each source's connector provenance as edges..",
+      "digest": "sha256:cc6839e06f17603ca02f1eaa3aff8edb21fb684c9ee89b496fae6931fa0b3d31",
+      "name": "knowledge_graph",
+      "service": "knowledge",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/knowledge_graph/SKILL.md",
+      "works": [
+        "data",
+        "education"
+      ]
+    }
+  ],
+  "spec_version": "8.0.0"
+}

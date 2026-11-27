@@ -1,0 +1,146 @@
+package functions
+
+import (
+	"bytes"
+	"encoding/json"
+	"io"
+	"net/http"
+	"net/http/httptest"
+	"testing"
+	"time"
+
+	"github.com/hanzoai/cloud/internal/sqltest"
+	"github.com/hanzoai/cloud/sdk"
+	luxlog "github.com/luxfi/log"
+	"github.com/zap-proto/zip"
+)
+
+func mountApp(t *testing.T) *zip.App {
+	t.Helper()
+	app := zip.New(zip.Config{Logger: luxlog.New("test")})
+	// cloud.Bridge parks the validated org, the project and the request a typed op
+	// reads off its context. The composer installs it once at the root in
+	// production (serve.go); this test composes the same way.
+	app.Use(cloud.Bridge())
+	t.Setenv("CLOUD_DATA_DIR", t.TempDir())
+	if err := Use(app, cloud.Deps{}); err != nil {
+		t.Fatalf("Use:  %v", err)
+	}
+	return app
+}
+
+// do fires an in-process request. org is stamped as X-Org-Id — the header the
+// gateway's SanitizeIdentity injects from the validated principal in prod; here
+// we set it directly to exercise the subsystem's own org scoping.
+func do(t *testing.T, app *zip.App, method, path, org string, body any) (int, []byte) {
+	t.Helper()
+	var r io.Reader
+	if body != nil {
+		b, _ := json.Marshal(body)
+		r = bytes.NewReader(b)
+	}
+	req := httptest.NewRequest(method, path, r)
+	if body != nil {
+		req.Header.Set("Content-Type", "application/json")
+	}
+	if org != "" {
+		req.Header.Set("X-Org-Id", org)
+		req.Header.Set("X-User-Id", "u_"+org) // validated principal (org() gates on it)
+	}
+	resp, err := app.Test(req, zip.TestConfig{Timeout: 30 * time.Second, FailOnTimeout: true})
+	if err != nil {
+		t.Fatalf("Test %s %s: %v", method, path, err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	b, _ := io.ReadAll(resp.Body)
+	return resp.StatusCode, b
+}
+
+// TestHTTPTenantGateAndIsolation proves at the HTTP layer: no org → 403; a
+// function created under one org is invisible + inaccessible to another.
+func TestHTTPTenantGateAndIsolation(t *testing.T) {
+	sqltest.Engines(t, func(t *testing.T, _ sqltest.Open) {
+		app := mountApp(t)
+
+		// No org header → the org() gate refuses (401), never leaks an empty list.
+		if code, _ := do(t, app, http.MethodGet, "/v1/function", "", nil); code != http.StatusUnauthorized {
+			t.Fatalf("no-org list want 401, got %d", code)
+		}
+
+		// maxpower creates a function.
+		code, _ := do(t, app, http.MethodPost, "/v1/function", "maxpower",
+			map[string]any{"name": "resize", "runtime": "python", "code": "print('hi')"})
+		if code != http.StatusCreated {
+			t.Fatalf("create want 201, got %d", code)
+		}
+
+		// maxpower sees it; the list shape is {functions:[...]}.
+		code, body := do(t, app, http.MethodGet, "/v1/function", "maxpower", nil)
+		if code != http.StatusOK {
+			t.Fatalf("list want 200, got %d", code)
+		}
+		var listed struct {
+			Functions []functionView `json:"functions"`
+		}
+		if err := json.Unmarshal(body, &listed); err != nil {
+			t.Fatalf("list json: %v (%s)", err, body)
+		}
+		if len(listed.Functions) != 1 || listed.Functions[0].Name != "resize" {
+			t.Fatalf("maxpower should see [resize], got %+v", listed.Functions)
+		}
+		if listed.Functions[0].Endpoint != "/v1/function/resize/invoke" {
+			t.Fatalf("endpoint should be the invoke URL, got %q", listed.Functions[0].Endpoint)
+		}
+
+		// acme (different org) must NOT see maxpower's function.
+		code, body = do(t, app, http.MethodGet, "/v1/function", "acme", nil)
+		if code != http.StatusOK {
+			t.Fatalf("acme list want 200, got %d", code)
+		}
+		_ = json.Unmarshal(body, &listed)
+		if len(listed.Functions) != 0 {
+			t.Fatalf("acme must see zero functions, got %+v", listed.Functions)
+		}
+
+		// acme cannot GET or DELETE maxpower's function — it is not found for acme.
+		if code, _ := do(t, app, http.MethodGet, "/v1/function/resize", "acme", nil); code != http.StatusNotFound {
+			t.Fatalf("acme GET maxpower fn want 404, got %d", code)
+		}
+		if code, _ := do(t, app, http.MethodDelete, "/v1/function/resize", "acme", nil); code != http.StatusNotFound {
+			t.Fatalf("acme DELETE maxpower fn want 404, got %d", code)
+		}
+
+		// maxpower's function survived acme's delete attempt.
+		if code, _ := do(t, app, http.MethodGet, "/v1/function/resize", "maxpower", nil); code != http.StatusOK {
+			t.Fatalf("maxpower fn must survive, got %d", code)
+		}
+	})
+}
+
+// TestHTTPInvokeFailsClosed proves invoke never fabricates output when the
+// sandbox isn't configured — it returns 503 (no CODE_EXEC_UPSTREAM in tests).
+func TestHTTPInvokeFailsClosed(t *testing.T) {
+	sqltest.Engines(t, func(t *testing.T, _ sqltest.Open) {
+		app := mountApp(t)
+		do(t, app, http.MethodPost, "/v1/function", "maxpower",
+			map[string]any{"name": "job", "runtime": "python", "code": "print(1)"})
+		code, body := do(t, app, http.MethodPost, "/v1/function/job/invoke", "maxpower", map[string]any{"input": "x"})
+		if code != http.StatusServiceUnavailable {
+			t.Fatalf("invoke with no sandbox want 503, got %d (%s)", code, body)
+		}
+	})
+}
+
+// TestHTTPStaticRoutesNotShadowed proves /metrics is not captured by :name.
+func TestHTTPStaticRoutesNotShadowed(t *testing.T) {
+	sqltest.Engines(t, func(t *testing.T, _ sqltest.Open) {
+		app := mountApp(t)
+		code, body := do(t, app, http.MethodGet, "/v1/function/metrics", "maxpower", nil)
+		if code != http.StatusOK {
+			t.Fatalf("metrics want 200, got %d", code)
+		}
+		if !bytes.Contains(body, []byte("series")) || !bytes.Contains(body, []byte("costCents")) {
+			t.Fatalf("metrics shape wrong: %s", body)
+		}
+	})
+}

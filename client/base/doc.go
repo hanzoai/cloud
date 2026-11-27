@@ -1,0 +1,12 @@
+// Package base is the typed client for the "base" app's internal ops.
+//
+// Every call here is a ZAP call BY NAME over the peer's unix socket — no URL, no
+// env var, no HTTP round trip, and no way to reach the public edge by accident.
+// That last one is not a style preference: base's own callers used to reach it
+// through CLOUD_COMMERCE_HTTP_URL, which defaulted to the api.hanzo.ai edge —
+// the SAME binary — so the forwarder re-entered itself and the billing gate died
+// of it. A call by name cannot express that mistake.
+//
+// It depends on the CONTRACT (package client) and never on base's implementation,
+// so importing it costs a caller nothing but the types it is already sending.
+package base

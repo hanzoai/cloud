@@ -1,0 +1,214 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Hanzo Cloud API",
+    "description": "Package settings is how an org configures each product it uses, secret fields included.",
+    "version": "v1"
+  },
+  "servers": [
+    {
+      "url": "https://api.hanzo.ai"
+    }
+  ],
+  "security": [
+    {
+      "bearer": []
+    }
+  ],
+  "tags": [
+    {
+      "name": "settings"
+    }
+  ],
+  "paths": {
+    "/v1/settings/{product}": {
+      "get": {
+        "operationId": "get_settings_by_product",
+        "summary": "Reads the caller org's configuration for one product, with every secret field MASKED — only the names of the set secrets come back, never their values, which live in KMS.",
+        "description": "Reads the caller org's configuration for one product, with every\nsecret field MASKED — only the names of the set secrets come back, never their\nvalues, which live in KMS. A product the org has never configured is not a 404:\nit answers 200 with an empty config object, so the console's Settings tab always\nrenders and merges its own display defaults on top.",
+        "tags": [
+          "settings"
+        ],
+        "parameters": [
+          {
+            "name": "product",
+            "in": "path",
+            "required": true,
+            "description": "Product is the catalog slug, from the path. Must match ^[a-z0-9][a-z0-9._-]{0,62}$.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/settings.View"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      },
+      "put": {
+        "operationId": "put_settings_by_product",
+        "summary": "Writes the caller org's configuration for one product and answers the stored result, secrets masked.",
+        "description": "Writes the caller org's configuration for one product and answers the\nstored result, secrets masked. Secret VALUES are sealed into KMS under\norgs/{org}/settings/{product}/{key} and never touch this deployment's database;\nwith no KMS configured a write that carries any secret is refused whole (503)\nrather than dropping it or persisting it in the clear. A secret the body omits\nkeeps its stored value, so a partial write never silently clears one.",
+        "tags": [
+          "settings"
+        ],
+        "parameters": [
+          {
+            "name": "product",
+            "in": "path",
+            "required": true,
+            "description": "Product is the catalog slug, from the PATH. zip binds the path last, so the\nURL names the product being written whatever a body field claims.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/settings.settingsReq"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/settings.View"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "problem-details": {
+        "description": "An RFC 9457 problem document.",
+        "properties": {
+          "code": {
+            "description": "A stable token a client can branch on, when the refusal names one.",
+            "type": "string"
+          },
+          "detail": {
+            "description": "What was refused, for a person to read.",
+            "type": "string"
+          },
+          "status": {
+            "description": "The HTTP status.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "title": {
+            "description": "The status's reason phrase.",
+            "type": "string"
+          },
+          "type": {
+            "description": "about:blank",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "status",
+          "detail"
+        ],
+        "type": "object"
+      },
+      "settings.View": {
+        "properties": {
+          "config": {
+            "description": "Config is the product's non-secret configuration, an opaque JSON object the\nserver stores and returns verbatim. `{}` when nothing has been saved."
+          },
+          "createdAt": {
+            "description": "CreatedAt is when this configuration was first written, RFC 3339 UTC.",
+            "type": "string"
+          },
+          "product": {
+            "description": "Product is the catalog slug this configuration belongs to.",
+            "type": "string"
+          },
+          "secretKeys": {
+            "description": "SecretKeys names the secret fields that ARE set. Their VALUES live only in KMS\nand are never returned here — the console renders a mask.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "updatedAt": {
+            "description": "UpdatedAt is when this configuration was last written, RFC 3339 UTC. Empty\nwhen nothing has been saved.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "settings.settingsReq": {
+        "properties": {
+          "config": {
+            "additionalProperties": {},
+            "description": "Config is the product's non-secret configuration, stored verbatim. Bounded at\n64 KiB once serialized. Omit it to store an empty object.",
+            "type": "object"
+          },
+          "product": {
+            "description": "Product is the catalog slug, from the PATH. zip binds the path last, so the\nURL names the product being written whatever a body field claims.",
+            "type": "string"
+          },
+          "secrets": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "description": "Secrets are the secret fields, by name. Each VALUE is sealed into KMS and\nnever reaches this deployment's database; a value that is empty or equal to\nthe mask the read path returns means \"unchanged\" and is skipped, so a console\nround-trip cannot blank a stored secret. A key must match\n^[a-z0-9][a-z0-9._-]{0,62}$, a value is bounded at 8 KiB, and an org may hold\nat most 64 secret fields per product.",
+            "type": "object"
+          }
+        },
+        "type": "object"
+      }
+    },
+    "securitySchemes": {
+      "bearer": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "The caller's credential, sent as `Authorization: Bearer \u003ctoken\u003e`. It is either an access token minted by Hanzo IAM or an API key (pk-/sk-). X-Authorization, and HTTP Basic carrying the token as the password, are accepted spellings of the same header for clients that cannot set Authorization; a browser presents the session cookie instead. Every operation requires it unless it says `security: []`."
+      }
+    }
+  }
+}

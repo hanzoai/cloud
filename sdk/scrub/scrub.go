@@ -58,6 +58,11 @@ const highEntropyMinLen = 24
 // >= highEntropyMinLen base64/hex chars — the shape of a raw API key / access
 // token / hex secret — UNLESS s is a structured human identifier.
 //
+// The run alphabet is [A-Za-z0-9_+/-] — the base64 alphabets (url-safe §5 '-”_'
+// and standard §4 '+”/') and hex. '-' is INCLUDED so a url-safe-base64 token
+// that embeds '-' is still caught by its run (excluding '-' left an ~11% bypass
+// for 32-byte url-safe tokens whose '-' happened to break every 24-run — measured).
+//
 // TWO-STAGE DETECTION:
 //
 //  1. UNCONDITIONAL run scan — a >= highEntropyMinLen UNBROKEN run over
@@ -313,7 +318,9 @@ func isFreeTextDelimiter(r rune) bool {
 // recorded Path can never carry a credential even if a future route embeds one.
 
 // Prefixes is every opaque-key spelling the estate recognizes at the edge, and
-// this is the ONE authority for it.
+// this is the ONE authority for it. It used to live in package cloud with a note
+// asking apps/admission to keep its copy in step by hand; a leaf means neither
+// has to remember.
 var Prefixes = []string{"pk-", "sk-"}
 
 // IsKey reports whether tok is an opaque, backend-validated key rather than a

@@ -1,0 +1,462 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Hanzo Cloud API",
+    "description": "Package environment is what a codebase is before its agent starts: the commands that install it, the command that starts it, and the secrets it reads.",
+    "version": "v1"
+  },
+  "servers": [
+    {
+      "url": "https://api.hanzo.ai"
+    }
+  ],
+  "security": [
+    {
+      "bearer": []
+    }
+  ],
+  "tags": [
+    {
+      "name": "environment"
+    }
+  ],
+  "paths": {
+    "/v1/environment": {
+      "get": {
+        "operationId": "get_environment",
+        "summary": "Lists every codebase in your org that has an environment.",
+        "description": "Lists every codebase in your org that has an environment.\n\nAn environment is what a coding run does to its checkout before its agent\nstarts: the install script, the start command and the secrets it exports.\nSecret values are never answered — only which names are set. A codebase with\nnothing saved and nothing proposed is not listed.",
+        "tags": [
+          "environment"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/environment.envList"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/environment/{repo}": {
+      "delete": {
+        "operationId": "delete_environment_by_repo",
+        "summary": "Forgets one codebase's environment, and its secrets with it.",
+        "description": "Forgets one codebase's environment, and its secrets with it.\n\nLater runs on the codebase start bare. Each secret's value is removed from KMS\nfirst; one that will not go stops the forget, so no value outlives the record\nthat names it. Org admin only.",
+        "tags": [
+          "environment"
+        ],
+        "parameters": [
+          {
+            "name": "repo",
+            "in": "path",
+            "required": true,
+            "description": "Repo is the repository's name in the caller's org — a name, never owner/name.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "no content"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      },
+      "get": {
+        "operationId": "get_environment_by_repo",
+        "summary": "Reads one codebase's environment.",
+        "description": "Reads one codebase's environment.\n\nA codebase with none answers 200 with state `none` and empty scripts, so a\nsurface can always draw the editor. `proposed` means a setup run's answer is\nwaiting in `proposal`; nothing in it runs until it is saved.",
+        "tags": [
+          "environment"
+        ],
+        "parameters": [
+          {
+            "name": "repo",
+            "in": "path",
+            "required": true,
+            "description": "Repo is the repository's name in the caller's org — a name, never owner/name.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/environment.Environment"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      },
+      "put": {
+        "operationId": "put_environment_by_repo",
+        "summary": "Saves one codebase's install and start scripts.",
+        "description": "Saves one codebase's install and start scripts.\n\nEvery later sandbox run on this codebase runs the install script in its fresh\ncheckout before the agent starts, and leaves the start command running in the\nbackground. Saving clears any pending proposal: saving is the review. Secrets\nare set one at a time on their own address and are left as they are. Org admin\nonly.",
+        "tags": [
+          "environment"
+        ],
+        "parameters": [
+          {
+            "name": "repo",
+            "in": "path",
+            "required": true,
+            "description": "Repo is the repository's name in the caller's org.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/environment.envSave"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/environment.Environment"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/environment/{repo}/secrets/{name}": {
+      "delete": {
+        "operationId": "delete_environment_by_repo_secrets_by_name",
+        "summary": "Removes one secret from a codebase.",
+        "description": "Removes one secret from a codebase.\n\nThe value is removed from KMS, then the name from the environment; later runs\nno longer export it. Removing a name that is not set is a 404. Org admin only.",
+        "tags": [
+          "environment"
+        ],
+        "parameters": [
+          {
+            "name": "repo",
+            "in": "path",
+            "required": true,
+            "description": "Repo is the repository's name in the caller's org.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "description": "Name is the secret's environment variable name.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/environment.Environment"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      },
+      "put": {
+        "operationId": "put_environment_by_repo_secrets_by_name",
+        "summary": "Sets one secret on a codebase.",
+        "description": "Sets one secret on a codebase.\n\nThe value is sealed in KMS and exported to every later sandbox run on this\ncodebase under its name, a setup run included. It is blinded out of every\nstream the run publishes, and no route answers it back. Setting a name that is\nalready set replaces its value. Org admin only.",
+        "tags": [
+          "environment"
+        ],
+        "parameters": [
+          {
+            "name": "repo",
+            "in": "path",
+            "required": true,
+            "description": "Repo is the repository's name in the caller's org.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "description": "Name is the environment variable the run exports the value under.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/environment.envSecret"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/environment.Environment"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "environment.Environment": {
+        "properties": {
+          "install": {
+            "description": "Install is the shell a run executes in its fresh checkout before the agent\nstarts, from the repository root. Empty installs nothing.",
+            "type": "string"
+          },
+          "proposal": {
+            "$ref": "#/components/schemas/environment.Proposal",
+            "description": "Proposal is what the last setup run found, until it is saved or replaced."
+          },
+          "repo": {
+            "description": "Repo is the codebase: a repository's name in the caller's org.",
+            "type": "string"
+          },
+          "secrets": {
+            "description": "Secrets are the names set on this codebase, each exported to the run's\ncommands under that name. Values are never answered.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "session": {
+            "description": "Session is the setup run that produced the proposal, when there is one.",
+            "type": "string"
+          },
+          "start": {
+            "description": "Start is the one command a run leaves running in the background once the\ninstall has finished — a dev server, a database. Empty starts nothing.",
+            "type": "string"
+          },
+          "state": {
+            "description": "State is `none` when nothing is saved or proposed, `proposed` when a setup\nrun's answer is waiting to be reviewed, and `ready` otherwise.",
+            "type": "string"
+          },
+          "updatedAt": {
+            "description": "UpdatedAt is when this environment last changed, RFC 3339. Absent for none.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "environment.Proposal": {
+        "properties": {
+          "install": {
+            "description": "Install is the install script the agent checked.",
+            "type": "string"
+          },
+          "note": {
+            "description": "Note is what the agent found and checked, in its own words.",
+            "type": "string"
+          },
+          "secrets": {
+            "description": "Secrets are the environment variables the agent found the codebase reads.\nSome may not be set yet; setting them is a person's act, not the agent's.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "start": {
+            "description": "Start is the start command the agent checked, or empty.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "environment.envList": {
+        "properties": {
+          "data": {
+            "description": "Data is one entry per codebase that has an environment, by name.",
+            "items": {
+              "$ref": "#/components/schemas/environment.Environment"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "environment.envSave": {
+        "properties": {
+          "install": {
+            "description": "Install is run in every fresh checkout before the agent starts, from the\nrepository root, and must be non-interactive. Empty installs nothing.",
+            "type": "string"
+          },
+          "repo": {
+            "description": "Repo is the repository's name in the caller's org.",
+            "type": "string"
+          },
+          "start": {
+            "description": "Start is left running in the background after the install. Empty starts\nnothing.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "environment.envSecret": {
+        "properties": {
+          "name": {
+            "description": "Name is the environment variable the run exports the value under.",
+            "type": "string"
+          },
+          "repo": {
+            "description": "Repo is the repository's name in the caller's org.",
+            "type": "string"
+          },
+          "value": {
+            "description": "Value is sealed in KMS and never answered, logged or echoed. It is never\nread from a query string, because a URL is logged in more places than a\nbody is.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "problem-details": {
+        "description": "An RFC 9457 problem document.",
+        "properties": {
+          "code": {
+            "description": "A stable token a client can branch on, when the refusal names one.",
+            "type": "string"
+          },
+          "detail": {
+            "description": "What was refused, for a person to read.",
+            "type": "string"
+          },
+          "status": {
+            "description": "The HTTP status.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "title": {
+            "description": "The status's reason phrase.",
+            "type": "string"
+          },
+          "type": {
+            "description": "about:blank",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "status",
+          "detail"
+        ],
+        "type": "object"
+      }
+    },
+    "securitySchemes": {
+      "bearer": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "The caller's credential, sent as `Authorization: Bearer \u003ctoken\u003e`. It is either an access token minted by Hanzo IAM or an API key (pk-/sk-). X-Authorization, and HTTP Basic carrying the token as the password, are accepted spellings of the same header for clients that cannot set Authorization; a browser presents the session cookie instead. Every operation requires it unless it says `security: []`."
+      }
+    }
+  }
+}

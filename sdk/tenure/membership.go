@@ -162,6 +162,7 @@ func normalize(ms []Member) *[]Member {
 // when no live in-cluster source is configured. No members means no members,
 // which elects nobody (fail-closed).
 //
+// It used to read CLOUD_REPLICAS as "id@addr,id2@addr2" when called with none.
 // That variable is an integer replica COUNT everywhere else in this binary
 // (cloud.Config.Replicas, and the contract Validate checks against it), so the
 // same name carried two meanings and "3" would have parsed here as one member

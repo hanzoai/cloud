@@ -1,0 +1,233 @@
+package skills
+
+import (
+	"embed"
+	"errors"
+	"fmt"
+	"io/fs"
+	"net/http"
+	"path"
+	"regexp"
+
+	luxlog "github.com/luxfi/log"
+
+	"github.com/hanzoai/cloud/sdk"
+	"github.com/hanzoai/cloud/sdk/brand"
+	"github.com/hanzoai/cloud/sdk/spec"
+	"github.com/zap-proto/zip"
+)
+
+// The prose for both discovery routes. Neither can be a typed op (see below), so
+// zipdoc has no doc comment to lift for them and the document would otherwise
+// publish an operationId and nothing else. Declared through the same registry the
+// router projection consults, so it renders only while the routes are served, and
+// the generated SDKs and the spec-derived CLI carry it.
+func init() {
+	spec.Describe(wellKnown+"/index.json", http.MethodGet,
+		"The brand's catalogue of agent skills",
+		"The Agent Skills Discovery catalogue an AI client reads to learn what this deployment "+
+			"can do: every skill, with the sha256 of the SKILL.md that is actually served for it, "+
+			"so a client can verify the document it then fetches.\n\n"+
+			"The catalogue is GENERATED from the per-service OpenAPI specs and embedded in the "+
+			"binary; this route serves those bytes verbatim and never re-derives them, which is "+
+			"what makes the digests hold. Which brand's catalogue you get is decided per request "+
+			"from the Host — api.hanzo.ai answers the Hanzo catalogue, api.lux.network the Lux "+
+			"one, api.zoo.ngo the Zoo one — never one brand's skills on another's surface; a Host "+
+			"whose brand has no embedded catalogue falls back to the deployment brand, then to "+
+			"hanzo.\n\n"+
+			"Public by design: the discovery surface carries no secrets, so there is no bearer "+
+			"and no tenant scope. Answers `Cache-Control: public, max-age=300`, and a catalogue "+
+			"that is not embedded is `{\"error\":…}` at 404.")
+
+	spec.Describe(wellKnown+"/:skill/SKILL.md", http.MethodGet,
+		"One skill's document, as markdown",
+		"Serves a single agent skill's SKILL.md as text/markdown — the instructions a client "+
+			"follows once index.json has told it the skill exists, and byte for byte the document "+
+			"that index.json's sha256 for that skill was computed over.\n\n"+
+			"The skill segment is a flat, service-prefixed id (`ai_models`): one path segment with "+
+			"no separators, so a request can never address anything outside the embedded "+
+			"catalogue. An id of any other shape, or a skill the serving brand does not carry, is "+
+			"`{\"error\":…}` at 404 — the same answer, so a probe learns nothing about which is "+
+			"which.\n\n"+
+			"Brand resolution and caching are index.json's: the Host picks the catalogue, and the "+
+			"response is `Cache-Control: public, max-age=300`. Public — no bearer, no tenant "+
+			"scope.")
+
+	spec.Describe(wellKnown+"/:product/index.json", http.MethodGet,
+		"One product's skills, as a catalogue in its own right",
+		"Serves the index for a single product — the same shape and the same fields as the "+
+			"brand catalogue, narrowed to the skills of one product, so a client that already "+
+			"walks the top document needs no second parser.\n\n"+
+			"The top catalogue lists 116 products beside its skills and gives each one this "+
+			"address; without it those links answer 404 and a reader looking for one "+
+			"capability is back to reading every skill. The segment is the product name "+
+			"prefixed `_` (`_account`), which is what keeps a product index and a skill "+
+			"distinguishable in one flat directory and is why the skill route rejects it.\n\n"+
+			"Brand resolution and caching are index.json's. Public — no bearer, no tenant "+
+			"scope. A product the serving brand does not carry is `{\"error\":…}` at 404.")
+}
+
+// Regenerate the FULL embedded catalog from the openapi SOT (delegates to the
+// one Makefile target so there is a single regen command). `make skills`.
+//go:generate sh -c "cd ../.. && make skills"
+
+//go:embed all:catalog
+var catalogFS embed.FS
+
+// skillID is the flat, service-prefixed skill identifier (e.g. `ai_models`).
+// One path segment, no separators that could escape the catalogue root.
+var skillID = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]*$`)
+
+// productID is a product index directory (`_account`). The leading `_` is what
+// separates the two kinds of directory that share the catalogue root, and it is
+// load-bearing in BOTH directions: skillID refuses it, so a product can never be
+// served as a skill, and this refuses everything else, so a skill can never be
+// served as a product index. Same one-segment shape, so neither can address
+// anything outside the catalogue.
+var productID = regexp.MustCompile(`^_[a-z0-9][a-z0-9_-]*$`)
+
+const wellKnown = "/.well-known/agent-skills"
+
+type handler struct {
+	fsys     fs.FS           // catalog/ subtree
+	brands   map[string]bool // brand ids with an embedded catalogue
+	fallback string          // deployment brand (CLOUD_BRAND)
+}
+
+// Mount registers the discovery routes on app per HIP-0106.
+func Use(app cloud.Router, deps cloud.Deps) error {
+	if app == nil {
+		return errors.New("skills: nil app")
+	}
+	sub, err := fs.Sub(catalogFS, "catalog")
+	if err != nil {
+		return fmt.Errorf("skills.Use:  %w", err)
+	}
+	h := &handler{fsys: sub, brands: map[string]bool{}, fallback: cloud.Brand()}
+	entries, err := fs.ReadDir(sub, ".")
+	if err != nil {
+		return fmt.Errorf("skills.Use:  read catalog: %w", err)
+	}
+	for _, e := range entries {
+		if e.IsDir() {
+			h.brands[e.Name()] = true
+		}
+	}
+	if len(h.brands) == 0 {
+		return fmt.Errorf("skills.Use:  empty catalog (run `make skills`)")
+	}
+
+	// BOTH routes are UNTYPED BY DESIGN, and neither is a judgement call — see
+	// serveIndex and serveSkill. A typed op re-marshals its output through
+	// encoding/json and always answers application/json; this surface serves EMBEDDED
+	// BYTES verbatim, one of them as text/markdown, both under a Cache-Control the
+	// discovery convention depends on. Typing either would change what the wire
+	// carries, so the cost of staying raw is paid knowingly: no MCP tool, no CLI
+	// command, no typed SDK method for these two addresses. Their PROSE is not part
+	// of that cost — openapi.Describe declares it beside the wire fact (init above),
+	// so the document, the generated SDKs and the spec-derived CLI can still explain
+	// what these two addresses are. The catalogue itself IS the machine-readable
+	// description, which is what makes the remaining cost bearable here and nowhere
+	// else in this partition.
+	g := app.Group(wellKnown)
+	g.Raw(http.MethodGet, "/index.json", h.serveIndex)
+	g.Raw(http.MethodGet, "/:skill/SKILL.md", h.serveSkill)
+	// The product tier. Same reasoning as the two above — embedded bytes, served
+	// verbatim — and a separate route rather than a branch inside serveSkill
+	// because the two answer different documents at different addresses.
+	g.Raw(http.MethodGet, "/:product/index.json", h.serveProduct)
+
+	// Answer the deployment brand's skills to the tool plane, which lists them for
+	// activation (catalog_rpc.go). Fall back to the default brand's catalogue.
+	skillBrand := h.fallback
+	if !h.brands[skillBrand] {
+		skillBrand = brand.Default
+	}
+	serveCatalog(sub, skillBrand)
+
+	if luxlog.Default() != nil {
+		luxlog.Default().New("subsystem", "skills").Info(
+			"agent-skills discovery mounted", "brands", len(h.brands), "fallback", h.fallback)
+	}
+	return nil
+}
+
+// brandFor resolves the serving brand for a request Host, degrading to the
+// deployment brand then hanzo when the host's brand has no embedded catalogue.
+func (h *handler) brandFor(host string) string {
+	if b, ok := brand.ForHostOK(host); ok && h.brands[b] {
+		return b // explicit white-label by Host
+	}
+	if h.brands[h.fallback] {
+		return h.fallback // deployment brand (CLOUD_BRAND)
+	}
+	return brand.Default
+}
+
+// serveIndex answers GET /.well-known/agent-skills/index.json with the brand's
+// catalogue, exactly as generated.
+//
+// UNTYPED BY DESIGN — two independent wire facts a typed op cannot carry:
+//
+//  1. The response is the EMBEDDED FILE'S BYTES. index.json carries a sha256 per
+//     skill computed over the served SKILL.md, and the catalogue is the artifact
+//     plugin/gen-skills wrote; a typed Out re-marshals through
+//     encoding/json, which re-orders keys and re-indents, so the document a client
+//     verifies would no longer be the document that was signed.
+//  2. A miss answers `{"error": "..."}` at 404. A typed op's only refusal is a
+//     returned error, which zip's errorHandler renders as RFC 9457 problem+json
+//     (type/title/status/detail, code as an extension member) — a different body
+//     for the same condition.
+func (h *handler) serveIndex(c *zip.Ctx) error {
+	brand := h.brandFor(c.Fiber().Hostname())
+	return h.serveFile(c, path.Join(brand, "index.json"), "application/json; charset=utf-8")
+}
+
+// serveSkill answers GET /.well-known/agent-skills/{skill}/SKILL.md with one skill
+// document.
+//
+// UNTYPED BY DESIGN, and structurally so: the response is `text/markdown` — a
+// DOCUMENT, not a JSON value. A typed op marshals its Out with c.JSON and always
+// answers application/json, so there is no shape of In/Out that serves this route's
+// wire at all. It also carries serveIndex's Cache-Control and its 404 body.
+// serveProduct answers GET /.well-known/agent-skills/<_product>/index.json with
+// the product's own catalogue. Embedded bytes, verbatim, for the reason
+// serveIndex serves them that way: the digests in it were computed over the
+// documents this binary carries, so re-deriving the JSON would invalidate them.
+func (h *handler) serveProduct(c *zip.Ctx) error {
+	brand := h.brandFor(c.Fiber().Hostname())
+	id := c.Param("product")
+	if !productID.MatchString(id) {
+		return c.JSON(404, map[string]string{"error": "unknown product"})
+	}
+	return h.serveFile(c, path.Join(brand, id, "index.json"), "application/json; charset=utf-8")
+}
+
+func (h *handler) serveSkill(c *zip.Ctx) error {
+	brand := h.brandFor(c.Fiber().Hostname())
+	id := c.Param("skill")
+	if !skillID.MatchString(id) {
+		return c.JSON(404, map[string]string{"error": "unknown skill"})
+	}
+	if _, err := fs.Stat(h.fsys, path.Join(brand, id, "SKILL.md")); err != nil {
+		if md, ok := builtinSkills[id]; ok {
+			c.SetHeader("Content-Type", "text/markdown; charset=utf-8")
+			c.SetHeader("Cache-Control", "public, max-age=300")
+			return c.Bytes(200, []byte(md))
+		}
+	}
+	return h.serveFile(c, path.Join(brand, id, "SKILL.md"), "text/markdown; charset=utf-8")
+}
+
+// serveFile writes an embedded catalogue file. The name is always built from a
+// validated brand id + a validated skill segment, so it can never escape the
+// embedded root; a missing file is a clean 404.
+func (h *handler) serveFile(c *zip.Ctx, name, contentType string) error {
+	b, err := fs.ReadFile(h.fsys, name)
+	if err != nil {
+		return c.JSON(404, map[string]string{"error": "not found"})
+	}
+	c.SetHeader("Content-Type", contentType)
+	c.SetHeader("Cache-Control", "public, max-age=300")
+	return c.Bytes(200, b)
+}

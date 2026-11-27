@@ -1,0 +1,35 @@
+{
+  "$schema": "https://schemas.agentskills.io/discovery/0.2.0/schema.json",
+  "base_url": "https://api.lux.network",
+  "brand": "lux",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://lux.id",
+  "mcp": {
+    "description": "Model Context Protocol over JSON-RPC 2.0 — one POST per message, stateless, protocol revision 2026-07-28. tools/list answers without a credential with one tool per subsystem (its operations in the \"op\" enum) plus \"describe\", which returns one operation's input schema. tools/call names a subsystem tool and carries {\"op\": <operation>, \"input\": <its arguments>}; it takes the same bearer the REST API does, and a call that carries none is answered 401 with a WWW-Authenticate header naming the resource metadata at /.well-known/oauth-protected-resource, which names the authorization server to sign in at. The tool surface is the public contract: the operator's admin product is not offered, and a name that would disclose a secret or mutate an identity is withheld — the list says how many, under _meta.",
+    "method": "POST",
+    "url": "https://api.lux.network/v1/mcp"
+  },
+  "skill_count": 2,
+  "skills": [
+    {
+      "description": "Read ad campaigns: Returns the caller org's ad campaigns, most recently updated first, optionally narrowed to one lifecycle status., Returns one of the caller org's campaigns..",
+      "digest": "sha256:3458af6503481351a27d30fc2c09b8beff8a6d47a2965b3d74f6dc0936d21ba1",
+      "name": "ad_campaigns",
+      "service": "ad",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/ad_campaigns/SKILL.md"
+    },
+    {
+      "description": "Read ad summary: Rolls the caller org's ad campaigns up into four numbers: how many campaigns exist, how many are active, and the summed budget and spend across all of them..",
+      "digest": "sha256:8b146d9b27dc8da0b667bbe0554d668f70e857364b3f4cc507cd7e1b133436e1",
+      "name": "ad_summary",
+      "service": "ad",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/ad_summary/SKILL.md",
+      "works": [
+        "marketing"
+      ]
+    }
+  ],
+  "spec_version": "8.0.0"
+}

@@ -1,0 +1,40 @@
+{
+  "$schema": "https://schemas.agentskills.io/discovery/0.2.0/schema.json",
+  "base_url": "https://api.zoo.ngo",
+  "brand": "zoo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://zoolabs.id",
+  "mcp": {
+    "description": "Model Context Protocol over JSON-RPC 2.0 — one POST per message, stateless, protocol revision 2026-07-28. tools/list answers without a credential with one tool per subsystem (its operations in the \"op\" enum) plus \"describe\", which returns one operation's input schema. tools/call names a subsystem tool and carries {\"op\": <operation>, \"input\": <its arguments>}; it takes the same bearer the REST API does, and a call that carries none is answered 401 with a WWW-Authenticate header naming the resource metadata at /.well-known/oauth-protected-resource, which names the authorization server to sign in at. The tool surface is the public contract: the operator's admin product is not offered, and a name that would disclose a secret or mutate an identity is withheld — the list says how many, under _meta.",
+    "method": "POST",
+    "url": "https://api.zoo.ngo/v1/mcp"
+  },
+  "skill_count": 3,
+  "skills": [
+    {
+      "description": "Read label coverage: How much of the window has matured, and how much of that is judged.",
+      "digest": "sha256:eed2e6a8deea6385b4e6ee4a6a6bd86d05269265263764ca153b55386c9baa76",
+      "name": "label_coverage",
+      "service": "label",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/label_coverage/SKILL.md"
+    },
+    {
+      "description": "Read label label: Read the assertions this tenant has recorded.",
+      "digest": "sha256:a61b961c60430c87e9d31e33493032659bfb9f324a60963a722694f43a7f5acc",
+      "name": "label_label",
+      "service": "label",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/label_label/SKILL.md"
+    },
+    {
+      "description": "Read label vocabulary: The closed vocabularies and the precedence rule that resolves a conflict.",
+      "digest": "sha256:c3733ddcb54fe7b174ed355a1307e1322dd961356972043a8b94b58498979217",
+      "name": "label_vocabulary",
+      "service": "label",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/label_vocabulary/SKILL.md"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

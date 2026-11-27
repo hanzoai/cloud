@@ -12,9 +12,11 @@ package cloud
 // which prices it exactly as it prices the same answer for any caller of
 // api.hanzo.ai — the routed model, its route and rate rows, Enso's fixed prices,
 // zen's retail — and tells the price on the call's Bill (types.Bill). The meter
-// charges that. Before the call it holds the most the call can cost at the
-// model's listed price (ai_rates), never less than a cent, so an empty wallet is
-// refused before a model is asked; the hold is given back when the debit lands.
+// charges that. Before the call it holds the most the call can cost at the model's
+// listed price (ai_rates), never less than a cent, so an empty wallet is refused
+// before a model is asked; the hold is given back when the debit lands. The flat
+// $2-a-million rate it used to charge for every model billed enso-ultra below its
+// cost and the free models above nothing; it is gone.
 //
 // It reuses the SAME commerce path (Meter over Deps.Metering) as every other Hanzo
 // surface. With no meter constructed the wrapper is a transparent pass-through, so
@@ -32,10 +34,10 @@ import (
 	"github.com/hanzoai/decimal"
 	hz "github.com/hanzoai/money"
 
-	"github.com/hanzoai/account"
 	"github.com/hanzoai/cloud/sdk/infer"
 	"github.com/hanzoai/cloud/sdk/meter"
 	"github.com/hanzoai/cloud/sdk/principal"
+	"github.com/hanzoai/account"
 	luxlog "github.com/luxfi/log"
 )
 
@@ -65,13 +67,14 @@ type meteredAI struct {
 // implements it (agents' model-catalog validation must survive the wrap). deps
 // must already carry Metering/Env/Logger.
 //
-// It does NOT carry StreamCompleter, on purpose. A stream has no plane to cross, so
-// it was answered by the gateway as this deployment's own application: billed there
-// to the deployment's org at the gateway's price, and here to the customer at the
-// meter's own — two charges, neither of them the customer's at the model's price.
-// Every in-process call crosses the plane now, where the model API prices it once
-// for the account the request names; a caller that wanted deltas gets the whole
-// answer at once (apps/answer chunks it, apps/studio forwards it).
+// It carries StreamCompleter (ChatStream), metered exactly as ChatCompletion is: the
+// same hold, one settle at the price the model API told. A stream crosses the plane
+// as ai_chat_stream, so the model API prices it for the account the request names,
+// as it does a buffered completion. Before that op a stream could only reach the
+// gateway as this deployment's own application (billed there to the deployment's
+// org at the gateway's price, and here to the customer at the meter's own), so the
+// meter offered none. Over an inner client that cannot stream, ChatStream is
+// ChatCompletion, with the whole answer as its one delta.
 func MeteredAIClient(inner infer.Client, deps Deps) infer.Client {
 	m := &meteredAI{
 		inner:  inner,
@@ -98,6 +101,29 @@ func (m *meteredAIModels) Models(ctx context.Context) ([]string, error) {
 // out-of-funds / over-cap / frozen payer is refused BEFORE upstream tokens are
 // spent), runs the call, then debits what the model API priced it at.
 func (m *meteredAI) ChatCompletion(ctx context.Context, req *infer.ChatRequest) (*infer.ChatResponse, error) {
+	return m.complete(ctx, req, m.inner.ChatCompletion)
+}
+
+// ChatStream is ChatCompletion delivered a delta at a time: the same hold before
+// anything is asked, the same one settle after, at the price the model API told
+// the call's Bill. A stream is never a way around the meter: an inner client that
+// cannot stream answers as ChatCompletion, the whole answer its one delta.
+func (m *meteredAI) ChatStream(ctx context.Context, req *infer.ChatRequest, emit func(delta string) error) (*infer.ChatResponse, error) {
+	sc, ok := m.inner.(infer.StreamCompleter)
+	if !ok {
+		resp, err := m.ChatCompletion(ctx, req)
+		if err == nil && resp != nil && resp.Content != "" && emit != nil {
+			_ = emit(resp.Content)
+		}
+		return resp, err
+	}
+	return m.complete(ctx, req, func(ctx context.Context, req *infer.ChatRequest) (*infer.ChatResponse, error) {
+		return sc.ChatStream(ctx, req, emit)
+	})
+}
+
+// complete is the one metered path a completion takes, buffered or streamed.
+func (m *meteredAI) complete(ctx context.Context, req *infer.ChatRequest, call func(context.Context, *infer.ChatRequest) (*infer.ChatResponse, error)) (*infer.ChatResponse, error) {
 	// The balance gate and the debit key on the account the request names (Payer,
 	// resolved where the work started). The inner AI call still receives req.Org,
 	// the EFFECTIVE org, for its data scope (BYO keys, RAG).
@@ -112,7 +138,7 @@ func (m *meteredAI) ChatCompletion(ctx context.Context, req *infer.ChatRequest) 
 	}
 	defer h.Release() // no-op once settlement has taken it; the safety net for every other exit.
 	ctx, bill := infer.WithBill(ctx)
-	resp, cerr := m.inner.ChatCompletion(ctx, req)
+	resp, cerr := call(ctx, req)
 	if cerr != nil {
 		m.failed(ctx, payer, req.Project, req.Model, bill, meter.Usage{Actor: req.Actor, RequestID: req.RunID}, h)
 		return resp, cerr
@@ -458,6 +484,8 @@ func MicrosToGateCents(micros int64) int64 {
 	return 1
 }
 
+// EstTokens is a deterministic, provider-agnostic token estimate (~4 chars/token)
+// used to size the pre-call hold before the call's real usage is known.
 func EstTokens(texts ...string) int {
 	var chars int
 	for _, t := range texts {

@@ -137,7 +137,7 @@ func TestAReplyDetachesItself(t *testing.T) {
 	// The comparison is against a LITERAL, not against a second variable holding
 	// out.Addr. Assigning a string copies its HEADER, so `want := out.Addr` would
 	// alias the same bytes and both sides would move together — an assertion that
-	// passes whether or not the codec copies.
+	// passes whether or not the codec copies. That is the bug this test had.
 	const want = "/run/hanzo/commerce.sock"
 	if out.Addr != want {
 		t.Fatalf("decoded %q, want %q", out.Addr, want)

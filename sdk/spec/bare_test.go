@@ -8,7 +8,8 @@ import (
 // TestBareFindsWhatAnSDKReadsAndNothingElse pins the walk against the two ways a
 // property hides: nested inside another property, and behind a composition
 // keyword. A check that stopped at the top level would report a clean document
-// while a whole sub-object has nothing said about it.
+// while a whole sub-object shipped with nothing said about it — which is how the
+// class went unmeasured for as long as it did.
 func TestBareFindsWhatAnSDKReadsAndNothingElse(t *testing.T) {
 	doc := &Document{
 		OpenAPI: "3.1.0",

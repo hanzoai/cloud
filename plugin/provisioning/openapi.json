@@ -1,0 +1,1467 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Hanzo Cloud API",
+    "description": "Package provisioning is one-click data add-ons: a SQL, key-value, document, vector, search or object store, wired straight into your app.",
+    "version": "v1"
+  },
+  "servers": [
+    {
+      "url": "https://api.hanzo.ai"
+    }
+  ],
+  "security": [
+    {
+      "bearer": []
+    }
+  ],
+  "tags": [
+    {
+      "name": "admin"
+    },
+    {
+      "name": "provisioning"
+    }
+  ],
+  "paths": {
+    "/v1/admin/provisioning/vector/collections": {
+      "get": {
+        "operationId": "get_admin_provisioning_vector_collections",
+        "summary": "Lists every collection in the deployment's vector store with its size and geometry, across all tenants.",
+        "description": "Lists every collection in the deployment's vector store\nwith its size and geometry, across all tenants.\n\nPer-collection detail is best-effort — one collection that fails to describe\nitself keeps its name and defaults (dimension 0, cosine) rather than blanking\nthe whole answer — and an unreachable Qdrant answers 200 with an EMPTY list, so\nthe panel shows an honest empty state instead of an error.",
+        "tags": [
+          "admin"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/provisioning.vectorCollectionList"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-tool": true
+      }
+    },
+    "/v1/admin/provisioning/vector/stats": {
+      "get": {
+        "operationId": "get_admin_provisioning_vector_stats",
+        "summary": "Totals the collections, vectors and storage across the whole vector store.",
+        "description": "Totals the collections, vectors and storage across the whole\nvector store.\n\nEvery figure is summed from the same per-collection detail the collections\nlisting returns, so the two panels can never disagree. An unreachable Qdrant\nanswers 200 with all zeros rather than an error.",
+        "tags": [
+          "admin"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/provisioning.vectorStats"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-tool": true
+      }
+    },
+    "/v1/provisioning/datastore": {
+      "get": {
+        "operationId": "get_provisioning_datastore",
+        "summary": "Lists the caller org's Hanzo Datastore warehouses.",
+        "description": "Lists the caller org's Hanzo Datastore warehouses. Each one is\na DEDICATED analytical instance the org alone runs, so the host is that\ninstance's own in-cluster Service and the port is its HTTP port, 8123.",
+        "tags": [
+          "provisioning"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/provisioning.provisionedSummary"
+                  },
+                  "type": "array"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      },
+      "post": {
+        "operationId": "post_provisioning_datastore",
+        "summary": "Launches your org's OWN Hanzo Datastore instance and answers with its `datastore://` connection string.",
+        "description": "Launches your org's OWN Hanzo Datastore instance and answers\nwith its `datastore://` connection string.\n\nThe instance is yours alone — a deployment in your own tenant namespace, so its\nadmin credential is naturally scoped to you and no other tenant shares the\nprocess. Off-cluster this fails closed with 503 rather than handing back a\nshared one.",
+        "tags": [
+          "provisioning"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/provisioning.provisionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/provisioning.provisionResult"
+                }
+              }
+            },
+            "description": "created"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/provisioning/datastore/{name}": {
+      "delete": {
+        "operationId": "delete_provisioning_datastore_by_name",
+        "summary": "Deprovisions one Hanzo Datastore warehouse.",
+        "description": "Deprovisions one Hanzo Datastore warehouse. It reverts any app\ninstance bound to it back to Base BEFORE tearing down the org's dedicated\ninstance, then deletes the sealed credential and removes the metadata row.\nAnswers 204 with no body; a second call is a 404.",
+        "tags": [
+          "provisioning"
+        ],
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "description": "Name is the resource's org-unique slug, from the path. Lower-cased and\ntrimmed before lookup, exactly as it was at create.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "warehouse"
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "no content"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      },
+      "get": {
+        "operationId": "get_provisioning_datastore_by_name",
+        "summary": "Returns one Hanzo Datastore warehouse's metadata.",
+        "description": "Returns one Hanzo Datastore warehouse's metadata. It carries the\nwarehouse's status, its instance address and the admin user the instance\nbooted with — never the password. A still-booting instance reads\n\"provisioning\", reconciled from the operator's live view rather than the row.",
+        "tags": [
+          "provisioning"
+        ],
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "description": "Name is the resource's org-unique slug, from the path. Lower-cased and\ntrimmed before lookup, exactly as it was at create.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "warehouse"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/provisioning.provisionedResource"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/provisioning/docdb": {
+      "get": {
+        "operationId": "get_provisioning_docdb",
+        "summary": "Lists the caller org's Hanzo DocDB document databases.",
+        "description": "Lists the caller org's Hanzo DocDB document databases. Each one is\na DEDICATED FerretDB instance the org alone runs, speaking the MongoDB wire\nprotocol, so the host is that instance's own in-cluster Service and the port\nis 27017.",
+        "tags": [
+          "provisioning"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/provisioning.provisionedSummary"
+                  },
+                  "type": "array"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      },
+      "post": {
+        "operationId": "post_provisioning_docdb",
+        "summary": "Launches your org's OWN document-database instance and answers with its `mongodb://` connection string.",
+        "description": "Launches your org's OWN document-database instance and answers with\nits `mongodb://` connection string. It speaks the MongoDB wire protocol, so\nexisting MongoDB drivers connect unchanged.\n\nThe instance is yours alone — a deployment in your own tenant namespace, so its\nadmin credential is naturally scoped to you and no other tenant shares the\nprocess. Off-cluster this fails closed with 503 rather than handing back a\nshared one.",
+        "tags": [
+          "provisioning"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/provisioning.provisionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/provisioning.provisionResult"
+                }
+              }
+            },
+            "description": "created"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/provisioning/docdb/{name}": {
+      "delete": {
+        "operationId": "delete_provisioning_docdb_by_name",
+        "summary": "Deprovisions one Hanzo DocDB database.",
+        "description": "Deprovisions one Hanzo DocDB database. It reverts any app instance\nbound to it back to Base BEFORE tearing down the org's dedicated FerretDB\ninstance, then deletes the sealed credential and removes the metadata row.\nAnswers 204 with no body; a second call is a 404.",
+        "tags": [
+          "provisioning"
+        ],
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "description": "Name is the resource's org-unique slug, from the path. Lower-cased and\ntrimmed before lookup, exactly as it was at create.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "sessions"
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "no content"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      },
+      "get": {
+        "operationId": "get_provisioning_docdb_by_name",
+        "summary": "Returns one Hanzo DocDB database's metadata.",
+        "description": "Returns one Hanzo DocDB database's metadata. It carries the\ndatabase's status, its instance address and the SCRAM user the instance was\nset up with — never the password. A still-booting instance reads\n\"provisioning\", reconciled from the operator's live view.",
+        "tags": [
+          "provisioning"
+        ],
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "description": "Name is the resource's org-unique slug, from the path. Lower-cased and\ntrimmed before lookup, exactly as it was at create.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "sessions"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/provisioning.provisionedResource"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/provisioning/kv": {
+      "get": {
+        "operationId": "get_provisioning_kv",
+        "summary": "Lists the caller org's Hanzo KV stores.",
+        "description": "Lists the caller org's Hanzo KV stores. Each one is a DEDICATED Valkey\ninstance the org alone runs, so the host is that instance's own in-cluster\nService and the port is 6379.",
+        "tags": [
+          "provisioning"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/provisioning.provisionedSummary"
+                  },
+                  "type": "array"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      },
+      "post": {
+        "operationId": "post_provisioning_kv",
+        "summary": "Launches your org's OWN key-value instance and answers with its `kv://` connection string.",
+        "description": "Launches your org's OWN key-value instance and answers with its `kv://`\nconnection string.\n\nThe instance is yours alone — a deployment in your own tenant namespace, so its\nadmin credential is naturally scoped to you and no other tenant shares the\nprocess. Off-cluster this fails closed with 503 rather than handing back a\nshared one.",
+        "tags": [
+          "provisioning"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/provisioning.provisionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/provisioning.provisionResult"
+                }
+              }
+            },
+            "description": "created"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/provisioning/kv/{name}": {
+      "delete": {
+        "operationId": "delete_provisioning_kv_by_name",
+        "summary": "Deprovisions one Hanzo KV store.",
+        "description": "Deprovisions one Hanzo KV store. It reverts any app instance bound to\nit back to Base BEFORE tearing down the org's dedicated Valkey instance, then\ndeletes the sealed credential and removes the metadata row. Answers 204 with\nno body; a second call is a 404.",
+        "tags": [
+          "provisioning"
+        ],
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "description": "Name is the resource's org-unique slug, from the path. Lower-cased and\ntrimmed before lookup, exactly as it was at create.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "sessions"
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "no content"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      },
+      "get": {
+        "operationId": "get_provisioning_kv_by_name",
+        "summary": "Returns one Hanzo KV store's metadata.",
+        "description": "Returns one Hanzo KV store's metadata. It carries the store's status,\nits instance address and the Valkey user it authenticates as (\"default\", the\nonly user a requirepass instance has) — never the password. A still-booting\ninstance reads \"provisioning\", reconciled from the operator's live view.",
+        "tags": [
+          "provisioning"
+        ],
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "description": "Name is the resource's org-unique slug, from the path. Lower-cased and\ntrimmed before lookup, exactly as it was at create.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "sessions"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/provisioning.provisionedResource"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/provisioning/s3": {
+      "get": {
+        "operationId": "get_provisioning_s3",
+        "summary": "Lists the caller org's object-storage buckets.",
+        "description": "Lists the caller org's object-storage buckets. A bucket lives in an\nalready-live shared object store and is reached through the public gateway.\nThe names here are the friendly ones the org provisioned; the physical bucket\nis org-namespaced underneath, which is what keeps two tenants' buckets\ndistinct.",
+        "tags": [
+          "provisioning"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/provisioning.provisionedSummary"
+                  },
+                  "type": "array"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      },
+      "post": {
+        "operationId": "post_provisioning_s3",
+        "summary": "Creates an S3-compatible bucket inside the already-running shared object store and answers with the endpoint that reaches it.",
+        "description": "Creates an S3-compatible bucket inside the already-running shared\nobject store and answers with the endpoint that reaches it.",
+        "tags": [
+          "provisioning"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/provisioning.provisionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/provisioning.provisionResult"
+                }
+              }
+            },
+            "description": "created"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/provisioning/s3/{name}": {
+      "delete": {
+        "operationId": "delete_provisioning_s3_by_name",
+        "summary": "Deletes one bucket from the shared object store and removes its metadata row.",
+        "description": "Deletes one bucket from the shared object store and removes its\nmetadata row. Answers 204 with no body; a second call is a 404.",
+        "tags": [
+          "provisioning"
+        ],
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "description": "Name is the resource's org-unique slug, from the path. Lower-cased and\ntrimmed before lookup, exactly as it was at create.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "uploads"
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "no content"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      },
+      "get": {
+        "operationId": "get_provisioning_s3_by_name",
+        "summary": "Returns one bucket's metadata.",
+        "description": "Returns one bucket's metadata. It carries the bucket's status and the\ngateway address it is reached at, and no username: the object store\nauthenticates with a shared, out-of-band key rather than a per-bucket\ncredential.",
+        "tags": [
+          "provisioning"
+        ],
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "description": "Name is the resource's org-unique slug, from the path. Lower-cased and\ntrimmed before lookup, exactly as it was at create.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "uploads"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/provisioning.provisionedResource"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/provisioning/search": {
+      "get": {
+        "operationId": "get_provisioning_search",
+        "summary": "Lists the caller org's search indexes.",
+        "description": "Lists the caller org's search indexes. An index is a logical\nresource inside an already-live shared backend, so every one of them is\nreached through the public gateway rather than at an instance of its own.",
+        "tags": [
+          "provisioning"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/provisioning.provisionedSummary"
+                  },
+                  "type": "array"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      },
+      "post": {
+        "operationId": "post_provisioning_search",
+        "summary": "Creates a search index inside the already-running shared search backend and answers with the endpoint that reaches it.",
+        "description": "Creates a search index inside the already-running shared search\nbackend and answers with the endpoint that reaches it.",
+        "tags": [
+          "provisioning"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/provisioning.provisionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/provisioning.provisionResult"
+                }
+              }
+            },
+            "description": "created"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/provisioning/search/{name}": {
+      "delete": {
+        "operationId": "delete_provisioning_search_by_name",
+        "summary": "Deletes one search index from the shared backend and removes its metadata row.",
+        "description": "Deletes one search index from the shared backend and removes its\nmetadata row. Answers 204 with no body; a second call is a 404.",
+        "tags": [
+          "provisioning"
+        ],
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "description": "Name is the resource's org-unique slug, from the path. Lower-cased and\ntrimmed before lookup, exactly as it was at create.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "products"
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "no content"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      },
+      "get": {
+        "operationId": "get_provisioning_search_by_name",
+        "summary": "Returns one search index's metadata.",
+        "description": "Returns one search index's metadata. It carries the index's status\nand the gateway address it is reached at, and no username: the backend\nauthenticates with a shared, out-of-band key rather than a per-index\ncredential.",
+        "tags": [
+          "provisioning"
+        ],
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "description": "Name is the resource's org-unique slug, from the path. Lower-cased and\ntrimmed before lookup, exactly as it was at create.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "products"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/provisioning.provisionedResource"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/provisioning/sql": {
+      "get": {
+        "operationId": "get_provisioning_sql",
+        "summary": "Lists the caller org's Hanzo SQL databases.",
+        "description": "Lists the caller org's Hanzo SQL databases. Each one is a DEDICATED\nHanzo SQL instance the org alone runs, so the host is that instance's own\nin-cluster Service and the port is 5432.",
+        "tags": [
+          "provisioning"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/provisioning.provisionedSummary"
+                  },
+                  "type": "array"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      },
+      "post": {
+        "operationId": "post_provisioning_sql",
+        "summary": "Launches your org's OWN Hanzo SQL instance and answers with its `postgres://` connection string.",
+        "description": "Launches your org's OWN Hanzo SQL instance and answers with its\n`postgres://` connection string.\n\nThe instance is yours alone — a deployment in your own tenant namespace, so its\nadmin credential is naturally scoped to you and no other tenant shares the\nprocess. Off-cluster, where there is no orchestrator to launch one, this fails\nclosed with 503 rather than handing back a shared one.",
+        "tags": [
+          "provisioning"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/provisioning.provisionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/provisioning.provisionResult"
+                }
+              }
+            },
+            "description": "created"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/provisioning/sql/{name}": {
+      "delete": {
+        "operationId": "delete_provisioning_sql_by_name",
+        "summary": "Deprovisions one Hanzo SQL database.",
+        "description": "Deprovisions one Hanzo SQL database. It reverts any app instance\nbound to it back to Base BEFORE tearing down the org's dedicated Postgres\ninstance — never a live app pointed at a deleted backend — then deletes the\nsealed credential and removes the metadata row. Answers 204 with no body; a\nsecond call is a 404, not a second delete.",
+        "tags": [
+          "provisioning"
+        ],
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "description": "Name is the resource's org-unique slug, from the path. Lower-cased and\ntrimmed before lookup, exactly as it was at create.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "orders"
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "no content"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      },
+      "get": {
+        "operationId": "get_provisioning_sql_by_name",
+        "summary": "Returns one Hanzo SQL database's metadata.",
+        "description": "Returns one Hanzo SQL database's metadata. It carries the database's\nstatus, its instance address and the admin user Postgres booted with — never\nthe password, which is returned once at create and otherwise lives only in\nHanzo KMS. A still-booting instance reads \"provisioning\", reconciled from the\noperator's live view rather than from the row.",
+        "tags": [
+          "provisioning"
+        ],
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "description": "Name is the resource's org-unique slug, from the path. Lower-cased and\ntrimmed before lookup, exactly as it was at create.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "orders"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/provisioning.provisionedResource"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/provisioning/vector": {
+      "get": {
+        "operationId": "get_provisioning_vector",
+        "summary": "Lists the caller org's vector collections.",
+        "description": "Lists the caller org's vector collections. A collection is a\nlogical resource inside an already-live shared backend, so every one of them\nis reached through the public gateway rather than at an instance of its own.",
+        "tags": [
+          "provisioning"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/provisioning.provisionedSummary"
+                  },
+                  "type": "array"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      },
+      "post": {
+        "operationId": "post_provisioning_vector",
+        "summary": "Creates a vector collection inside the already-running shared vector backend and answers with the endpoint that reaches it.",
+        "description": "Creates a vector collection inside the already-running shared\nvector backend and answers with the endpoint that reaches it.",
+        "tags": [
+          "provisioning"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/provisioning.provisionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/provisioning.provisionResult"
+                }
+              }
+            },
+            "description": "created"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/provisioning/vector/{name}": {
+      "delete": {
+        "operationId": "delete_provisioning_vector_by_name",
+        "summary": "Deletes one vector collection from the shared backend and removes its metadata row.",
+        "description": "Deletes one vector collection from the shared backend and removes\nits metadata row. Answers 204 with no body; a second call is a 404.",
+        "tags": [
+          "provisioning"
+        ],
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "description": "Name is the resource's org-unique slug, from the path. Lower-cased and\ntrimmed before lookup, exactly as it was at create.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "embeddings"
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "no content"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      },
+      "get": {
+        "operationId": "get_provisioning_vector_by_name",
+        "summary": "Returns one vector collection's metadata.",
+        "description": "Returns one vector collection's metadata. It carries the\ncollection's status and the gateway address it is reached at, and no username:\nthe backend authenticates with a shared, out-of-band key rather than a\nper-collection credential, so there is no per-resource user to report.",
+        "tags": [
+          "provisioning"
+        ],
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "description": "Name is the resource's org-unique slug, from the path. Lower-cased and\ntrimmed before lookup, exactly as it was at create.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "embeddings"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/provisioning.provisionedResource"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "problem-details": {
+        "description": "An RFC 9457 problem document.",
+        "properties": {
+          "code": {
+            "description": "A stable token a client can branch on, when the refusal names one.",
+            "type": "string"
+          },
+          "detail": {
+            "description": "What was refused, for a person to read.",
+            "type": "string"
+          },
+          "status": {
+            "description": "The HTTP status.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "title": {
+            "description": "The status's reason phrase.",
+            "type": "string"
+          },
+          "type": {
+            "description": "about:blank",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "status",
+          "detail"
+        ],
+        "type": "object"
+      },
+      "provisioning.provisionRequest": {
+        "properties": {
+          "instance": {
+            "description": "Instance binds a DEDICATED add-on to the app instance whose\n\u003cinstance\u003e-addons Secret receives the \u003cKIND\u003e_URL (e.g. \"commerce\").\nOptional: empty means \"not instance-bound\" — the DSN is returned once and\nwired by the caller.",
+            "type": "string"
+          },
+          "name": {
+            "description": "Name is the org-unique slug for the new resource, matching\n^[a-z0-9]([a-z0-9-]{0,38}[a-z0-9])?$. Every physical name derives from it.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "provisioning.provisionResult": {
+        "properties": {
+          "connectionString": {
+            "description": "ConnectionString is the ready-to-use DSN, credential included. RETURNED\nHERE ONCE: no read beside this one carries it, so a caller that does not\nkeep it must provision again.",
+            "type": "string"
+          },
+          "database": {
+            "description": "Database is the logical database, collection, index or bucket this resource\nresolves to on its backend. It is derived from Name under an org-namespacing\nhash, so it is not Name and two orgs cannot land on one.",
+            "type": "string"
+          },
+          "host": {
+            "description": "Host is the address that routes to this resource — a dedicated instance's\nown in-cluster Service, or the public gateway for a shared one. Never the\ninternal admin address of a shared backend.",
+            "type": "string"
+          },
+          "id": {
+            "description": "ID is the resource's server-minted handle, \"rs_\"-prefixed. The caller does\nnot choose it, and it is what every read and the delete address.",
+            "type": "string"
+          },
+          "kind": {
+            "description": "Kind is the product provisioned: sql, vector, datastore, kv, search, s3 or\ndocdb. It is the route that was called, not a body field.",
+            "type": "string"
+          },
+          "name": {
+            "description": "Name is the org-unique slug the caller asked for, lower-cased. Every\nphysical name on the backend derives from it.",
+            "type": "string"
+          },
+          "password": {
+            "description": "Password is the minted credential, in plaintext, for the kinds that have\none. RETURNED HERE ONCE — where KMS is configured it is sealed there and\nonly a reference is persisted; where it is not, it is stored nowhere at all.\nIt is never held in plaintext on either side.",
+            "type": "string"
+          },
+          "port": {
+            "description": "Port is the port a client connects to on Host.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "status": {
+            "description": "Status is \"ready\", or \"provisioning\" while a dedicated instance is still\nbeing materialized by the operator. A shared-backend create is \"ready\" here;\na dedicated one answers 201 still launching, and reaches ready only when a\nlater read reconciles it against the operator's live CR — never fabricated.",
+            "type": "string"
+          },
+          "username": {
+            "description": "Username is the credential's user, for the kinds that mint one per resource.\nAbsent for a kind whose backend authenticates with a shared, out-of-band key.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "provisioning.provisionedResource": {
+        "properties": {
+          "database": {
+            "description": "Database is the logical database, collection, index or bucket this\nresource resolves to on its backend.",
+            "type": "string"
+          },
+          "host": {
+            "description": "Host is the address that actually routes to this resource — a dedicated\ninstance's own in-cluster Service, or the public gateway for a shared one.",
+            "type": "string"
+          },
+          "id": {
+            "description": "ID is the resource's server-minted handle, \"rs_\"-prefixed.",
+            "type": "string"
+          },
+          "kind": {
+            "description": "Kind is the product: sql, vector, datastore, kv, search, s3 or docdb.",
+            "type": "string"
+          },
+          "name": {
+            "description": "Name is the org-unique slug the caller provisioned the resource under.",
+            "type": "string"
+          },
+          "port": {
+            "description": "Port is the port a client connects to on Host.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "status": {
+            "description": "Status is \"ready\", or \"provisioning\" while a dedicated instance is still\nbeing materialized. A dedicated resource's status is reconciled from the\noperator's live CR before this is answered, so it is never a stale ready.",
+            "type": "string"
+          },
+          "username": {
+            "description": "Username is the credential's user, for the kinds that mint one per\nresource. Absent for a kind whose backend authenticates with a shared,\nout-of-band key.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "provisioning.provisionedSummary": {
+        "properties": {
+          "createdAt": {
+            "description": "CreatedAt is when the resource was provisioned, in unix seconds.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "host": {
+            "description": "Host is the address that actually routes to this resource — a dedicated\ninstance's own in-cluster Service, or the public gateway for a shared one.\nNever the internal admin address of a shared backend.",
+            "type": "string"
+          },
+          "id": {
+            "description": "ID is the resource's server-minted handle, \"rs_\"-prefixed.",
+            "type": "string"
+          },
+          "kind": {
+            "description": "Kind is the product: sql, vector, datastore, kv, search, s3 or docdb.",
+            "type": "string"
+          },
+          "name": {
+            "description": "Name is the org-unique slug the caller provisioned the resource under.",
+            "type": "string"
+          },
+          "port": {
+            "description": "Port is the port a client connects to on Host.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "status": {
+            "description": "Status is \"ready\", or \"provisioning\" while a dedicated instance is still\nbeing materialized by the operator.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "provisioning.vectorCollection": {
+        "properties": {
+          "createdAt": {
+            "description": "CreatedAt is the collection's creation time (RFC 3339); Qdrant does not\nreport one, so it is empty today.",
+            "type": "string"
+          },
+          "dimension": {
+            "description": "Dimension is the size of one vector in the collection.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "distanceMetric": {
+            "description": "DistanceMetric is the collection's distance function; \"cosine\" when the\ncollection's detail could not be read.",
+            "type": "string"
+          },
+          "name": {
+            "description": "Name is the collection name.",
+            "type": "string"
+          },
+          "storageBytes": {
+            "description": "StorageBytes is the collection's on-disk size, omitted when unknown.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "vectorCount": {
+            "description": "VectorCount is the collection's point count.",
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "provisioning.vectorCollectionList": {
+        "properties": {
+          "collections": {
+            "description": "Collections is one row per Qdrant collection, sorted by name. Empty — never\nabsent — when the vector service cannot be reached.",
+            "items": {
+              "$ref": "#/components/schemas/provisioning.vectorCollection"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "provisioning.vectorStats": {
+        "properties": {
+          "totalCollections": {
+            "description": "TotalCollections is how many collections the store holds.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "totalStorageBytes": {
+            "description": "TotalStorageBytes is the sum of every collection's on-disk size.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "totalVectors": {
+            "description": "TotalVectors is the sum of every collection's point count.",
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      }
+    },
+    "securitySchemes": {
+      "bearer": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "The caller's credential, sent as `Authorization: Bearer \u003ctoken\u003e`. It is either an access token minted by Hanzo IAM or an API key (pk-/sk-). X-Authorization, and HTTP Basic carrying the token as the password, are accepted spellings of the same header for clients that cannot set Authorization; a browser presents the session cookie instead. Every operation requires it unless it says `security: []`."
+      }
+    }
+  }
+}

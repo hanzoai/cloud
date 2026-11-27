@@ -199,8 +199,11 @@ type CheckpointFunc func(cp Checkpoint)
 // which doubles as the chain's serialization there).
 //
 // READS GET HANDLES OF THEIR OWN. The writer's one connection is the chain's, and a
-// read that held it held every append in the deployment behind it, so an append
-// waiting past the plane's 5 s bound failed every audited request. The SQLite chain is WAL, where readers and the
+// read that held it held every append in the deployment behind it: GET
+// /v1/admin/audit counted a 16-million-row chain on that connection for 126-190 s,
+// every append waited past the plane's 5 s bound, and cloud answered 503 to every
+// audited request while KMS refused every secret (2026-10-30 03:13, 13:22, 14:17 UTC;
+// thousands a day as the chain grew). The SQLite chain is WAL, where readers and the
 // one writer do not wait on each other, so Query and the walks read through readers.
 // Only with the C codec: the pure-Go envelope gives each handle a private copy of
 // the file and writes it back on Close, so there a second handle is a second writer
@@ -387,9 +390,11 @@ func (r *Recorder) see(next uint64, hash string) {
 // REPLICA's holder is ordered by the database, not by mu: it waits at BeginWrite for
 // this transaction to end, then reads the head this one left.
 //
-// One INSERT per transaction makes the chain a queue as long as its burst, and an
-// append that waits past the plane's 5 s bound fails the audited request. A batch
-// costs one commit, so a burst costs a few.
+// One INSERT per transaction made the chain a queue as long as its burst: a fleet
+// fold on the admin board audits each of its thousands of per-org reads, appends
+// waited past the plane's 5 s bound, and every audited request in the deployment
+// answered 503 for minutes (2026-10-30 03:13 and 13:22 UTC; /v1/event and webhooks
+// among them). A batch costs one commit, so a burst costs a few.
 func (r *Recorder) Append(ctx context.Context, rec Record) (Record, error) {
 	if rec.Time.IsZero() {
 		rec.Time = time.Now().UTC()

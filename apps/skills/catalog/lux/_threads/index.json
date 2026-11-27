@@ -1,0 +1,32 @@
+{
+  "$schema": "https://schemas.agentskills.io/discovery/0.2.0/schema.json",
+  "base_url": "https://api.lux.network",
+  "brand": "lux",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://lux.id",
+  "mcp": {
+    "description": "Model Context Protocol over JSON-RPC 2.0 — one POST per message, stateless, protocol revision 2026-07-28. tools/list answers without a credential with one tool per subsystem (its operations in the \"op\" enum) plus \"describe\", which returns one operation's input schema. tools/call names a subsystem tool and carries {\"op\": <operation>, \"input\": <its arguments>}; it takes the same bearer the REST API does, and a call that carries none is answered 401 with a WWW-Authenticate header naming the resource metadata at /.well-known/oauth-protected-resource, which names the authorization server to sign in at. The tool surface is the public contract: the operator's admin product is not offered, and a name that would disclose a secret or mutate an identity is withheld — the list says how many, under _meta.",
+    "method": "POST",
+    "url": "https://api.lux.network/v1/mcp"
+  },
+  "skill_count": 2,
+  "skills": [
+    {
+      "description": "Read threads chunks: Retrieves a lossless byte-range slice of any cold or hot chunk in a thread..",
+      "digest": "sha256:eb36e3c3f4f9685d28b0a815b8346040541c403fe6a832bffbea1fd56b6e33bb",
+      "name": "threads_chunks",
+      "service": "threads",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/threads_chunks/SKILL.md"
+    },
+    {
+      "description": "Read threads threads: Returns thread metadata, named branches, token totals, active leases, and capability grants..",
+      "digest": "sha256:156f26dd7dbe84dba7d833ab413bcd09cd92c39db23a0b458f2b6727904041b3",
+      "name": "threads_threads",
+      "service": "threads",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/threads_threads/SKILL.md"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

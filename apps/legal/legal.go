@@ -1,0 +1,334 @@
+package legal
+
+import (
+	"encoding/json"
+	"errors"
+	"fmt"
+	"net/http"
+	"strings"
+	"time"
+
+	"github.com/hanzoai/cloud/sdk"
+	"github.com/hanzoai/cloud/sdk/audit"
+	"github.com/hanzoai/cloud/sdk/geo"
+	"github.com/hanzoai/cloud/sdk/principal"
+	"github.com/hanzoai/cloud/sdk/spec"
+	"github.com/zap-proto/zip"
+)
+
+// maxBody bounds a legal request body. Templates + merge maps are small; a custom
+// template override is capped generously.
+const maxBody = 1 << 20 // 1 MiB
+
+// routePrefix is the subtree this subsystem owns, named once so the mount and the
+// body cap cannot disagree about which routes are legal's.
+const routePrefix = "/v1/legal"
+
+// state is legal's own data; shared deps live in the embedded cloud.Base.
+type state struct {
+	store *Store
+	esign Esign
+	filer Filer
+	audit *audit.Recorder
+}
+
+// mounted is the process-wide handle so Shutdown can close the store.
+var mounted *cloud.Service[state]
+
+// Mount wires /v1/legal/* and opens the sealed store under DataDir. The
+// e-sign and filing clients default to the honest stubs; a real provider is a
+// config-driven swap (the clients are provider-agnostic).
+func Use(app cloud.Router, deps cloud.Deps) error {
+	if app == nil {
+		return errors.New("legal: nil app")
+	}
+	if cloud.DataDir() == "" {
+		return fmt.Errorf("legal.Use:  empty DataDir")
+	}
+	store, err := openStore(cloud.DataDir(), deps.MasterKey)
+	if err != nil {
+		return fmt.Errorf("legal.Use:  open store: %w", err)
+	}
+	s := &cloud.Service[state]{
+		Base:  cloud.NewBase(deps, "legal"),
+		State: state{store: store, esign: stubEsign{}, filer: stubFiler{}, audit: deps.Audit},
+	}
+	mounted = s
+	routes(app, s)
+	expose(s)
+	s.Log.Info("legal mounted", "brand", cloud.Brand(), "templates", len(Builtins()), "audit", deps.Audit != nil)
+	return nil
+}
+
+// routes registers the legal surface. Everything but the signature COMPLETION is a
+// typed op (typed.go) — one registry entry carrying the schema, the prose, an MCP
+// tool, a CLI command and an SDK method.
+func routes(app cloud.Router, s *cloud.Service[state]) {
+	o := ops{s: s}
+	g := app.Group("/v1/legal")
+	// cloud.Bridge is not installed here: the composer installs it once at the
+	// root, after the identity check that mints the validated org and before any
+	// subsystem registers a route — an order only the whole program can assert.
+	// The ops below read what it parks off the context.
+	//
+	// The 1 MiB body gate, in front of the typed ops. A typed op receives its
+	// DECODED In, so a size check inside one would run after the parse it exists to
+	// precede — zip refuses an oversized non-JSON body with 400 before the handler
+	// is ever called. Registered before every leaf, because fiber runs middleware
+	// in registration order.
+	g.Use(bodyCap())
+
+	g.Get("/health", o.health)
+	g.Get("/templates", o.listTemplates)
+	g.Get("/templates/:id", o.getTemplate)
+	g.Put("/templates/:id", o.overrideTemplate)
+
+	g.Post("/documents", o.generateDocument, zip.WithStatus(http.StatusCreated))
+	g.Get("/documents", o.listDocuments)
+	g.Get("/documents/:id", o.getDocument)
+	g.Post("/documents/:id/sign", o.requestSign)
+	// UNTYPED BY DESIGN — it DISCARDS its decode error (`_ = decode(…)` below), so
+	// a caller may post an unparseable body and still drive the provider-reported
+	// completion. zip's invoke refuses such a body before the handler runs, so
+	// typing it would turn today's 200 into a 400. See typed.go.
+	g.Raw(http.MethodPost, "/documents/:id/sign/complete", cloud.Handle(s, completeSign))
+
+	g.Post("/filings", o.createFiling, zip.WithStatus(http.StatusCreated))
+	g.Get("/filings", o.listFilings)
+}
+
+// Shutdown closes the store. Idempotent.
+func Shutdown() error {
+	if mounted == nil || mounted.State.store == nil {
+		return nil
+	}
+	err := mounted.State.store.Close()
+	mounted = nil
+	return err
+}
+
+// ---- templates ----
+
+// templateView is the catalog projection: metadata + fields, NOT the full body (a
+// list stays light; the body is fetched per template).
+type templateView struct {
+	// ID is the template's stable id and the path segment that fetches its body —
+	// "nda", "msa", "safe". An override keeps the built-in's id.
+	ID string `json:"id"`
+	// Category is the corporate need the template serves: formation, equity, ops or
+	// sales. Formation and equity are the securities-class categories, which is what
+	// forces counselReview.
+	Category Category `json:"category"`
+	// Title is the display name, e.g. "Mutual Non-Disclosure Agreement". A generated
+	// document inherits it.
+	Title string `json:"title"`
+	// Version is which version of this template the caller's org resolves to. A
+	// built-in is version 1; the org's first override is 2 and each save increments,
+	// so an override version never collides with the built-in's.
+	Version int `json:"version"`
+	// Origin is "builtin" for a template the platform ships or "org" for one this
+	// org saved. It separates the catalog every tenant sees from this tenant's own.
+	Origin string `json:"origin"`
+	// CounselReview marks a template whose rendered documents open with the counsel
+	// notice. True for every formation and equity template whatever an override
+	// sends: the engine prepends the notice and no caller can suppress it.
+	CounselReview bool `json:"counselReview"`
+	// Fields declares the merge fields the body consumes — every key a generation
+	// must supply, each with its human label. All are REQUIRED: a missing one is
+	// refused rather than rendered as a blank into a contract.
+	Fields []Field `json:"fields"`
+}
+
+func toTemplateView(t Template) templateView {
+	return templateView{ID: t.ID, Category: t.Category, Title: t.Title, Version: t.Version, Origin: t.Origin, CounselReview: t.CounselReview, Fields: t.Fields}
+}
+
+// ---- documents ----
+
+// The prose for the one operation here that cannot be a typed op. Every other route
+// in legal is typed and zipdoc lifts its doc comment into zipdoc_gen.go; the
+// signature completion stays a raw handler (routes says why — it discards its decode
+// error on purpose, and typing it would turn today's 200 into a 400), so there is no
+// comment for anything to lift and the published document would carry an operationId
+// and nothing else — an SDK method and a CLI command that cannot explain themselves.
+// Declared through the same registry Register uses, so it renders only while the
+// router actually serves the route.
+func init() {
+	spec.Describe("/v1/legal/documents/:id/sign/complete", http.MethodPost,
+		"Record that a generated document's signature request completed",
+		"Records completion of the signature request opened over a generated document and "+
+			"answers the document with a `signed` flag.\n\n"+
+			"The e-sign provider's own status is consulted FIRST and is the default answer; an "+
+			"explicit `signed` field in the body overrides it. That override is the whole point: "+
+			"the default `manual` provider never self-completes, so a reviewer (or a real "+
+			"provider's webhook) is what moves the document. A completion flips the document to "+
+			"`signed`, stamps `signedAt`, and writes a `legal.document.signed` audit event; a "+
+			"provider still reporting incomplete answers 200 with the document unchanged, so the "+
+			"call is safe to repeat and never fabricates a signature.\n\n"+
+			"Org-scoped and fails closed: a validated principal is required (401 without one), the "+
+			"document is read under the caller's OWN org so another tenant's id is a 404, a "+
+			"document with no open signature request is a 400, and a provider whose status call "+
+			"errors is a 502.")
+}
+
+// completeSign records signature completion — a provider webhook or a reviewer signal.
+// The stub never self-completes; this authenticated, audited endpoint is the signal.
+func completeSign(s *cloud.Service[state], c *zip.Ctx) error {
+	org, ok := principal.Org(c)
+	if !ok {
+		return principal.Refused(c)
+	}
+	doc, err := s.State.store.GetDocument(c.Context(), org, c.Param("id"))
+	if err == errNotFound {
+		return zip.ErrNotFound("document not found")
+	}
+	if err != nil {
+		return zip.Errorf(http.StatusInternalServerError, "get document: %v", err)
+	}
+	if doc.EsignRef == "" {
+		return zip.ErrBadRequest("no signature request to complete")
+	}
+	// A real provider's webhook drives completion; honor an explicit signal for the
+	// stub. The provider's own Status is checked first.
+	complete, err := s.State.esign.Status(c.Context(), org, doc.EsignRef)
+	if err != nil {
+		return zip.Errorf(http.StatusBadGateway, "esign status failed")
+	}
+	var reqBody struct {
+		Signed *bool `json:"signed"`
+	}
+	_ = decode(c, &reqBody)
+	if reqBody.Signed != nil {
+		complete = *reqBody.Signed
+	}
+	if !complete {
+		return c.JSON(http.StatusOK, map[string]any{"document": docView(doc, false), "signed": false})
+	}
+	// Who recorded it is kept beside when: a peer that relies on a NAMED signer (the
+	// W-9 certification, apps/tax) accepts the completion only from that signer, and
+	// the manual provider takes it from any member of the org.
+	now, by := nowUnix(), strings.Clone(c.User())
+	if err := s.State.store.UpdateDocumentSign(c.Context(), org, doc.ID, StatusSigned, doc.EsignProvider, doc.EsignRef, now, now, by); err != nil {
+		return zip.Errorf(http.StatusInternalServerError, "update document: %v", err)
+	}
+	doc.Status, doc.UpdatedAt, doc.SignedAt, doc.SignedBy = StatusSigned, now, now, by
+	emitAudit(s, c, "legal.document.signed", audit.Resource{Type: "legal.document", ID: doc.ID},
+		map[string]any{"documentId": doc.ID, "provider": doc.EsignProvider})
+	return c.JSON(http.StatusOK, map[string]any{"document": docView(doc, false), "signed": true})
+}
+
+// ---- filings ----
+
+// ---- views ----
+
+// docView renders a document; withBody controls whether the (sealed) rendered content
+// is included — lists omit it, single reads to the owner include it.
+func docView(d Document, withBody bool) map[string]any {
+	v := map[string]any{
+		"id":              d.ID,
+		"templateId":      d.TemplateID,
+		"templateVersion": d.TemplateVersion,
+		"category":        d.Category,
+		"title":           d.Title,
+		"status":          d.Status,
+		"createdAt":       d.CreatedAt,
+		"updatedAt":       d.UpdatedAt,
+	}
+	if withBody {
+		v["contentType"] = d.ContentType
+		v["body"] = d.Body
+	}
+	if d.EsignProvider != "" {
+		v["esignProvider"] = d.EsignProvider
+	}
+	if d.SignedAt != 0 {
+		v["signedAt"] = d.SignedAt
+	}
+	return v
+}
+
+// ---- helpers ----
+
+// emitAudit records a legal action on the shared tamper-evident trail. The `after`
+// map carries opaque ids + template/category metadata ONLY — never the rendered
+// document body (which may contain names) — and is redacted as a second layer.
+func emitAudit(s *cloud.Service[state], c *zip.Ctx, action string, res audit.Resource, after map[string]any) {
+	if s.State.audit == nil {
+		return
+	}
+	org, _ := principal.Org(c)
+	rec := audit.Record{
+		Actor:     audit.Actor{Org: org, Sub: c.User(), Email: c.UserEmail()},
+		Action:    action,
+		Resource:  res,
+		Auth:      audit.AuthContext{Method: "gateway", IsAdmin: principal.Super(c)},
+		Outcome:   audit.Outcome{Result: "success", Status: 200},
+		Method:    c.Method(),
+		Path:      c.Path(),
+		SourceIP:  geo.IP(c),
+		RequestID: c.RequestID(),
+		After:     audit.Redact(mustJSON(after)),
+	}
+	if _, err := s.State.audit.Append(c.Context(), rec); err != nil {
+		s.Log.Warn("legal audit append failed", "err", err, "action", action)
+	}
+}
+
+func mustJSON(v any) json.RawMessage {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return json.RawMessage(`{}`)
+	}
+	return b
+}
+
+// bodyCap re-establishes decode's 1 MiB gate IN FRONT of the typed ops, for
+// exactly the routes decode has always gated — and no others. A typed op receives
+// its DECODED In, so a size check written inside one runs after the parse it is
+// there to precede; cloud's global zip body limit is far larger, so without this
+// the 413 this package has always answered would silently become a 400 about
+// unparseable bytes.
+//
+// 403 OUTRANKS 413, because the org check has always run before decode: an
+// oversized body from an unvalidated caller is refused as unauthenticated, and is
+// never told how big its body may be.
+func bodyCap() zip.Handler {
+	return func(c *zip.Ctx) error {
+		if len(c.Fiber().Body()) <= maxBody || !capped(c.Method(), strings.TrimSuffix(c.Path(), "/")) {
+			return c.Continue()
+		}
+		if _, ok := principal.Org(c); !ok {
+			return principal.Refused(c)
+		}
+		return zip.Errorf(http.StatusRequestEntityTooLarge, "request body too large")
+	}
+}
+
+// capped names the routes whose request body decode() has always sized. The
+// signature COMPLETION is deliberately absent: it discards its decode error, so an
+// oversized body has always reached it and been ignored, and capping it here would
+// turn today's 200 into a 413.
+func capped(method, path string) bool {
+	switch {
+	case method == http.MethodPut:
+		return strings.HasPrefix(path, routePrefix+"/templates/")
+	case method != http.MethodPost:
+		return false
+	case path == routePrefix+"/documents", path == routePrefix+"/filings":
+		return true
+	}
+	return strings.HasSuffix(path, "/sign")
+}
+
+func decode(c *zip.Ctx, v any) error {
+	raw := c.Fiber().Body()
+	if len(raw) == 0 {
+		return nil
+	}
+	if len(raw) > maxBody {
+		return zip.Errorf(http.StatusRequestEntityTooLarge, "request body too large")
+	}
+	return c.Bind(v)
+}
+
+func nowUnix() int64 { return time.Now().Unix() }

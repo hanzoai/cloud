@@ -1,0 +1,51 @@
+{
+  "$schema": "https://schemas.agentskills.io/discovery/0.2.0/schema.json",
+  "base_url": "https://api.zoo.ngo",
+  "brand": "zoo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://zoolabs.id",
+  "mcp": {
+    "description": "Model Context Protocol over JSON-RPC 2.0 — one POST per message, stateless, protocol revision 2026-07-28. tools/list answers without a credential with one tool per subsystem (its operations in the \"op\" enum) plus \"describe\", which returns one operation's input schema. tools/call names a subsystem tool and carries {\"op\": <operation>, \"input\": <its arguments>}; it takes the same bearer the REST API does, and a call that carries none is answered 401 with a WWW-Authenticate header naming the resource metadata at /.well-known/oauth-protected-resource, which names the authorization server to sign in at. The tool surface is the public contract: the operator's admin product is not offered, and a name that would disclose a secret or mutate an identity is withheld — the list says how many, under _meta.",
+    "method": "POST",
+    "url": "https://api.zoo.ngo/v1/mcp"
+  },
+  "skill_count": 4,
+  "skills": [
+    {
+      "description": "Read metrics health: How many metric series this deployment holds for your org.",
+      "digest": "sha256:f26542a2d3efbbfee2bff66c95e61b86fea498d9e782d240b66d3ce25aa142ec",
+      "name": "metrics_health",
+      "service": "metrics",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/metrics_health/SKILL.md"
+    },
+    {
+      "description": "Read metrics logs: How many log records this deployment holds for your org, Search your org's logs by label, time and substring.",
+      "digest": "sha256:468adcdb08a84940168f4e95b9e04f678483e7de6a793db6864117cdbc0ceb68",
+      "name": "metrics_logs",
+      "service": "metrics",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/metrics_logs/SKILL.md"
+    },
+    {
+      "description": "Read metrics query: Read your org's series back over a time range.",
+      "digest": "sha256:554faac7308fb0583952a2054d3c0981952cb68282a00527f722cead9301cc1f",
+      "name": "metrics_query",
+      "service": "metrics",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/metrics_query/SKILL.md",
+      "works": [
+        "data"
+      ]
+    },
+    {
+      "description": "Read metrics traces: How many spans this deployment holds for your org, Recent spans for your org over a time range, Every span of one trace — the waterfall.",
+      "digest": "sha256:caab7f8488c4c66cec503ed24822f3fa116f9da2742d371c5f47712b001afbcd",
+      "name": "metrics_traces",
+      "service": "metrics",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/metrics_traces/SKILL.md"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

@@ -1,0 +1,308 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Hanzo Cloud API",
+    "description": "Package catalog is one place to browse every project, app and site built here.",
+    "version": "v1"
+  },
+  "servers": [
+    {
+      "url": "https://api.hanzo.ai"
+    }
+  ],
+  "security": [
+    {
+      "bearer": []
+    }
+  ],
+  "tags": [
+    {
+      "name": "catalog"
+    }
+  ],
+  "paths": {
+    "/v1/catalog": {
+      "get": {
+        "operationId": "get_catalog",
+        "summary": "Searches AND browses the cross-org catalog: every project, app and site the fleet has built, whichever org built it.",
+        "description": "Searches AND browses the cross-org catalog: every project, app and site\nthe fleet has built, whichever org built it.\n\nIt reads TWO corpora and returns them as one page — the published,\nworld-readable catalog that every caller sees, plus the caller's OWN org's\nprivate entries when the request carries a validated principal. Each row says\nwhich it came from in `scope`, so a client can warn before sharing a link. An\nanonymous caller simply gets the published one; no filter can ever widen a\ncaller into another tenant's corpus, because the query that would return it is\nnever run for them.\n\nA request with no q is a browse rather than a search, and both answer the same\nshape: the page, the total before paging, and the facet counts over the whole\nmatching set.",
+        "tags": [
+          "catalog"
+        ],
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "description": "Q is the free-text query the lexical index scores relevance on. Empty is a\nbrowse rather than a search — the same request either way.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "org",
+            "in": "query",
+            "required": false,
+            "description": "Org narrows to one builder org: hanzo | lux | zoo. Case-insensitive.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "kind",
+            "in": "query",
+            "required": false,
+            "description": "Kind narrows to repo | site. Case-insensitive.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "origin",
+            "in": "query",
+            "required": false,
+            "description": "Origin narrows to what a row IS to you: template | community | third-party |\nproduct. This is the axis the two hanzo.app lanes are cut on.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "template"
+          },
+          {
+            "name": "archetype",
+            "in": "query",
+            "required": false,
+            "description": "Archetype narrows to one project archetype. Case-insensitive.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "language",
+            "in": "query",
+            "required": false,
+            "description": "Language narrows to one implementation language. Case-insensitive.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "typescript"
+          },
+          {
+            "name": "template",
+            "in": "query",
+            "required": false,
+            "description": "Template narrows a lane to ONE lineage: the id of the parent everything\nreturned was forked from.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "forkable",
+            "in": "query",
+            "required": false,
+            "description": "Forkable is tri-state: \"true\" selects the forkable rows, \"false\" selects the\nrest, and anything else — including absent — applies no filter at all.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "true"
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Limit caps the page at 200, default 50. A value that is not a non-negative\ninteger falls back to the default.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "20"
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "description": "Offset is where the page starts, default 0, with the same tolerance.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/catalog.catalogPage"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "catalog.Entry": {
+        "properties": {
+          "archetype": {
+            "description": "Archetype is WHAT KIND OF THING this is, from a closed and ordered list —\nmodel | contract | chain | sdk | template | infra | site | app — derived from\nthe repository's own topics, name and description, first match winning, and\nalways `site` for a deployed site. It is DERIVED, never guessed by a model,\nbecause a wrong archetype hides a row from the browse rail more thoroughly\nthan a missing one does. Empty when no topic matched: unclassified, not\nuncategorisable.",
+            "type": "string"
+          },
+          "description": {
+            "description": "Description is the repository's own one-line GitHub description, carried\nverbatim. It comes from the SOURCE half of a row, so a site that was never\nmatched to a repository has none, and nothing here is written by us.",
+            "type": "string"
+          },
+          "forkable": {
+            "description": "Forkable is NOT omitempty: false is an answer here, not a missing field.\nOmitted, a client could not tell \"you cannot fork this\" from \"nobody said\".",
+            "type": "boolean"
+          },
+          "id": {
+            "description": "ID is \"\u003corg\u003e/\u003cname\u003e\" and is the corpus's primary key: a re-published entry\nupdates in place under it rather than accumulating duplicates, so it is the\none handle stable enough to link to or to name in a `template` filter. Two\norgs can spell the same id, and `canonical` picks which one keeps it.",
+            "type": "string"
+          },
+          "kind": {
+            "description": "repo | site",
+            "type": "string"
+          },
+          "language": {
+            "description": "Language is the repository's primary implementation language as GitHub\ncomputes it (\"Go\", \"TypeScript\"), and the case is GitHub's. Empty for a site\nwith no source half and for a repository GitHub could not classify.",
+            "type": "string"
+          },
+          "license": {
+            "description": "License is the terms that upstream work carries, in whichever form the half\nthat credited it had: an SPDX id (\"MIT\", \"Apache-2.0\") on a GitHub fork,\nfree text on a site whose publisher declared it. GitHub's NOASSERTION — \"we\ncould not identify it\" — reads as none rather than as a licence by that name.\nSo empty means UNDECLARED and never unencumbered, and Upstream is what says\nwhether the question applies at all.",
+            "type": "string"
+          },
+          "name": {
+            "description": "Name is the short identifier inside the org — the repository's name, or the\nsite's slug — and is the half of ID after the slash. Not a display name;\nTitle is.",
+            "type": "string"
+          },
+          "note": {
+            "description": "Note is why a row is NOT in the published catalog, set by the admission gate\n(gate.go) on the sites it holds back. It is the difference between a demo\nthat silently vanished from the public lens and one whose owner can read the\nreason and fix it. A published row never carries one.",
+            "type": "string"
+          },
+          "org": {
+            "description": "hanzo | lux | zoo",
+            "type": "string"
+          },
+          "origin": {
+            "description": "Origin is WHAT THIS IS TO YOU: template | community | third-party | product\n(origin.go owns the four nouns and derives them). Not omitempty, for the\nsame reason Forkable is not: every row has an answer, and a missing one is\nexactly the flattening this field exists to end.",
+            "type": "string"
+          },
+          "repo": {
+            "description": "source",
+            "type": "string"
+          },
+          "scope": {
+            "description": "Scope is provenance, not storage: \"public\" for a row from the published\ncorpus, \"org\" for one only this caller can see. A UI that cannot tell them\napart cannot warn before sharing a link.",
+            "type": "string"
+          },
+          "stars": {
+            "description": "Stars is GitHub's stargazer count for the source repository, read at the last\nsync and never accumulated here. It is not a ranking — the page sorts on\nUpdated — but it is the tiebreak when two orgs claim one ID. Absent for a\nsite with no repository behind it, and for a repository nobody has starred.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "template": {
+            "description": "lineage, if forked from one",
+            "type": "string"
+          },
+          "title": {
+            "description": "Title is what to SHOW. A site's human name wins where it has one; a repo row\nfalls back to the repository name, so on a repo this usually just repeats\nName. Absent only for a site whose project was never named — render Name.",
+            "type": "string"
+          },
+          "updated": {
+            "description": "Updated is when the thing last MOVED, as RFC 3339 in UTC: a repository's last\npush, or a site's last deploy. The page is ordered on it, most recent first,\nby comparing these strings — so the format is load-bearing and not cosmetic.\nAbsent means the source reported no timestamp, and such a row sorts last.",
+            "type": "string"
+          },
+          "upstream": {
+            "description": "Upstream/License credit the third-party work an entry was published from:\nthe difference between \"this org built it\" and \"somebody else built it and\nwe are showing it to you\".\n\nWHO built it is Org, above — the account that paid for the project. There\nwas once a separate admin-gated `official` boolean here claiming the same\nthing, and because it was gated it disagreed: apps Hanzo wrote and hosts\nwere published by a script holding an ordinary org token, so it stayed\nfalse on all of them and this directory filed our own work as somebody\nelse's. A field that restates an unforgeable fact can only ever be the\nwrong copy of it.",
+            "type": "string"
+          },
+          "url": {
+            "description": "live, if it is deployed",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "catalog.catalogPage": {
+        "properties": {
+          "data": {
+            "description": "Data is the page of matching entries, most recently updated first.",
+            "items": {
+              "$ref": "#/components/schemas/catalog.Entry"
+            },
+            "type": "array"
+          },
+          "facets": {
+            "additionalProperties": {
+              "additionalProperties": {
+                "format": "int64",
+                "type": "integer"
+              },
+              "type": "object"
+            },
+            "description": "Facets counts the whole matching set along every browse axis, so a rail a\nclient renders is a rail that has results behind it. Keyed axis → value → count.",
+            "type": "object"
+          },
+          "total": {
+            "description": "Total is how many entries matched BEFORE paging — what a pager sizes itself on.",
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "problem-details": {
+        "description": "An RFC 9457 problem document.",
+        "properties": {
+          "code": {
+            "description": "A stable token a client can branch on, when the refusal names one.",
+            "type": "string"
+          },
+          "detail": {
+            "description": "What was refused, for a person to read.",
+            "type": "string"
+          },
+          "status": {
+            "description": "The HTTP status.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "title": {
+            "description": "The status's reason phrase.",
+            "type": "string"
+          },
+          "type": {
+            "description": "about:blank",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "status",
+          "detail"
+        ],
+        "type": "object"
+      }
+    },
+    "securitySchemes": {
+      "bearer": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "The caller's credential, sent as `Authorization: Bearer \u003ctoken\u003e`. It is either an access token minted by Hanzo IAM or an API key (pk-/sk-). X-Authorization, and HTTP Basic carrying the token as the password, are accepted spellings of the same header for clients that cannot set Authorization; a browser presents the session cookie instead. Every operation requires it unless it says `security: []`."
+      }
+    }
+  }
+}

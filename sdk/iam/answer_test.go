@@ -57,6 +57,9 @@ func TestAnswerSurfacesIAMsOwnWords(t *testing.T) {
 	}
 }
 
+// The regression that made the invite unreadable even once IAM answered it: a
+// bare resource has no `status` field, so an envelope-only reader saw Status ""
+// and called a 200 a failure.
 func TestAnswerDoesNotCallASuccessfulResourceAFailure(t *testing.T) {
 	got, err := Answer(200, []byte(`{"owner":"acme","name":"dana","id":"c0ffee"}`))
 	if err != nil {

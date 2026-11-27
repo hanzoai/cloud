@@ -15,7 +15,8 @@ import (
 // The peer's PLANE SOCKET (zip.SocketPath("ai")) cannot serve it at all: that
 // socket speaks ZAP, not HTTP, and carries the typed-op plane rather than the
 // app's routes — so a raw /v1 request there is first unintelligible and then, if
-// framed correctly, a 404.
+// framed correctly, a 404. Reaching it that way is what made @hanzo answer "the
+// agent hit an error handling that" for every Slack turn.
 //
 // What is left is the router's own listener, entered on 127.0.0.1 so it never
 // leaves the pod. Which address a process gets is decided by WHAT IT IS, never

@@ -3,7 +3,7 @@
 // with an Ed25519 key whose public half the deployment publishes at
 // /.well-known/http-message-signatures-directory. A site that reads the
 // signature can tell a Hanzo agent from anything else that copies its
-// User-Agent.
+// User-Agent (hanzo-inc/cloud#423).
 //
 // # One signer, one key set, one transport
 //

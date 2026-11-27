@@ -1,0 +1,88 @@
+{
+  "$schema": "https://schemas.agentskills.io/discovery/0.2.0/schema.json",
+  "base_url": "https://api.zoo.ngo",
+  "brand": "zoo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://zoolabs.id",
+  "mcp": {
+    "description": "Model Context Protocol over JSON-RPC 2.0 — one POST per message, stateless, protocol revision 2026-07-28. tools/list answers without a credential with one tool per subsystem (its operations in the \"op\" enum) plus \"describe\", which returns one operation's input schema. tools/call names a subsystem tool and carries {\"op\": <operation>, \"input\": <its arguments>}; it takes the same bearer the REST API does, and a call that carries none is answered 401 with a WWW-Authenticate header naming the resource metadata at /.well-known/oauth-protected-resource, which names the authorization server to sign in at. The tool surface is the public contract: the operator's admin product is not offered, and a name that would disclose a secret or mutate an identity is withheld — the list says how many, under _meta.",
+    "method": "POST",
+    "url": "https://api.zoo.ngo/v1/mcp"
+  },
+  "skill_count": 9,
+  "skills": [
+    {
+      "description": "Read event economic: Returns, oldest first and paged, the payments the caller's org made or received in a year, with the ones a correction restates named and what either party disputes — for the org's admins..",
+      "digest": "sha256:c6bd58b915a584a364004e8e3b5fc7344dcbfed32cdbcda93396d75f2e8d4ceb",
+      "name": "event_economic",
+      "service": "event",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/event_economic/SKILL.md"
+    },
+    {
+      "description": "Read event errors: Returns the caller org's most recently captured errors, newest first..",
+      "digest": "sha256:188b77d4637866bb4cb2f5d166a2e1246f74df89a44f7d50f68cef068c0daa3d",
+      "name": "event_errors",
+      "service": "event",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/event_errors/SKILL.md"
+    },
+    {
+      "description": "Read event health: Reports whether the event plane can take a write and the warehouse can answer a read..",
+      "digest": "sha256:c9791df98dac5b651790251d3294643ef62bb432d43696c729da618973698e10",
+      "name": "event_health",
+      "service": "event",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/event_health/SKILL.md"
+    },
+    {
+      "description": "Read event insights: Returns the caller org's most recent product events, newest first., Reports that the unified insights surface is serving..",
+      "digest": "sha256:f666400d907e744686453a3fc92fe56523f28378ba9c6fff734a602509d9bb2b",
+      "name": "event_insights",
+      "service": "event",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/event_insights/SKILL.md"
+    },
+    {
+      "description": "Read event overview: Returns the caller org's analytics KPIs for one time window..",
+      "digest": "sha256:c09b67cd266605c79ff8131f18d863fa9bc85b4277525550f7aed02284e78cc4",
+      "name": "event_overview",
+      "service": "event",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/event_overview/SKILL.md"
+    },
+    {
+      "description": "Read event pixel: A site's default pixel — a page view from an image, for a page that runs no script.",
+      "digest": "sha256:76108aeef59c368ee06ea7ee7c087eca93c9a20a715dc4eba28272ce7aa3af85",
+      "name": "event_pixel",
+      "service": "event",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/event_pixel/SKILL.md"
+    },
+    {
+      "description": "Read event tag js: The Zoo event tag — the one-line install for a surface with no bundler.",
+      "digest": "sha256:9ed9b637d4baa070bce8de428c8dfc081b802397d3d7f4a380a570ad38bdc75a",
+      "name": "event_tag-js",
+      "service": "event",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/event_tag-js/SKILL.md"
+    },
+    {
+      "description": "Read event timeseries: Returns the caller org's LLM usage over time as an evenly-spaced series..",
+      "digest": "sha256:5b62a0c282bbbaa4bf139663542facfd95c0faa5d1914ecf886a05d64fcaa99b",
+      "name": "event_timeseries",
+      "service": "event",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/event_timeseries/SKILL.md"
+    },
+    {
+      "description": "Read event top: Returns the caller org's ranked lenses for one window, five of them at once..",
+      "digest": "sha256:daaa32228b7830db2d380c1700a2b3dc8fc4e6714fe26ad7e01eccacec858f12",
+      "name": "event_top",
+      "service": "event",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/event_top/SKILL.md"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

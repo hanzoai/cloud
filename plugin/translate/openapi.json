@@ -1,0 +1,423 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Hanzo Cloud API",
+    "description": "Package translate is text in, the same text out in the language you asked for.",
+    "version": "v1"
+  },
+  "servers": [
+    {
+      "url": "https://api.hanzo.ai"
+    }
+  ],
+  "security": [
+    {
+      "bearer": []
+    }
+  ],
+  "tags": [
+    {
+      "name": "translate"
+    }
+  ],
+  "paths": {
+    "/v1/translate": {
+      "post": {
+        "operationId": "post_translate",
+        "summary": "Translate a string or a batch into one target language",
+        "description": "Returns one translation per input string, in input order, each carrying where it sits on the review ladder and whether it came from your memory rather than an engine — plus a usage block of REAL counts (strings, cached, translated, failed, and the source characters of the strings an engine translated). Send `text` for one string or `batch` for many, never both. When you name no `source`, the detected one is reported back.\n\nTHE TRANSLATION MEMORY IS CONSULTED FIRST AND IT IS NORMATIVE, NOT A CACHE. Every string keys on (source text, declared source language, target, glossary version, tier, format, model); a hit is returned VERBATIM and never re-translated, which is what makes a locale rebuild idempotent under a non-deterministic model and the bill proportional to what actually changed. The same text through another model or another format is another entry. A string translated with its source detected also answers a later call that declares one, so declaring `source` never throws away work done without it; one translated under a declared source answers only that source. Misses go to the engine and are written back at state `machine`. Editing a glossary term changes the key, so a stale rendering can never be served.\n\nIT CANNOT TRAMPLE REVIEWED WORK. A write from this route may create an entry or refresh one still at `machine`, and nothing else — a string a human moved to approved or published through the memory review lane survives every rebuild, and comes back here unchanged. The memory is the caller's OWN org's, a separate store per org: the source text you send is customer content and lands nowhere else. Read it back or review it at /v1/translate/memory.\n\n`tier` picks the engine and defaults to quality — the model plane, which carries context, terminology and tone, and which bills its own tokens, so nothing is charged twice here. `bulk` is the high-volume engine and is metered HERE, on the source characters of the strings it translated: a fully-cached rebuild, or a string that failed, costs zero. BULK NEVER FALLS BACK TO QUALITY — on a deployment that does not serve it the answer is 503 for that tier, so a caller is never quietly served, or charged, at a tier it did not ask for. A bulk request beyond its balance is refused with the nested {\"error\":{\"code\",\"message\"}} body at 402/503.\n\n`model` names the model the quality tier runs on, through the same metered model plane as the default (enso-auto), which decides whether your org may use it exactly as it does for chat. That is how an org points translation at a model it serves itself, on its own linked GPU say: by the alias it registered for it. A name from an upstream model family is rewritten to the default before it runs, so a model of your own must be named by your org's alias; the reply's `model` names the one it runs on. `model` with `tier: bulk` is 400.\n\n`target` IS CHECKED FOR SHAPE, NOT FOR SUPPORT: anything BCP-47-shaped is accepted (`es`, `pt-BR`), anything else is 400. There is no unsupported-language error — a well-formed tag no engine can actually render is passed straight through, and whatever comes back is what gets stored and returned. `format` (text, html, markdown) tells the engine what markup to preserve; `glossary` fixes terms verbatim.\n\nA BATCH IS TRANSLATED IN PARTS of about 8 KB, each its own completion with a ceiling sized to it. A part that comes back cut short (any finish other than stop), malformed, or covering the wrong number of strings is asked again one string at a time. Every translation must keep its source's shape: the same {placeholders}, printf conversions in the same order, the same ICU arguments and selectors with an other branch (the words in their branches are translated), the same tags with the same attributes (alt, title, aria-label and placeholder are words), the same link targets and URLs; a string whose shape moved is asked once more. A string that still fails comes back with `error` naming what went wrong (a lost placeholder, an added URL) and no text, is not stored, and fails nothing else.\n\nTHE WORK IS BOUNDED: at most two model calls per part, one held for every part still to come, a stop after two parts in a row return nothing, 90 seconds per call, and a stop when the caller disconnects. Strings the call did not reach come back with `error` saying why. What came back is stored, so sending the batch again asks only for the rest. When no string at all can be returned, or the engine fails, the answer is 502 with code `translate_failed`.\n\nRequires a validated principal — 401 without one, and the org is always that principal's. At most 512 strings per call and 32768 characters per string (400 past either), and 262144 characters in all (413 past it: split the batch).",
+        "tags": [
+          "translate"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Brief"
+              }
+            }
+          }
+        },
+        "responses": {
+          "2XX": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Delivery"
+                }
+              }
+            }
+          }
+        },
+        "x-public": true
+      }
+    },
+    "/v1/translate/memory": {
+      "get": {
+        "operationId": "get_translate_memory",
+        "summary": "Returns the org's own translation-memory entries, newest first, optionally narrowed to one target language and/or one position on the review ladder.",
+        "description": "Returns the org's own translation-memory entries, newest first, optionally\nnarrowed to one target language and/or one position on the review ladder. It is\nthe review lane's read: what a human reviewer works through.\n\nThe org is ALWAYS the validated principal's org, never a request field, so one\ntenant can never read another's memory — the entries hold customer source text.",
+        "tags": [
+          "translate"
+        ],
+        "parameters": [
+          {
+            "name": "target",
+            "in": "query",
+            "required": false,
+            "description": "Target narrows to one target language tag (BCP-47, e.g. \"es\" or \"pt-BR\").",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "state",
+            "in": "query",
+            "required": false,
+            "description": "State narrows to one position on the review ladder: machine, suggested,\napproved or published.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Limit caps the rows returned. Non-positive or unparseable means the server\ndefault (200); the ceiling is 1000.",
+            "schema": {
+              "format": "int64",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/translate.MemoryPage"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      },
+      "put": {
+        "operationId": "put_translate_memory",
+        "summary": "Records a human decision on one translation-memory entry, and returns the entry as stored.",
+        "description": "Records a human decision on one translation-memory entry, and returns the\nentry as stored. A human write always wins over the stored value, and once it lands\nat approved or published no machine write can move it again — which is what makes a\nlocale rebuild safe to run against reviewed work.\n\nThe org is ALWAYS the validated principal's org, never a request field, so a review\ncan only ever land in the caller's own memory.",
+        "tags": [
+          "translate"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "source": "Hello",
+                "state": "approved",
+                "target": "es",
+                "text": "Hola"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/translate.ReviewRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/translate.MemoryEntry"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Brief": {
+        "type": "object",
+        "properties": {
+          "batch": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "format": {
+            "type": "string"
+          },
+          "glossary": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "model": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string"
+          },
+          "target": {
+            "type": "string"
+          },
+          "text": {
+            "type": "string"
+          },
+          "tier": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "target"
+        ]
+      },
+      "Delivery": {
+        "type": "object",
+        "properties": {
+          "detected_source": {
+            "type": "string"
+          },
+          "model": {
+            "type": "string"
+          },
+          "tier": {
+            "type": "string"
+          },
+          "translations": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Translation"
+            }
+          },
+          "usage": {
+            "$ref": "#/components/schemas/Tally"
+          }
+        }
+      },
+      "Tally": {
+        "type": "object",
+        "properties": {
+          "cached": {
+            "type": "integer"
+          },
+          "characters": {
+            "type": "integer"
+          },
+          "failed": {
+            "type": "integer"
+          },
+          "strings": {
+            "type": "integer"
+          },
+          "translated": {
+            "type": "integer"
+          }
+        }
+      },
+      "Translation": {
+        "type": "object",
+        "properties": {
+          "cached": {
+            "type": "boolean"
+          },
+          "error": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string"
+          },
+          "state": {
+            "type": "string"
+          },
+          "text": {
+            "type": "string"
+          }
+        }
+      },
+      "problem-details": {
+        "description": "An RFC 9457 problem document.",
+        "properties": {
+          "code": {
+            "description": "A stable token a client can branch on, when the refusal names one.",
+            "type": "string"
+          },
+          "detail": {
+            "description": "What was refused, for a person to read.",
+            "type": "string"
+          },
+          "status": {
+            "description": "The HTTP status.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "title": {
+            "description": "The status's reason phrase.",
+            "type": "string"
+          },
+          "type": {
+            "description": "about:blank",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "status",
+          "detail"
+        ],
+        "type": "object"
+      },
+      "translate.MemoryEntry": {
+        "properties": {
+          "actor": {
+            "description": "Actor is the validated user id that last wrote this entry by hand. Empty on an\nentry an engine produced, and on one written before attribution existed.",
+            "type": "string"
+          },
+          "format": {
+            "description": "Format is the markup the source carried: text, html or markdown. Part of the\nidentity.",
+            "type": "string"
+          },
+          "glossary_version": {
+            "description": "Glossary is the glossary VERSION the entry was translated under — the digest\nversion() derives from the terms, so changing a term changes the key and the\nstale rendering can never be served.",
+            "type": "string"
+          },
+          "lang": {
+            "description": "Lang is the source language the translate call declared, empty when the\nengine detected it. Part of the identity; an entry with none also serves a\ncall that declares one.",
+            "type": "string"
+          },
+          "model": {
+            "description": "Model is the quality-tier model the translate call named, empty for the\ndefault. Part of the identity: one model's rendering never answers for\nanother's.",
+            "type": "string"
+          },
+          "request_id": {
+            "description": "RequestID is the X-Request-Id of the translate call whose engine produced\nthe entry. Empty on an entry a human wrote, and on one older than the field.",
+            "type": "string"
+          },
+          "source": {
+            "description": "Source is the ORIGINAL string this entry translates. Part of the identity.",
+            "type": "string"
+          },
+          "state": {
+            "description": "State is the entry's position on the review ladder: machine, suggested,\napproved or published.",
+            "type": "string"
+          },
+          "target": {
+            "description": "Target is the target language tag (BCP-47, e.g. \"es\" or \"pt-BR\"). Part of the\nidentity.",
+            "type": "string"
+          },
+          "text": {
+            "description": "Text is the stored translation. A memory hit returns it verbatim, which is the\nidempotence contract.",
+            "type": "string"
+          },
+          "tier": {
+            "description": "Tier is the engine tier the entry belongs to, quality or bulk. Part of the\nidentity: the two tiers keep separate renderings of the same source.",
+            "type": "string"
+          },
+          "updated_at": {
+            "description": "UpdatedAt is the unix second the entry last changed.",
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "translate.MemoryPage": {
+        "properties": {
+          "data": {
+            "description": "Data is the matching memory entries, newest first.",
+            "items": {
+              "$ref": "#/components/schemas/translate.MemoryEntry"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "translate.ReviewRequest": {
+        "properties": {
+          "format": {
+            "description": "Format is the markup the source carries: text (the default), html or markdown.\nPart of the entry's identity.",
+            "type": "string"
+          },
+          "glossary": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "description": "Glossary is the terminology the entry was translated under. Its VERSION — the\ndigest of the sorted terms — is part of the entry's identity, so editing a term\nyields a new entry rather than overwriting the old rendering.",
+            "type": "object"
+          },
+          "lang": {
+            "description": "Lang is the source language the translate calls this entry serves declare\n(their `source`), empty for calls that let the engine detect it. Part of the\nentry's identity; an entry with none also serves calls that declare one.",
+            "type": "string"
+          },
+          "model": {
+            "description": "Model is the quality-tier model the translate calls this entry serves name;\nempty for the default. Part of the entry's identity, and refused with bulk.",
+            "type": "string"
+          },
+          "source": {
+            "description": "Source is the ORIGINAL string this entry translates. Required; part of the\nentry's identity, so a different source is a different entry.",
+            "type": "string"
+          },
+          "state": {
+            "description": "State is the entry's new position on the review ladder: suggested, approved or\npublished. `machine` is engine-only and is refused here — a human may not demote\na string back into the churn.",
+            "type": "string"
+          },
+          "target": {
+            "description": "Target is the target language tag (BCP-47, e.g. \"es\" or \"pt-BR\"). Required;\npart of the entry's identity.",
+            "type": "string"
+          },
+          "text": {
+            "description": "Text is the reviewed translation to store. A human write always wins over the\nstored value.",
+            "type": "string"
+          },
+          "tier": {
+            "description": "Tier is the engine tier the entry belongs to, quality (the default) or bulk.\nPart of the entry's identity: the two tiers keep separate renderings.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      }
+    },
+    "securitySchemes": {
+      "bearer": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "The caller's credential, sent as `Authorization: Bearer \u003ctoken\u003e`. It is either an access token minted by Hanzo IAM or an API key (pk-/sk-). X-Authorization, and HTTP Basic carrying the token as the password, are accepted spellings of the same header for clients that cannot set Authorization; a browser presents the session cookie instead. Every operation requires it unless it says `security: []`."
+      }
+    }
+  }
+}

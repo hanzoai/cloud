@@ -1,0 +1,48 @@
+{
+  "$schema": "https://schemas.agentskills.io/discovery/0.2.0/schema.json",
+  "base_url": "https://api.lux.network",
+  "brand": "lux",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://lux.id",
+  "mcp": {
+    "description": "Model Context Protocol over JSON-RPC 2.0 — one POST per message, stateless, protocol revision 2026-07-28. tools/list answers without a credential with one tool per subsystem (its operations in the \"op\" enum) plus \"describe\", which returns one operation's input schema. tools/call names a subsystem tool and carries {\"op\": <operation>, \"input\": <its arguments>}; it takes the same bearer the REST API does, and a call that carries none is answered 401 with a WWW-Authenticate header naming the resource metadata at /.well-known/oauth-protected-resource, which names the authorization server to sign in at. The tool surface is the public contract: the operator's admin product is not offered, and a name that would disclose a secret or mutate an identity is withheld — the list says how many, under _meta.",
+    "method": "POST",
+    "url": "https://api.lux.network/v1/mcp"
+  },
+  "skill_count": 4,
+  "skills": [
+    {
+      "description": "Read engine model: Read one model's load state on the serving runtime.",
+      "digest": "sha256:05380bf75a9f34b2de4c56b6d55603f34d78082ba9b6019e3c9804c8bcec9204",
+      "name": "engine_model",
+      "service": "engine",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/engine_model/SKILL.md"
+    },
+    {
+      "description": "Read engine models: List the models the serving runtime holds, with each one's load state.",
+      "digest": "sha256:2326663115e8c5a19c15b0f4993666f59bc6e7e86ca047f9aedb6b4f15979571",
+      "name": "engine_models",
+      "service": "engine",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/engine_models/SKILL.md"
+    },
+    {
+      "description": "Read engine status: Whether the serving runtime is reachable, and which build it runs.",
+      "digest": "sha256:8a781a9a7630be9898e184fa5fb4776455b5776495976a72f20c6f3ef63ec3f9",
+      "name": "engine_status",
+      "service": "engine",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/engine_status/SKILL.md"
+    },
+    {
+      "description": "Read engine system: The serving host's own inventory: devices, memory and build capabilities.",
+      "digest": "sha256:a5910b53822b4478f7eb471278201be8bbdc9681b7c7832ed09eece01dd5f4d5",
+      "name": "engine_system",
+      "service": "engine",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/engine_system/SKILL.md"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

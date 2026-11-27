@@ -1,0 +1,32 @@
+{
+  "$schema": "https://schemas.agentskills.io/discovery/0.2.0/schema.json",
+  "base_url": "https://api.hanzo.ai",
+  "brand": "hanzo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://hanzo.id",
+  "mcp": {
+    "description": "Model Context Protocol over JSON-RPC 2.0 — one POST per message, stateless, protocol revision 2026-07-28. tools/list answers without a credential with one tool per subsystem (its operations in the \"op\" enum) plus \"describe\", which returns one operation's input schema. tools/call names a subsystem tool and carries {\"op\": <operation>, \"input\": <its arguments>}; it takes the same bearer the REST API does, and a call that carries none is answered 401 with a WWW-Authenticate header naming the resource metadata at /.well-known/oauth-protected-resource, which names the authorization server to sign in at. The tool surface is the public contract: the operator's admin product is not offered, and a name that would disclose a secret or mutate an identity is withheld — the list says how many, under _meta.",
+    "method": "POST",
+    "url": "https://api.hanzo.ai/v1/mcp"
+  },
+  "skill_count": 2,
+  "skills": [
+    {
+      "description": "Read sbom health: Health is a pure liveness probe: the service is up; datastore reflects whether the datastore store is connected..",
+      "digest": "sha256:41b4fc2285d72245456d7cac56c12facd7c6839bb48de75bddc41ba18e74da24",
+      "name": "sbom_health",
+      "service": "sbom",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/sbom_health/SKILL.md"
+    },
+    {
+      "description": "Read sbom sbom: Returns everything inside one container image, addressed by its digest or by its image ref..",
+      "digest": "sha256:244e4d4905494859f4482443255e888c6df6a7e995ba103a3aae650c90fccd19",
+      "name": "sbom_sbom",
+      "service": "sbom",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/sbom_sbom/SKILL.md"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

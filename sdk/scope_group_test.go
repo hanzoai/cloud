@@ -1,16 +1,17 @@
 package cloud_test
 
-// scope.Group is the third form, and it has two ways to go wrong. Each test below is the
-// smallest program that reproduces one of them. They share scope_test.go's helpers (deny,
-// pong, get, mountAll, newApp) — same package, one set of primitives.
+// scope.Group is the third form, and it is the one that shipped broken twice in
+// one day. Each test below is the smallest program that reproduces one of those
+// failures. They share scope_test.go's helpers (deny, pong, get, mountAll,
+// newApp) — same package, one set of primitives.
 //
 // The two failures are OPPOSITE KINDS, which is why one test cannot cover both:
 //
 //   - It DOES NOT COMPOSE. Group handed back the raw zip router, so `g.Use(mw)`
 //     went past every confinement in scope.go and hung middleware on a node whose
 //     subtree is necessarily empty — a subsystem's routes register through
-//     ZipApp, on the ROOT. zip refuses that at boot, so a program that builds,
-//     links and passes vet and unit tests still fails to start.
+//     ZipApp, on the ROOT. zip refuses that at boot, so fifteen plugins built,
+//     linked, passed vet and unit tests, and crash-looped in production.
 //     Detected here by [zip.App.Build], which is `Listen` minus the sockets and
 //     returns the verdict instead of panicking with it.
 //
@@ -57,6 +58,8 @@ func patterns(t *testing.T, app *zip.App) []string {
 	return out
 }
 
+// TestGroupWithLaterUseComposes is the outage, in nine lines.
+//
 // A subsystem takes a group and hangs middleware on it AFTERWARDS — `g :=
 // app.Group(p); g.Use(mw)`, the idiom scope.go once documented as needing no
 // policing — while its routes register at full paths through ZipApp, because

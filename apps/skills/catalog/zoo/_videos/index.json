@@ -1,0 +1,35 @@
+{
+  "$schema": "https://schemas.agentskills.io/discovery/0.2.0/schema.json",
+  "base_url": "https://api.zoo.ngo",
+  "brand": "zoo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://zoolabs.id",
+  "mcp": {
+    "description": "Model Context Protocol over JSON-RPC 2.0 — one POST per message, stateless, protocol revision 2026-07-28. tools/list answers without a credential with one tool per subsystem (its operations in the \"op\" enum) plus \"describe\", which returns one operation's input schema. tools/call names a subsystem tool and carries {\"op\": <operation>, \"input\": <its arguments>}; it takes the same bearer the REST API does, and a call that carries none is answered 401 with a WWW-Authenticate header naming the resource metadata at /.well-known/oauth-protected-resource, which names the authorization server to sign in at. The tool surface is the public contract: the operator's admin product is not offered, and a name that would disclose a secret or mutate an identity is withheld — the list says how many, under _meta.",
+    "method": "POST",
+    "url": "https://api.zoo.ngo/v1/mcp"
+  },
+  "skill_count": 2,
+  "skills": [
+    {
+      "description": "Read videos content: Implements GET /v1/videos/{id}/content — download the finished MP4..",
+      "digest": "sha256:218fc5e9a75b04687afbdd1cacda3193d48525c3bf7c4e76e6deda00b5a54fd0",
+      "name": "videos_content",
+      "service": "videos",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/videos_content/SKILL.md",
+      "works": [
+        "design"
+      ]
+    },
+    {
+      "description": "Read videos videos: Implements GET /v1/videos/{id} — poll a job's status..",
+      "digest": "sha256:6de8f6a542301467022e582b4db2b2eb196be2484a77be057d98a4aa36fc6dc1",
+      "name": "videos_videos",
+      "service": "videos",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/videos_videos/SKILL.md"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

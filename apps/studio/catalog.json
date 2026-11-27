@@ -1,0 +1,284 @@
+[
+  {
+    "id": "image",
+    "kind": "image",
+    "title": "Image",
+    "description": "An image from a prompt.",
+    "inputs": {
+      "type": "object",
+      "required": ["prompt"],
+      "properties": {
+        "prompt": {"type": "string", "title": "What to make"},
+        "model": {"type": "string", "default": "iro"},
+        "size": {"type": "string", "default": "1024x1024", "enum": ["1024x1024", "1536x1024", "1024x1536"]},
+        "n": {"type": "number", "default": 1, "minimum": 1, "maximum": 4}
+      }
+    },
+    "graph": {"steps": [
+      {"id": "image", "op": "image.generate", "title": "Generate", "with": {"prompt": "{{input.prompt}}", "model": "{{input.model}}", "size": "{{input.size}}", "n": "{{input.n}}"}}
+    ]}
+  },
+  {
+    "id": "poster",
+    "kind": "poster",
+    "title": "Poster",
+    "description": "A poster designed as HTML and rendered to an image at exactly the size you ask for.",
+    "inputs": {
+      "type": "object",
+      "required": ["brief"],
+      "properties": {
+        "brief": {"type": "string", "title": "What the poster says"},
+        "width": {"type": "number", "default": 1080},
+        "height": {"type": "number", "default": 1350},
+        "format": {"type": "string", "default": "png", "enum": ["png", "jpeg", "webp", "pdf"]}
+      }
+    },
+    "graph": {"steps": [
+      {"id": "design", "op": "chat", "title": "Design", "with": {
+        "html": true, "max_tokens": 8000,
+        "system": "You are a poster designer. You answer with one complete, self-contained HTML document and nothing else: inline CSS only, no scripts, no external images, web fonts only from fonts.googleapis.com. The page is exactly the size you are given; the body has no margin and nothing overflows it.",
+        "prompt": "Design a striking poster, exactly {{input.width}}px wide and {{input.height}}px tall, for:\n\n{{input.brief}}"
+      }},
+      {"id": "render", "op": "render.html", "title": "Render", "with": {"html": "{{steps.design.text}}", "width": "{{input.width}}", "height": "{{input.height}}", "format": "{{input.format}}"}}
+    ]}
+  },
+  {
+    "id": "document",
+    "kind": "document",
+    "title": "Document",
+    "description": "A document written from a brief and rendered to PDF (or DOCX, or Markdown).",
+    "inputs": {
+      "type": "object",
+      "required": ["brief"],
+      "properties": {
+        "brief": {"type": "string", "title": "What the document is"},
+        "format": {"type": "string", "default": "pdf", "enum": ["pdf", "docx", "md"]}
+      }
+    },
+    "graph": {"steps": [
+      {"id": "write", "op": "chat", "title": "Write", "with": {
+        "json": true, "max_tokens": 12000,
+        "system": "You write documents as JSON: {\"title\": string, \"blocks\": [block]}. A block is {\"type\":\"heading\",\"level\":1|2|3,\"text\"}, {\"type\":\"paragraph\",\"text\"}, {\"type\":\"list\",\"ordered\":bool,\"items\":[string]}, {\"type\":\"quote\",\"text\"}, {\"type\":\"table\",\"header\":true,\"rows\":[[string]]}, {\"type\":\"code\",\"text\"} or {\"type\":\"break\"}. Text may use **bold** and *italic*.",
+        "prompt": "Write this document:\n\n{{input.brief}}"
+      }},
+      {"id": "render", "op": "render.document", "title": "Render", "with": {"document": "{{steps.write.json}}", "title": "{{steps.write.json.title}}", "format": "{{input.format}}"}}
+    ]}
+  },
+  {
+    "id": "document.render",
+    "kind": "document",
+    "title": "Render a document",
+    "description": "One of your documents rendered to PDF, DOCX or Markdown.",
+    "inputs": {
+      "type": "object",
+      "required": ["document"],
+      "properties": {
+        "document": {"type": "string", "title": "The document", "format": "document"},
+        "format": {"type": "string", "default": "pdf", "enum": ["pdf", "docx", "md"]}
+      }
+    },
+    "graph": {"steps": [
+      {"id": "render", "op": "render.document", "title": "Render", "with": {"document": "{{input.document}}", "format": "{{input.format}}"}}
+    ]}
+  },
+  {
+    "id": "slides",
+    "kind": "slides",
+    "title": "Slides",
+    "description": "A deck written from a brief and rendered to PowerPoint (or PDF).",
+    "inputs": {
+      "type": "object",
+      "required": ["brief"],
+      "properties": {
+        "brief": {"type": "string", "title": "What the deck is"},
+        "format": {"type": "string", "default": "pptx", "enum": ["pptx", "pdf"]}
+      }
+    },
+    "graph": {"steps": [
+      {"id": "write", "op": "chat", "title": "Write", "with": {
+        "json": true, "max_tokens": 12000,
+        "system": "You write slide decks as JSON: {\"title\": string, \"slides\": [slide]}. A slide is {\"layout\": \"title\"|\"content\"|\"split\"|\"quote\", \"title\", \"subtitle\"?, \"bullets\"?: [string], \"body\"?, \"notes\"?}. The first slide's layout is title. Bullets are short; at most six to a slide.",
+        "prompt": "Write this deck:\n\n{{input.brief}}"
+      }},
+      {"id": "render", "op": "render.slides", "title": "Render", "with": {"document": "{{steps.write.json}}", "title": "{{steps.write.json.title}}", "format": "{{input.format}}"}}
+    ]}
+  },
+  {
+    "id": "slides.render",
+    "kind": "slides",
+    "title": "Render a deck",
+    "description": "One of your decks rendered to PowerPoint or PDF.",
+    "inputs": {
+      "type": "object",
+      "required": ["document"],
+      "properties": {
+        "document": {"type": "string", "title": "The deck", "format": "document"},
+        "format": {"type": "string", "default": "pptx", "enum": ["pptx", "pdf"]}
+      }
+    },
+    "graph": {"steps": [
+      {"id": "render", "op": "render.slides", "title": "Render", "with": {"document": "{{input.document}}", "format": "{{input.format}}"}}
+    ]}
+  },
+  {
+    "id": "voice",
+    "kind": "voice",
+    "title": "Voice",
+    "description": "Words spoken in a voice.",
+    "inputs": {
+      "type": "object",
+      "required": ["text"],
+      "properties": {
+        "text": {"type": "string", "title": "What to say"},
+        "voice": {"type": "string", "default": "alloy"},
+        "format": {"type": "string", "default": "mp3", "enum": ["mp3", "wav"]}
+      }
+    },
+    "graph": {"steps": [
+      {"id": "speak", "op": "voice.speak", "title": "Speak", "with": {"text": "{{input.text}}", "voice": "{{input.voice}}", "format": "{{input.format}}"}}
+    ]}
+  },
+  {
+    "id": "music",
+    "kind": "music",
+    "title": "Music",
+    "description": "A piece of music from a prompt.",
+    "inputs": {
+      "type": "object",
+      "required": ["prompt"],
+      "properties": {
+        "prompt": {"type": "string", "title": "What it sounds like"},
+        "seconds": {"type": "number", "default": 30}
+      }
+    },
+    "graph": {"steps": [
+      {"id": "compose", "op": "music.generate", "title": "Compose", "with": {"prompt": "{{input.prompt}}", "seconds": "{{input.seconds}}"}}
+    ]}
+  },
+  {
+    "id": "video",
+    "kind": "video",
+    "title": "Video",
+    "description": "A short video clip from a prompt.",
+    "inputs": {
+      "type": "object",
+      "required": ["prompt"],
+      "properties": {
+        "prompt": {"type": "string", "title": "What happens"},
+        "seconds": {"type": "number", "default": 5},
+        "size": {"type": "string", "default": "1280x720"}
+      }
+    },
+    "graph": {"steps": [
+      {"id": "shoot", "op": "video.generate", "title": "Shoot", "with": {"prompt": "{{input.prompt}}", "seconds": "{{input.seconds}}", "size": "{{input.size}}"}}
+    ]}
+  },
+  {
+    "id": "model",
+    "kind": "model",
+    "title": "3D model",
+    "description": "A 3D model (glb) from a prompt.",
+    "inputs": {
+      "type": "object",
+      "required": ["prompt"],
+      "properties": {"prompt": {"type": "string", "title": "What to model"}}
+    },
+    "graph": {"steps": [
+      {"id": "model", "op": "model.generate", "title": "Model", "with": {"prompt": "{{input.prompt}}"}}
+    ]}
+  },
+  {
+    "id": "video.edit",
+    "kind": "video",
+    "title": "Edit a video",
+    "description": "Clips cut together, with captions, overlays and an audio bed, encoded to MP4.",
+    "inputs": {
+      "type": "object",
+      "required": ["timeline"],
+      "properties": {
+        "timeline": {"type": "object", "title": "The edit", "description": "{clips: [{asset, start?, end?, seconds?}], captions?: [{text, start?, end?, position?}], overlays?: [{asset, x?, y?, start?, end?}], audio?: [{asset, start?, volume?}], width?, height?, fps?, format?}"}
+      }
+    },
+    "graph": {"steps": [
+      {"id": "edit", "op": "video.edit", "title": "Edit", "with": {"timeline": "{{input.timeline}}"}}
+    ]}
+  },
+  {
+    "id": "ad",
+    "kind": "ad",
+    "title": "Video ad",
+    "description": "A short motion ad written as an HTML composition and rendered to MP4.",
+    "inputs": {
+      "type": "object",
+      "required": ["brief"],
+      "properties": {
+        "brief": {"type": "string", "title": "What the ad sells"},
+        "width": {"type": "number", "default": 1080},
+        "height": {"type": "number", "default": 1920},
+        "seconds": {"type": "number", "default": 6}
+      }
+    },
+    "graph": {"steps": [
+      {"id": "compose", "op": "chat", "title": "Compose", "with": {
+        "html": true, "max_tokens": 10000,
+        "system": "You write motion ads as one self-contained HTML composition for the Frames renderer. The root element is <div data-composition-id=\"ad\" data-width=W data-height=H data-fps=\"30\" data-duration=S data-no-timeline> holding the whole frame at exactly W x H px. Motion is CSS @keyframes only, animating opacity and transform: translateY, with animation-delay to sequence beats; frame 0 already shows the headline; the last 2 seconds hold the final frame. Inline CSS, no scripts, no external images, fonts only from fonts.googleapis.com. Answer with the HTML document and nothing else.",
+        "prompt": "A {{input.seconds}}-second ad, {{input.width}}x{{input.height}} px, for:\n\n{{input.brief}}"
+      }},
+      {"id": "render", "op": "render.composition", "title": "Render", "with": {"html": "{{steps.compose.text}}", "format": "mp4"}}
+    ]}
+  },
+  {
+    "id": "type",
+    "kind": "type",
+    "title": "Type system",
+    "description": "A type system as design tokens, and a specimen sheet that shows it.",
+    "inputs": {
+      "type": "object",
+      "required": ["brief"],
+      "properties": {"brief": {"type": "string", "title": "The voice of the type"}}
+    },
+    "graph": {"steps": [
+      {"id": "tokens", "op": "chat", "title": "Tokens", "with": {
+        "json": true, "max_tokens": 4000,
+        "system": "You design type systems as W3C design tokens (DTCG). Answer JSON {\"font\": {role: {\"$type\":\"fontFamily\",\"$value\":[family, fallback]}}, \"type\": {style: {\"$type\":\"typography\",\"$value\":{\"fontFamily\":\"{font.role}\",\"fontSize\":\"NNpx\",\"fontWeight\":N,\"lineHeight\":N,\"letterSpacing\":\"Nem\"}}}} with roles display, body and mono and styles display, h1, h2, h3, body, caption, code. Families are Google Fonts.",
+        "prompt": "A type system for: {{input.brief}}"
+      }},
+      {"id": "specimen", "op": "chat", "title": "Specimen", "with": {
+        "html": true, "max_tokens": 8000,
+        "system": "You answer with one complete HTML document and nothing else: a type specimen sheet 1600px wide and 2000px tall that loads the families from fonts.googleapis.com and shows every style with its name, size and a sample line. Inline CSS, no scripts.",
+        "prompt": "The type system:\n\n{{steps.tokens.text}}"
+      }},
+      {"id": "sheet", "op": "render.html", "title": "Render", "with": {"html": "{{steps.specimen.text}}", "width": 1600, "height": 2000, "format": "png"}}
+    ]}
+  },
+  {
+    "id": "film",
+    "kind": "film",
+    "title": "Film",
+    "description": "A short film from a brief: a script, a storyboard, a clip per shot, narration, and the edit.",
+    "inputs": {
+      "type": "object",
+      "required": ["brief"],
+      "properties": {
+        "brief": {"type": "string", "title": "What the film is about"},
+        "shots": {"type": "number", "default": 4, "minimum": 1, "maximum": 12},
+        "voice": {"type": "string", "default": "alloy"}
+      }
+    },
+    "graph": {"steps": [
+      {"id": "script", "op": "chat", "title": "Script", "with": {
+        "json": true, "max_tokens": 6000,
+        "system": "You write short films as JSON: {\"title\": string, \"narration\": string (what the narrator says over the whole film), \"shots\": [{\"prompt\": string (a cinematic description of the shot for a video model), \"seconds\": 5}]}.",
+        "prompt": "A film of {{input.shots}} shots about:\n\n{{input.brief}}"
+      }},
+      {"id": "board", "op": "image.generate", "title": "Storyboard", "each": "{{steps.script.json.shots}}", "with": {"prompt": "Storyboard frame, cinematic still: {{item.prompt}}", "size": "1536x1024"}},
+      {"id": "shots", "op": "video.generate", "title": "Shots", "each": "{{steps.script.json.shots}}", "with": {"prompt": "{{item.prompt}}", "seconds": "{{item.seconds}}"}},
+      {"id": "voice", "op": "voice.speak", "title": "Narration", "with": {"text": "{{steps.script.json.narration}}", "voice": "{{input.voice}}"}},
+      {"id": "edit", "op": "video.edit", "title": "Edit", "with": {"timeline": {
+        "clips": "{{steps.shots.assets}}",
+        "audio": ["{{steps.voice.asset}}"],
+        "captions": [{"text": "{{steps.script.json.title}}", "start": 0, "end": 3, "position": "center"}]
+      }}}
+    ]}
+  }
+]

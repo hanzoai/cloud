@@ -320,7 +320,8 @@ func isSecurityRelevant(method, path string, status int, super bool) bool {
 	// A site's beacon is not a security event. It records what a visitor did and
 	// changes nothing anyone authorizes on; the event plane is its record, a receipt
 	// per batch. Auditing it put every public page view behind a synchronous write to
-	// the one chain, so a stalled trail would refuse analytics at the edge. A denied beacon is still recorded
+	// the one chain, so a stalled trail refused analytics at the edge (/v1/event and
+	// /v1/event/replay answered 503 on 2026-10-30). A denied beacon is still recorded
 	// above, and so is one sent with platform authority.
 	if telemetry(method, path) {
 		return false

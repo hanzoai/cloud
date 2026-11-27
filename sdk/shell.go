@@ -14,7 +14,7 @@ import (
 // is a program that was assembled wrong, said once and loudly.
 
 // ErrNoHost is returned by [Listen] when no host is linked into the process.
-var ErrNoHost = errors.New("cloud: no host is linked: import the package that registers the host's hooks")
+var ErrNoHost = errors.New("cloud: no host is linked: import github.com/hanzoai/cloud/internal/host")
 
 // App returns an app carrying everything a Hanzo program must carry, in the one
 // order those parts are correct in. It is the only way to obtain one: a program

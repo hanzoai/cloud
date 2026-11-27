@@ -1,0 +1,346 @@
+package cloud
+
+import (
+	"go/ast"
+	"go/parser"
+	"go/token"
+	"os"
+	"path/filepath"
+	"testing"
+
+	"github.com/hanzoai/cloud/manifest"
+)
+
+// meteredSurfaces reads the app name out of every plugin/<name>/main.go that declares
+// Price: cloud.Metered. The name comes from the DIRECTORY, which is the same key
+// manifest.Apps and UsePrefixes use — gen-app-cmds already pins that a plugin
+// directory and a manifest row are one-to-one.
+func meteredSurfaces(t *testing.T) []string {
+	t.Helper()
+	roots, err := filepath.Glob(filepath.Join("plugin", "*", "main.go"))
+	if err != nil {
+		t.Fatalf("glob composition roots: %v", err)
+	}
+	if len(roots) == 0 {
+		t.Fatal("no plugin/*/main.go found — this test is walking the wrong tree")
+	}
+
+	var out []string
+	for _, root := range roots {
+		src, err := os.ReadFile(root)
+		if err != nil {
+			t.Fatalf("read %s: %v", root, err)
+		}
+		file, err := parser.ParseFile(token.NewFileSet(), root, src, 0)
+		if err != nil {
+			t.Fatalf("parse %s: %v", root, err)
+		}
+		if pluginIsMetered(file) {
+			out = append(out, filepath.Base(filepath.Dir(root)))
+		}
+	}
+	return out
+}
+
+// pluginIsMetered reports whether a composition root declares Price: cloud.Metered.
+// It matches the same []cloud.Plugin{{…}} literal TestPriceDeclared walks — the
+// elements are implicit, so the slice type is what names cloud.Plugin.
+func pluginIsMetered(file *ast.File) bool {
+	found := false
+	ast.Inspect(file, func(n ast.Node) bool {
+		lit, ok := n.(*ast.CompositeLit)
+		if !ok {
+			return true
+		}
+		arr, ok := lit.Type.(*ast.ArrayType)
+		if !ok || !isCloudPlugin(arr.Elt) {
+			return true
+		}
+		for _, elt := range lit.Elts {
+			plugin, ok := elt.(*ast.CompositeLit)
+			if !ok {
+				continue
+			}
+			for _, field := range plugin.Elts {
+				kv, ok := field.(*ast.KeyValueExpr)
+				if !ok {
+					continue
+				}
+				key, ok := kv.Key.(*ast.Ident)
+				if !ok || key.Name != "Price" {
+					continue
+				}
+				if sel, ok := kv.Value.(*ast.SelectorExpr); ok && sel.Sel.Name == "Metered" {
+					found = true
+				}
+			}
+		}
+		return true
+	})
+	return found
+}
+
+// OwnerOf resolves by LONGEST prefix, which is what makes the check above sound.
+func TestOwnerOfPrefersTheMoreSpecificApp(t *testing.T) {
+	// leaderboard folded out of usage's tree (/v1/leaderboard); the deeper-row
+	// pair that remains is lsp-under-nothing vs code — so the specificity claim
+	// is held on entitlement's org subtree, which still nests by design.
+	if got := manifest.OwnerOf("/v1/entitlement/orgs/acme"); got != "entitlement" {
+		t.Errorf("OwnerOf(/v1/entitlement/orgs/acme) = %q, want entitlement", got)
+	}
+	if got := manifest.OwnerOf("/v1/usage"); got != "usage" {
+		t.Errorf("OwnerOf(/v1/usage) = %q, want usage", got)
+	}
+	// ai is declared the bare /v1 catch-all, so an otherwise-unmatched /v1 path
+	// legitimately resolves to it — that IS the routing, not a miss. Only a path
+	// outside every declared prefix is unowned.
+	if got := manifest.OwnerOf("/v1/nothing-routes-here"); got != "ai" {
+		t.Errorf("OwnerOf(unmatched /v1) = %q, want ai (the catch-all)", got)
+	}
+	// A parameterized prefix owns every spelling of its address: the manifest
+	// says :skill, a document says {skill}, a request carries the slug itself.
+	for _, p := range []string{
+		"/.well-known/agent-skills/{skill}/SKILL.md",
+		"/.well-known/agent-skills/anything/SKILL.md",
+	} {
+		if got := manifest.OwnerOf(p); got != "skills" {
+			t.Errorf("OwnerOf(%s) = %q, want skills (the :skill row)", p, got)
+		}
+	}
+	if got := manifest.OwnerOf("/healthz"); got != "" {
+		t.Errorf("OwnerOf(outside every prefix) = %q, want empty", got)
+	}
+}
+
+// TestMeteredSurfacesHoldAMeter asks the thing every check above assumes and none of
+// them verify. cloud.Metered means ONE thing — "the charge for this surface is owned
+// by a meter DOWNSTREAM of the edge" (price.go) — and the edge charges nothing on that
+// promise. Three surfaces made the promise and kept no meter, so every request to them
+// was free in a way no test could see: the price was declared, the standing was
+// required, the meter did not exist.
+//
+// It is the same walk as the two tests above, asking the next question, and it reads
+// SOURCE for the same reason they do: a composition root is a source fact.
+//
+// The two lists below are the honest coverage report, in code. A surface may only be
+// absent from its own package's meter by being NAMED in one of them, with the reason —
+// so the gap is a line Somebody has to write, not an absence nobody can see.
+func TestMeteredSurfacesHoldAMeter(t *testing.T) {
+	metered := meteredSurfaces(t)
+	if len(metered) == 0 {
+		t.Fatal("found no Price: cloud.Metered composition root — asserting nothing")
+	}
+
+	var held int
+	for _, name := range metered {
+		// The packages the ROOT mounts, not apps/<name> — see appDirs. Assuming the
+		// two names match once reported a surface as holding no meter because it
+		// looked for a directory spelled the way the ROW was, not the way the
+		// PACKAGE was.
+		var charges, priced bool
+		for _, dir := range appDirs(t, filepath.Join("plugin", name, "main.go")) {
+			if c, pr := packagePrice(t, dir); c {
+				charges, priced = true, pr
+				break
+			}
+		}
+		switch {
+		case charges:
+			held++
+			// A meter that resolves every fee to a zero default charges nothing until
+			// Somebody types a number — wired, gated, and free. That is a legitimate
+			// posture, but it must be a SENTENCE Somebody wrote, not a default nobody
+			// noticed. See pricedAtZero.
+			if !priced && pricedAtZero[name] == "" {
+				t.Errorf("plugin/%s declares Price: cloud.Metered and its meter resolves every fee "+
+					"to a default of 0 — it is wired, it is gated, and it posts nothing.\n"+
+					"Give the fee a non-zero default (cloud.ResourceFeeCents, or a number of "+
+					"your own), or name %q in pricedAtZero with the reason the surface is "+
+					"deliberately free today.", name, name)
+			}
+		case meteredByAIWrapper[name]:
+			// Correct, and deliberately not its own meter: these surfaces spend on
+			// INFERENCE, and inference is metered once, where the tokens are counted —
+			// build.go wraps Deps.AI/Deps.Embed in MeteredAIClient. A second meter here
+			// would bill the same tokens twice.
+		case meteredWithoutAMeter[name]:
+			t.Logf("apps/%s: declared Metered, charges nothing — known gap", name)
+		default:
+			t.Errorf("apps/%s declares Price: cloud.Metered but its package calls no meter "+
+				"(Authorize/Reserve/Record/Debit/RecordUsage).\nMetered means a meter downstream of "+
+				"the edge owns the charge, and the edge charges nothing on that promise — so "+
+				"with no meter the surface is silently free. Wire the meter, or name it in "+
+				"meteredWithoutAMeter with the reason.", name)
+		}
+	}
+
+	// CONTROL. A matcher that stops recognising a call would turn every case above
+	// into the "named" branch and pass. Pin the floor we measured.
+	if held < 20 {
+		t.Fatalf("only %d metered surfaces were seen to hold a meter; 20 do. The call "+
+			"matcher has moved and this test is asserting nothing", held)
+	}
+	t.Logf("%d of %d metered surfaces hold their own meter; %d meter through the AI wrapper; "+
+		"%d charge nothing", held, len(metered), len(meteredByAIWrapper), len(meteredWithoutAMeter))
+}
+
+// pricedAtZero names the metered surfaces whose meter is fully wired and whose
+// price is deliberately zero, with the reason. The meter is real — the gate runs,
+// the debit path exists — so Metered is the honest declaration; only the NUMBER is
+// zero, and turning it on is one environment variable.
+//
+// It is separate from meteredWithoutAMeter, and the difference is the whole point:
+// that list is a surface with no meter at all (a gap), this one is a surface with a
+// meter and a policy. A reader who cannot tell them apart cannot tell a decision
+// from an oversight.
+var pricedAtZero = map[string]string{
+	// Every sandbox class has been free since sandboxes existed, and shipping the
+	// meter must not also ship a price — the first anybody would hear of it is a 402
+	// on a button that worked yesterday. apps/sandbox/api.go's ResourceFee documents
+	// this at the knob (SANDBOX_FEE_CENTS[_EXEC|_DEV|_DESKTOP]) and a test pins it.
+	// Pricing it is a product decision, and a separate one from declaring it.
+	"sandbox": "every class free since inception; SANDBOX_FEE_CENTS turns it on — a values change, not a wiring gap",
+	// Preparing and furnishing a 1099 are the two acts apps/tax meters, and billing's
+	// catalog prices neither. The meter is wired around both at a literal zero, with
+	// no environment knob: the price arrives with the catalog's, not with a pod's env.
+	"tax": "no catalog price for preparing or furnishing a 1099; metered at zero until billing's catalog prices it",
+	// An operation (list the buckets, mint an upload URL) is priced in fractions of a
+	// cent per thousand, and a cent is the smallest price the knob states, so the
+	// default is free. CLOUD_S3_FEE_CENTS and CLOUD_SPACE_FEE_CENTS price it.
+	"s3":    "an operation costs less than the cent the knob states; CLOUD_S3_FEE_CENTS prices it",
+	"space": "an operation costs less than the cent the knob states; CLOUD_SPACE_FEE_CENTS prices it",
+}
+
+// meteredByAIWrapper are the surfaces whose spend is INFERENCE, metered once by the
+// wrapped AI client build.go installs (MeteredAIClient → metered_ai.go), not by a
+// meter of their own. A second meter would double-bill the same tokens.
+var meteredByAIWrapper = map[string]bool{
+	"ai":    true, // the completions surface itself.
+	"ask":   true, // holds deps.AI and answers questions with it.
+	"agent": true, // replays /v1/chat/completions in-process (aiCompleter).
+	"code":  true, // /ask synthesizes over deps.AI, /search embeds over deps.Embed.
+}
+
+// meteredWithoutAMeter is THE GAP, named so it is countable. Each entry declares
+// cloud.Metered — the platform requires standing before its handlers run — and then
+// charges nothing at all. They are not free by decision; nobody has priced them. The
+// list must only ever shrink.
+//
+// It was EMPTY, and todo is the one entry. auto and flow were the last two to
+// leave — both are typed passthroughs whose RUN op schedules real compute, so each
+// grew the meter its declaration had been claiming (apps/auto/billing.go,
+// apps/flow/billing.go: gate before the upstream call, debit after it succeeds, one
+// ResourceFeeCents knob read by both).
+//
+// todo's board moved to the forge, and its meter did not move with it. The
+// Bill.Authorize/Bill.Record pair lived in the store-backed ops (updateProject, listIssues,
+// getIssue and their siblings), which lost their routes in that move and kept their
+// code — so the meter that satisfied this test sat behind addresses nobody served,
+// and the live surface (forgeCreateIssue, forgePatchIssue, claimIssue) has charged
+// nothing since. Deleting the unrouted half made the gap visible rather than causing
+// it. Pricing a write that lands in git.hanzo.ai rather than in a local store is the
+// open question, and it is a pricing decision, not a typing one.
+var meteredWithoutAMeter = map[string]bool{
+	"task": true,
+}
+
+// packagePrice is packageCharges plus the question a wired meter cannot answer on
+// its own: does it charge a NUMBER?
+//
+// A meter priced at zero posts no ledger entry, so the surface is free while every
+// structural check reads it as metered — the client is wired, the standing is
+// required, and the debit is a no-op. plugin/sandbox passed this test that way
+// for its whole life. The evidence is the DEFAULT a fee resolves to:
+// cloud.FeeCents(env, kind, 0) is a surface that charges nothing unless an operator
+// types a number, and cloud.ResourceFeeCents (or any non-zero default) is one that
+// charges out of the box.
+//
+// priced is false only when the package resolves fees AND every one of them
+// defaults to zero. A package that resolves none is not making a claim either way —
+// its amount comes from somewhere this walk cannot see — so it is left alone.
+func packagePrice(t *testing.T, dir string) (charges, priced bool) {
+	fees, zeroFees := 0, 0
+	t.Helper()
+	files, err := filepath.Glob(filepath.Join(dir, "*.go"))
+	if err != nil {
+		t.Fatalf("glob %s: %v", dir, err)
+	}
+	// Sub-packages hold handlers too (apps/<name>/<sub>/…), so walk the whole tree.
+	_ = filepath.Walk(dir, func(p string, info os.FileInfo, err error) error {
+		if err == nil && !info.IsDir() && filepath.Ext(p) == ".go" && filepath.Dir(p) != dir {
+			files = append(files, p)
+		}
+		return nil
+	})
+
+	for _, f := range files {
+		if len(f) > 8 && f[len(f)-8:] == "_test.go" {
+			continue
+		}
+		src, err := os.ReadFile(f)
+		if err != nil {
+			t.Fatalf("read %s: %v", f, err)
+		}
+		file, err := parser.ParseFile(token.NewFileSet(), f, src, 0)
+		if err != nil {
+			continue // generated or build-tagged oddity; the other files answer.
+		}
+		ast.Inspect(file, func(n ast.Node) bool {
+			call, ok := n.(*ast.CallExpr)
+			if !ok {
+				return true
+			}
+			sel, ok := call.Fun.(*ast.SelectorExpr)
+			if !ok {
+				return true
+			}
+			// WHAT IT CHARGES, asked before WHETHER it charges — the switch below
+			// returns early on every name it does not recognise, and a fee resolver is
+			// one of those. Counted here so a zero default is visible at all.
+			//
+			// FeeCents(envPrefix, kind, def): a literal 0 default is a surface that
+			// charges nothing until an operator prices it. ResourceFeeCents carries the
+			// platform's $1.00 default, so it is always priced.
+			if sel.Sel.Name == "FeeCents" && len(call.Args) == 3 {
+				fees++
+				if lit, ok := call.Args[2].(*ast.BasicLit); ok && lit.Kind == token.INT && lit.Value == "0" {
+					zeroFees++
+				}
+			}
+			if sel.Sel.Name == "ResourceFeeCents" {
+				fees++
+			}
+			// Reserve(ctx, payer, kind, 0): a meter wired at a literal zero, with no
+			// resolver in front of it — the same fact as a zero FeeCents default,
+			// spelled without the knob.
+			if sel.Sel.Name == "Reserve" && len(call.Args) == 4 {
+				if lit, ok := call.Args[3].(*ast.BasicLit); ok && lit.Kind == token.INT && lit.Value == "0" {
+					fees++
+					zeroFees++
+				}
+			}
+			switch sel.Sel.Name {
+			// Authorize/Record are the meter's two verbs, and Reserve/Debit are the
+			// same two asked with a resolved cloud.Payer instead of loose strings (see
+			// payer.go) — a surface that composes them is metered exactly as much as one
+			// that does not. RecordUsage is the ledger's own, which zen reaches directly
+			// because it supplies the upstream module's gate and meter as function values.
+			case "Authorize", "Reserve", "Record", "Debit", "RecordUsage":
+				charges = true
+			// fare.Paid IS the meter, composed once for the whole metered-surface
+			// class instead of copied into each app: it opens with admit and closes
+			// with settle, and settle calls Bill.Record. Qualified by its package,
+			// because a bare "Paid" is a word any app might use for something else.
+			case "Paid":
+				if pkg, ok := sel.X.(*ast.Ident); !ok || pkg.Name != "fare" {
+					return true
+				}
+				charges = true
+			default:
+				return true
+			}
+			return true
+		})
+	}
+	return charges, !(fees > 0 && zeroFees == fees)
+}

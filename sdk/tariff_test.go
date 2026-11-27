@@ -200,8 +200,9 @@ func TestABillIsMadeOfFourThings(t *testing.T) {
 			t.Errorf("%s is published with nothing said about it", c.Name)
 		}
 	}
-	// The split is the reason a budget can refuse a completion and cannot refuse a
-	// render, so it is read here rather than left to prose.
+	// Two are quoted before they run and two are measured from what they used.
+	// The split is the reason a budget can refuse a completion and cannot refuse
+	// a render, so it is read here rather than left to prose.
 	quoted := map[string]bool{}
 	for _, c := range got {
 		quoted[c.Name] = c.Quoted

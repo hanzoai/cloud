@@ -1,0 +1,67 @@
+{
+  "$schema": "https://schemas.agentskills.io/discovery/0.2.0/schema.json",
+  "base_url": "https://api.zoo.ngo",
+  "brand": "zoo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://zoolabs.id",
+  "mcp": {
+    "description": "Model Context Protocol over JSON-RPC 2.0 — one POST per message, stateless, protocol revision 2026-07-28. tools/list answers without a credential with one tool per subsystem (its operations in the \"op\" enum) plus \"describe\", which returns one operation's input schema. tools/call names a subsystem tool and carries {\"op\": <operation>, \"input\": <its arguments>}; it takes the same bearer the REST API does, and a call that carries none is answered 401 with a WWW-Authenticate header naming the resource metadata at /.well-known/oauth-protected-resource, which names the authorization server to sign in at. The tool surface is the public contract: the operator's admin product is not offered, and a name that would disclose a secret or mutate an identity is withheld — the list says how many, under _meta.",
+    "method": "POST",
+    "url": "https://api.zoo.ngo/v1/mcp"
+  },
+  "skill_count": 6,
+  "skills": [
+    {
+      "description": "Read benchmark catalog: Is the canonical benchmarks this arena reads — the id, title, axis, item count, upstream source and direction of each, with native marking the ones the standardized harness runs today..",
+      "digest": "sha256:47a91da388e089ec12001bc509486c64513ab06535fae17db4420d1039f31a11",
+      "name": "benchmark_catalog",
+      "service": "benchmark",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/benchmark_catalog/SKILL.md"
+    },
+    {
+      "description": "Read benchmark claims: Lists the effective claims the caller may read, each labelled with the org that made it and the user who recorded it..",
+      "digest": "sha256:b83c9fcd81023c1702b33b37b7a3e5add9fa361f65265a20ae8df0cdd90d50a5",
+      "name": "benchmark_claims",
+      "service": "benchmark",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/benchmark_claims/SKILL.md"
+    },
+    {
+      "description": "Read benchmark compare: Is the ONLY valid arm-vs-arm test: it pairs the two models on the items BOTH completed, and answers rescue and damage counts with an exact-McNemar p..",
+      "digest": "sha256:441941868874e42ed3631075e2eaef3e25472ce2ac5c6cc8f4c66981cd97ae12",
+      "name": "benchmark_compare",
+      "service": "benchmark",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/benchmark_compare/SKILL.md",
+      "works": [
+        "research"
+      ]
+    },
+    {
+      "description": "Read benchmark history: Returns each model's measured score per run over time, oldest first, with the change between runs..",
+      "digest": "sha256:258064be71d76bcf5d2ceb0e752854e4a6015343dc9f48c75a81bbd4b205aaee",
+      "name": "benchmark_history",
+      "service": "benchmark",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/benchmark_history/SKILL.md"
+    },
+    {
+      "description": "Read benchmark leaderboard: Answers one row per model for the benchmark named — what our own harness measured, beside what the vendor claims, and the gap between them..",
+      "digest": "sha256:e398f842910b8c1a1a65d4fe4fd0c5ebbdd06e64109e4f7bd20c412e33df2f87",
+      "name": "benchmark_leaderboard",
+      "service": "benchmark",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/benchmark_leaderboard/SKILL.md"
+    },
+    {
+      "description": "Read benchmark presets: Are the router blends available to compose from — a named set of model arms, the rank they escalate through and the panel width that bounds fan-out — each named for the model layer as enso-<name>..",
+      "digest": "sha256:ddf8362b2533ffb8c3b46996d4efb64460a4826f057a2aeae471c2f66091e4c9",
+      "name": "benchmark_presets",
+      "service": "benchmark",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/benchmark_presets/SKILL.md"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

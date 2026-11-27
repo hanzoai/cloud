@@ -205,7 +205,7 @@ func TestDenialKeepsAnUpstreamStatus(t *testing.T) {
 // TestUnauthorizedNamesTheScheme: a 401 carries WWW-Authenticate (RFC 9110
 // §11.6.1), so a client can tell which credential would have been accepted, and
 // names the resource metadata on the host it called (RFC 9728 §5.1,
-// #420). A handler that issued its own challenge keeps it.
+// hanzo-inc/cloud#420). A handler that issued its own challenge keeps it.
 func TestUnauthorizedNamesTheScheme(t *testing.T) {
 	resp, err := newErrApp(zip.ErrUnauthorized("no key")).Test(httptest.NewRequest(http.MethodGet, "/v1/thing", nil), zip.TestConfig{Timeout: 30 * time.Second, FailOnTimeout: true})
 	if err != nil {

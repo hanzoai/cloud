@@ -1,0 +1,212 @@
+package auto
+
+import (
+	"encoding/json"
+	"net/http"
+	"testing"
+
+	"github.com/hanzoai/cloud/apps/provider"
+	"github.com/hanzoai/cloud/internal/sqltest"
+)
+
+// TestOrgGating401 proves every data endpoint refuses a request with NO validated
+// principal (the anonymous-forge path). A data plane never serves an unauthenticated
+// principal.
+func TestOrgGating401(t *testing.T) {
+	sqltest.Engines(t, func(t *testing.T, _ sqltest.Open) {
+		app := newApp(t)
+		gated := []struct {
+			method, path string
+		}{
+			{http.MethodGet, "/v1/auto/provider"},
+			{http.MethodGet, "/v1/auto/flows"},
+			{http.MethodPost, "/v1/auto/flows"},
+			{http.MethodGet, "/v1/auto/flows/x"},
+			{http.MethodGet, "/v1/auto/runs"},
+			{http.MethodPost, "/v1/auto/flows/x/run"},
+		}
+		for _, g := range gated {
+			if r := req(t, app, g.method, g.path, "", nil); r.Code != http.StatusUnauthorized {
+				t.Fatalf("%s %s without principal want 401, got %d (%s)", g.method, g.path, r.Code, r.Body)
+			}
+		}
+	})
+}
+
+// TestConnectorsCatalog: the /connectors endpoint returns the full connector
+// catalogue — every generated piece plus every connector with actions of its own
+// (core/slack/github/google). The count is not pinned to a generation, so the
+// invariant is ConnectorCount==len(Connectors), the whole catalog is there, and a
+// piece whose program is vendored is runnable. The retired /providers path is gone.
+func TestConnectorsCatalog(t *testing.T) {
+	sqltest.Engines(t, func(t *testing.T, _ sqltest.Open) {
+		app := newApp(t)
+		r := req(t, app, http.MethodGet, "/v1/auto/provider", "acme", nil)
+		if r.Code != http.StatusOK {
+			t.Fatalf("connectors want 200, got %d (%s)", r.Code, r.Body)
+		}
+		var cat Catalog
+		if err := json.Unmarshal(r.Body, &cat); err != nil {
+			t.Fatalf("connectors body: %v (%s)", err, r.Body)
+		}
+		if cat.ConnectorCount != len(cat.Connectors) || len(cat.Connectors) < 700 {
+			t.Fatalf("catalogue inconsistent/too small: count=%d len=%d", cat.ConnectorCount, len(cat.Connectors))
+		}
+		byName := map[string]ConnectorMetadata{}
+		for _, p := range cat.Connectors {
+			byName[p.Name] = p
+		}
+		for _, want := range []string{"core", "slack", "github", "google"} {
+			if _, ok := byName[want]; !ok {
+				t.Fatalf("catalogue missing %q: %+v", want, cat.Connectors)
+			}
+		}
+		if byName["slack"].Auth.Type != "oauth2" || !byName["slack"].Auth.Required {
+			t.Fatalf("slack auth descriptor wrong: %+v", byName["slack"].Auth)
+		}
+		// A piece whose program is vendored is runnable and carries its declared
+		// actions with their inputs; one that needs an SDK is catalogued, not runnable.
+		bitly := byName["bitly"]
+		if !bitly.Runnable || bitly.Auth.Type != "custom_auth" || len(bitly.Actions) == 0 || bitly.LogoURL != "/v1/provider/bitly/logo" {
+			t.Fatalf("bitly entry wrong: %+v", bitly)
+		}
+		if byName["gmail"].Runnable || len(byName["gmail"].Actions) == 0 {
+			t.Fatalf("gmail should be catalogued with its actions and not runnable: %+v", byName["gmail"].Runnable)
+		}
+		if cat.RunnableCount < 400 {
+			t.Fatalf("runnableCount = %d, want the vendored programs", cat.RunnableCount)
+		}
+
+		// The retired /providers path is GONE, not aliased. An alias is how a second
+		// name survives a rename, and this one had outlived its argument: it forwarded
+		// verbatim to /connectors, so every client reading the document saw one
+		// capability at two addresses and had to pick.
+		if gone := req(t, app, http.MethodGet, "/v1/auto/providers", "acme", nil); gone.Code != http.StatusNotFound {
+			t.Fatalf("/providers answered %d — the retired name is back", gone.Code)
+		}
+	})
+}
+
+// TestFlowCRUDHTTP exercises the flow lifecycle over HTTP with a validated principal,
+// and proves cross-tenant invisibility at the HTTP boundary.
+func TestFlowCRUDHTTP(t *testing.T) {
+	sqltest.Engines(t, func(t *testing.T, _ sqltest.Open) {
+		app := newApp(t)
+
+		// Create a flow with an initial draft version.
+		create := req(t, app, http.MethodPost, "/v1/auto/flows", "acme", map[string]any{
+			"displayName": "Nightly Sync",
+			"trigger": map[string]any{
+				"name": "trigger", "type": TriggerTypeProvider, "displayName": "Start",
+				"strategy": string(provider.StrategyManual),
+				"settings": map[string]any{"pieceName": "core", "triggerName": "manual"},
+			},
+		})
+		if create.Code != http.StatusCreated {
+			t.Fatalf("create flow want 201, got %d (%s)", create.Code, create.Body)
+		}
+		var pf populatedFlow
+		if err := json.Unmarshal(create.Body, &pf); err != nil {
+			t.Fatalf("create body: %v (%s)", err, create.Body)
+		}
+		if pf.Org != "acme" {
+			t.Fatalf("flow projectId must be the org, got %q", pf.Org)
+		}
+		if pf.Version == nil || pf.Version.DisplayName != "Nightly Sync" {
+			t.Fatalf("create must return the initial version: %+v", pf.Version)
+		}
+		flowID := pf.ID
+
+		// GET returns the flow + latest version.
+		get := req(t, app, http.MethodGet, "/v1/auto/flows/"+flowID, "acme", nil)
+		if get.Code != http.StatusOK {
+			t.Fatalf("get flow want 200, got %d (%s)", get.Code, get.Body)
+		}
+
+		// A different org cannot see it.
+		if r := req(t, app, http.MethodGet, "/v1/auto/flows/"+flowID, "globex", nil); r.Code != http.StatusNotFound {
+			t.Fatalf("globex GET acme flow want 404, got %d", r.Code)
+		}
+		// A different org's list is empty.
+		rl := req(t, app, http.MethodGet, "/v1/auto/flows", "globex", nil)
+		var listOut struct {
+			Data []Flow `json:"data"`
+		}
+		_ = json.Unmarshal(rl.Body, &listOut)
+		if len(listOut.Data) != 0 {
+			t.Fatalf("globex must see zero flows, got %d", len(listOut.Data))
+		}
+
+		// DELETE.
+		if r := req(t, app, http.MethodDelete, "/v1/auto/flows/"+flowID, "acme", nil); r.Code != http.StatusNoContent {
+			t.Fatalf("delete flow want 204, got %d (%s)", r.Code, r.Body)
+		}
+		if r := req(t, app, http.MethodGet, "/v1/auto/flows/"+flowID, "acme", nil); r.Code != http.StatusNotFound {
+			t.Fatalf("deleted flow GET want 404, got %d", r.Code)
+		}
+	})
+}
+
+// TestOperationsApply proves the FlowOperation apply mutates the flow's version tree
+// (ADD_ACTION into the linear chain) and honestly rejects an unsupported tree op.
+func TestOperationsApply(t *testing.T) {
+	sqltest.Engines(t, func(t *testing.T, _ sqltest.Open) {
+		app := newApp(t)
+
+		create := req(t, app, http.MethodPost, "/v1/auto/flows", "acme", map[string]any{
+			"displayName": "Builder Flow",
+			"trigger": map[string]any{
+				"name": "trigger", "type": TriggerTypeProvider, "displayName": "Start",
+				"strategy": string(provider.StrategyManual),
+				"settings": map[string]any{"pieceName": "core", "triggerName": "manual"},
+			},
+		})
+		var pf populatedFlow
+		_ = json.Unmarshal(create.Body, &pf)
+		flowID := pf.ID
+
+		// ADD_ACTION: append a core.http_request step after the trigger.
+		addReq := map[string]any{
+			"type": string(OpAddAction),
+			"request": map[string]any{
+				"parentStep": "",
+				"action": map[string]any{
+					"name": "http1", "type": ActionTypeProvider, "displayName": "Fetch",
+					"settings": map[string]any{"pieceName": "core", "actionName": "http_request", "input": map[string]any{"url": "https://example.com"}},
+				},
+			},
+		}
+		r := req(t, app, http.MethodPost, "/v1/auto/flows/"+flowID+"/operations", "acme", addReq)
+		if r.Code != http.StatusOK {
+			t.Fatalf("ADD_ACTION want 200, got %d (%s)", r.Code, r.Body)
+		}
+		var v FlowVersion
+		if err := json.Unmarshal(r.Body, &v); err != nil {
+			t.Fatalf("operation body: %v (%s)", err, r.Body)
+		}
+		if v.Trigger == nil || v.Trigger.NextAction == nil || v.Trigger.NextAction.Name != "http1" {
+			t.Fatalf("ADD_ACTION must insert http1 into the chain: %+v", v.Trigger)
+		}
+
+		// CHANGE_NAME.
+		nameReq := map[string]any{"type": string(OpChangeName), "request": map[string]any{"displayName": "Renamed"}}
+		rn := req(t, app, http.MethodPost, "/v1/auto/flows/"+flowID+"/operations", "acme", nameReq)
+		var v2 FlowVersion
+		_ = json.Unmarshal(rn.Body, &v2)
+		if v2.DisplayName != "Renamed" {
+			t.Fatalf("CHANGE_NAME must rename, got %q", v2.DisplayName)
+		}
+
+		// An ADD_ACTION planting a ROUTER (tree op) is honestly rejected 422.
+		badReq := map[string]any{
+			"type": string(OpAddAction),
+			"request": map[string]any{
+				"parentStep": "http1",
+				"action":     map[string]any{"name": "router1", "type": ActionTypeRouter, "displayName": "Route"},
+			},
+		}
+		if rb := req(t, app, http.MethodPost, "/v1/auto/flows/"+flowID+"/operations", "acme", badReq); rb.Code != http.StatusUnprocessableEntity {
+			t.Fatalf("ROUTER add want 422 (unsupported), got %d (%s)", rb.Code, rb.Body)
+		}
+	})
+}

@@ -1,0 +1,57 @@
+version: "1"
+title: Research venture
+sections:
+  - {id: charter, title: Venture charter, order: 1}
+  - {id: team, title: Team design, order: 2}
+  - {id: work, title: First working session, order: 3}
+  - {id: review, title: Studio review, order: 4}
+steps:
+  - id: vs-brief
+    section: charter
+    title: Choose the decision this venture must make
+    detail: Record the customer, problem, evidence available, current uncertainty, accountable human, and the decision this first working session should inform.
+  - id: vs-boundary
+    section: charter
+    title: Confirm the venture workspace and budget
+    detail: Identify its Hanzo organization, human reviewers, allowed sources, connector identities, budget owner and spend ceiling. Record which studio materials this venture may reuse.
+    deps: [vs-brief]
+  - id: vs-chart
+    section: team
+    title: Design the team and reporting lines
+    detail: Give the venture one lead. Map the seven functions to leads, identify shared services, and justify the specialist roles this brief needs.
+    deps: [vs-brief]
+  - id: vs-role-specs
+    section: team
+    title: Write job descriptions that can drive assignments
+    detail: For each role record its manager, expertise, responsibilities, expected work product, allowed sources and tools, budget, and when to hand work to a person.
+    deps: [vs-chart, vs-boundary]
+  - id: vs-roster
+    section: team
+    title: Approve the roster and link each role to an agent
+    detail: Have the studio operator accept or revise the roster. Record the agent identity for each accepted role, its manager and its version. Test one delegation before starting portfolio work.
+    deps: [vs-role-specs]
+  - id: vs-run
+    section: work
+    title: Assign a brief through the venture lead
+    detail: Choose one nonconfidential brief. The lead assigns tasks to named specialists and collects drafts, unresolved questions, citations and usage under a single run.
+    deps: [vs-roster]
+  - id: vs-evidence
+    section: work
+    title: Have a domain reviewer check the evidence
+    detail: Compare the brief with the source material. Record unsupported or conflicting claims, material corrections and minutes of expert review. Assign any field work or interviews to a person.
+    deps: [vs-run]
+  - id: vs-decision
+    section: review
+    title: Record the decision and any external action
+    detail: Record the human decision and next owner. Route any proposed external message, calendar event, or repository push to the action's execution-time approval flow. Updating this checklist records progress only.
+    deps: [vs-evidence]
+  - id: vs-gap
+    section: review
+    title: Review the first overnight role proposal
+    detail: Review a scheduled report showing repeated gaps, affected tasks, candidate role, expected benefit and added cost. Accept, revise or reject. Record the roster revision or the reason it stayed as it was.
+    deps: [vs-run]
+  - id: vs-review
+    section: review
+    title: Review venture evidence and choose the next milestone
+    detail: Compare outcomes, reviewer time and costs with the prior workflow. Decide whether to continue, change direction, pause or spin out. Store the decision with the venture record.
+    deps: [vs-decision, vs-gap]

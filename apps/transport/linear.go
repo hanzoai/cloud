@@ -1,0 +1,52 @@
+package transport
+
+import (
+	"context"
+	"strings"
+	"time"
+
+	"github.com/hanzoai/cloud/client"
+	"github.com/hanzoai/cloud/sdk"
+)
+
+// linear.go is the Linear transport: an issue is a channel, its comments the
+// thread, and a comment that mentions @hanzo is a turn. The integrations Linear
+// webhook normalizes the delivery; the reply is a comment posted with the key of
+// the person who bound the organization (integrations planeChatSend).
+
+// linearEndpoint is the send path; tests spy it, prod never repoints.
+var linearEndpoint = func(ctx context.Context, org, channel, text string) (string, error) {
+	return post(ctx, org, client.ChatSendIn{Provider: "linear", Channel: channel, Text: text})
+}
+
+var linearTransport = transport{
+	id:        "linear",
+	caps:      capabilities{DM: false, Group: false, Thread: true},
+	normalize: linearNormalize,
+	send:      linearEgress,
+}
+
+// linearNormalize maps a Linear Inbound (ExternalID = organization id, Channel =
+// issue id, DedupeKey = comment id) into the envelope. Every issue is a thread.
+func linearNormalize(ev client.TransportIngestIn) (Message, bool) {
+	if ev.Channel == "" {
+		return Message{}, false
+	}
+	return Message{
+		Transport:   "linear",
+		Account:     strings.ToLower(ev.ExternalID),
+		Sender:      Sender{ExternalID: ev.User, Org: ev.Org},
+		Channel:     Channel{ID: ev.Channel, Kind: ChannelThread},
+		Text:        ev.Text,
+		Idempotency: ev.DedupeKey,
+	}, true
+}
+
+// linearEgress posts a comment on the issue.
+func linearEgress(ctx context.Context, _ *cloud.Service[state], org string, m Message) (Delivery, error) {
+	id, err := linearEndpoint(ctx, org, m.Channel.ID, renderText(m))
+	if err != nil {
+		return Delivery{}, err
+	}
+	return Delivery{MessageID: id, Timestamp: time.Now().Unix()}, nil
+}

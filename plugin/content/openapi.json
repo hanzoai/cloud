@@ -1,0 +1,707 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Hanzo Cloud API",
+    "description": "Package content is marketing content from draft to published, on every channel.",
+    "version": "v1"
+  },
+  "servers": [
+    {
+      "url": "https://api.hanzo.ai"
+    }
+  ],
+  "security": [
+    {
+      "bearer": []
+    }
+  ],
+  "tags": [
+    {
+      "name": "content"
+    }
+  ],
+  "paths": {
+    "/v1/content/board": {
+      "get": {
+        "operationId": "get_content_board",
+        "summary": "Aggregates the caller org's marketing content across every publishable content type into ONE queue board — the cross-type read the framework's per-DocType list cannot give.",
+        "description": "Aggregates the caller org's marketing content across every publishable\ncontent type into ONE queue board — the cross-type read the framework's\nper-DocType list cannot give. It never fails on a partial outage: a content type\nthe org has not installed, or one whose search errors, is skipped and logged\nrather than failing the whole board.",
+        "tags": [
+          "content"
+        ],
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "description": "Status keeps only items in one lifecycle state (draft, in_review, approved,\nqueued, published, archived). An undefined state is refused.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "queued"
+          },
+          {
+            "name": "project",
+            "in": "query",
+            "required": false,
+            "description": "Project keeps only items in one brand/site sub-scope.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "doctype",
+            "in": "query",
+            "required": false,
+            "description": "DocType keeps only one content type; omitted, the board spans every\npublishable type. An unknown type is refused.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Limit caps the rows returned, clamped to 1000. Defaults to 200, which is also\nwhat a non-positive or unparseable value takes.",
+            "schema": {
+              "format": "int64",
+              "type": "integer"
+            },
+            "example": 50
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/content.boardPage"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/content/channels": {
+      "get": {
+        "operationId": "get_content_channels",
+        "summary": "Lists the distribution channels the caller's org has connected — the social integrations a publish can target.",
+        "description": "Lists the distribution channels the caller's org has connected — the\nsocial integrations a publish can target. A deployment with no distribution edge\nwired answers 503 rather than an empty list that would read as \"no channels\".",
+        "tags": [
+          "content"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/content.channelList"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/content/generate": {
+      "post": {
+        "operationId": "post_content_generate",
+        "summary": "Draft a provider of marketing content and file it in the CMS as a draft.",
+        "description": "Draft a provider of marketing content and file it in the CMS as a draft.\n\nAnswers 201 with the created draft's identity — {doctype, name, status} — and the\ndocument itself lands in the CMS through the SAME validate and lifecycle-hook\npipeline an ordinary create runs. This is a WRITE, not a preview: there is no\ndry-run, and every call that succeeds leaves a document behind.\n\n`doctype` picks which of two generation planes runs, and they are the only two.\nCampaign and SocialPost are drafted as brand COPY on the platform AI plane (zen5 by\ndefault, overridable per request with `model` or per deployment); Asset is a studio\nimage render the AI plane never sees. Everything else about the call is identical.\n\nMONEY, metered in exactly one place per mode and never both. Copy rides the\nplatform's own inference meter — the org's balance is authorised before the model\ncall and debited at the exact token cost after — so content never re-bills it. A\nstudio render is invisible to that meter, so content is the sole meter for it: the\norg is gated BEFORE the GPU compute and refused 402 when out of funds or over its\nspend cap, and the debit is recorded only once the render actually returns, because\nthe billable event is the consumed compute and not the CMS row. `project` rides the\nBODY rather than a server-minted identity claim, so it attributes spend but a\nproject-scoped cap stays soft on it — the org is the value that is enforced.\n\nThe org is the caller's own, resolved once from the validated principal and never\nread from the body; a caller without one is refused 401. Status is not the\ngenerator's to choose: a generated item is ALWAYS a draft, and the storage-boundary\nhook enforces that a second time.\n\nIt fails closed rather than inventing anything. An unknown content type is 404 and a\ndeployment whose marketing module is not installed is 409 naming the install call.\nAn AI plane or studio that is unconfigured or unreachable, a graph the studio\nrejects, and a render that does not return in time all degrade to 503 — never\nfabricated copy, never a fake render. A `source_media` that fails the SSRF and\ntraversal validator is 400 raised before the billing gate and before the studio is\ncontacted, so a hostile source never costs the caller anything.",
+        "tags": [
+          "content"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/content.GenerateInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/content.GenerateResult"
+                }
+              }
+            },
+            "description": "created"
+          },
+          "402": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/content.GenerateResult"
+                }
+              }
+            },
+            "description": "payment required"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/content/lifecycle": {
+      "get": {
+        "operationId": "get_content_lifecycle",
+        "summary": "Returns the ONE marketing-content state machine: the ordered lifecycle states, which state a fresh document starts in, which one is publicly live, and the legal successors of every state.",
+        "description": "Returns the ONE marketing-content state machine: the ordered\nlifecycle states, which state a fresh document starts in, which one is publicly\nlive, and the legal successors of every state. The console builds its board\ncolumns and its per-item action buttons from this single answer, so the UI and\nthe write-time enforcement hook can never disagree about what is legal.",
+        "tags": [
+          "content"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/content.stateGraph"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/content/publish": {
+      "post": {
+        "operationId": "post_content_publish",
+        "summary": "Publish distributes one CMS content item to the channels recorded on it and returns the honest per-channel outcome.",
+        "description": "Publish distributes one CMS content item to the channels recorded on it and\nreturns the honest per-channel outcome. The item names itself — its caption,\nmedia and channel list are read from the stored document, not from this request.\nIt is idempotent per channel (a channel already posted for this item is skipped),\nand a publish that loses the per-item lease to a live publisher answers status\n\"in_progress\" having posted nothing.",
+        "tags": [
+          "content"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "doctype": "marketing.SocialPost",
+                "name": "spring-teaser"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/content.PublishInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/content.PublishResult"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/content/{doctype}/{name}/transition": {
+      "post": {
+        "operationId": "post_content_by_doctype_by_name_transition",
+        "summary": "Moves one content item to a new lifecycle state and, on the move to published, fans it out to the item's channels.",
+        "description": "Moves one content item to a new lifecycle state and, on the move to\npublished, fans it out to the item's channels. The edge must be legal for the\nitem's current state — an illegal move is refused with 409 — and the status write\nre-validates it at the storage boundary. Distribution is best effort: its honest\nstate is reported on the result and a distribution failure never rolls the status\nchange back.",
+        "tags": [
+          "content"
+        ],
+        "parameters": [
+          {
+            "name": "doctype",
+            "in": "path",
+            "required": true,
+            "description": "DocType is the content type to act on, from the path.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "marketing.SocialPost"
+          },
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "description": "Name is the document to act on, from the path.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "spring-teaser"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "doctype": "marketing.SocialPost",
+                "name": "spring-teaser",
+                "to": "published"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/content.transitionIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/content.TransitionResult"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "content.Channel": {
+        "properties": {
+          "disabled": {
+            "description": "Disabled is true for a channel the org switched off at the social edge. It\nis still listed — this is what the org has CONNECTED, not what it can post\nto — but a publish never targets it, neither by name nor as part of the\n\"every channel\" default.",
+            "type": "boolean"
+          },
+          "id": {
+            "description": "ID is the social integration id a post targets. It is the exact value to put\nin a content item's `channels` list to reach this one connected account.",
+            "type": "string"
+          },
+          "name": {
+            "description": "Name is the account label as the org connected it — the handle a human\nrecognises. It is never an address: a publish resolves channels by ID or by\nProvider and never by this.",
+            "type": "string"
+          },
+          "provider": {
+            "description": "Provider is the network behind the integration: \"x\", \"instagram\", \"tiktok\"\nand the rest of what the org connected. Naming a provider in a publish\ntargets EVERY connected account of it, so it is the coarse handle where ID\nis the precise one.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "content.ChannelResult": {
+        "properties": {
+          "channel": {
+            "description": "the social integration id targeted",
+            "type": "string"
+          },
+          "error": {
+            "description": "short reason, when it failed",
+            "type": "string"
+          },
+          "externalId": {
+            "description": "social post id, when it went out",
+            "type": "string"
+          },
+          "provider": {
+            "description": "\"x\" | \"instagram\" | ... when known",
+            "type": "string"
+          },
+          "status": {
+            "description": "\"distributed\" | \"scheduled\" | \"failed\"",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "content.GenerateInput": {
+        "properties": {
+          "brief": {
+            "description": "the brief/goal driving copy generation",
+            "type": "string"
+          },
+          "channels": {
+            "description": "target channels (SocialPost)",
+            "type": "string"
+          },
+          "design": {
+            "description": "studio design slug (asset source)",
+            "type": "string"
+          },
+          "doctype": {
+            "description": "marketing.Campaign | marketing.SocialPost | marketing.Asset",
+            "type": "string"
+          },
+          "kind": {
+            "description": "asset kind: ecom|product|lifestyle|hover|hero",
+            "type": "string"
+          },
+          "model": {
+            "description": "optional zen model override (copy)",
+            "type": "string"
+          },
+          "product": {
+            "description": "commerce product handle (copy context)",
+            "type": "string"
+          },
+          "project": {
+            "description": "brand/site sub-scope (billing + tenancy axis)",
+            "type": "string"
+          },
+          "source_media": {
+            "description": "asset source image (design CAD/photo)",
+            "type": "string"
+          },
+          "title": {
+            "description": "optional explicit title",
+            "type": "string"
+          },
+          "tone": {
+            "description": "tone override for a single draft",
+            "type": "string"
+          },
+          "voice": {
+            "description": "brand-voice guidance for the copy director",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "content.GenerateResult": {
+        "properties": {
+          "doctype": {
+            "description": "the marketing type the draft was filed as",
+            "type": "string"
+          },
+          "name": {
+            "description": "the new document's name — its address for every later call",
+            "type": "string"
+          },
+          "status": {
+            "description": "always \"draft\"; the lifecycle owns the initial state",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "content.PublishInput": {
+        "properties": {
+          "doctype": {
+            "description": "DocType is the content type holding the item: Campaign, SocialPost or Asset.\nAny other name is refused as an unknown content type.",
+            "type": "string"
+          },
+          "name": {
+            "description": "Name is the document within that type — the item to distribute. Its caption,\nmedia and channel list come off the stored document, so this names WHICH\nitem and says nothing about what goes out.",
+            "type": "string"
+          },
+          "scheduleAt": {
+            "description": "ScheduleAt hands a future go-live to the channel's own scheduler, as an\nISO-8601 time. Empty posts now.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "content.PublishResult": {
+        "properties": {
+          "channels": {
+            "description": "Channels is the channel list read off the content document — integration ids\nor provider names, as the item declares them. Empty when the item names\nnone, which targets every connected, enabled channel. It is what was ASKED\nfor; Results is what happened.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "externalIds": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "description": "ExternalIDs maps channel id → the post id that channel returned, merged with\neverything earlier publishes recorded. Successes only, and it is the\nidempotency ledger: a channel named here is skipped by every later publish\nof this item, so the map only ever grows.",
+            "type": "object"
+          },
+          "results": {
+            "description": "Results is the outcome per channel — which went out, which did not and why —\ncovering the whole fan-out including failures, so partial success is never\nflattened into one verdict. A channel the org has not connected appears here\nas failed with \"channel not connected\".",
+            "items": {
+              "$ref": "#/components/schemas/content.ChannelResult"
+            },
+            "type": "array"
+          },
+          "status": {
+            "description": "Status is the ONE headline, drawn from: \"distributed\" (something is on\nrecord and went out now), \"scheduled\" (same, handed to the channel's own\nscheduler for later), \"failed\" (nothing is on record — this fan-out missed\nentirely and no earlier one landed), \"in_progress\" (another publisher holds\nthe item, so this call posted NOTHING and the caller retries), and\n\"not_configured\" (no distribution edge is wired; a transition records it\ninstead of failing). A partial fan-out is \"distributed\"/\"scheduled\", never\n\"failed\" — the per-channel truth is in Results.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "content.StorefrontResult": {
+        "properties": {
+          "imageUrl": {
+            "description": "ImageURL is the absolute URL the listing's headerImage now points at. The\nimage is REFERENCED, not copied — it stays in the org's studio output\nbucket, so removing it there empties the storefront tile.",
+            "type": "string"
+          },
+          "slug": {
+            "description": "Slug is the product handle the image was attached to. It IS the asset's\n`design` field — that equality is the whole join between the studio and the\ncatalog, which is why an asset with no design produces no storefront result\nat all.",
+            "type": "string"
+          },
+          "status": {
+            "description": "Status is one of \"published\" (the product image was set), \"not_configured\"\n(no commerce edge, no store provisioned for the org, or a token that is not\nadmin on the store — a fail-closed no-op) or \"failed\" (commerce answered and\nerrored). None of the three fails the transition that produced it.",
+            "type": "string"
+          },
+          "store": {
+            "description": "Store is the commerce store id the image landed in, resolved for the org\nmid-call. Present only on \"published\": a result that never got that far\ncarries none.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "content.TransitionResult": {
+        "properties": {
+          "distribution": {
+            "$ref": "#/components/schemas/content.PublishResult",
+            "description": "Distribution is the channel fan-out this move triggered. Present ONLY on the\nmove to published, the single edge that distributes — so its absence means\nno fan-out was attempted, never that one failed quietly. A fan-out that DID\nfail is present carrying its own honest status, because distribution never\nrolls the status change back."
+          },
+          "doctype": {
+            "description": "DocType is the content type that moved — Campaign, SocialPost or Asset —\nechoed from the path.",
+            "type": "string"
+          },
+          "from": {
+            "description": "From is the state the item held when it was read. A document carrying no\nstatus yet reads as \"draft\".",
+            "type": "string"
+          },
+          "name": {
+            "description": "Name is the document that moved, echoed from the path.",
+            "type": "string"
+          },
+          "storefront": {
+            "$ref": "#/components/schemas/content.StorefrontResult",
+            "description": "Storefront is the catalog side effect, present only when a published Asset\nwas product imagery — it carries a design and a kind of ecom, product or\nlifestyle. Absent for everything else, so absence reads as \"not catalog\nimagery\" rather than \"the catalog failed\"."
+          },
+          "to": {
+            "description": "To is the state it holds now. From == To on an idempotent re-transition,\nwhich is legal and is where a caller that lost a publish race lands.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "content.boardItem": {
+        "properties": {
+          "doctype": {
+            "description": "DocType is which content type the row came from: Campaign, SocialPost or\nAsset. The board spans all three at once, so this is what tells them apart.",
+            "type": "string"
+          },
+          "name": {
+            "description": "Name is the document within that type. (doctype, name) is the pair every\n/v1/content write addresses an item by.",
+            "type": "string"
+          },
+          "project": {
+            "description": "Project is the brand/site sub-scope within the org. Absent for an item held\nat org level rather than under one brand.",
+            "type": "string"
+          },
+          "status": {
+            "description": "Status is the lifecycle state: draft, in_review, approved, queued, published\nor archived. It decides what a reader may see — the public site pulls\nexactly \"published\" and nothing else — so it is a visibility fact, not a\nworkflow label.",
+            "type": "string"
+          },
+          "title": {
+            "description": "Title is the item's headline, read from its type's own title field. Empty\nfor a document that has none.",
+            "type": "string"
+          },
+          "updatedAt": {
+            "description": "UpdatedAt is unix seconds of the document's last write, and the key the\nboard sorts on, newest first.",
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "content.boardPage": {
+        "properties": {
+          "count": {
+            "description": "Count is the number of rows in THIS page — never the org's total.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "data": {
+            "description": "Data is the matching items, most recently updated first.",
+            "items": {
+              "$ref": "#/components/schemas/content.boardItem"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "content.channelList": {
+        "properties": {
+          "data": {
+            "description": "Data is every social channel the caller's org has connected, disabled ones\nincluded (Disabled says which).",
+            "items": {
+              "$ref": "#/components/schemas/content.Channel"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "content.stateGraph": {
+        "properties": {
+          "initial": {
+            "description": "Initial is the state a fresh document starts in — \"draft\". A stored document\nwith no status at all is read as this too.",
+            "type": "string"
+          },
+          "live": {
+            "description": "Live is the ONE state that is publicly readable — \"published\". The site\npulls only documents in it, so reaching Live IS site-publish; every other\nstate is invisible to a reader.",
+            "type": "string"
+          },
+          "states": {
+            "description": "States is every lifecycle state in canonical order: draft, in_review,\napproved, queued, published, archived. The console lays its board columns\nout in exactly this order, so the order is part of the answer.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "transitions": {
+            "additionalProperties": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "description": "Transitions maps each state to the states it may move to. A target absent\nfrom a state's list is REFUSED, at the endpoint and again at the storage\nboundary — this is the whole rule, not a hint for the UI. A state never\nlists itself; a move that changes nothing is always legal.",
+            "type": "object"
+          }
+        },
+        "type": "object"
+      },
+      "content.transitionIn": {
+        "properties": {
+          "doctype": {
+            "description": "DocType is the content type to act on, from the path.",
+            "type": "string"
+          },
+          "name": {
+            "description": "Name is the document to act on, from the path.",
+            "type": "string"
+          },
+          "scheduleAt": {
+            "description": "ScheduleAt is an ISO-8601 go-live time handed to the channel's own scheduler;\n\"\" distributes now.",
+            "type": "string"
+          },
+          "to": {
+            "description": "To is the lifecycle state to move to. Required, and the move must be a legal\nedge from the item's current state.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "problem-details": {
+        "description": "An RFC 9457 problem document.",
+        "properties": {
+          "code": {
+            "description": "A stable token a client can branch on, when the refusal names one.",
+            "type": "string"
+          },
+          "detail": {
+            "description": "What was refused, for a person to read.",
+            "type": "string"
+          },
+          "status": {
+            "description": "The HTTP status.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "title": {
+            "description": "The status's reason phrase.",
+            "type": "string"
+          },
+          "type": {
+            "description": "about:blank",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "status",
+          "detail"
+        ],
+        "type": "object"
+      }
+    },
+    "securitySchemes": {
+      "bearer": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "The caller's credential, sent as `Authorization: Bearer \u003ctoken\u003e`. It is either an access token minted by Hanzo IAM or an API key (pk-/sk-). X-Authorization, and HTTP Basic carrying the token as the password, are accepted spellings of the same header for clients that cannot set Authorization; a browser presents the session cookie instead. Every operation requires it unless it says `security: []`."
+      }
+    }
+  }
+}

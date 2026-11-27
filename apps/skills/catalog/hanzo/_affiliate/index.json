@@ -1,0 +1,40 @@
+{
+  "$schema": "https://schemas.agentskills.io/discovery/0.2.0/schema.json",
+  "base_url": "https://api.hanzo.ai",
+  "brand": "hanzo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://hanzo.id",
+  "mcp": {
+    "description": "Model Context Protocol over JSON-RPC 2.0 — one POST per message, stateless, protocol revision 2026-07-28. tools/list answers without a credential with one tool per subsystem (its operations in the \"op\" enum) plus \"describe\", which returns one operation's input schema. tools/call names a subsystem tool and carries {\"op\": <operation>, \"input\": <its arguments>}; it takes the same bearer the REST API does, and a call that carries none is answered 401 with a WWW-Authenticate header naming the resource metadata at /.well-known/oauth-protected-resource, which names the authorization server to sign in at. The tool surface is the public contract: the operator's admin product is not offered, and a name that would disclose a secret or mutate an identity is withheld — the list says how many, under _meta.",
+    "method": "POST",
+    "url": "https://api.hanzo.ai/v1/mcp"
+  },
+  "skill_count": 3,
+  "skills": [
+    {
+      "description": "Read affiliate affiliate: Answers the caller org's OWN affiliate standing: status, referral code and share link, commission rate, how many orgs it has referred, and its lifetime accrued, still-pending and already-paid commission in integer cents, with its payout history..",
+      "digest": "sha256:859eea369dac19da46258f6ba019f590a8c58d36ac906fe71454ba87acf82af0",
+      "name": "affiliate_affiliate",
+      "service": "affiliate",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/affiliate_affiliate/SKILL.md"
+    },
+    {
+      "description": "Read affiliate leaderboard: Answers the top affiliates by lifetime accrued commission, shown by OPT-IN HANDLE with aggregate figures only, plus the caller's own exact rank..",
+      "digest": "sha256:27ce09b0f5be34be7f39eed4040d5f60da72e5f1826a75af7b19314540cf937b",
+      "name": "affiliate_leaderboard",
+      "service": "affiliate",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/affiliate_leaderboard/SKILL.md"
+    },
+    {
+      "description": "Read affiliate me: Answers the richer self-view: the same lifetime accrued, pending and paid commission and payout history, plus the caller's downline broken out by upline LEVEL — direct, second, third — each with the rate paid at that level and how many orgs sit there., Answers ",
+      "digest": "sha256:5dc3e055bab4a1e13210b6ab9ef4dd36661387ad1c522b8383f552ad965206a1",
+      "name": "affiliate_me",
+      "service": "affiliate",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/affiliate_me/SKILL.md"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

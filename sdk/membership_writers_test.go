@@ -5,7 +5,7 @@ import (
 	"context"
 	"testing"
 
-	_ "github.com/hanzoai/cloud/sdk/driver/kv"
+	_ "github.com/hanzoai/cloud/internal/driver/kv"
 
 	"github.com/hanzoai/cloud/sdk/coord"
 	"github.com/hanzoai/cloud/sdk/tenure"

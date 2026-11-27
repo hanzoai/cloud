@@ -1,0 +1,414 @@
+package goja
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"maps"
+	"strconv"
+	"sync"
+
+	"github.com/hanzoai/cloud/sdk/env"
+
+	"github.com/dop251/goja"
+)
+
+// defaultPoolSize mirrors gojavm's default. Override via CLOUD_GOJAHOST_POOL_SIZE.
+const defaultPoolSize = 8
+
+// Request is the dispatch envelope handed to globalThis.handle in JS.
+type Request struct {
+	Route string `json:"route"`
+	// Method is the HTTP method this dispatch stands for. The envelope has always
+	// been documented as handle({route, method, ...}) and the binding never filled
+	// it, so a bundle guarding a write on it saw "GET" for every request. A host
+	// that dispatches outside HTTP leaves it empty and the bundle reads its own
+	// default.
+	Method string            `json:"method"`
+	Params map[string]string `json:"params,omitempty"`
+	Query  map[string]string `json:"query,omitempty"`
+	Tenant string            `json:"tenant,omitempty"`
+
+	// OrgID is the validated tenant for read-WRITE subsystems (captable). It is
+	// passed to handle as req.orgId; the bundle uses it to scope every row.
+	// Read-only bundles (plans/pricing) ignore it and read Tenant instead.
+	OrgID string `json:"orgId,omitempty"`
+	// Body is the decoded request body for mutations, passed to handle as
+	// req.body. nil for reads. Whatever json.Unmarshal produced (map/slice/scalar)
+	// is converted to a JS value by goja.
+	Body any `json:"body,omitempty"`
+}
+
+// Response is what globalThis.handle returns: an HTTP status + an opaque body
+// that the host serializes straight to JSON.
+type Response struct {
+	Status int             `json:"status"`
+	Body   json.RawMessage `json:"body"`
+}
+
+// Host is a compiled service bundle plus a pool of goja runtimes that have had
+// the bundle + the injected globals evaluated. Safe for concurrent use.
+type Host struct {
+	name    string
+	program *goja.Program
+	pool    []*slot
+	factory func() *goja.Runtime
+
+	mu sync.Mutex
+	// globals is replaced whole by SetGlobal and never written in place, so a
+	// runtime loading from the map it read under mu ranges over a map nobody
+	// writes.
+	globals map[string]any
+	// gen counts SetGlobal calls from 1. A runtime that evaluated the bundle at
+	// an older generation evaluates it again before its next call.
+	gen    uint64
+	closed bool
+}
+
+type slot struct {
+	mu   sync.Mutex
+	busy bool
+	vm   *goja.Runtime
+	// gen is the Host generation this runtime evaluated the bundle at; 0 until it
+	// has. Only the goroutine holding the slot reads or writes it.
+	gen     uint64
+	hasFunc bool
+}
+
+// Config configures a Host.
+type Config struct {
+	// Name identifies the service for error messages ("plans", "pricing").
+	Name string
+	// Bundle is the goja bundle source (goja/bundle.js from the service repo).
+	Bundle []byte
+	// Globals are injected onto each runtime before the bundle runs, e.g.
+	// {"__PLANS_DATA__": <catalog>}. Values are converted via goja.ToValue.
+	// Pointers to the same Go value are shared read-only across runtimes; the
+	// bundles never mutate injected globals.
+	Globals map[string]any
+}
+
+// New compiles the bundle and pre-warms the runtime pool. The bundle is
+// compiled once (goja.Program is safe to share across runtimes); each pool
+// runtime evaluates it lazily on first use.
+func New(cfg Config) (*Host, error) {
+	if cfg.Name == "" {
+		return nil, errors.New("gojahost: Config.Name required")
+	}
+	if len(cfg.Bundle) == 0 {
+		return nil, fmt.Errorf("gojahost[%s]: empty bundle", cfg.Name)
+	}
+	prog, err := goja.Compile(cfg.Name+"/bundle.js", string(cfg.Bundle), true)
+	if err != nil {
+		return nil, fmt.Errorf("gojahost[%s]: compile: %w", cfg.Name, err)
+	}
+
+	size := defaultPoolSize
+	if v := env.Or("CLOUD_GOJAHOST_POOL_SIZE", ""); v != "" {
+		if n, e := strconv.Atoi(v); e == nil {
+			size = n
+		}
+	}
+	if size < 1 {
+		size = 1
+	}
+
+	h := &Host{
+		name:    cfg.Name,
+		program: prog,
+		globals: cfg.Globals,
+		gen:     1,
+		factory: func() *goja.Runtime { return goja.New() },
+		pool:    make([]*slot, size),
+	}
+	for i := range h.pool {
+		h.pool[i] = &slot{vm: h.factory()}
+	}
+
+	// Eagerly load + validate one runtime so misconfiguration (bad bundle,
+	// missing handle export) fails at Mount, not at first request.
+	if err := h.withSlot(func(s *slot) error {
+		if err := h.ensure(s); err != nil {
+			return err
+		}
+		if !s.hasFunc {
+			return fmt.Errorf("gojahost[%s]: bundle does not define globalThis.handle", cfg.Name)
+		}
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+	return h, nil
+}
+
+// ensure evaluates the bundle on a runtime once per generation of the injected
+// globals (installing them first), then records whether globalThis.handle
+// exists.
+func (h *Host) ensure(s *slot) error {
+	h.mu.Lock()
+	globals, gen := h.globals, h.gen
+	h.mu.Unlock()
+	if s.gen == gen {
+		return nil
+	}
+	for k, v := range globals {
+		if err := s.vm.Set(k, v); err != nil {
+			return fmt.Errorf("gojahost[%s]: set global %s: %w", h.name, k, err)
+		}
+	}
+	// Minimal node-ish shims the bundles may touch. The bundles are written
+	// to avoid console, but defensively wire a no-op console so a stray
+	// console.* never throws ReferenceError.
+	installConsole(s.vm)
+
+	if _, err := s.vm.RunProgram(h.program); err != nil {
+		return fmt.Errorf("gojahost[%s]: run bundle: %w", h.name, err)
+	}
+	_, s.hasFunc = goja.AssertFunction(s.vm.Get("handle"))
+	s.gen = gen
+	return nil
+}
+
+// Dispatch calls globalThis.handle(req) on a pooled runtime and returns the
+// JS-side {status, body}. ctx cancellation interrupts the call. Read-only
+// bundles (plans/pricing) use this; their globals are the catalog injected once
+// at New.
+func (h *Host) Dispatch(ctx context.Context, req Request) (*Response, error) {
+	return h.DispatchWith(ctx, req, nil)
+}
+
+// DispatchWith is Dispatch plus a set of per-call NATIVE globals installed on the
+// runtime immediately before handle() runs (left in place until the next
+// dispatch on that slot overwrites them). This is the read-WRITE extension of
+// the read-only plan/pricing pattern: the NewBase binding passes a tenant-bound
+// __db bridge (+ __newId/__now) here so a bundle's SQL calls hit the right
+// per-tenant Base. The slot is held exclusively for the whole call (withSlot
+// serializes it), so installing globals on the shared runtime is race-free, and
+// values are plain Go funcs/maps that goja converts to callable JS.
+func (h *Host) DispatchWith(ctx context.Context, req Request, hostGlobals map[string]any) (*Response, error) {
+	h.mu.Lock()
+	if h.closed {
+		h.mu.Unlock()
+		return nil, fmt.Errorf("gojahost[%s]: closed", h.name)
+	}
+	h.mu.Unlock()
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+
+	var resp *Response
+	err := h.withSlot(func(s *slot) error {
+		if err := h.ensure(s); err != nil {
+			return err
+		}
+		// Install per-dispatch native globals (e.g. __db) AFTER the bundle has
+		// loaded (ensure) and BEFORE handle runs. The bundle references them only
+		// when handle is called, so this ordering is correct.
+		for k, v := range hostGlobals {
+			if err := s.vm.Set(k, v); err != nil {
+				return fmt.Errorf("gojahost[%s]: set host global %s: %w", h.name, k, err)
+			}
+		}
+		fn, ok := goja.AssertFunction(s.vm.Get("handle"))
+		if !ok {
+			return fmt.Errorf("gojahost[%s]: globalThis.handle missing", h.name)
+		}
+
+		// Watchdog: interrupt the VM if ctx cancels mid-call.
+		done := make(chan struct{})
+		defer close(done)
+		go func() {
+			select {
+			case <-ctx.Done():
+				s.vm.Interrupt(ctx.Err())
+			case <-done:
+			}
+		}()
+
+		arg := s.vm.ToValue(map[string]any{
+			"route":  req.Route,
+			"method": req.Method,
+			"params": toAnyMap(req.Params),
+			"query":  toAnyMap(req.Query),
+			"tenant": req.Tenant,
+			"orgId":  req.OrgID,
+			"body":   req.Body,
+		})
+		out, callErr := fn(goja.Undefined(), arg)
+		if callErr != nil {
+			if _, ok := errors.AsType[*goja.InterruptedError](callErr); ok {
+				if ce := ctx.Err(); ce != nil {
+					return ce
+				}
+			}
+			return fmt.Errorf("gojahost[%s]: handle(%s): %w", h.name, req.Route, callErr)
+		}
+
+		// The JS returns {status:number, body:any}. Pull them out and
+		// re-marshal body to canonical JSON bytes via the export view.
+		exported := out.Export()
+		m, ok := exported.(map[string]any)
+		if !ok {
+			return fmt.Errorf("gojahost[%s]: handle(%s) returned %T, want object", h.name, req.Route, exported)
+		}
+		// Fail closed: a response with no EXPLICIT, valid numeric status must NOT
+		// be treated as success. NewBase's per-request transaction commits iff
+		// status < 400, so a defaulted 200 would silently PERSIST a bundle that
+		// forgot to set a status — on a boundary whose safety IS the status gate.
+		// Default 500 (which rolls the transaction back); only a bundle-provided
+		// status in the valid HTTP range [100,599] overrides it.
+		status := 500
+		if sv, ok := m["status"]; ok {
+			switch f := sv.(type) {
+			case int64:
+				if f >= 100 && f <= 599 {
+					status = int(f)
+				}
+			case float64:
+				if f >= 100 && f <= 599 {
+					status = int(f)
+				}
+			}
+		}
+		bodyBytes, mErr := json.Marshal(m["body"])
+		if mErr != nil {
+			return fmt.Errorf("gojahost[%s]: marshal body: %w", h.name, mErr)
+		}
+		resp = &Response{Status: status, Body: bodyBytes}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return resp, nil
+}
+
+// Eval runs an arbitrary JS expression against a pooled runtime (bundle
+// already loaded) and returns the exported Go value. Used by callers that
+// want to invoke a non-route helper the bundle exposes (e.g. applyMarkup).
+func (h *Host) Eval(ctx context.Context, fnName string, jsonArg []byte) ([]byte, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	var out []byte
+	err := h.withSlot(func(s *slot) error {
+		if err := h.ensure(s); err != nil {
+			return err
+		}
+		fn, ok := goja.AssertFunction(s.vm.Get(fnName))
+		if !ok {
+			return fmt.Errorf("gojahost[%s]: globalThis.%s is not a function", h.name, fnName)
+		}
+		var arg any
+		if len(jsonArg) > 0 {
+			if err := json.Unmarshal(jsonArg, &arg); err != nil {
+				return fmt.Errorf("gojahost[%s]: %s arg not JSON: %w", h.name, fnName, err)
+			}
+		}
+		done := make(chan struct{})
+		defer close(done)
+		go func() {
+			select {
+			case <-ctx.Done():
+				s.vm.Interrupt(ctx.Err())
+			case <-done:
+			}
+		}()
+		res, callErr := fn(goja.Undefined(), s.vm.ToValue(arg))
+		if callErr != nil {
+			if _, ok := errors.AsType[*goja.InterruptedError](callErr); ok {
+				if ce := ctx.Err(); ce != nil {
+					return ce
+				}
+			}
+			return fmt.Errorf("gojahost[%s]: %s: %w", h.name, fnName, callErr)
+		}
+		b, mErr := json.Marshal(res.Export())
+		if mErr != nil {
+			return fmt.Errorf("gojahost[%s]: marshal %s result: %w", h.name, fnName, mErr)
+		}
+		out = b
+		return nil
+	})
+	return out, err
+}
+
+// SetGlobal updates an injected global and forces every pooled runtime to
+// re-evaluate the bundle on next use (so the new value takes effect). The pricing
+// document calls it whenever commerce's first-party prices or the third-party
+// sync change what it serves.
+//
+// It copies the map rather than writing into it: a runtime evaluating the bundle
+// may be ranging over the current one at this moment, on a request goroutine.
+func (h *Host) SetGlobal(key string, value any) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	next := make(map[string]any, len(h.globals)+1)
+	maps.Copy(next, h.globals)
+	next[key] = value
+	h.globals = next
+	h.gen++
+}
+
+// Close drops the pool.
+func (h *Host) Close() error {
+	h.mu.Lock()
+	h.closed = true
+	h.pool = nil
+	h.mu.Unlock()
+	return nil
+}
+
+// withSlot borrows a free pool slot; if all are busy it spins up a one-off
+// runtime (matching gojavm's saturation fallback).
+func (h *Host) withSlot(call func(*slot) error) error {
+	h.mu.Lock()
+	pool := h.pool
+	h.mu.Unlock()
+
+	for _, s := range pool {
+		s.mu.Lock()
+		if s.busy {
+			s.mu.Unlock()
+			continue
+		}
+		s.busy = true
+		s.mu.Unlock()
+
+		err := call(s)
+
+		s.mu.Lock()
+		s.busy = false
+		s.mu.Unlock()
+		return err
+	}
+	// Saturated: ephemeral runtime, fully loaded fresh.
+	tmp := &slot{vm: h.factory()}
+	return call(tmp)
+}
+
+func toAnyMap(m map[string]string) map[string]any {
+	if m == nil {
+		return map[string]any{}
+	}
+	out := make(map[string]any, len(m))
+	for k, v := range m {
+		out[k] = v
+	}
+	return out
+}
+
+// installConsole wires a no-op console.{log,info,warn,error,debug} so guest
+// code that logs does not throw. goja has no console by default.
+func installConsole(vm *goja.Runtime) {
+	if !goja.IsUndefined(vm.Get("console")) {
+		return
+	}
+	noop := func(goja.FunctionCall) goja.Value { return goja.Undefined() }
+	console := vm.NewObject()
+	for _, m := range []string{"log", "info", "warn", "error", "debug", "trace"} {
+		_ = console.Set(m, noop)
+	}
+	_ = vm.Set("console", console)
+}

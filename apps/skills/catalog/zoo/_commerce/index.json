@@ -1,0 +1,184 @@
+{
+  "$schema": "https://schemas.agentskills.io/discovery/0.2.0/schema.json",
+  "base_url": "https://api.zoo.ngo",
+  "brand": "zoo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://zoolabs.id",
+  "mcp": {
+    "description": "Model Context Protocol over JSON-RPC 2.0 — one POST per message, stateless, protocol revision 2026-07-28. tools/list answers without a credential with one tool per subsystem (its operations in the \"op\" enum) plus \"describe\", which returns one operation's input schema. tools/call names a subsystem tool and carries {\"op\": <operation>, \"input\": <its arguments>}; it takes the same bearer the REST API does, and a call that carries none is answered 401 with a WWW-Authenticate header naming the resource metadata at /.well-known/oauth-protected-resource, which names the authorization server to sign in at. The tool surface is the public contract: the operator's admin product is not offered, and a name that would disclose a secret or mutate an identity is withheld — the list says how many, under _meta.",
+    "method": "POST",
+    "url": "https://api.zoo.ngo/v1/mcp"
+  },
+  "skill_count": 21,
+  "skills": [
+    {
+      "description": "Read commerce cart: List the org's carts, newest first, with how many were left, Read one cart with its lines and totals.",
+      "digest": "sha256:5a647bf3f473052a993904a72f3bfb33b12b4c5d217fa13a63138a5f51a7a8d0",
+      "name": "commerce_cart",
+      "service": "commerce",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/commerce_cart/SKILL.md"
+    },
+    {
+      "description": "Read commerce catalog: The public product catalog projection for a brand.",
+      "digest": "sha256:aaad00ac19b6089660fb4a1595d4e3b5be7c2223322e44e32eb55a7c60b69c41",
+      "name": "commerce_catalog",
+      "service": "commerce",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/commerce_catalog/SKILL.md"
+    },
+    {
+      "description": "Read commerce collection: List your org's collections, as a page, Fetch one collection.",
+      "digest": "sha256:e9a3c9f73ecb282d1a831f624ba8911a5970d4c20f9f8949147e5f2dedfc9690",
+      "name": "commerce_collection",
+      "service": "commerce",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/commerce_collection/SKILL.md"
+    },
+    {
+      "description": "Read commerce currencies: The reference currency list the price and settings pickers render.",
+      "digest": "sha256:e7731874ab0f0aa76734a5dee6060a164e466ab37415981641abdc3d04f8592e",
+      "name": "commerce_currencies",
+      "service": "commerce",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/commerce_currencies/SKILL.md"
+    },
+    {
+      "description": "Read commerce disclosure: List your org's disclosures, as a page, Fetch one disclosure.",
+      "digest": "sha256:3735215aa16d123e4a48a380040264d55d8e1b32e7a6d715e9c505b94a9ea59f",
+      "name": "commerce_disclosure",
+      "service": "commerce",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/commerce_disclosure/SKILL.md"
+    },
+    {
+      "description": "Read commerce discount: List your org's discounts, as a page, Fetch one discount.",
+      "digest": "sha256:dfb606049b007a448af33980be61febe1f25dc1bf8c77ee349c8c07f09f56bc4",
+      "name": "commerce_discount",
+      "service": "commerce",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/commerce_discount/SKILL.md"
+    },
+    {
+      "description": "Read commerce health: Answers ok whenever the commerce subsystem is mounted..",
+      "digest": "sha256:b806c5ce4dd94730bab464a0302080f31d95c112359136a0729c21ad1966c127",
+      "name": "commerce_health",
+      "service": "commerce",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/commerce_health/SKILL.md"
+    },
+    {
+      "description": "Read commerce movie: List your org's movies, as a page, Fetch one movie.",
+      "digest": "sha256:fe827666184ffcf0676974785cb3e01785c3c3cfd608fd090e5b92e03e2894f4",
+      "name": "commerce_movie",
+      "service": "commerce",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/commerce_movie/SKILL.md"
+    },
+    {
+      "description": "Read commerce note: List your org's notes, as a page, Fetch one note.",
+      "digest": "sha256:cd7bfef01d02511a3eb64bf0e35f82e55a27ff6cf9717cd2f06d8b5cae142c68",
+      "name": "commerce_note",
+      "service": "commerce",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/commerce_note/SKILL.md"
+    },
+    {
+      "description": "Read commerce order: List the org's orders, newest first, with what they came to.",
+      "digest": "sha256:d8080e38c29797742fbd88da27bb383a88aba171e47e329ce75114b766b3b1ce",
+      "name": "commerce_order",
+      "service": "commerce",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/commerce_order/SKILL.md"
+    },
+    {
+      "description": "Read commerce org: The public org configuration a checkout page boots from.",
+      "digest": "sha256:2611d0493ef7feedff5200ed3214352bdd87874c544bc78fc8d928b8d2df6036",
+      "name": "commerce_org",
+      "service": "commerce",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/commerce_org/SKILL.md"
+    },
+    {
+      "description": "Read commerce product: List your org's products, as a page, Fetch one product.",
+      "digest": "sha256:10262738adec7abf3fe09cfafae57de085f33dd37d8cab1a29d933695074f07f",
+      "name": "commerce_product",
+      "service": "commerce",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/commerce_product/SKILL.md"
+    },
+    {
+      "description": "Read commerce return: List your org's returns, as a page, Fetch one return.",
+      "digest": "sha256:c92db48be18e446b755e7e22912fe59b47dc2cb107b8d75b9d42fdd75608c338",
+      "name": "commerce_return",
+      "service": "commerce",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/commerce_return/SKILL.md"
+    },
+    {
+      "description": "Read commerce saleschannel: List your org's sales channels, as a page, Fetch one sales channel.",
+      "digest": "sha256:a1d25c9b84eaf7953cdfd4ff4b16e2664920a08cc4d6f42a14790545074bceae",
+      "name": "commerce_saleschannel",
+      "service": "commerce",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/commerce_saleschannel/SKILL.md"
+    },
+    {
+      "description": "Read commerce stocklocation: List your org's stock locations, as a page, Fetch one stock location.",
+      "digest": "sha256:f6e4466d24764d99c6195bec309b455b0826d534d3480eb00e8daf51c71ee7fe",
+      "name": "commerce_stocklocation",
+      "service": "commerce",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/commerce_stocklocation/SKILL.md"
+    },
+    {
+      "description": "Read commerce store: List your org's storefronts as a page, Whether a store is entitled to trade, and why, Resolve your org's active storefront without naming an id.",
+      "digest": "sha256:cc46d32234e02a052261bb875c0402314f427ead62f4c479511d4539b0844f04",
+      "name": "commerce_store",
+      "service": "commerce",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/commerce_store/SKILL.md"
+    },
+    {
+      "description": "Read commerce tokentransaction: List your org's token transactions, as a page, Fetch one token transaction.",
+      "digest": "sha256:c10142abe857814671503bbb8613bc64eabae067cb7c8cf5b49af9bdcba61f79",
+      "name": "commerce_tokentransaction",
+      "service": "commerce",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/commerce_tokentransaction/SKILL.md"
+    },
+    {
+      "description": "Read commerce transfer: List your org's transfers, as a page, Fetch one transfer.",
+      "digest": "sha256:9acd6125a918e5643c54c6f73c66b0e41591f17009f437272125255fe6017a09",
+      "name": "commerce_transfer",
+      "service": "commerce",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/commerce_transfer/SKILL.md"
+    },
+    {
+      "description": "Read commerce variant: List your org's variants, as a page, Fetch one variant.",
+      "digest": "sha256:29972fd4863367fae674dfc25fbf625dc817280aa90040f34d0652431e80374b",
+      "name": "commerce_variant",
+      "service": "commerce",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/commerce_variant/SKILL.md"
+    },
+    {
+      "description": "Read commerce wallet: List your org's wallets, as a page, Fetch one wallet.",
+      "digest": "sha256:d4106204bd6af377ced0534576cbcaece60f431cdae40ec1501fd8ddd3e7d30e",
+      "name": "commerce_wallet",
+      "service": "commerce",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/commerce_wallet/SKILL.md"
+    },
+    {
+      "description": "Read commerce watchlist: List your org's watchlists, as a page, Fetch one watchlist.",
+      "digest": "sha256:fc0e349bcc2914ced191ef685d2af707ae93a21a869ef88b5153bc1687597fb3",
+      "name": "commerce_watchlist",
+      "service": "commerce",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/commerce_watchlist/SKILL.md"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

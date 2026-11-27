@@ -10,21 +10,23 @@ package cloud
 // of the defence.
 //
 // It is not sufficient, because *Config is not the only way into the process
-// environment. A route registered under one of those is a route the document
-// publishes or omits for a reason the code alone does not decide, and the two
-// directions fail differently:
+// environment. Measured on the tree this test ships with: 372 os.Getenv /
+// os.LookupEnv calls across apps/ and clients/, every one of them reachable from
+// a Mount and none of them passing through SpecConfig. A route registered under
+// one of those is a route the document publishes or omits for a reason the code
+// alone does not decide, and the two directions fail differently:
 //
-// 	registered when the var is SET    the describe run omits it, so an address
-// 	                                  production serves is undescribed — a hole
-// 	registered when the var is EMPTY  the describe run PUBLISHES it and
-// 	                                  production never registers it — a 404 on a
-// 	                                  published address, in every SDK, the MCP
-// 	                                  tool list and the CLI at once
+//	registered when the var is SET    the describe run omits it, so an address
+//	                                  production serves is undescribed — a hole
+//	registered when the var is EMPTY  the describe run PUBLISHES it and
+//	                                  production never registers it — a 404 on a
+//	                                  published address, in every SDK, the MCP
+//	                                  tool list and the CLI at once
 //
-// The second is the lie this whole gate family exists to make impossible, and it is
-// the one cause of it that openapi/reach.py cannot see until after a release is built:
-// reach asks the live service, and by then the damage is done. This asks the source,
-// before the artifact is written.
+// The second is the lie this whole gate family exists to make impossible, and it
+// is the one cause of it that openapi/reach.py cannot see until after a release
+// has shipped: reach asks production, and production is where the damage already
+// is. This asks the source, before the artifact is written.
 //
 // TODAY THE COUNT IS ZERO, and that is the point of writing it down. The document
 // is honest about this by accident, not by construction — nothing stopped the

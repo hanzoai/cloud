@@ -1,0 +1,698 @@
+// runner.go — POST /v1/platform/runner: the native, privileged build endpoint.
+//
+// This is the no-GitHub-builders build trigger that `hanzo build` and the
+// git-push-to-deploy hook call. It replaces the old /v1/arcd surface: one native
+// build API on the runner fabric.
+//
+// It differs from the tenant path (/v1/platform/.../deploy, which FORCES a
+// per-tenant image ref): a /v1/platform/runner build is PRIVILEGED — the caller supplies
+// the output image — so it is bounded three ways:
+//   - a credential: one that NAMES an organization, or the shared build-callback
+//     token compared in constant time,
+//   - an image-ref allowlist restricted to the org registries we own, so a leaked
+//     token can never push to an arbitrary registry, and
+//   - on a credential that names an organization, that organization's own
+//     namespace — so an ordinary build reaches one brand rather than all of them.
+
+package platform
+
+import (
+	"cmp"
+	"context"
+	"errors"
+	"net/http"
+	"slices"
+	"strings"
+	"time"
+
+	"github.com/hanzoai/cloud/internal/remote"
+	"github.com/hanzoai/cloud/sdk"
+	"github.com/hanzoai/cloud/sdk/principal"
+	"github.com/zap-proto/zip"
+)
+
+// runnerBuildReq mirrors the CLI BuildReq (cli/platform.go). repo + image are
+// required; the rest are optional build knobs.
+//
+// THERE IS NO ORGANIZATION FIELD. A build belongs to the organization its
+// credential names (runnerOrg), and an attribution a caller can write is worth
+// nothing — checking one merely moves the mistake to whoever forgets the check
+// next. Deleting it leaves nothing to check and nothing to forget.
+//
+// Every field carries `url:"-"`. This is a PRIVILEGED build trigger, and zip's
+// binder fills an In field from the query string as well as the body: without the
+// opt-out `?image=…` would choose the pushed artifact, and the whole authorization
+// argument below reads req.Image.
+type runnerBuildReq struct {
+	// Repo is the repository clone URL to build. Required on the image lane.
+	Repo string `json:"repo" url:"-"`
+	// SHA is the commit to pin; it wins over Ref and Branch.
+	SHA string `json:"sha" url:"-"`
+	// Image is the output image ref to push. Required on the image lane, and it
+	// must target a registry namespace the caller's org owns.
+	Image string `json:"image" url:"-"`
+	// Branch is the branch to build when no SHA or Ref is given.
+	Branch string `json:"branch,omitempty" url:"-"`
+	// Ref is the git ref to build when no SHA is given.
+	Ref string `json:"ref,omitempty" url:"-"`
+	// Dockerfile is the path to build from; empty uses the zero-config frontend.
+	Dockerfile string `json:"dockerfile,omitempty" url:"-"`
+	// Context is the build context path within the repo.
+	Context string `json:"context,omitempty" url:"-"`
+	// DockerTarget is the multi-stage build target to stop at.
+	DockerTarget string `json:"dockerTarget,omitempty" url:"-"`
+	// Args are --build-arg values. They are what lets several images off ONE
+	// Dockerfile mean different things — the sandbox classes are three entries
+	// differing only by STAGE. Validated at the k8s choke point, with VERSION and
+	// REVISION taking precedence: those are receipts the builder derives from the
+	// tag and the commit, and a caller that could overwrite them could make an
+	// image lie about which commit it is.
+	Args map[string]string `json:"args,omitempty" url:"-"`
+	// Platforms are the `<os>/<arch>` pairs the image is built for. EMPTY MEANS
+	// EVERY ARCHITECTURE THE FLEET HAS — each built on a node of that
+	// architecture, joined by ONE manifest index, so a single tag serves both.
+	// Name one to build only that one.
+	Platforms []string `json:"platforms,omitempty" url:"-"`
+	// Tags are more tags of Image's own repository, pushed onto the same manifest
+	// by the same export, so every one names the digest Image does — by
+	// construction, not by a second push agreeing with the first. Bare tags
+	// (`v1.2.3`, `latest`), at most 8, and only beside a tag Image: a digest names
+	// an image that already exists. Duplicates and Image's own tag are dropped;
+	// the answer's `tags` lists what will be written.
+	Tags []string `json:"tags,omitempty" url:"-"`
+	// OS is the target operating system for the artifact lane.
+	OS string `json:"os,omitempty" url:"-"`
+	// Arch is the target architecture for the artifact lane.
+	Arch string `json:"arch,omitempty" url:"-"`
+	// Binaries selects the ARTIFACT lane (artifact.go): build what the repo's
+	// hanzo.yml `binaries:` block declares — a Go binary, an npm tarball, a Rust
+	// binary — and publish it to hanzoai/s3 instead of pushing an image. It is the
+	// same recipe hanzoai/ci reads, sent verbatim, so `image` is meaningless here
+	// and must be absent.
+	Binaries []binarySpec `json:"binaries,omitempty" url:"-"`
+	// Bucket mirrors hanzo.yml's `bucket:` — where the artifact lane publishes.
+	Bucket string `json:"bucket,omitempty" url:"-"`
+	// Tag is the publish path segment, so both entry points write ONE index at ONE
+	// URL. It defaults to the pinned ref, and must be named explicitly for a
+	// branch.
+	Tag string `json:"tag,omitempty" url:"-"`
+}
+
+// runnerBuildResp is the 202 acceptance (matches the CLI BuildJob). Index is the
+// artifact lane's output — the binaries.json a host reads — where Image is the
+// image lane's; a build produces exactly one of the two.
+type runnerBuildResp struct {
+	// BuildJobID is the queued build's id, and what its progress is read by.
+	BuildJobID string `json:"buildJobId"`
+	// Status is `queued` while the build waits its turn, `building` once it runs, then
+	// `succeeded` or `failed`. The POST answers `queued`: a build that is accepted has
+	// not run. A build is never refused for the others running.
+	Status string `json:"status"`
+	// Position is the build's place in line while it is `queued`, from 1: how many
+	// builds start before it, and it, were nothing to finish meanwhile. Absent once it runs.
+	Position int `json:"position,omitempty"`
+	// RunnerPool is the runner class the build was placed on.
+	RunnerPool string `json:"runnerPool"`
+	// Image is the ref the image lane will push.
+	Image string `json:"image,omitempty"`
+	// Target is the multi-stage build target, echoed back.
+	Target string `json:"target,omitempty"`
+	// Index is the binaries.json URL the artifact lane will publish.
+	Index string `json:"index,omitempty"`
+	// Platforms are the architectures the image lane will publish, echoed back.
+	Platforms []string `json:"platforms,omitempty"`
+	// Tags are the extra tags the image lane will write beside Image, onto the
+	// same manifest: the request's, deduplicated. This is the promise — a tag
+	// absent here will not be written.
+	Tags []string `json:"tags,omitempty"`
+	// Reason is why a failed build failed, as the cluster said it: the solve's
+	// error line (`error: failed to solve: ...`), a container waiting on what it
+	// cannot have, or the deadline.
+	Reason string `json:"reason,omitempty"`
+	// Digest is the pushed OCI manifest or index digest (`sha256:...`), populated
+	// once the build succeeds so callers can pin private and public images without
+	// a separate GHCR read:packages credential.
+	Digest string `json:"digest,omitempty"`
+}
+
+// runnerBuildRef names one build by the id POST /v1/build answered with.
+type runnerBuildRef struct {
+	// ID is the build's id, from the path.
+	ID string `json:"id"`
+}
+
+// getBuild answers one build: its status, and for a failed build the reason.
+//
+// A build belongs to the organization its credential names, so it is read by the
+// credential that could have asked for it, and another organization's build is
+// 404 rather than 403: whether an id exists is not said to anyone it is not for.
+func (o ops) getBuild(ctx context.Context, in *runnerBuildRef) (*runnerBuildResp, error) {
+	b, err := o.build(ctx, in.ID)
+	if err != nil {
+		return nil, err
+	}
+	out := &runnerBuildResp{BuildJobID: b.ID, Status: b.Status, Image: b.Image, Platforms: b.Platforms, Tags: b.Tags, Digest: b.Digest, Reason: b.Reason}
+	if b.Status == "queued" {
+		out.Position, _ = o.s.State.k8s.queuePosition(ctx, b.ID)
+	}
+	return out, nil
+}
+
+// runnerBuildLog is one build's BuildKit output, as the pods of its Jobs logged it.
+type runnerBuildLog struct {
+	// ID is the build's id.
+	ID string `json:"id"`
+	// Status is the build's recorded status: `queued` or `building` until it
+	// finishes, then `succeeded` or `failed`.
+	Status string `json:"status"`
+	// Log is the build's output, each container under a line naming it, in the
+	// order the pod ran them. A build across several architectures is one Job per
+	// architecture and then the index that joins them, and each is read in that
+	// order under a line naming the Job. Empty when there is no pod to read: the
+	// build is not yet placed, its pods were reaped when their TTL elapsed, or the
+	// cluster cannot be reached. Never a log nobody wrote.
+	Log string `json:"log"`
+	// Truncated is whether a Job's log was cut to its most recent bytes, which its
+	// first line then says too. Each container is read to the tail of its lines
+	// either way, and that cut is not marked.
+	Truncated bool `json:"truncated"`
+}
+
+// getBuildLog answers one build's BuildKit output: the log of each Job that ran
+// it, every container in the order it ran them, so a failed step's real error is
+// readable rather than cut off at the RUN line that failed.
+//
+// The log is read from the cluster when asked, never stored, so it lives as long
+// as the build's pods do: once their TTL reaps them `log` is empty, and the status
+// and reason GET /v1/build/{id} answers are what remain.
+//
+// A build belongs to the organization its credential names, and another
+// organization's build is 404, exactly as GET /v1/build/{id} answers it.
+func (o ops) getBuildLog(ctx context.Context, in *runnerBuildRef) (*runnerBuildLog, error) {
+	b, err := o.build(ctx, in.ID)
+	if err != nil {
+		return nil, err
+	}
+	out := &runnerBuildLog{ID: b.ID, Status: b.Status}
+	jobs := buildJobs(b)
+	var logs []string
+	for _, j := range jobs {
+		log, ok := o.s.State.k8s.buildLogs(ctx, j)
+		if !ok {
+			continue
+		}
+		out.Truncated = out.Truncated || strings.HasPrefix(log, logCut)
+		if len(jobs) > 1 {
+			log = "══ " + j + " ══\n" + log
+		}
+		logs = append(logs, log)
+	}
+	out.Log = strings.Join(logs, "\n")
+	return out, nil
+}
+
+// build is one build read by the credential that could have asked for it: the
+// organization the credential names, and 404 for an id that is not that
+// organization's, whether or not it exists.
+func (o ops) build(ctx context.Context, id string) (Build, error) {
+	c, err := o.request(ctx)
+	if err != nil {
+		return Build{}, err
+	}
+	org := runnerOrg(c)
+	if org == "" {
+		return Build{}, zip.ErrForbidden("build requires an org-scoped identity")
+	}
+	b, err := o.s.State.store.GetBuild(ctx, org, strings.TrimSpace(id))
+	if errors.Is(err, errNotFound) {
+		return Build{}, zip.ErrNotFound("build not found")
+	}
+	if err != nil {
+		return Build{}, zip.Errorf(http.StatusInternalServerError, "get build: %v", err)
+	}
+	return b, nil
+}
+
+// ownedRegistryHosts are the registry hosts the fabric operates. An image on any
+// other host is NEVER allowed on the privileged build path. oci.hanzo.ai is the
+// self-hosted fleet registry (the native CI/CD home); ghcr stays during the
+// migration as the public mirror.
+//
+// A host reaches this list by resolving to infrastructure we run, and by nothing
+// else. It is a TRUST decision, not a spelling one: a name that resolves away
+// from us is a name an attacker can be handed, so it is refused here even when
+// the string still looks like ours.
+var ownedRegistryHosts = []string{"oci.hanzo.ai", "ghcr.io"}
+
+// orgRegistryNamespaces maps an IAM org (the validated `owner` claim) to the
+// registry namespace(s) that org OWNS. Only the brands that own a registry appear
+// (hanzo→hanzoai/hanzo-inc, lux→luxfi/lux-cpp/lux-gpu, zoo→zooai,
+// adnexus→adnexustech); lux-cpp and lux-gpu are Lux's own C++ and GPU orgs, and
+// zood (zooai/node) builds on lux-cpp/node's image. An org
+// absent here owns NO push
+// target, so an org-admin of it is refused on the IAM build path (fail-closed) —
+// nobody pushes to a brand they do not own. The UNION of the values is the set of
+// namespaces the fabric owns (ownedNamespaces), the outer bound every build meets
+// first. No identity reaches a namespace its org does not own — platform sudo
+// included, and the reserved admin org owns none — so a credential that leaks
+// publishes into one brand at most.
+//
+// This is the ONE place the org→registry trust is expressed, and it is the fix
+// for H1: imageAllowed proves an image targets an owned registry, but only
+// imageInOrgRegistry proves the CALLER owns that namespace — without the second
+// check any org-admin could overwrite another brand's production image via the
+// shared push credential.
+var orgRegistryNamespaces = map[string][]string{
+	"hanzo":   {"hanzoai", "hanzo-inc"},
+	"lux":     {"luxfi", "lux-cpp", "lux-gpu"},
+	"zoo":     {"zooai"},
+	"adnexus": {"adnexustech"},
+}
+
+// ownedNamespaces is the set of registry namespaces the fabric owns — the union
+// of every org's namespaces. Derived once from orgRegistryNamespaces so there is
+// no second hand-maintained list to drift.
+var ownedNamespaces = func() map[string]bool {
+	m := map[string]bool{}
+	for _, nss := range orgRegistryNamespaces {
+		for _, ns := range nss {
+			m[ns] = true
+		}
+	}
+	return m
+}()
+
+// imageRegistryNamespace returns the owned-registry namespace an image pushes to
+// (ghcr.io/luxfi/x → "luxfi", oci.hanzo.ai/hanzoai/y → "hanzoai") and
+// ok=false when the image is not on an owned host, has no namespace/repo split, or
+// carries an empty repo. The parse is strict: <owned-host>/<namespace>/<repo…>.
+// It assumes the image has already passed validateImageRef (a single clean OCI
+// ref), so the host and namespace are the first two '/'-separated components.
+func imageRegistryNamespace(image string) (string, bool) {
+	for _, h := range ownedRegistryHosts {
+		prefix := h + "/"
+		if !strings.HasPrefix(image, prefix) {
+			continue
+		}
+		rest := image[len(prefix):]
+		i := strings.IndexByte(rest, '/')
+		if i <= 0 || i+1 >= len(rest) {
+			return "", false // no namespace, or nothing after it (no repo)
+		}
+		return rest[:i], true
+	}
+	return "", false
+}
+
+// repository is an image ref with its version removed — what the registry calls
+// the thing, rather than which one. A digest is cut at the `@`; a tag is the
+// colon AFTER the last slash, because a host may carry a port and that colon
+// comes before one.
+func repository(image string) string {
+	if i := strings.IndexByte(image, '@'); i > 0 {
+		image = image[:i]
+	}
+	if i := strings.LastIndexByte(image, '/'); i >= 0 {
+		if j := strings.IndexByte(image[i:], ':'); j > 0 {
+			return image[:i+j]
+		}
+	}
+	return image
+}
+
+// excluded names the images this endpoint does not publish, because their versions
+// are ordered somewhere else and two allocators cannot agree on a number.
+//
+// ghcr.io/hanzoai/cloud is the whole list, and the reason is stated above
+// runnerBuild: its numbers are allocated by a compare-and-swap in
+// .hanzo/workflows/cicd.yml, beside the commit being numbered. A second
+// allocator reading the same registry cannot reserve anything the first one
+// honours. That held for as long as everyone read the comment.
+var excluded = []string{"ghcr.io/hanzoai/cloud"}
+
+// imageExcluded refuses regardless of who is asking, SuperAdmin included: no
+// amount of authority makes two allocators agree, so this is asked before the
+// question of whose namespace it is.
+func imageExcluded(image string) bool {
+	return slices.Contains(excluded, repository(image))
+}
+
+// imageAllowed reports whether image targets a registry namespace the fabric owns
+// (the OUTER bound shared by the machine and IAM paths). It does NOT bind the
+// namespace to any caller — imageInOrgRegistry does that on the IAM path.
+func imageAllowed(image string) bool {
+	ns, ok := imageRegistryNamespace(image)
+	return ok && ownedNamespaces[ns]
+}
+
+// imageInOrgRegistry reports whether image pushes to a namespace the given org
+// OWNS (H1). Used to confine an IAM org-admin to its own brand's registry: a
+// hanzo admin may push ghcr.io/hanzoai/* but never ghcr.io/luxfi/*. A caller whose
+// org owns no namespace (not one of the three registry brands) always fails here.
+func imageInOrgRegistry(image, org string) bool {
+	ns, ok := imageRegistryNamespace(image)
+	if !ok {
+		return false
+	}
+	return slices.Contains(ownedBy(org), ns)
+}
+
+// ownedBy is the ONE lookup of an org's registry namespaces, keyed by the VERBATIM
+// validated IAM owner — the same value principal.Org returns, trimmed and nothing
+// else.
+//
+// Both halves of an authorization comparison must be the same value. This lookup
+// folded the org (strings.ToLower) while principal.Org returns it verbatim and
+// never lowercases, precisely because "acme" and "ACME" are DISTINCT IAM tenants
+// (principal.go, and TestMembershipMatchIsByteExact pins it). So a tenant who
+// self-serves an org named `Hanzo` — a different owner from `hanzo`, whose own
+// RoleOwner makes IsOrgAdmin true inside it — folded onto the `hanzo` key and
+// claimed the `hanzoai` namespace: push over another brand's production images,
+// ghcr.io/hanzoai/cloud among them — the binary the whole fleet runs. A fold
+// applied to one side of a comparison is not a normalization, it is a collision,
+// and here the collision IS a cross-tenant privilege grant.
+//
+// The keys are therefore the real IAM owners (brand.Default is "hanzo"); a brand
+// whose owner is spelled otherwise is named here as it is spelled there.
+func ownedBy(org string) []string { return orgRegistryNamespaces[strings.TrimSpace(org)] }
+
+// repoOwnerInOrg is imageInOrgRegistry for the ARTIFACT lane: it reports whether
+// the repo being built belongs to a forge owner the caller's org owns. It reads
+// the SAME orgRegistryNamespaces map because a brand's registry namespace and its
+// forge owner are one name (hanzo→hanzoai owns both ghcr.io/hanzoai/* and
+// github.com/hanzoai/*) — so a hanzo admin publishes artifacts for hanzoai repos
+// and never for luxfi's, exactly as it can never push a luxfi image.
+func repoOwnerInOrg(repoURL, org string) bool {
+	slug := repoSlug(repoURL)
+	owner, _, ok := strings.Cut(slug, "/")
+	if !ok || owner == "" {
+		return false
+	}
+	for _, owned := range ownedBy(org) {
+		if strings.EqualFold(owner, owned) {
+			return true
+		}
+	}
+	return false
+}
+
+// runnerOrg resolves the ORGANIZATION a build is authorized for — read off the
+// caller's credential and nothing the caller stated. It answers "" when the request
+// carries no org-scoped identity at all, and such a request is refused.
+//
+// It reads ONLY the principal.* accessors — the output of the ONE identity verifier
+// — which read authority headers SanitizeIdentity strips on ingress and re-mints
+// solely from a signature-verified token, so the signal is unforgeable off-gateway.
+//
+// TWO KINDS OF CREDENTIAL NAME AN ORG, and each is entitled differently because
+// they are different things:
+//
+//   - A PERSON must ADMINISTER the org (or hold platform sudo). Publishing into a
+//     brand's registry is not a plain member's to do, so a login is necessary and
+//     not sufficient.
+//   - An APPLICATION acting as itself IS the organization's own machine identity.
+//     Obtaining its token requires that application's client secret, and its org is
+//     the application's own owner, which it cannot choose: IAM mints an app token no
+//     membership set, so the org-switch admits nothing. It holds no admin scope and
+//     needs none — the act is a purpose, and the purpose is bounded below by the
+//     namespace that org owns.
+//
+// The second is what lets a build carry an organization at all. Asking every caller
+// for the admin bit asked a question no non-interactive credential can answer:
+// authz.Claims.OrgAdmin refuses every machine by construction — correctly, since an
+// app is issued for a purpose and not handed an org's self-service surface — so the
+// only credential that still reached this endpoint from a pipeline was the fabric's
+// shared token, which names no org and is therefore wider than any single build.
+func runnerOrg(c *zip.Ctx) string {
+	org, ok := principal.Org(c) // composes principal.Validated
+	if !ok {
+		return ""
+	}
+	if principal.Super(c) || principal.IsOrgAdmin(c) || principal.IsApp(c) {
+		return org
+	}
+	return ""
+}
+
+// runnerBuild triggers a native build — an image, or the binaries a repo declares.
+//
+// The fabric's own build trigger, and what `hanzo build` and git-push-to-deploy
+// call. It answers 202 with the build job id: a queued build, not a pushed
+// artifact.
+//
+// Two lanes, and a build is exactly one of them. The IMAGE lane takes `repo` and
+// the output `image` and launches a BuildKit Job that pushes it. The ARTIFACT lane
+// takes `binaries` — the same recipe the repo's hanzo.yml declares — and publishes
+// to object storage instead; it must carry no `image`, because a build produces
+// binaries or an image, never both.
+//
+// PRIVILEGED, and A BUILD BELONGS TO THE ORGANIZATION ITS CREDENTIAL NAMES. Two
+// credentials, never a third:
+//
+//   - one that NAMES an organization — a person who administers it (the `hanzo
+//     build` path, so one IAM login authorizes a build with no separate build
+//     token), or that organization's own machine identity (the pipeline path). The
+//     build is attributed to that org and confined to what it owns.
+//   - the shared build-callback token, compared in constant time. It names NO
+//     organization, which is both why the fabric's own release can publish across
+//     brands with it and why anything that CAN name one is read first.
+//
+// Both are bounded by the owned-registry allowlist. The org path is bounded again,
+// by the org: the image's registry namespace must be one that organization owns, so
+// it publishes into its own brand and can never overwrite another's through the
+// shared push credential. The same confinement applies to the artifact lane's repo
+// owner. There is no request field naming an organization — the attribution is read
+// off the credential, so there is nothing for a caller to write it with.
+//
+// The output image is parsed and validated as a single well-formed OCI ref before
+// any authorization decision reads it, so a crafted ref cannot smuggle a
+// build-exporter attribute past the check.
+func (o ops) runnerBuild(ctx context.Context, body *runnerBuildReq) (*runnerBuildResp, error) {
+	// The request itself, not a tenant: this route resolves the organization from
+	// the credential below and accepts a credential that names none, so asking the
+	// client for a tenant here would refuse the fabric's own build before the route
+	// could decide.
+	c, err := o.request(ctx)
+	if err != nil {
+		return nil, err
+	}
+	// The organization this build belongs to, read off the credential and nothing
+	// the caller stated. A caller that names none is refused: there used to be a
+	// shared build-callback token that authorized an org-less build for the fabric
+	// itself, and it was a second auth system standing beside IAM — no membership,
+	// no expiry, nothing in an audit log but "the token". The fabric's own builds
+	// arrive over the plane now (PlatformBuild), where the caller is stated.
+	org := runnerOrg(c)
+	if org == "" {
+		return nil, zip.ErrForbidden("build requires an org-scoped identity")
+	}
+	// runnerOrg names an org only for a caller that administers it or is its own
+	// machine identity, so the caller is that org's staff (laneOf).
+	return build(o.s, ctx, laneOf(org, true), org, *body)
+}
+
+// build launches one image build for org, confined to what org owns: the
+// registry namespaces orgRegistryNamespaces names for it, and on the artifact
+// lane the forge owner of the same name. Every caller is confined alike — a
+// platform SuperAdmin builds into another brand by acting in that brand's org,
+// and the build is then that org's, charged and recorded there. l is whose
+// build it is, decided by the caller (laneOf).
+func build(s *cloud.Service[state], ctx context.Context, l lane, org string, req runnerBuildReq) (*runnerBuildResp, error) {
+
+	req.Repo = strings.TrimSpace(req.Repo)
+	req.Image = strings.TrimSpace(req.Image)
+
+	// EVERY BUILD HERE IS A TENANT'S BUILD, and the allowlist below is what bounds
+	// it: an ordinary build publishes ONE tenant's artifact into the namespace that
+	// tenant owns, so the organization the credential names is the right bound.
+	//
+	// ghcr.io/hanzoai/cloud — the binary every service in every org runs — is not
+	// published from here at all. Its version numbers are ordered by one branch of
+	// one repository, and the compare-and-swap that allocates one runs in
+	// .hanzo/workflows/cicd.yml, beside the commit it is numbering. A second
+	// allocator reading the same registry cannot reserve anything the first one
+	// honours, so there is one.
+	ref := cmp.Or(strings.TrimSpace(req.SHA), strings.TrimSpace(req.Ref), strings.TrimSpace(req.Branch), "main")
+	if len(req.Binaries) > 0 {
+		return runnerArtifactBuild(s, ctx, req, ref, org)
+	}
+	if req.Repo == "" || req.Image == "" {
+		return nil, zip.ErrBadRequest("repo and image are required")
+	}
+	// Validate the output image as a single, well-formed OCI ref BEFORE any
+	// registry/authz decision reads it — so imageRegistryNamespace parses a clean
+	// ref and a comma/space/`=` can never inject a BuildKit `--output` exporter
+	// attribute (M1). launchDirectBuild re-validates at the k8s choke point
+	// (validateBuildInputs); this is the early, user-facing 400.
+	if _, err := validateImageRef(req.Image); err != nil {
+		return nil, zip.ErrBadRequest(err.Error())
+	}
+	if !imageAllowed(req.Image) {
+		return nil, zip.ErrForbidden("image must push to an owned registry (ghcr.io/{hanzoai,luxfi,zooai}/*)")
+	}
+	if imageExcluded(req.Image) {
+		return nil, zip.ErrForbidden(repository(req.Image) + " is versioned by its own release lane and is not published from this endpoint")
+	}
+	platforms, err := buildPlatforms(req.Platforms)
+	if err != nil {
+		return nil, zip.ErrBadRequest(err.Error())
+	}
+	// A fan-out publishes each half at the requested tag plus its architecture, and
+	// then the index at the tag itself. A digest names an image that already exists
+	// and there is no tag to hang either on, so several platforms and a digest are
+	// not a combination that has an answer.
+	if len(platforms) > 1 && strings.Contains(req.Image, "@") {
+		return nil, zip.ErrBadRequest("several platforms need a tag to publish under, not a digest")
+	}
+	tags, err := imageTags(req.Image, req.Tags)
+	if err != nil {
+		return nil, zip.ErrBadRequest(err.Error())
+	}
+
+	// H1 — bind the image's registry namespace to the org the CREDENTIAL names.
+	// imageAllowed proved the image targets a registry the fabric owns; this proves
+	// that organization owns the namespace, so it publishes into its own brand and
+	// can never overwrite another brand's image through the shared push credential.
+	// No caller is exempt, platform sudo included: a SuperAdmin reaches another
+	// brand's namespace by acting in that brand's org, never from its own.
+	if !imageInOrgRegistry(req.Image, org) {
+		return nil, zip.ErrForbidden("image registry-org must match your organization")
+	}
+	// A tag is a ref of Image's own repository (tagRef), so it lands in the
+	// namespace just bound. Every ref the build writes is still asked what Image
+	// was: what is authorized is what is pushed, name by name.
+	for _, t := range tags {
+		if r := tagRef(req.Image, t); !imageAllowed(r) || imageExcluded(r) || !imageInOrgRegistry(r, org) {
+			return nil, zip.ErrForbidden("tag " + t + " must publish where image does")
+		}
+	}
+
+	bldID := genID("bld")
+
+	// For an estate build of an org-owned github.com repository that is not on
+	// the standing cross-repo allowlist (githubReadRepos), mint a short-lived
+	// one-repository contents:read installation token from org's GitHub App
+	// installation so private repos (e.g. hanzoai/zrok) clone cleanly without
+	// adding them to a standing broad secret. Public repos still clone if
+	// provider is unavailable or has no installation for that owner.
+	var checkout *gitCheckout
+	if l == estate {
+		if owner, repo, ok := parseGitHubRepo(req.Repo); ok && repoOwnerInOrg(req.Repo, org) {
+			if _, _, standing := githubReadRepo(org, req.Repo); !standing {
+				if g, mErr := mintEstateCheckout(ctx, org, owner, repo); mErr == nil {
+					checkout = g
+				} else {
+					s.Log.Debug("runner build: no per-build github checkout token minted; proceeding without one",
+						"org", org, "repo", owner+"/"+repo, "err", mErr)
+				}
+			}
+		}
+	}
+	defer func() {
+		if checkout != nil {
+			_ = revokeCheckout(context.WithoutCancel(ctx), checkout)
+		}
+	}()
+
+	jobName, err := s.State.k8s.launchCheckedBuild(ctx, l, org, "", req.Repo, ref, req.Image, strings.TrimSpace(req.Dockerfile), req.DockerTarget, req.Context, bldID, checkout, req.Args, platforms, tags...)
+	if err != nil {
+		return nil, zip.Errorf(deployErrStatus(err), "launch build: %v", err)
+	}
+	if checkout != nil {
+		c := checkout
+		checkout = nil
+		var jobs []string
+		if len(platforms) < 2 {
+			jobs = []string{jobName}
+		} else {
+			for _, p := range platforms {
+				jobs = append(jobs, buildJobName(bldID, nativeArch[p]))
+			}
+		}
+		go s.State.k8s.revokeWhenDoneAll(jobs, c, s.Log.Warn)
+	}
+
+	// Record the build under the organization its credential named. Best-effort:
+	// a record miss must not fail a launched build.
+	now := time.Now().Unix()
+	kept := buildRequest{Lane: l, Repo: req.Repo, Ref: ref, Image: req.Image, Dockerfile: strings.TrimSpace(req.Dockerfile), Target: req.DockerTarget, Dir: req.Context, Args: req.Args, Platforms: platforms, Tags: tags}
+	b := Build{ID: bldID, Org: org, Status: "queued", Image: req.Image, JobName: jobName, Platforms: platforms, Tags: tags, Request: kept.encode(), CreatedAt: now, UpdatedAt: now}
+	if err := s.State.store.InsertBuild(ctx, b); err != nil {
+		s.Log.Warn("runner build record insert failed (build already launched)", "job", jobName, "err", err)
+	}
+	s.Log.Info("runner build launched", "job", jobName, "image", req.Image, "tags", tags, "ref", ref, "repo", remote.Clean(req.Repo), "platforms", platforms)
+
+	return &runnerBuildResp{
+		BuildJobID: bldID, Status: "queued", RunnerPool: "32g", Image: req.Image, Target: strings.TrimSpace(req.DockerTarget), Platforms: platforms, Tags: tags,
+	}, nil
+}
+
+// runnerArtifactBuild serves the ARTIFACT lane of POST /v1/platform/runner: build what the
+// repo's hanzo.yml `binaries:` declares and publish it, rather than push an image.
+// Auth is already settled by the caller, which hands this lane the organization the
+// credential named; the build is charged to it. The bounds this lane adds are
+// its own: the repo URL (the same allowlisted-git-host validator the image lane
+// uses), the recipe (binarySpec.validate), and the forge owner, which must be one
+// that organization owns.
+func runnerArtifactBuild(s *cloud.Service[state], ctx context.Context, req runnerBuildReq, ref, org string) (*runnerBuildResp, error) {
+	if strings.TrimSpace(req.Image) != "" {
+		return nil, zip.ErrBadRequest("a build produces binaries or an image, never both")
+	}
+	if len(req.Tags) > 0 {
+		return nil, zip.ErrBadRequest("tags name more refs of an image, and a binaries build pushes none; `tag` names the publish path")
+	}
+	if len(req.Binaries) > maxArtifactBinaries {
+		return nil, zip.Errorf(http.StatusBadRequest, "at most %d binaries per build", maxArtifactBinaries)
+	}
+	repoURL, err := validateRepoURL(req.Repo)
+	if err != nil {
+		return nil, zip.ErrBadRequest(err.Error())
+	}
+	if _, err := validateBuildRef(ref); err != nil {
+		return nil, zip.ErrBadRequest(err.Error())
+	}
+	for i := range req.Binaries {
+		if err := req.Binaries[i].validate(); err != nil {
+			return nil, zip.ErrBadRequest(err.Error())
+		}
+	}
+	// The publish path segment. Defaults to the pinned ref (a tag publishes at
+	// its tag, a commit at its sha — both immutable); a branch ref carries a '/'
+	// and would nest the layout, so it must be named explicitly.
+	tag := cmp.Or(strings.TrimSpace(req.Tag), ref)
+	if !artifactNameRE.MatchString(tag) {
+		return nil, zip.ErrBadRequest("tag must be a flat version/commit segment (set `tag` when building a branch)")
+	}
+	bucket := cmp.Or(strings.TrimSpace(req.Bucket), defaultArtifactBucket)
+	if !bucketRE.MatchString(bucket) {
+		return nil, zip.ErrBadRequest("bucket must be a valid object-store bucket name")
+	}
+	// Same H1 confinement the image lane applies to a registry namespace: an
+	// organization publishes artifacts only for the forge owner it owns, and no
+	// caller is exempt.
+	if !repoOwnerInOrg(repoURL, org) {
+		return nil, zip.ErrForbidden("repo owner must match your organization")
+	}
+
+	bldID := genID("bld")
+	slug := repoSlug(repoURL)
+	base := artifactBase(bucket, slug, tag)
+	jobName, err := s.State.k8s.launchArtifactBuild(ctx, org, repoURL, ref, tag, base, artifactPutBase(bucket, slug, tag), req.Binaries, bldID)
+	if err != nil {
+		return nil, zip.Errorf(deployErrStatus(err), "launch build: %v", err)
+	}
+
+	// The build row records the INDEX as the output, the way the image lane
+	// records the pushed ref: it is the one URL the artifact is reached by.
+	index := base + "/binaries.json"
+	now := time.Now().Unix()
+	b := Build{ID: bldID, Org: org, Status: "queued", Image: index, JobName: jobName, CreatedAt: now, UpdatedAt: now}
+	if err := s.State.store.InsertBuild(ctx, b); err != nil {
+		s.Log.Warn("runner artifact build record insert failed (build already launched)", "job", jobName, "err", err)
+	}
+	s.Log.Info("runner artifact build launched", "job", jobName, "index", index, "ref", ref, "repo", remote.Clean(repoURL), "binaries", len(req.Binaries))
+
+	return &runnerBuildResp{
+		BuildJobID: bldID, Status: "queued", RunnerPool: "32g", Index: index,
+	}, nil
+}

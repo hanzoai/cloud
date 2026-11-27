@@ -14,10 +14,10 @@ import (
 // renewal count and the process that holds it. Everything about who runs a loop is
 // decided there, by compare-and-set; the KV is never asked.
 //
-// The holder renews by rewriting the object every Confirm, and a renewal that
-// lands gives it term from the moment the write began. A read never confirms
-// anything: only a write the store accepted against the version this process
-// last wrote.
+// HOLDING IS A PERIOD OF TIME, MEASURED FROM A WRITE. The holder renews by
+// rewriting the object every Confirm, and a renewal that lands gives it term
+// from the moment the write began. A read never confirms anything: only a write
+// the store accepted against the version this process last wrote.
 //
 // TAKING NEEDS NO WORD FROM ANYONE. A lease nobody holds (its holder let it go after
 // its passes ended) is taken at once. A held lease is taken only when its object

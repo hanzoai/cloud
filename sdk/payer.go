@@ -24,10 +24,10 @@ import (
 	"strings"
 	"sync/atomic"
 
-	"github.com/hanzoai/account"
 	"github.com/hanzoai/cloud/sdk/geo"
 	"github.com/hanzoai/cloud/sdk/meter"
 	"github.com/hanzoai/cloud/sdk/principal"
+	"github.com/hanzoai/account"
 	"github.com/zap-proto/zip"
 )
 
@@ -75,12 +75,12 @@ type payerKey struct{}
 // Both resolve through principal's own rules (Payer / PayerFrom), so the two paths
 // cannot disagree about who pays.
 //
-// Off the HTTP path the wallet came back empty, empty means "nobody to bill",
-// and every meter correctly skips both the gate and the debit for that — so an
-// identified caller reaching a paid operation over the agent plane spent the
-// platform's money unbilled and unrecorded. The caller was never anonymous
-// there; only the transport was different. Money must not be a property of the
-// transport.
+// IT USED TO READ ONLY THE FIRST, and that was a free pass. Off the HTTP path the
+// wallet came back empty, empty means "nobody to bill", and every meter correctly
+// skips both the gate and the debit for that — so an identified caller reaching a
+// paid operation over the agent plane spent the platform's money unbilled and
+// unrecorded. The caller was never anonymous there; only the transport was
+// different. Money must not be a property of the transport.
 //
 // The zero Payer now means what it says: no attested caller anywhere on this
 // context — an in-process composer, a background job, a CLI invocation. That is

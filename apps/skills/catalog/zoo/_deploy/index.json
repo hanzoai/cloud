@@ -1,0 +1,99 @@
+{
+  "$schema": "https://schemas.agentskills.io/discovery/0.2.0/schema.json",
+  "base_url": "https://api.zoo.ngo",
+  "brand": "zoo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://zoolabs.id",
+  "mcp": {
+    "description": "Model Context Protocol over JSON-RPC 2.0 — one POST per message, stateless, protocol revision 2026-07-28. tools/list answers without a credential with one tool per subsystem (its operations in the \"op\" enum) plus \"describe\", which returns one operation's input schema. tools/call names a subsystem tool and carries {\"op\": <operation>, \"input\": <its arguments>}; it takes the same bearer the REST API does, and a call that carries none is answered 401 with a WWW-Authenticate header naming the resource metadata at /.well-known/oauth-protected-resource, which names the authorization server to sign in at. The tool surface is the public contract: the operator's admin product is not offered, and a name that would disclose a secret or mutate an identity is withheld — the list says how many, under _meta.",
+    "method": "POST",
+    "url": "https://api.zoo.ngo/v1/mcp"
+  },
+  "skill_count": 10,
+  "skills": [
+    {
+      "description": "Read deploy account: Compatibility answer the console UI asks before enabling its buttons.",
+      "digest": "sha256:9a18231a3b68d6e7b13d9b052828f5fad9ae613ffbe96b6a66a813bd61cc459e",
+      "name": "deploy_account",
+      "service": "deploy",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/deploy_account/SKILL.md"
+    },
+    {
+      "description": "Read deploy applications: Returns the fleet as an argocd ApplicationList: one projected Application per operator App CR, carrying the image tag the CR DECLARES, the tag actually RUNNING in the cluster's Deployment, the reconciled health, and the sync verdict those two produce (de",
+      "digest": "sha256:6f3691c25b3db31163c1a4a52f1185ee5011f97489e03af0150ac1bf6bca45de",
+      "name": "deploy_applications",
+      "service": "deploy",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/deploy_applications/SKILL.md",
+      "works": [
+        "engineering"
+      ]
+    },
+    {
+      "description": "Read deploy clusters: Returns the argocd ClusterList of the destinations the caller's applications reconcile into: one entry per distinct destination server, carrying the count of applications reconciling into it..",
+      "digest": "sha256:3fc757da1a5db45df923a43e4e11ffdea45619a269d064a0f561d767e0cde5d7",
+      "name": "deploy_clusters",
+      "service": "deploy",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/deploy_clusters/SKILL.md"
+    },
+    {
+      "description": "Read deploy health: Reports whether this deployment can observe the delivery plane..",
+      "digest": "sha256:5bc68a39980115be7cde76e40ae229995e03413bda397000523d5274e314ef37",
+      "name": "deploy_health",
+      "service": "deploy",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/deploy_health/SKILL.md"
+    },
+    {
+      "description": "Read deploy live: Answers, for each service, what it is running and whether that is what universe says it should run..",
+      "digest": "sha256:a5839b12286178cf1781fa89c4e74e34276435f9788bbbbda4f305ae42db76df",
+      "name": "deploy_live",
+      "service": "deploy",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/deploy_live/SKILL.md"
+    },
+    {
+      "description": "Read deploy login: Start the sign-in round trip for this console.",
+      "digest": "sha256:876a37b550c2e1d8e50a354743b055e06acbe47d95423d2d42fbc0af8e8a9a11",
+      "name": "deploy_login",
+      "service": "deploy",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/deploy_login/SKILL.md"
+    },
+    {
+      "description": "Read deploy projects: Returns the argocd AppProjectList this console groups and filters applications by..",
+      "digest": "sha256:3a9b4c73c3afc346f35d33e029c90ca4587c4d6f155d425640424363139d0084",
+      "name": "deploy_projects",
+      "service": "deploy",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/deploy_projects/SKILL.md"
+    },
+    {
+      "description": "Read deploy release: Answers why a service is, or is not, live: for the newest versions claimed in its source repository, the commit each names, whether the pipeline's runs on it passed and which jobs failed with the lines that say why, whether an image of it was smoked, whether ",
+      "digest": "sha256:24458165292b1dd8b0a3f3bce665091bd3eaaf7fd11e4173cd9a2dd6da58dec4",
+      "name": "deploy_release",
+      "service": "deploy",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/deploy_release/SKILL.md"
+    },
+    {
+      "description": "Read deploy session: Answers \"is this browser signed in, and if not where does it sign in?\" — the dashboard SPA's bootstrap question, and the only route on this plane that answers for an anonymous caller..",
+      "digest": "sha256:cc07c5ac763106c2134b7169a9468b2bef09c425e93ef9852213ccd442568d6b",
+      "name": "deploy_session",
+      "service": "deploy",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/deploy_session/SKILL.md"
+    },
+    {
+      "description": "Read deploy stream: Live application fleet updates as Server-Sent Events, Live resource tree for one application, as Server-Sent Events.",
+      "digest": "sha256:124b6202807aa18962be4a8dd7ccfa094744295c9155232e144a85bfd9909d62",
+      "name": "deploy_stream",
+      "service": "deploy",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/deploy_stream/SKILL.md"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

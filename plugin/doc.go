@@ -1,0 +1,35 @@
+// Package plugin carries the fleet's build-time PROJECTION into the host: the
+// OpenAPI subset each subsystem serves, known without running it.
+//
+// It is a function of the plugin's own router, so it is known when the plugin is
+// BUILT: `<app> describe plugin/<app>` writes openapi.json from one mount of one
+// router (describe.go). This package embeds those files, and the host composes them
+// into the fleet document it serves at /v1/openapi.json.
+//
+// It exists as its own leaf package for one reason: go:embed cannot reach outside
+// its own directory, so the bytes must be embedded from HERE, and cmd/cloud must
+// stay light. This file imports embed and nothing else — no apps, no cloud root —
+// so `go list -deps ./cmd/cloud` gains exactly one package and still links no
+// subsystem.
+//
+// # There is no MCP catalogue here any more
+//
+// It used to embed plugin/<app>/mcp.json too — the tool array the app's binary
+// projected at build time — and hand it to zip as Plugin.Tools so the host could
+// answer tools/list without touching a child. That file was a SECOND source for a
+// fact the child already knows, and a second source can only be stale or
+// accidentally correct. It was stale: plugin/o11y/mcp.json held 12 tools while
+// the o11y binary at the same commit served 365, because the missing 353 ops live
+// in github.com/hanzoai/o11y and a go.mod bump in ANOTHER repository invalidated
+// an artifact in this one with nothing in the diff to say so. No generator on a
+// hook in this repo could have seen that trigger.
+//
+// So the catalogue is not regenerated more often; it is gone, and the MCP server
+// asks the child (package fleet). The subset below survives for the one reason the
+// catalogue could not: the fleet's document carries each subsystem's PROSE, and
+// that prose is lifted from the app's SOURCE at describe time
+// (openapi.Synopsis) — a running child has no comment to read and would answer
+// with its deployment's brand blurb instead, which the compose would then publish
+// as the description of every product tag. Making the synopsis a declared value
+// is what the other half of this file is waiting on.
+package plugin

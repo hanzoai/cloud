@@ -20,16 +20,13 @@ import (
 	"testing"
 	"time"
 
+	"github.com/hanzoai/cloud/internal/driver/postgres"
+	"github.com/hanzoai/cloud/internal/sqltest"
 	"github.com/hanzoai/cloud/sdk/dialect"
-	"github.com/hanzoai/cloud/sdk/driver/postgres"
 	"github.com/hanzoai/cloud/sdk/locus"
 	"github.com/hanzoai/cloud/sdk/principal"
-	"github.com/hanzoai/cloud/sdk/sqltest"
 	"github.com/hanzoai/namespace"
 )
-
-// The stores these tests move are the flags app's.
-func init() { postgres.Declare("flags") }
 
 // padded is a subsystem's open func whose rows weigh something, so the files of stores
 // with more rows are bigger.

@@ -1,0 +1,91 @@
+package git
+
+import (
+	"encoding/json"
+	"net/http"
+	"os"
+	"path/filepath"
+	"testing"
+
+	"github.com/hanzoai/cloud/internal/sqltest"
+	"github.com/hanzoai/cloud/sdk"
+	"github.com/hanzoai/cloud/sdk/locus"
+	"github.com/hanzoai/cloud/sdk/principal"
+	luxlog "github.com/luxfi/log"
+	"github.com/zap-proto/zip"
+)
+
+// mountAppDir mounts git on an explicit DataDir so a test can assert the
+// per-org SQLite files land where the path convention says.
+func mountAppDir(t *testing.T, dir string) *zip.App {
+	t.Helper()
+	app := zip.New(zip.Config{Logger: luxlog.New("test")})
+	t.Setenv("CLOUD_DATA_DIR", dir)
+	t.Setenv("CLOUD_DOMAIN", "api.hanzo.test")
+	if err := Use(app, cloud.Deps{}); err != nil {
+		t.Fatalf("Use:  %v", err)
+	}
+	t.Cleanup(func() { _ = Shutdown() })
+	return app
+}
+
+// TestPerOrgStoreFileIsolation proves the conversion from ONE shared git.db to a
+// per-org file: two orgs get two physical DBs, and one org can never list the
+// other's repos (no cross-read at the store-file boundary).
+func TestPerOrgStoreFileIsolation(t *testing.T) {
+	sqltest.Engines(t, func(t *testing.T, _ sqltest.Open) {
+		dir := t.TempDir()
+		app := mountAppDir(t, dir)
+
+		if code, b := do(t, app, http.MethodPost, "/v1/git/repos", "orga",
+			map[string]any{"name": "svc"}); code != http.StatusCreated {
+			t.Fatalf("orgA create: %d %s", code, b)
+		}
+
+		// orgB sees an empty list — never orgA's repo.
+		code, b := do(t, app, http.MethodGet, "/v1/git/repos", "orgb", nil)
+		if code != http.StatusOK {
+			t.Fatalf("orgB list: %d %s", code, b)
+		}
+		var listB struct {
+			Data []repoView `json:"data"`
+		}
+		if err := json.Unmarshal(b, &listB); err != nil {
+			t.Fatalf("orgB list json: %v (%s)", err, b)
+		}
+		if len(listB.Data) != 0 {
+			t.Fatalf("orgB saw orgA's repos: %+v", listB.Data)
+		}
+
+		// orgB may create a same-named repo — its own file, no conflict.
+		if code, b := do(t, app, http.MethodPost, "/v1/git/repos", "orgb",
+			map[string]any{"name": "svc"}); code != http.StatusCreated {
+			t.Fatalf("orgB create (same name): %d %s", code, b)
+		}
+
+		// Close before stat: on the pure-Go codec the database is written back at
+		// CLOSE, so an open store has not yet landed its file. Shutdown is idempotent,
+		// so mountAppDir's Cleanup still runs harmlessly.
+		if err := Shutdown(); err != nil {
+			t.Fatalf("Shutdown: %v", err)
+		}
+
+		// Two physically distinct per-org DBs exist: files on SQLite, schemas on hanzo-sql.
+		for _, org := range []string{"orga", "orgb"} {
+			if locus.DSN() != "" {
+				ns, err := principal.OrgNamespace(org, "")
+				if err != nil {
+					t.Fatal(err)
+				}
+				if ok, err := locus.Exists(ns, "git"); err != nil || !ok {
+					t.Fatalf("expected per-org git schema for %s: exists=%v err=%v", org, ok, err)
+				}
+				continue
+			}
+			p := filepath.Join(dir, "orgs", org, "git.db")
+			if _, err := os.Stat(p); err != nil {
+				t.Fatalf("expected per-org git store at %s: %v", p, err)
+			}
+		}
+	})
+}

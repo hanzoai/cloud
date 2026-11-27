@@ -1,0 +1,3094 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Hanzo Cloud API",
+    "description": "Package marketplace is the one market between orgs: agents and personas to hire, apps, skills, MCP servers and tools to buy, each sold by the org that owns it, and the two-sided work one org buys from another.",
+    "version": "v1"
+  },
+  "servers": [
+    {
+      "url": "https://api.hanzo.ai"
+    }
+  ],
+  "security": [
+    {
+      "bearer": []
+    }
+  ],
+  "tags": [
+    {
+      "name": "marketplace"
+    }
+  ],
+  "paths": {
+    "/v1/marketplace": {
+      "get": {
+        "operationId": "get_marketplace",
+        "summary": "Lists every tool and agent the caller can reach in their own org and project, enriched with any public listing's title, category and price, and with installed=true on the ones already activated for that scope.",
+        "description": "Lists every tool and agent the caller can reach in their own org and\nproject, enriched with any public listing's title, category and price, and with\ninstalled=true on the ones already activated for that scope. It is the shop\nwindow: one read that answers what exists, what it costs and what is already on.",
+        "tags": [
+          "marketplace"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/marketplace.marketCatalog"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/marketplace/install": {
+      "post": {
+        "operationId": "post_marketplace_install",
+        "summary": "Activates one tool for the caller's own org and project.",
+        "description": "Activates one tool for the caller's own org and project. A marketplace\ninstall IS the tool plane's activation write — one store, one truth — so an\ninstalled capability is immediately dispatchable and a monetized one is priced\nfrom its listing at every call. The tool must resolve in the caller's scope, so\ninstalling something that does not exist is refused rather than recorded.",
+        "tags": [
+          "marketplace"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "tool": "summarize"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/marketplace.installReq"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/marketplace.installState"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/marketplace/jobs": {
+      "get": {
+        "operationId": "get_marketplace_jobs",
+        "summary": "Lists the jobs the caller's org is a party to, newest first: as buyer, the work it hired — with the quotes it has not paid and the jobs being funded, each with the attempt that made it, so a hire whose answer was lost is found here — and as seller, the work it was hired for, which never includes another org's quote.",
+        "description": "Lists the jobs the caller's org is a party to, newest first: as buyer, the work\nit hired — with the quotes it has not paid and the jobs being funded, each with\nthe attempt that made it, so a hire whose answer was lost is found here — and as\nseller, the work it was hired for, which never includes another org's quote.\nAny member of the org.",
+        "tags": [
+          "marketplace"
+        ],
+        "parameters": [
+          {
+            "name": "role",
+            "in": "query",
+            "required": false,
+            "description": "Role is buyer — the jobs the caller's org hired for — or seller, the jobs it\nwas hired for. Buyer when empty.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "seller"
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "description": "Status keeps one state.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "open"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/marketplace.jobPage"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      },
+      "post": {
+        "operationId": "post_marketplace_jobs",
+        "summary": "Hires another org for a piece of work, through a public listing or by a direct offer, and answers 201 with the job — open, waiting for the seller.",
+        "description": "Hires another org for a piece of work, through a public listing or by a direct\noffer, and answers 201 with the job — open, waiting for the seller.\n\nIt is paid over x402, in two steps on this one call. Sent without payment, the\nterms are cleared first — principal decides whether the buyer may pay the seller\nthis amount, and a blocked payment, one that waits on the seller's tax form, and\none that clears only with tax withheld, which this rail does not withhold, are\nrefused and nothing is opened — and it answers 402 with the terms to sign, for\nthe job resource job:\u003cid\u003e: on PAYMENT-REQUIRED, in the body, and in the message.\nSent again with the signed authorization — on PAYMENT-SIGNATURE, or as\npayment — echoing that resource, the terms are cleared once more, the job is\nfunding, and the rail checks the payment against exactly those terms, checks\nit stays acceptable until a dispute could last be ruled on, holds it for this\njob, and sets the amount aside in the buyer's wallet: a wallet that cannot\ncover it answers 402 insufficient_funds and opens nothing. Nothing is paid\nuntil the buyer releases the job, or its review window passes after delivery;\na job that ends unpaid returns the amount to the wallet. Any member of the\nbuying org; a platform SuperAdmin inspecting another org cannot spend it.\n\nA hire sent with an attempt — the buyer's own key for it, in the body — is one\nhire however often it is sent: the same attempt with the same request answers\nthe same job, so a request whose answer was lost is sent again as it was, and\nopens one job and sets its amount aside once. It answers the quote's terms\nagain while the job is quoted or funding (a quote over its hour is given up\nand quoted anew), and the job, 201, once it opened. Another request under an\nattempt already used is refused, 422. The buyer's own jobs list its quotes\nand those being funded, with their attempts, so an attempt in flight is found\nthere too. Without an attempt, the same terms asked again within the hour\nanswer the same quote, and the same payment sent again answers the job it\nopened.",
+        "tags": [
+          "marketplace"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "amount": "250.00",
+                "attempt": "8f14e45f-ea8d-4c4e-9c1b-0f3b2b1a7d6e",
+                "brief": "Summarize our Q3 filings",
+                "listing": "lst_4f1c"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/marketplace.hireIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/marketplace.Job"
+                }
+              }
+            },
+            "description": "created"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/marketplace/jobs/{id}": {
+      "get": {
+        "operationId": "get_marketplace_jobs_by_id",
+        "summary": "Reads one job the caller's org is a party to.",
+        "description": "Reads one job the caller's org is a party to. Another org's job, and one that\ndoes not exist, are the same 404.",
+        "tags": [
+          "marketplace"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the job, from the path.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "job_9a1f"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/marketplace.Job"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/marketplace/jobs/{id}/accept": {
+      "post": {
+        "operationId": "post_marketplace_jobs_by_id_accept",
+        "summary": "Accepts a job the caller's org was hired for: the seller takes the work on and the clock toward its deadline is the seller's.",
+        "description": "Accepts a job the caller's org was hired for: the seller takes the work on and\nthe clock toward its deadline is the seller's. Only an open job, and only before\nits deadline.",
+        "tags": [
+          "marketplace"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the job, from the path.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "job_9a1f"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/marketplace.Job"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/marketplace/jobs/{id}/cancel": {
+      "post": {
+        "operationId": "post_marketplace_jobs_by_id_cancel",
+        "summary": "Takes back a job the caller's org opened, before the seller accepts it.",
+        "description": "Takes back a job the caller's org opened, before the seller accepts it. Nothing\nwas paid: the amount set aside returns to the wallet.",
+        "tags": [
+          "marketplace"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the job, from the path.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "job_9a1f"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/marketplace.Job"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/marketplace/jobs/{id}/decline": {
+      "post": {
+        "operationId": "post_marketplace_jobs_by_id_decline",
+        "summary": "Declines a job the caller's org was hired for, before any work.",
+        "description": "Declines a job the caller's org was hired for, before any work. Nothing was\npaid: the buyer's authorization is given up, never settled, and the amount it\nset aside returns to the buyer's wallet.",
+        "tags": [
+          "marketplace"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the job, from the path.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "job_9a1f"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "id": "job_9a1f",
+                "reason": "Booked through March"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/marketplace.declineIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/marketplace.Job"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/marketplace/jobs/{id}/deliver": {
+      "post": {
+        "operationId": "post_marketplace_jobs_by_id_deliver",
+        "summary": "Records delivery of a job the caller's org accepted, before its deadline, and starts the review window: the buyer releases or disputes within it, or it releases itself when it closes.",
+        "description": "Records delivery of a job the caller's org accepted, before its deadline, and\nstarts the review window: the buyer releases or disputes within it, or it\nreleases itself when it closes.",
+        "tags": [
+          "marketplace"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the job, from the path.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "job_9a1f"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "id": "job_9a1f",
+                "note": "Summary attached",
+                "url": "https://files.example.com/q3.pdf"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/marketplace.deliverIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/marketplace.Job"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/marketplace/jobs/{id}/dispute": {
+      "post": {
+        "operationId": "post_marketplace_jobs_by_id_dispute",
+        "summary": "Stops a job for a ruling, as either party: before delivery (and before the deadline), or within the review window after it.",
+        "description": "Stops a job for a ruling, as either party: before delivery (and before the\ndeadline), or within the review window after it. Nothing moves while it is\ndisputed. It ends when the buyer releases it, the seller refunds it, the\nplatform's arbiter rules, or the arbiter's time lapses and it is refunded.",
+        "tags": [
+          "marketplace"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the job, from the path.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "job_9a1f"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "id": "job_9a1f",
+                "reason": "The summary covers Q2, not Q3"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/marketplace.disputeIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/marketplace.Job"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/marketplace/jobs/{id}/feedback": {
+      "post": {
+        "operationId": "post_marketplace_jobs_by_id_feedback",
+        "summary": "Rates the other party of a settled job — the seller when the caller's org bought, the buyer when it sold — once per party per job, and never edited.",
+        "description": "Rates the other party of a settled job — the seller when the caller's org\nbought, the buyer when it sold — once per party per job, and never edited. A\njob counts as settled once it was released, or refunded after the seller took\nit on; one cancelled or declined before any work earns nothing. What buyers say\nof a seller is its listing's and its own reputation in the shop. It answers 201\nwith the feedback recorded.",
+        "tags": [
+          "marketplace"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the job, from the path.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "job_9a1f"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "comment": "Thorough and on time",
+                "id": "job_9a1f",
+                "rating": 5
+              },
+              "schema": {
+                "$ref": "#/components/schemas/marketplace.feedbackIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/marketplace.Feedback"
+                }
+              }
+            },
+            "description": "created"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/marketplace/jobs/{id}/refund": {
+      "post": {
+        "operationId": "post_marketplace_jobs_by_id_refund",
+        "summary": "Refunds a job the caller's org accepted, as the seller, at any point before it is paid: nothing was moved, so the buyer's authorization is given up, never settled, and the amount it set aside returns to the buyer's wallet.",
+        "description": "Refunds a job the caller's org accepted, as the seller, at any point before it\nis paid: nothing was moved, so the buyer's authorization is given up, never\nsettled, and the amount it set aside returns to the buyer's wallet.",
+        "tags": [
+          "marketplace"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the job, from the path.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "job_9a1f"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/marketplace.Job"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/marketplace/jobs/{id}/release": {
+      "post": {
+        "operationId": "post_marketplace_jobs_by_id_release",
+        "summary": "Releases a job the caller's org is paying for, paying the seller the whole amount: the buyer's authorization is settled on the rail, once, and the rail states the payment.",
+        "description": "Releases a job the caller's org is paying for, paying the seller the whole\namount: the buyer's authorization is settled on the rail, once, and the rail\nstates the payment. The buyer may release any time after acceptance, including\nto end a dispute.",
+        "tags": [
+          "marketplace"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the job, from the path.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "job_9a1f"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/marketplace.Job"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/marketplace/jobs/{id}/resolve": {
+      "post": {
+        "operationId": "post_marketplace_jobs_by_id_resolve",
+        "summary": "Rules on a disputed job, as the platform's arbiter: release pays the seller the whole amount from the buyer's held authorization, if the payment still clears; refund ends it with nothing paid, and the amount set aside returns to the buyer's wallet.",
+        "description": "Rules on a disputed job, as the platform's arbiter: release pays the seller the\nwhole amount from the buyer's held authorization, if the payment still clears;\nrefund ends it with nothing paid, and the amount set aside returns to the\nbuyer's wallet. A platform SuperAdmin only.",
+        "tags": [
+          "marketplace"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the job, from the path.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "job_9a1f"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "id": "job_9a1f",
+                "outcome": "refund"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/marketplace.resolveIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/marketplace.Job"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/marketplace/listings": {
+      "get": {
+        "operationId": "get_marketplace_listings",
+        "summary": "Returns the listings the caller's own org has published — what this org is offering, not what it can buy — optionally of one kind.",
+        "description": "Returns the listings the caller's own org has published — what this\norg is offering, not what it can buy — optionally of one kind. A publisher only\never sees its own rows.",
+        "tags": [
+          "marketplace"
+        ],
+        "parameters": [
+          {
+            "name": "kind",
+            "in": "query",
+            "required": false,
+            "description": "Kind keeps one kind: agent, persona, app, skill, mcp, tool, expert or capability.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/marketplace.listingPage"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      },
+      "post": {
+        "operationId": "post_marketplace_listings",
+        "summary": "Offers one thing the caller's org owns on the marketplace — an agent, persona, app, skill, Kai capability or MCP server, or, for the platform, a tool sold per call — optionally monetized.",
+        "description": "Offers one thing the caller's org owns on the marketplace — an agent,\npersona, app, skill, Kai capability or MCP server, or, for the platform, a tool\nsold per call — optionally monetized. An expert is the exception to the org's\nadmin: any member lists themself, once, as a person (kind expert), and is the\nlisting's owner beside the org's admins. The owning app is asked, as the org,\nwhether the thing is the org's, so a listing never sells something that does\nnot exist or belongs to someone else: a tool every org reaches is the\nplatform's, and a server enabled off the public shelf is the shelf's. A\nmonetized listing names a payout wallet of the org's own, which wallets\nconfirms, so a price is never unpayable. The price is exact to 18 decimal\nplaces, so a per-call price below a cent is a real price and not a rounded-away\nzero. An org admin publishes, at most 1000 listings an org; it answers 201 with\nthe created row.",
+        "tags": [
+          "marketplace"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "kind": "agent",
+                "price": "250",
+                "public": true,
+                "recipient": "wal_9f2",
+                "title": "Research analyst",
+                "tool": "researcher"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/marketplace.publishReq"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/marketplace.Listing"
+                }
+              }
+            },
+            "description": "created"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/marketplace/listings/{id}": {
+      "delete": {
+        "operationId": "delete_marketplace_listings_by_id",
+        "summary": "Withdraws one of the caller org's listings from the marketplace and answers 204.",
+        "description": "Withdraws one of the caller org's listings from the marketplace and\nanswers 204. Only the publishing org can remove its own listing; an id that is\nunknown, or belongs to another org, is the same 404, so a probe learns nothing\nabout what exists. Removing a listing removes its price from per-call enforcement;\nit does not uninstall the tool for anyone who already installed it, and a job\nalready opened through it runs to its end. An org admin unpublishes, and an\nexpert unpublishes their own listing.",
+        "tags": [
+          "marketplace"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the listing, from the path.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "lst_1"
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "no content"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      },
+      "patch": {
+        "operationId": "patch_marketplace_listings_by_id",
+        "summary": "Edits one of the caller org's listings — its copy, price, payout wallet, visibility and documentation, and an expert's profile — under the same rules publish applies, and answers the listing as it now stands.",
+        "description": "Edits one of the caller org's listings — its copy, price, payout wallet,\nvisibility and documentation, and an expert's profile — under the same rules\npublish applies, and answers the listing as it now stands. Another org's\nlisting and one that does not exist are the same 404. An org admin edits, and\nan expert edits their own listing.",
+        "tags": [
+          "marketplace"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the listing to edit, from the path.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "lst_4f1c"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "id": "lst_4f1c",
+                "price": "300",
+                "public": true
+              },
+              "schema": {
+                "$ref": "#/components/schemas/marketplace.patchReq"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/marketplace.Listing"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/marketplace/listings/{id}/verify": {
+      "post": {
+        "operationId": "post_marketplace_listings_by_id_verify",
+        "summary": "Marks an expert listing verified, or takes the mark away, whichever org published it.",
+        "description": "Marks an expert listing verified, or takes the mark away, whichever org\npublished it. Verified is staff's word that the person is who the listing says\nand does what it says: only a SuperAdmin (an owner of the reserved admin org)\ngives it, never an org admin and never the expert, and each change is on the\naudit trail with who made it. It answers the listing as it now stands. A\nlisting that is not an expert's is a 404.",
+        "tags": [
+          "marketplace"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the expert listing, from the path.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "lst_4f1c"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "id": "lst_4f1c",
+                "verified": true
+              },
+              "schema": {
+                "$ref": "#/components/schemas/marketplace.verifyReq"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/marketplace.Listing"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/marketplace/seller": {
+      "get": {
+        "operationId": "get_marketplace_seller",
+        "summary": "Answers where the caller's org stands as a seller, in one read: its founders' identity verification (KYC) and legal entity (KYB), its tax form and whether it is certified and valid, its own sanctions screening — only what an org may see about itself — the payout wallet it proved, the TaxPrincipalCredentials signed for its agents, what it earned in the year from the economic events the rails stated, and the 1099s payers furnished it.",
+        "description": "Answers where the caller's org stands as a seller, in one read: its founders'\nidentity verification (KYC) and legal entity (KYB), its tax form and whether it\nis certified and valid, its own sanctions screening — only what an org may see\nabout itself — the payout wallet it proved, the TaxPrincipalCredentials signed\nfor its agents, what it earned in the year from the economic events the rails\nstated, and the 1099s payers furnished it. Ready says nothing is missing. Each\nowning app is asked as the org; one this deployment does not run is named absent\nrather than read as empty. An org admin reads it.",
+        "tags": [
+          "marketplace"
+        ],
+        "parameters": [
+          {
+            "name": "year",
+            "in": "query",
+            "required": false,
+            "description": "Year is the calendar year (UTC); the current one when zero.",
+            "schema": {
+              "format": "int64",
+              "type": "integer"
+            },
+            "example": 2026
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/marketplace.Onboarding"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/marketplace/seller/payout": {
+      "post": {
+        "operationId": "post_marketplace_seller_payout",
+        "summary": "Starts binding one of the caller org's wallets as the wallet it is paid into: answers a challenge naming the org, the wallet and its address, to be signed with that wallet within fifteen minutes and sent to POST /v1/marketplace/seller/payout/verify.",
+        "description": "Starts binding one of the caller org's wallets as the wallet it is paid into:\nanswers a challenge naming the org, the wallet and its address, to be signed\nwith that wallet within fifteen minutes and sent to POST\n/v1/marketplace/seller/payout/verify. A newer challenge replaces an older one.\nAn org admin binds.",
+        "tags": [
+          "marketplace"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "wallet": "wal_9f2"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/marketplace.payoutIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/marketplace.PayoutChallenge"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/marketplace/seller/payout/verify": {
+      "post": {
+        "operationId": "post_marketplace_seller_payout_verify",
+        "summary": "Binds the caller org's payout wallet: the signature over its outstanding challenge is recovered, and must recover to the wallet's address, before the challenge expires.",
+        "description": "Binds the caller org's payout wallet: the signature over its outstanding\nchallenge is recovered, and must recover to the wallet's address, before the\nchallenge expires. A challenge binds once. It answers the payout wallet as it\nnow stands; a job offered directly to the org is paid into it. An org admin\nbinds.",
+        "tags": [
+          "marketplace"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "signature": "0x5f1c…1b"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/marketplace.verifyIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/marketplace.Payout"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/marketplace/shop": {
+      "get": {
+        "operationId": "get_marketplace_shop",
+        "summary": "Searches every public listing of every kind — agents and personas to hire, apps, skills, Kai capabilities, MCP servers and tools — newest first, with facets by kind, category, price and rating, paged.",
+        "description": "Searches every public listing of every kind — agents and personas to hire,\napps, skills, Kai capabilities, MCP servers and tools — newest first, with\nfacets by kind, category, price and rating, paged. Each listing carries its\nseller's public face, its reputation from settled jobs and installs, and the\ncommand and MCP operation that buy it. It needs no credential and answers the\nsame to everyone.\n\nWith kind=expert it also takes sort and dir, language, verified, minLevel,\nbadge, tokenTier, rateMin and rateMax, and product: the experts the ordinary\nfilters match are kept by these, ordered and paged, and total is how many were\nkept (facets stay the ordinary filters'). An expert whose reward profile is public\nshows it — level, points, the three rarest badges, the token tier — and each shows\nthe products it scores highest in with the parts of the score, and those it ranks\namong the best three of all experts in. A private profile shows nothing of the\nrewards program and is put last by an order that reads it. A value a parameter\ncannot take, and any of these without kind=expert, is a 400.",
+        "tags": [
+          "marketplace"
+        ],
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "description": "Q keeps listings whose title, description, category, thing or seller\ncontains every word of it, case-insensitively.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "research"
+          },
+          {
+            "name": "kind",
+            "in": "query",
+            "required": false,
+            "description": "Kind keeps one kind: agent, persona, app, skill, mcp, tool or expert.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "agent"
+          },
+          {
+            "name": "category",
+            "in": "query",
+            "required": false,
+            "description": "Category keeps one category, exactly.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "price",
+            "in": "query",
+            "required": false,
+            "description": "Price keeps free listings or priced ones.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "rating",
+            "in": "query",
+            "required": false,
+            "description": "Rating keeps listings rated at least this many stars, 1 to 5.",
+            "schema": {
+              "format": "int64",
+              "type": "integer"
+            }
+          },
+          {
+            "name": "seller",
+            "in": "query",
+            "required": false,
+            "description": "Seller keeps one seller org's listings.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "area",
+            "in": "query",
+            "required": false,
+            "description": "Area keeps the experts who work on one area: configure, base, commerce,\nbot, agents, cloud, models, creative or freelance.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Limit is the page size: 48 by default, 200 at most.",
+            "schema": {
+              "format": "int64",
+              "type": "integer"
+            },
+            "example": 48
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "description": "Offset is where the page starts.",
+            "schema": {
+              "format": "int64",
+              "type": "integer"
+            }
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "required": false,
+            "description": "Sort orders experts, with kind=expert: tokens (the token tier), level, points\n(the rewards program's, put last for an expert whose reward profile is not\npublic), rating (unrated last), jobs (jobs completed), rate (the hourly rate,\nnone last) or newest. It is newest by default.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "dir",
+            "in": "query",
+            "required": false,
+            "description": "Dir is the direction of Sort: desc by default, or asc. An expert the order\ncannot place stays last either way.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "language",
+            "in": "query",
+            "required": false,
+            "description": "Language keeps the experts who work in a language, a BCP 47 tag such as en,\nes or zh-cn; zh keeps zh-cn and zh-tw as well. With kind=expert.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "verified",
+            "in": "query",
+            "required": false,
+            "description": "Verified, true, keeps the experts staff verified; false keeps everyone. With\nkind=expert.",
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "minLevel",
+            "in": "query",
+            "required": false,
+            "description": "MinLevel keeps the experts whose public reward profile shows this level or\nhigher; 0 keeps everyone. With kind=expert.",
+            "schema": {
+              "format": "int64",
+              "type": "integer"
+            }
+          },
+          {
+            "name": "badge",
+            "in": "query",
+            "required": false,
+            "description": "Badge keeps the experts whose public reward profile holds a badge, by id such\nas first-merge. With kind=expert.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "tokenTier",
+            "in": "query",
+            "required": false,
+            "description": "TokenTier keeps the experts whose token tier is at least this: 100k, 1m, 5m,\n10m, 100m, 1b, 10b, 100b or 1t. With kind=expert.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "rateMin",
+            "in": "query",
+            "required": false,
+            "description": "RateMin keeps the experts whose hourly rate is at least this decimal USD amount;\nan expert with no hourly rate is kept by neither RateMin nor RateMax. With\nkind=expert.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "rateMax",
+            "in": "query",
+            "required": false,
+            "description": "RateMax keeps the experts whose hourly rate is at most this decimal USD amount.\nWith kind=expert.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "product",
+            "in": "query",
+            "required": false,
+            "description": "Product orders the experts by their score in a product, best first, those\nwith none last: dev, bot, team, base, commerce, cloud, agents, kai, enso, zen\nor creative. It is the order, so it is not given with Sort. With kind=expert.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/marketplace.Shop"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "security": [],
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/marketplace/shop/{id}": {
+      "get": {
+        "operationId": "get_marketplace_shop_by_id",
+        "summary": "Reads one public listing as the shop shows it — its seller's public face, its reputation and the ways to buy it.",
+        "description": "Reads one public listing as the shop shows it — its seller's public face, its\nreputation and the ways to buy it. A private listing and one that does not\nexist are the same 404. It needs no credential.",
+        "tags": [
+          "marketplace"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the listing, from the path.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "lst_4f1c"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/marketplace.ShopListing"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "security": [],
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/marketplace/shop/{id}/weights": {
+      "get": {
+        "operationId": "get_marketplace_shop_by_id_weights",
+        "summary": "Downloads an open-source Kai capability listing's .tar weights (base64) and shared representation metadata.",
+        "description": "Downloads an open-source Kai capability listing's .tar weights (base64) and\nshared representation metadata. Only public capability listings with price 0\nallow weight downloads; monetized capability listings keep their weights\nsealed and answer 403. It needs no credential.",
+        "tags": [
+          "marketplace"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the listing, from the path.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "lst_4f1c"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/marketplace.ShopCapabilityWeights"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "security": [],
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/marketplace/uninstall": {
+      "post": {
+        "operationId": "post_marketplace_uninstall",
+        "summary": "Deactivates one tool for the caller's own org and project, so it stops being dispatchable there.",
+        "description": "Deactivates one tool for the caller's own org and project, so it stops\nbeing dispatchable there. It is the exact inverse of install and touches the same\nactivation record; deactivating something that was never active is not an error.\nThe listing itself is untouched — this withdraws the caller's use of a capability,\nnot anyone's offer of it.",
+        "tags": [
+          "marketplace"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "tool": "summarize"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/marketplace.installReq"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/marketplace.installState"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "marketplace.Badge": {
+        "properties": {
+          "id": {
+            "description": "ID is the badge's id, such as first-merge.",
+            "type": "string"
+          },
+          "name": {
+            "description": "Name is what it is called.",
+            "type": "string"
+          },
+          "pillar": {
+            "description": "Pillar is what it is for: use, share, community, contribute or expert.",
+            "type": "string"
+          },
+          "rarity": {
+            "description": "Rarity is how rare it is, from common up.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "marketplace.CapabilitySpec": {
+        "properties": {
+          "baseSha256": {
+            "description": "BaseSHA256 is the Kai base weights' SHA-256 it was taught over.",
+            "type": "string"
+          },
+          "bytes": {
+            "description": "Bytes is the artifact's size in bytes.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "damage": {
+            "description": "Damage is the count of held-out regressions on preserve rows.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "fireRate": {
+            "description": "FireRate is the fraction of routed decisions the capability modifies.",
+            "format": "double",
+            "type": "number"
+          },
+          "form": {
+            "description": "Form is calibration, head, pair or full.",
+            "type": "string"
+          },
+          "labels": {
+            "description": "Labels are the question's option labels in order.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "latencyUs": {
+            "description": "LatencyUs is the measured CPU overhead in microseconds per decision.",
+            "format": "double",
+            "type": "number"
+          },
+          "license": {
+            "description": "License is Apache-2.0, MIT, BSD-3-Clause, CC-BY-4.0, or commercial.",
+            "type": "string"
+          },
+          "oodMoved": {
+            "description": "OODMoved is the number of out-of-distribution questions moved (0 required).",
+            "format": "int64",
+            "type": "integer"
+          },
+          "questionKey": {
+            "description": "QuestionKey is the question key the capability routes.",
+            "type": "string"
+          },
+          "questionType": {
+            "description": "QuestionType is choice, score or noul.",
+            "type": "string"
+          },
+          "rank": {
+            "description": "Rank is the correction's place on the form ladder (1..4).",
+            "format": "int64",
+            "type": "integer"
+          },
+          "repairs": {
+            "description": "Repairs is the count of held-out mistakes repaired during evaluation.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "representation": {
+            "description": "Representation is the shared Kai latent representation hash (weights,\ntokenizer, layout and pooling) the capability binds to.",
+            "type": "string"
+          },
+          "sha256": {
+            "description": "SHA256 is the capability .tar artifact's SHA-256.",
+            "type": "string"
+          },
+          "specificity": {
+            "description": "Specificity is the fraction of preserve rows left untouched.",
+            "format": "double",
+            "type": "number"
+          }
+        },
+        "type": "object"
+      },
+      "marketplace.Delivery": {
+        "properties": {
+          "at": {
+            "description": "At is when, unix seconds.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "hash": {
+            "description": "Hash commits to what was delivered: the seller's own 32-byte hash, or the\nSHA-256 of the note and URL. It is the escrow's delivery hash on chain.",
+            "type": "string"
+          },
+          "note": {
+            "description": "Note says what was delivered.",
+            "type": "string"
+          },
+          "url": {
+            "description": "URL is where it is, https. It is a KMS value (the row holds its path), so only the\nreads that serve a job to a party fill it.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "marketplace.Dispute": {
+        "properties": {
+          "at": {
+            "description": "At is when, unix seconds.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "by": {
+            "description": "By is the org that disputed.",
+            "type": "string"
+          },
+          "contested": {
+            "description": "Contested is the clock's own dispute: the payment stopped clearing when the\nreview window closed. A party's dispute never carries it, whatever the party\nis named.",
+            "type": "boolean"
+          },
+          "reason": {
+            "description": "Reason is the disputing party's words.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "marketplace.Earnings": {
+        "properties": {
+          "byRail": {
+            "additionalProperties": {},
+            "description": "ByRail sums them by the rail that moved them.",
+            "type": "object"
+          },
+          "currency": {
+            "description": "Currency is USD.",
+            "type": "string"
+          },
+          "gross": {
+            "description": "Gross is the sum of every payment to the org, exact USD."
+          },
+          "partial": {
+            "description": "Partial is true when the year held more than one read sums.",
+            "type": "boolean"
+          },
+          "payments": {
+            "description": "Payments is how many.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "year": {
+            "description": "Year is the calendar year (UTC).",
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "marketplace.Escrow": {
+        "properties": {
+          "contract": {
+            "description": "Contract is the contract the money moves through: the token the x402\nauthorization transfers, or the escrow on chain.",
+            "type": "string"
+          },
+          "network": {
+            "description": "Network is the CAIP-2 network the payment is signed for.",
+            "type": "string"
+          },
+          "payTo": {
+            "description": "PayTo is the seller's payout address.",
+            "type": "string"
+          },
+          "rail": {
+            "description": "Rail is x402 — the buyer's balance, settled at release — or chain, the Lux\nescrow contract.",
+            "type": "string"
+          },
+          "txHash": {
+            "description": "TxHash is the transaction that paid the seller, once one did: the chain's\nhash, or the x402 settlement id on the ledger.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "marketplace.Expert": {
+        "properties": {
+          "areas": {
+            "description": "Areas is what the expert works on: configure, base, commerce, bot, agents,\ncloud, models, creative or freelance.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "availability": {
+            "description": "Availability is the expert's weekly hours, in their own words.",
+            "type": "string"
+          },
+          "languages": {
+            "description": "Languages are the languages the expert works in, lowercase BCP 47 tags.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "links": {
+            "description": "Links are where the expert's work can be seen: up to 8 https URLs.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "person": {
+            "description": "Person is the expert's IAM identity: the verified principal that published\nthe listing, never taken off the wire. Only the expert's own org reads it.",
+            "type": "string"
+          },
+          "products": {
+            "description": "Products are the products the expert scores highest in, at most three, best\nfirst, each with the parts its score is made of; absent until they score in\nany (expertise.go).",
+            "items": {
+              "$ref": "#/components/schemas/marketplace.Score"
+            },
+            "type": "array"
+          },
+          "rate": {
+            "description": "Rate is the hourly rate, exact to 18 decimal places of USD; \"0\" when the\nexpert sells only a fixed engagement (the listing's price)."
+          },
+          "reward": {
+            "$ref": "#/components/schemas/marketplace.Reward",
+            "description": "Reward is the expert's standing in the rewards program, present only when\nthey made their reward profile public (reward.go)."
+          },
+          "self": {
+            "description": "Self is whether the expert is the caller. It is set on the caller's own\norg's listings and nowhere else, so a client finds its own listing without\nknowing how an identity is spelled.",
+            "type": "boolean"
+          },
+          "skills": {
+            "description": "Skills are what the expert is good at, in their own words: up to 20 names of\nup to 40 characters, each once whatever its case.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "timezone": {
+            "description": "Timezone is the expert's IANA time zone, \"America/Los_Angeles\".",
+            "type": "string"
+          },
+          "top": {
+            "description": "Top names the products in which the expert ranks among the best three of all\nexperts, in the order of the product list.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "verified": {
+            "description": "Verified is whether staff vouch for the expert. Only a SuperAdmin sets it.",
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
+      "marketplace.Facets": {
+        "properties": {
+          "category": {
+            "additionalProperties": {
+              "format": "int64",
+              "type": "integer"
+            },
+            "description": "Category counts listings in each category; an uncategorized one is not\ncounted.",
+            "type": "object"
+          },
+          "kind": {
+            "additionalProperties": {
+              "format": "int64",
+              "type": "integer"
+            },
+            "description": "Kind counts listings of each kind.",
+            "type": "object"
+          },
+          "price": {
+            "additionalProperties": {
+              "format": "int64",
+              "type": "integer"
+            },
+            "description": "Price counts free and priced listings.",
+            "type": "object"
+          },
+          "rating": {
+            "additionalProperties": {
+              "format": "int64",
+              "type": "integer"
+            },
+            "description": "Rating counts listings by their rounded rating, \"1\" to \"5\", and those with\nno rating yet as \"unrated\".",
+            "type": "object"
+          }
+        },
+        "type": "object"
+      },
+      "marketplace.Feedback": {
+        "properties": {
+          "about": {
+            "description": "About is the other party of the job, the org it is about.",
+            "type": "string"
+          },
+          "at": {
+            "description": "At is when, unix seconds.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "comment": {
+            "description": "Comment is the party's words, at most 4096 characters.",
+            "type": "string"
+          },
+          "from": {
+            "description": "From is the org that gave it.",
+            "type": "string"
+          },
+          "job": {
+            "description": "Job is the job it is about.",
+            "type": "string"
+          },
+          "listing": {
+            "description": "Listing is the listing the job was hired through; empty for a direct offer.",
+            "type": "string"
+          },
+          "rating": {
+            "description": "Rating is 1 to 5 stars.",
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "marketplace.Job": {
+        "properties": {
+          "amount": {
+            "description": "Amount is what the job pays, exact USD."
+          },
+          "attempt": {
+            "description": "Attempt is the buyer's own key for the hire that made the job, when it sent\none.",
+            "type": "string"
+          },
+          "brief": {
+            "description": "Brief is what the buyer asked for.",
+            "type": "string"
+          },
+          "buyerOrg": {
+            "description": "BuyerOrg is the org that pays.",
+            "type": "string"
+          },
+          "category": {
+            "description": "Category is what the payment is for — service, goods, transfer or royalty —\nas the buyer declared it and the seller accepted it. It is what the\neconomic event says.",
+            "type": "string"
+          },
+          "clearance": {
+            "description": "Clearance is principal's latest decision that the buyer may pay the seller\nthis amount — asked when the job was quoted, again when it was funded, and\nagain when it was released: GET /v1/principal/clearance/{id}.",
+            "type": "string"
+          },
+          "createdAt": {
+            "description": "CreatedAt is when the job was quoted, unix seconds.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "currency": {
+            "description": "Currency labels Amount: USD.",
+            "type": "string"
+          },
+          "deadline": {
+            "description": "Deadline is when delivery must land by, unix seconds.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "delivery": {
+            "$ref": "#/components/schemas/marketplace.Delivery",
+            "description": "Delivery is what the seller delivered, once it has."
+          },
+          "dispute": {
+            "$ref": "#/components/schemas/marketplace.Dispute",
+            "description": "Dispute is why the job was stopped, once it was."
+          },
+          "ending": {
+            "description": "Ending is the unpaid ending the job was given — declined, cancelled or\nrefunded — while the rail returns the amount it set aside. It takes no other\nstep meanwhile, and Status becomes Ending once the money is back.",
+            "type": "string"
+          },
+          "escrow": {
+            "$ref": "#/components/schemas/marketplace.Escrow",
+            "description": "Escrow is how the job is paid."
+          },
+          "history": {
+            "description": "History is every step the job took, oldest first.",
+            "items": {
+              "$ref": "#/components/schemas/marketplace.Step"
+            },
+            "type": "array"
+          },
+          "id": {
+            "description": "ID is the job, \"job_\"-prefixed.",
+            "type": "string"
+          },
+          "listing": {
+            "description": "Listing is the listing it was hired through; empty for a direct offer.",
+            "type": "string"
+          },
+          "performed": {
+            "description": "Performed is where the work is performed, ISO 3166-1 alpha-2, when said.",
+            "type": "string"
+          },
+          "review": {
+            "description": "Review is how many seconds after delivery the buyer has to release or\ndispute before the job releases itself.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "sellerOrg": {
+            "description": "SellerOrg is the org that does the work and is paid.",
+            "type": "string"
+          },
+          "status": {
+            "description": "Status is where the job stands: quoted or funding, which only its buyer\nsees, then open, accepted, delivered, released, disputed, declined,\ncancelled or refunded.",
+            "type": "string"
+          },
+          "title": {
+            "description": "Title names the work: the listing's title, or the offer's own.",
+            "type": "string"
+          },
+          "updatedAt": {
+            "description": "UpdatedAt is when it last moved, unix seconds.",
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "marketplace.JobCounts": {
+        "properties": {
+          "completed": {
+            "description": "Completed is released jobs.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "disputed": {
+            "description": "Disputed is jobs ever disputed.",
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "marketplace.Links": {
+        "properties": {
+          "cli": {
+            "description": "CLI is the hanzo command that buys it.",
+            "type": "string"
+          },
+          "docs": {
+            "description": "Docs is the listing's documentation, when the seller named one.",
+            "type": "string"
+          },
+          "mcp": {
+            "$ref": "#/components/schemas/marketplace.MCPRef",
+            "description": "MCP is the MCP tool and operation that buys it."
+          }
+        },
+        "type": "object"
+      },
+      "marketplace.Listing": {
+        "properties": {
+          "capability": {
+            "$ref": "#/components/schemas/marketplace.CapabilitySpec",
+            "description": "Capability is the Kai capability metadata behind a listing of kind\ncapability (capability.go); absent on every other kind."
+          },
+          "category": {
+            "description": "Category groups the listing in the shop window. Free text — no vocabulary,\nnothing validates it — and unlike Description it is silently cut to 4096\nbytes rather than refused. Empty means ungrouped.",
+            "type": "string"
+          },
+          "createdAt": {
+            "description": "CreatedAt is when the listing was published, in Unix SECONDS, minted at\ninsert. Every listing read orders by it descending, so it is the shop's\nordering key as well as its age.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "currency": {
+            "description": "Currency is the ISO 4217 code Price is quoted in; Create defaults it to \"USD\"\nwhen the publisher names none. It is a LABEL that travels to the shop window:\npublish parses Price with money.ParseUSD and the x402 terms carry no\ncurrency, so another code here changes what is displayed, not what is charged.",
+            "type": "string"
+          },
+          "description": {
+            "description": "Description is the long copy. Publish REFUSES one past 4096 bytes rather\nthan truncating it, so what is stored is what was sent; empty is allowed.",
+            "type": "string"
+          },
+          "docs": {
+            "description": "Docs is where the listing's documentation lives: an https URL, or a path on\ndocs.hanzo.ai. Empty when the seller named none.",
+            "type": "string"
+          },
+          "expert": {
+            "$ref": "#/components/schemas/marketplace.Expert",
+            "description": "Expert is the person behind a listing of kind expert (expert.go); absent on\nevery other kind."
+          },
+          "id": {
+            "description": "ID is the listing's id, minted here as \"lst_\" + 16 hex characters. A\npublisher cannot choose it: Create overwrites whatever arrives. It is unique\nwithin PublisherOrg (the primary key is the pair), and it is the path segment\nDELETE /v1/marketplace/listings/:id takes.",
+            "type": "string"
+          },
+          "kind": {
+            "description": "Kind is what the listing sells: agent, persona, app, skill, mcp, tool,\nexpert or capability. Listings published before kinds existed sold tools,\nand read as tool.",
+            "type": "string"
+          },
+          "price": {
+            "description": "Price is the exact price, 18 decimal places of USD: per call for a tool or\ncapability, the price a job is offered at for an agent. Zero is free."
+          },
+          "public": {
+            "description": "Public is whether other orgs can discover the listing. It also decides\nENFORCEMENT: only public rows reach the price table, so a private listing\nwith a price charges nobody. False leaves the row visible to its publisher\nalone.",
+            "type": "boolean"
+          },
+          "publisherOrg": {
+            "description": "PublisherOrg is the org that published the listing, taken from the validated\nprincipal and never off the wire. It is also the PAYEE org — Recipient is\nresolved inside it — and the isolation key: a publisher reads and deletes\nonly rows carrying its own org.",
+            "type": "string"
+          },
+          "recipient": {
+            "description": "Recipient is the seller's payout WALLET id in PublisherOrg: the wallet x402\npays for a call or a job bought through this listing.",
+            "type": "string"
+          },
+          "ref": {
+            "description": "Ref is the id the thing's owning app knows it by, resolved when the listing\nwas published — the agent id for an agent named by its name. A tool's is the\nx402 resource a dispatch of it is priced by: the source it resolves from and\nits name, so a price follows the tool that runs and not a name another org's\nown row may share. A capability's is capability:\u003corg\u003e:\u003csha256\u003e.",
+            "type": "string"
+          },
+          "title": {
+            "description": "Title is the shop-window name, required and refused past 200 bytes. It is\nwhat discovery paints over the tool's registry name.",
+            "type": "string"
+          },
+          "tool": {
+            "description": "Tool names the thing sold, as the seller named it: the agent, app, skill,\ncapability or MCP server's name or id, or the tool's registry name. It was\nproved the seller's own when the listing was published. For a tool or\ncapability it is what install switches on. For an expert it is the person's\nIAM identity.",
+            "type": "string"
+          },
+          "updatedAt": {
+            "description": "UpdatedAt is when the listing was last edited, unix seconds; its creation\nwhen it never was.",
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "marketplace.MCPRef": {
+        "properties": {
+          "op": {
+            "description": "Op is the operation within it.",
+            "type": "string"
+          },
+          "tool": {
+            "description": "Tool is the MCP tool: marketplace.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "marketplace.Onboarding": {
+        "properties": {
+          "credentials": {
+            "description": "Credentials are the TaxPrincipalCredentials signed for the org's agents,\nnewest first.",
+            "items": {
+              "$ref": "#/components/schemas/marketplace.Statement"
+            },
+            "type": "array"
+          },
+          "earnings": {
+            "$ref": "#/components/schemas/marketplace.Earnings",
+            "description": "Earnings is what the org was paid in Year, from the economic events the rails\nstated."
+          },
+          "entity": {
+            "description": "Entity is the legal entity's formation stage (KYB) — \"company\" once formed\n— or empty when the org began none.",
+            "type": "string"
+          },
+          "identity": {
+            "description": "Identity is the founders' identity verification (KYC): verified, pending,\nfailed or none.",
+            "type": "string"
+          },
+          "missing": {
+            "description": "Missing names what the org still owes before it is paid without a hitch:\nidentity, sanctions, tax_form, tax_invalid or payout.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "org": {
+            "description": "Org is the seller org.",
+            "type": "string"
+          },
+          "payout": {
+            "$ref": "#/components/schemas/marketplace.Payout",
+            "description": "Payout is the wallet the org proved it is paid into."
+          },
+          "ready": {
+            "description": "Ready is true when nothing is missing.",
+            "type": "boolean"
+          },
+          "received": {
+            "description": "Received are the 1099s payers furnished the org for Year.",
+            "items": {
+              "$ref": "#/components/schemas/marketplace.Received"
+            },
+            "type": "array"
+          },
+          "sanctions": {
+            "description": "Sanctions is the org's own screening: clear, review, blocked, unscreened or\nunavailable, and why in words.",
+            "type": "string"
+          },
+          "sanctionsReason": {
+            "description": "SanctionsReason says why Sanctions is what it is.",
+            "type": "string"
+          },
+          "sources": {
+            "description": "Sources names each owning app asked, and whether it answered: ok, absent\n(not run by this deployment) or failed.",
+            "items": {
+              "$ref": "#/components/schemas/marketplace.Source"
+            },
+            "type": "array"
+          },
+          "tax": {
+            "$ref": "#/components/schemas/marketplace.TaxStatus",
+            "description": "Tax is the org's own tax form, when it has one."
+          }
+        },
+        "type": "object"
+      },
+      "marketplace.Parts": {
+        "properties": {
+          "badges": {
+            "description": "Badges is the points for the badges held that show the product was used.",
+            "format": "double",
+            "type": "number"
+          },
+          "contributions": {
+            "description": "Contributions is the points for merged pull requests and completed bounties\nin the product's public repositories.",
+            "format": "double",
+            "type": "number"
+          },
+          "jobs": {
+            "description": "Jobs is the points for jobs released in the product's areas, weighted by stars.",
+            "format": "double",
+            "type": "number"
+          },
+          "usage": {
+            "description": "Usage is the points for lifetime tokens on the product's model family.",
+            "format": "double",
+            "type": "number"
+          }
+        },
+        "type": "object"
+      },
+      "marketplace.Payout": {
+        "properties": {
+          "address": {
+            "description": "Address is its address, recovered from the signature that proved it.",
+            "type": "string"
+          },
+          "bound": {
+            "description": "Bound is true once a signature proved it.",
+            "type": "boolean"
+          },
+          "boundAt": {
+            "description": "BoundAt is when, unix seconds.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "wallet": {
+            "description": "Wallet is the wallet id, in the seller's org.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "marketplace.PayoutChallenge": {
+        "properties": {
+          "address": {
+            "description": "Address is its address, which the signature must recover to.",
+            "type": "string"
+          },
+          "digest": {
+            "description": "Digest is the EIP-191 hash of Message, 0x hex: what POST\n/v1/wallet/{id}/sign signs, for a wallet the platform holds.",
+            "type": "string"
+          },
+          "expires": {
+            "description": "Expires is when the challenge may no longer be signed, unix seconds.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "message": {
+            "description": "Message is the text to sign with the wallet (EIP-191 personal_sign).",
+            "type": "string"
+          },
+          "wallet": {
+            "description": "Wallet is the wallet to prove.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "marketplace.Pillars": {
+        "properties": {
+          "community": {
+            "description": "Community is claims for joining in: Discord, stars and follows.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "contribute": {
+            "description": "Contribute is claims for building it: merged work, bounties and demos.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "expert": {
+            "description": "Expert is claims for the work of an expert on the marketplace.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "share": {
+            "description": "Share is claims for sharing it: referrals and posts.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "use": {
+            "description": "Use is claims for using Hanzo: models and products.",
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "marketplace.Price": {
+        "properties": {
+          "amount": {
+            "description": "Amount is what ONE call costs, EXACTLY: an 18-decimal USD value, so a\nper-call price of $0.0025 is $0.0025 and not a cent-floored zero. Cents\ncannot hold a per-token price, and a tool plane is where per-token prices\nlive."
+          },
+          "currency": {
+            "description": "Currency is the ISO 4217 code, e.g. \"USD\". Empty means USD.",
+            "type": "string"
+          },
+          "recipient": {
+            "description": "Recipient is the payout wallet ref the marketplace seller is paid at.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "marketplace.Received": {
+        "properties": {
+          "corrected": {
+            "description": "Corrected is true for a statement that corrects an earlier one.",
+            "type": "boolean"
+          },
+          "furnished": {
+            "description": "Furnished is when it was delivered, unix seconds.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "id": {
+            "description": "ID is the form id the payer issued it under.",
+            "type": "string"
+          },
+          "kind": {
+            "description": "Kind is 1099-NEC or 1099-MISC.",
+            "type": "string"
+          },
+          "payer": {
+            "description": "Payer is the org that furnished it.",
+            "type": "string"
+          },
+          "superseded": {
+            "description": "Superseded is true for one a later correction replaced.",
+            "type": "boolean"
+          },
+          "year": {
+            "description": "Year is the calendar year of the payments.",
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "marketplace.Reputation": {
+        "properties": {
+          "installs": {
+            "description": "Installs is how many orgs installed a tool listing's tool.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "jobs": {
+            "$ref": "#/components/schemas/marketplace.JobCounts",
+            "description": "Jobs counts the jobs released, and those that were ever disputed."
+          },
+          "rating": {
+            "description": "Rating is the mean stars buyers gave, 1 to 5 to one decimal; null until the\nfirst review.",
+            "format": "double",
+            "type": "number"
+          },
+          "reviews": {
+            "description": "Reviews is how many buyers rated.",
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "marketplace.Reward": {
+        "properties": {
+          "badges": {
+            "description": "Badges are the three the profile shows first, the rarest first.",
+            "items": {
+              "$ref": "#/components/schemas/marketplace.Badge"
+            },
+            "type": "array"
+          },
+          "level": {
+            "description": "Level is the level the profile shows, such as 2.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "levelName": {
+            "description": "LevelName is its name, such as Shipper.",
+            "type": "string"
+          },
+          "pillars": {
+            "$ref": "#/components/schemas/marketplace.Pillars",
+            "description": "Pillars counts the claims awarded under each pillar."
+          },
+          "points": {
+            "description": "Points are the lifetime points.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "tier": {
+            "$ref": "#/components/schemas/marketplace.Tier",
+            "description": "Tier is the highest token milestone the expert holds the badge of, never a\ncount of tokens; absent until they hold one."
+          }
+        },
+        "type": "object"
+      },
+      "marketplace.Score": {
+        "properties": {
+          "parts": {
+            "$ref": "#/components/schemas/marketplace.Parts",
+            "description": "Parts are the records that contributed."
+          },
+          "product": {
+            "description": "Product is the product's id.",
+            "type": "string"
+          },
+          "score": {
+            "description": "Score is the sum of Parts, to one decimal.",
+            "format": "double",
+            "type": "number"
+          }
+        },
+        "type": "object"
+      },
+      "marketplace.Seller": {
+        "properties": {
+          "documented": {
+            "description": "Documented is true while the seller's tax form is certified and valid —\nwhat its agents' TaxPrincipalCredentials rest on. False as well when that\ncould not be asked just now.",
+            "type": "boolean"
+          },
+          "org": {
+            "description": "Org is the seller org.",
+            "type": "string"
+          },
+          "reputation": {
+            "$ref": "#/components/schemas/marketplace.Reputation",
+            "description": "Reputation is what buyers made of the seller, across its listings."
+          }
+        },
+        "type": "object"
+      },
+      "marketplace.Shop": {
+        "properties": {
+          "facets": {
+            "$ref": "#/components/schemas/marketplace.Facets",
+            "description": "Facets counts the matches by kind, category, price and rating, each\ncounted as if its own filter were not applied."
+          },
+          "listings": {
+            "description": "Listings is this page, newest first.",
+            "items": {
+              "$ref": "#/components/schemas/marketplace.ShopListing"
+            },
+            "type": "array"
+          },
+          "total": {
+            "description": "Total is how many listings the search matched, past this page.",
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "marketplace.ShopCapabilityWeights": {
+        "properties": {
+          "base_sha256": {
+            "description": "BaseSHA256 is the Kai base weights' SHA-256 it was taught over.",
+            "type": "string"
+          },
+          "bytes": {
+            "description": "Bytes is the artifact's size in bytes.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "form": {
+            "description": "Form is calibration, head, pair or full.",
+            "type": "string"
+          },
+          "name": {
+            "description": "Name is the capability's slug.",
+            "type": "string"
+          },
+          "representation": {
+            "description": "Representation is the shared Kai latent representation hash.",
+            "type": "string"
+          },
+          "sha256": {
+            "description": "SHA256 is the capability .tar artifact's SHA-256.",
+            "type": "string"
+          },
+          "tar": {
+            "description": "Tar is the base64-encoded .tar archive of the capability's weights.",
+            "type": "string"
+          },
+          "version": {
+            "description": "Version is the capability version number.",
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "marketplace.ShopListing": {
+        "properties": {
+          "capability": {
+            "$ref": "#/components/schemas/marketplace.CapabilitySpec",
+            "description": "Capability is the Kai capability metadata behind a capability listing —\nshared representation, route, evaluation metrics and license; absent on any\nother kind."
+          },
+          "category": {
+            "description": "Category groups it; empty is ungrouped.",
+            "type": "string"
+          },
+          "createdAt": {
+            "description": "CreatedAt is when it was published, unix seconds.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "currency": {
+            "description": "Currency labels Price.",
+            "type": "string"
+          },
+          "description": {
+            "description": "Description is the long copy.",
+            "type": "string"
+          },
+          "docs": {
+            "description": "Docs is where its documentation lives, when the seller said.",
+            "type": "string"
+          },
+          "expert": {
+            "$ref": "#/components/schemas/marketplace.Expert",
+            "description": "Expert is the person behind an expert listing — rate, areas, languages, skills,\nlinks, time zone, hours and whether staff verified them, and, where they can be\ntold, their rewards standing and scores in products; absent on any other kind."
+          },
+          "id": {
+            "description": "ID is the listing.",
+            "type": "string"
+          },
+          "kind": {
+            "description": "Kind is what it sells: agent, persona, app, skill, mcp, tool or expert.",
+            "type": "string"
+          },
+          "links": {
+            "$ref": "#/components/schemas/marketplace.Links",
+            "description": "Links are the ways to act on it."
+          },
+          "price": {
+            "description": "Price is the exact USD price — per call for a tool, per job otherwise, the\nfixed engagement for an expert; \"0\" is free."
+          },
+          "public": {
+            "description": "Public is always true here.",
+            "type": "boolean"
+          },
+          "publisherOrg": {
+            "description": "PublisherOrg is the org that sells it.",
+            "type": "string"
+          },
+          "reputation": {
+            "$ref": "#/components/schemas/marketplace.Reputation",
+            "description": "Reputation is what buyers made of this listing."
+          },
+          "seller": {
+            "$ref": "#/components/schemas/marketplace.Seller",
+            "description": "Seller is what anyone may know about the seller."
+          },
+          "title": {
+            "description": "Title is the shop-window name.",
+            "type": "string"
+          },
+          "tool": {
+            "description": "Tool names the thing sold, as the seller named it; empty for an expert, who\nis a person and not a thing.",
+            "type": "string"
+          },
+          "updatedAt": {
+            "description": "UpdatedAt is when it was last edited, unix seconds.",
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "marketplace.Source": {
+        "properties": {
+          "app": {
+            "description": "App is the app.",
+            "type": "string"
+          },
+          "status": {
+            "description": "Status is ok, absent or failed.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "marketplace.Statement": {
+        "properties": {
+          "agent": {
+            "description": "Agent is the agent it is about.",
+            "type": "string"
+          },
+          "expires": {
+            "description": "Expires is when it stops standing, unix seconds; zero for a W-9, which\nstands until the form changes.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "form": {
+            "description": "Form is the class of tax form it rests on: w9, w8ben or w8bene.",
+            "type": "string"
+          },
+          "id": {
+            "description": "ID is the statement's jti.",
+            "type": "string"
+          },
+          "issued": {
+            "description": "Issued is when it was signed, unix seconds.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "jws": {
+            "description": "JWS is the signed statement itself — the credential an agent presents —\nanswered only to the org it is about.",
+            "type": "string"
+          },
+          "kind": {
+            "description": "Kind is what it states: tax.",
+            "type": "string"
+          },
+          "org": {
+            "description": "Org is the principal the agent answers to.",
+            "type": "string"
+          },
+          "revoked": {
+            "description": "Revoked is when it was withdrawn, unix seconds; zero while it stands.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "status": {
+            "description": "Status is live, expired or revoked.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "marketplace.Step": {
+        "properties": {
+          "at": {
+            "description": "At is when, unix seconds.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "by": {
+            "description": "By is the org whose act it was, or \"marketplace\" for a clock that ran out.",
+            "type": "string"
+          },
+          "status": {
+            "description": "Status is the state the job entered.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "marketplace.TaxStatus": {
+        "properties": {
+          "certified": {
+            "description": "Certified is whether its signature covers the form as it stands.",
+            "type": "boolean"
+          },
+          "expires": {
+            "description": "Expires is when a W-8 lapses, unix seconds; a W-9 does not.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "form": {
+            "description": "Form is w9, w8ben or w8bene.",
+            "type": "string"
+          },
+          "valid": {
+            "description": "Valid is whether it is complete and unexpired.",
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
+      "marketplace.Tier": {
+        "properties": {
+          "id": {
+            "description": "ID is the badge's id, such as billionaire.",
+            "type": "string"
+          },
+          "label": {
+            "description": "Label is how the milestone reads, such as 1B+.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "marketplace.capabilityIn": {
+        "properties": {
+          "license": {
+            "description": "License names the open-source license (\"Apache-2.0\", \"MIT\", \"BSD-3-Clause\",\n\"CC-BY-4.0\") for a free capability, or \"commercial\" for a priced one.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "marketplace.declineIn": {
+        "properties": {
+          "id": {
+            "description": "ID is the job, from the path.",
+            "type": "string"
+          },
+          "reason": {
+            "description": "Reason is the seller's words to the buyer, at most 4096 characters.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "marketplace.deliverIn": {
+        "properties": {
+          "hash": {
+            "description": "Hash is the seller's own commitment to what was delivered, 32 bytes as 0x\nhex; the SHA-256 of the note and URL when empty.",
+            "type": "string"
+          },
+          "id": {
+            "description": "ID is the job, from the path.",
+            "type": "string"
+          },
+          "note": {
+            "description": "Note says what was delivered. Required, at most 4096 characters.",
+            "type": "string"
+          },
+          "url": {
+            "description": "URL is where it is, https.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "marketplace.disputeIn": {
+        "properties": {
+          "id": {
+            "description": "ID is the job, from the path.",
+            "type": "string"
+          },
+          "reason": {
+            "description": "Reason is the disputing party's words. Required, at most 4096 characters.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "marketplace.expertIn": {
+        "properties": {
+          "areas": {
+            "description": "Areas is what the expert works on, one or more of configure, base,\ncommerce, bot, agents, cloud, models, creative and freelance.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "availability": {
+            "description": "Availability is the weekly hours in free form, at most 512 characters.",
+            "type": "string"
+          },
+          "languages": {
+            "description": "Languages are 1 to 8 lowercase BCP 47 tags: \"en\", \"es\", \"zh-cn\".",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "links": {
+            "description": "Links are 0 to 8 https URLs of at most 200 characters, with a host and no\nlogin in them.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "rate": {
+            "description": "Rate is the hourly rate as a decimal USD string, exact to 18 places; empty\nor \"0\" sells no hours.",
+            "type": "string"
+          },
+          "skills": {
+            "description": "Skills are 0 to 20 names of 1 to 40 characters, trimmed; a name already said,\nin any case, is kept once.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "timezone": {
+            "description": "Timezone is an IANA time zone: \"America/Los_Angeles\".",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "marketplace.feedbackIn": {
+        "properties": {
+          "comment": {
+            "description": "Comment is the party's words, at most 4096 characters.",
+            "type": "string"
+          },
+          "id": {
+            "description": "ID is the job, from the path.",
+            "type": "string"
+          },
+          "rating": {
+            "description": "Rating is 1 to 5 stars. Required.",
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "marketplace.hireIn": {
+        "properties": {
+          "amount": {
+            "description": "Amount is what the job pays, U.S. dollars to the cent: \"250.00\".",
+            "type": "string"
+          },
+          "attempt": {
+            "description": "Attempt is the buyer's own key for this hire: chosen once, when the hire\nstarts — a random id, 1 to 128 letters, digits, dots, colons, dashes or\nunderscores — and sent with every request it makes, the quote and the\npayment alike, with the rest of the request unchanged. The same attempt\nanswers the same job: the quote's terms to sign until it is paid, the job\nonce it opened, whatever it has come to since. Another request under an\nattempt already used is refused (422): a new hire is a new attempt.",
+            "type": "string"
+          },
+          "brief": {
+            "description": "Brief is what the buyer asks for, and what delivered looks like. Required,\nat most 4096 characters.",
+            "type": "string"
+          },
+          "category": {
+            "description": "Category is what the payment is for: service (the default), goods,\ntransfer or royalty.",
+            "type": "string"
+          },
+          "deadline": {
+            "description": "Deadline is when delivery must land by, unix seconds. Without one, it is\nthe latest the payment leaves room for: its expiry, less the review window,\nfourteen days for a ruling on a dispute, and a day for the clock.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "listing": {
+            "description": "Listing is the public listing the job is hired through. Empty for a direct\noffer, which names Seller instead.",
+            "type": "string"
+          },
+          "payment": {
+            "description": "Payment is the buyer's signed x402 authorization for the job — the value\nPAYMENT-SIGNATURE carries, for a caller that sends no headers of its own,\nover MCP or the command line. The header wins when both are sent.",
+            "type": "string"
+          },
+          "performed": {
+            "description": "Performed is where the work is performed, ISO 3166-1 alpha-2. It decides\nwhether a foreign seller's pay is U.S.-source.",
+            "type": "string"
+          },
+          "rail": {
+            "description": "Rail is x402 (the default) or chain.",
+            "type": "string"
+          },
+          "review": {
+            "description": "Review is how many seconds the buyer has after delivery to release or\ndispute: three days by default, thirty at most.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "seller": {
+            "description": "Seller is the org offered the job directly; only without a listing.",
+            "type": "string"
+          },
+          "title": {
+            "description": "Title names a direct offer; a listing's job takes the listing's title.",
+            "type": "string"
+          },
+          "wallet": {
+            "description": "Wallet is the buyer's wallet the payment is signed from. When named, the\nauthorization must be signed by its address.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "marketplace.installReq": {
+        "properties": {
+          "tool": {
+            "description": "Tool is the registry name of the capability to activate (or deactivate) for\nthe caller's own org and project. Required.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "marketplace.installState": {
+        "properties": {
+          "installed": {
+            "description": "Installed is its activation after the write.",
+            "type": "boolean"
+          },
+          "tool": {
+            "description": "Tool is the capability the write applied to.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "marketplace.jobPage": {
+        "properties": {
+          "jobs": {
+            "description": "Jobs is at most 500 jobs.",
+            "items": {
+              "$ref": "#/components/schemas/marketplace.Job"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "marketplace.listingPage": {
+        "properties": {
+          "listings": {
+            "description": "Listings is every listing this org has published, private ones included\n(Public says which are discoverable by others).",
+            "items": {
+              "$ref": "#/components/schemas/marketplace.Listing"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "marketplace.marketCatalog": {
+        "properties": {
+          "items": {
+            "description": "Items is every capability the caller can see in their own (org, project),\neach carrying any public listing's shop metadata and whether it is installed.",
+            "items": {
+              "$ref": "#/components/schemas/marketplace.marketItem"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "marketplace.marketItem": {
+        "properties": {
+          "activated": {
+            "description": "Activated is filled by the registry from the activation store for the\nrequesting (org,project); providers leave it zero. An unactivated tool is\ndiscoverable but refused 403 at dispatch.",
+            "type": "boolean"
+          },
+          "category": {
+            "description": "Category is that same listing's grouping. Free text chosen by the publisher,\nabsent when there is no public listing or the publisher left it blank.",
+            "type": "string"
+          },
+          "description": {
+            "description": "Description is the prose a model reads to decide whether to call the tool.",
+            "type": "string"
+          },
+          "dispatchable": {
+            "description": "Dispatchable is whether the tool can be CALLED. False for a listing-only\nentry: a skill is activated and attached to an agent, never called.",
+            "type": "boolean"
+          },
+          "inputSchema": {
+            "description": "Schema is the JSON Schema of the call arguments — the MCP inputSchema.\nAbsent for a tool that takes none."
+          },
+          "installed": {
+            "description": "Installed is whether the tool is activated for THIS caller's (org, project):\nthe same bit as Activated, under the shop's name for it, which install and\nuninstall are the writes for. It is per caller, so one listing reads\ninstalled for one org and not for another.",
+            "type": "boolean"
+          },
+          "name": {
+            "description": "Name is the tool's id in the flat, fleet-wide tool namespace — the value a\ntools/call passes. Unique across sources: a collision is resolved by source\nprecedence before the caller ever sees it.",
+            "type": "string"
+          },
+          "price": {
+            "$ref": "#/components/schemas/marketplace.Price",
+            "description": "Price is what a call costs and who is paid, absent for a free tool.\nEnforcement is the x402 settlement client; this is the declaration."
+          },
+          "source": {
+            "description": "Source is where the tool comes from: connector, function, zap-service,\nagent, skill or mcp.",
+            "type": "string"
+          },
+          "title": {
+            "description": "Title is the shop-window name, painted over the registry Name from the\nCHEAPEST public listing of this very tool — the platform's, for a tool every\norg reaches — the row a call would pay. Absent when the tool is not listed:\nthat row is a plain capability, not an offer.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "marketplace.patchReq": {
+        "properties": {
+          "capability": {
+            "$ref": "#/components/schemas/marketplace.capabilityIn",
+            "description": "Capability updates a capability listing's license; refused on any other kind."
+          },
+          "category": {
+            "description": "Category groups the listing in the shop window.",
+            "type": "string"
+          },
+          "currency": {
+            "description": "Currency denominates Price.",
+            "type": "string"
+          },
+          "description": {
+            "description": "Description is the long copy, at most 4096 characters.",
+            "type": "string"
+          },
+          "docs": {
+            "description": "Docs is where the listing's documentation lives; empty clears it.",
+            "type": "string"
+          },
+          "expert": {
+            "$ref": "#/components/schemas/marketplace.expertIn",
+            "description": "Expert replaces an expert listing's whole profile — rate, areas, languages,\ntime zone and weekly hours; absent keeps it. Refused on any other kind."
+          },
+          "id": {
+            "description": "ID is the listing to edit, from the path.",
+            "type": "string"
+          },
+          "price": {
+            "description": "Price is the decimal USD price, exact to 18 places; \"0\" makes it free.",
+            "type": "string"
+          },
+          "public": {
+            "description": "Public makes the listing discoverable by other orgs, or withdraws it.",
+            "type": "boolean"
+          },
+          "recipient": {
+            "description": "Recipient is the payout wallet id, in the publishing org.",
+            "type": "string"
+          },
+          "title": {
+            "description": "Title is the shop-window name, 1-200 characters.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "marketplace.payoutIn": {
+        "properties": {
+          "wallet": {
+            "description": "Wallet is one of the caller org's wallets. Required.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "marketplace.publishReq": {
+        "properties": {
+          "capability": {
+            "$ref": "#/components/schemas/marketplace.capabilityIn",
+            "description": "Capability carries optional publisher preferences for a listing of kind\ncapability (such as its open-source license). Refused on any other kind."
+          },
+          "category": {
+            "description": "Category groups the listing in the shop window.",
+            "type": "string"
+          },
+          "currency": {
+            "description": "Currency denominates Price.",
+            "type": "string"
+          },
+          "description": {
+            "description": "Description is the long copy, at most 4096 characters.",
+            "type": "string"
+          },
+          "docs": {
+            "description": "Docs is where the listing's documentation lives: an https URL or a path on\ndocs.hanzo.ai.",
+            "type": "string"
+          },
+          "expert": {
+            "$ref": "#/components/schemas/marketplace.expertIn",
+            "description": "Expert is the person behind a listing of kind expert — their hourly rate,\nareas, languages, time zone and weekly hours. Required for kind expert and\nrefused for any other. The price is then the fixed engagement price; an\nexpert sets a rate, a price or both."
+          },
+          "kind": {
+            "description": "Kind is what is sold: agent, persona, app, skill, mcp, tool (the default),\nexpert or capability. A tool is a platform tool, sold per call by the\nplatform alone; an expert is the caller, a person making their time\navailable; a capability is a trained Kai capability adapter of the org's.",
+            "type": "string"
+          },
+          "price": {
+            "description": "Price is the price as a decimal USD string, exact to 18 places — per call\nfor a tool or capability, what a job is offered at otherwise. \"0.0025\" is a\nquarter of a cent and stays one. Empty or \"0\" publishes it free; a positive\nprice requires Recipient.",
+            "type": "string"
+          },
+          "public": {
+            "description": "Public makes the listing discoverable by other orgs. Private otherwise.",
+            "type": "boolean"
+          },
+          "recipient": {
+            "description": "Recipient is the seller's payout wallet id, in the publishing org — the\nwallet x402 pays. Required for a monetized listing.",
+            "type": "string"
+          },
+          "title": {
+            "description": "Title is the shop-window name, 1-200 characters. Required.",
+            "type": "string"
+          },
+          "tool": {
+            "description": "Tool names the thing sold, in the seller's own org: an agent's name or id,\nan app's project slug or id, a skill's name or id, a Kai capability's name,\nan MCP server's name or id registered by hand, or a platform tool's registry\nname. It must be the seller's — there are no phantom listings. An expert's\nis the caller's own IAM identity, and is left out.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "marketplace.resolveIn": {
+        "properties": {
+          "id": {
+            "description": "ID is the job, from the path.",
+            "type": "string"
+          },
+          "outcome": {
+            "description": "Outcome is release — the seller is paid the whole amount — or refund.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "marketplace.verifyIn": {
+        "properties": {
+          "signature": {
+            "description": "Signature is the wallet's 65-byte signature over the challenge's message\n(EIP-191), 0x hex. Required.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "marketplace.verifyReq": {
+        "properties": {
+          "id": {
+            "description": "ID is the expert listing, from the path.",
+            "type": "string"
+          },
+          "verified": {
+            "description": "Verified is whether staff vouch for the expert.",
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
+      "problem-details": {
+        "description": "An RFC 9457 problem document.",
+        "properties": {
+          "code": {
+            "description": "A stable token a client can branch on, when the refusal names one.",
+            "type": "string"
+          },
+          "detail": {
+            "description": "What was refused, for a person to read.",
+            "type": "string"
+          },
+          "status": {
+            "description": "The HTTP status.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "title": {
+            "description": "The status's reason phrase.",
+            "type": "string"
+          },
+          "type": {
+            "description": "about:blank",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "status",
+          "detail"
+        ],
+        "type": "object"
+      }
+    },
+    "securitySchemes": {
+      "bearer": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "The caller's credential, sent as `Authorization: Bearer \u003ctoken\u003e`. It is either an access token minted by Hanzo IAM or an API key (pk-/sk-). X-Authorization, and HTTP Basic carrying the token as the password, are accepted spellings of the same header for clients that cannot set Authorization; a browser presents the session cookie instead. Every operation requires it unless it says `security: []`."
+      }
+    }
+  }
+}

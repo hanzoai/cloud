@@ -17,9 +17,10 @@ import (
 //	staged  — the subsystem was never enabled here. 503 is correct and boring.
 //	failed  — the subsystem WAS enabled, could not boot, and is now dead.
 //
-// Both answer 503, so a probe that treats 503 as one answer cannot tell a plane that
-// was never enabled from one that is dead; they are reported separately so a dead
-// plane is never mistaken for a staged one.
+// Both answered 503, so the release smoke tolerated both, and a dead revenue plane
+// shipped behind a green pod, a green deploy and a green test gate. That is exactly
+// what happened: commerce could not parse KV_URL, every /v1/plans answered
+// "commerce unavailable", and nothing in the pipeline objected.
 //
 // So failure becomes a fact the process reports. Mark it here, serve it on
 // /v1/health, and let the release gate refuse an image whose planes are dead.

@@ -1,0 +1,551 @@
+package provider
+
+import (
+	"cmp"
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
+	"net/http"
+	"net/url"
+	"strings"
+
+	"github.com/hanzoai/cloud/sdk/env"
+
+	"github.com/hanzoai/cloud/apps/kms"
+	"github.com/hanzoai/cloud/sdk"
+	"github.com/zap-proto/fiber/v3"
+	"github.com/zap-proto/zip"
+)
+
+// slack_link.go is the per-user account link — the transplant-safe browser flow
+// (ported verbatim from team-go/pkg/slack) that binds a Slack user to their own
+// Hanzo account so @hanzo runs ON BEHALF OF them:
+//
+//	GET /v1/provider/slack/link           leg1: set __Host- init cookie + redirect to Slack sign-in
+//	GET /v1/provider/slack/link/slack     leg2: Slack sign-in callback; require init-cookie==state BEFORE exchange
+//	GET /v1/provider/slack/link/callback  leg3: hanzo.id OIDC callback; bind Slack↔Hanzo, seal refresh in KMS
+//
+// TRANSPLANT DEFENSE. The binding identity is NEVER a URL/state param. Leg1 mints
+// a random nonce carried BOTH in an httpOnly __Host- init cookie AND the
+// slack-signin state's subject; leg2 refuses unless they match (a code+state
+// pasted into a VICTIM's browser carries no matching init cookie). Leg2 then sets
+// a __Host- link cookie carrying the SLACK-VERIFIED (team,user); leg3 reads the
+// (team,user) from THAT cookie (a forwarded link carries no cookie → cannot bind)
+// and requires the OIDC state to equal the cookie. The __Host- prefix host-binds
+// both cookies (Secure + no Domain + Path=/), so a sibling *.hanzo.ai origin
+// cannot plant/fixate a same-named cookie.
+
+// ── cookies ──────────────────────────────────────────────────────────────────
+
+const (
+	// slackInitCookie ties leg1→leg2 in ONE browser: its random value is ALSO the
+	// subject of the slack-signin state, and leg2 requires cookie==subject.
+	slackInitCookie = "__Host-hanzo_slack_init"
+	// slackLinkCookie carries the SLACK-VERIFIED (team,user) across the hanzo.id
+	// OIDC leg. The binding is read from THIS cookie, never a URL/state param.
+	slackLinkCookie = "__Host-hanzo_slack_link"
+)
+
+// setSlackCookie writes a browser-bound, httpOnly __Host- cookie. SameSite=Lax so
+// it survives the top-level GET redirect back from Slack / hanzo.id; Secure +
+// no Domain + Path=/ satisfy the __Host- prefix (net/http Cookie.Valid enforces
+// this, else fiber drops the cookie).
+func setSlackCookie(s *cloud.Service[state], c *zip.Ctx, name, val string) {
+	c.Fiber().Cookie(&fiber.Cookie{
+		Name: name, Value: val, Path: "/",
+		MaxAge: linkStateTTLSec, HTTPOnly: true, Secure: true,
+		SameSite: fiber.CookieSameSiteLaxMode,
+	})
+}
+
+func readSlackCookie(s *cloud.Service[state], c *zip.Ctx, name string) string {
+	return c.Fiber().Cookies(name)
+}
+
+func clearSlackCookie(s *cloud.Service[state], c *zip.Ctx, name string) {
+	c.Fiber().Cookie(&fiber.Cookie{
+		Name: name, Value: "", Path: "/",
+		MaxAge: -1, HTTPOnly: true, Secure: true,
+		SameSite: fiber.CookieSameSiteLaxMode,
+	})
+}
+
+// ── leg 1: begin the per-user link (Slack sign-in) ──────────────────────────
+
+func slackLink(s *cloud.Service[state], c *zip.Ctx) error {
+	slackBridgeReady(s)
+	if !slackLinkConfigured(s) {
+		return zip.Errorf(http.StatusServiceUnavailable, "account linking not configured")
+	}
+	// The entry state is PROVENANCE only (proves a server-minted prompt); the
+	// binding identity is taken from the Slack sign-in leg, not from it. Reject a
+	// missing/forged entry state.
+	if _, _, _, ok := verifySlackLink(s.State.stateKey, c.Query("state"), 0); !ok {
+		return zip.ErrBadRequest("invalid or expired link")
+	}
+	initNonce, err := genToken()
+	if err != nil {
+		return zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
+	}
+	ss, err := signSubject(s.State.stateKey, initNonce, 0)
+	if err != nil {
+		return zip.Errorf(http.StatusInternalServerError, "state: %v", err)
+	}
+	setSlackCookie(s, c, slackInitCookie, initNonce)
+	return redirect(c, slackUserAuthorizeURL(s, ss))
+}
+
+// slackUserAuthorizeURL builds the Slack sign-in (user_scope) authorize redirect.
+func slackUserAuthorizeURL(s *cloud.Service[state], state string) string {
+	q := url.Values{
+		"client_id":    {slackCreds().ClientID},
+		"user_scope":   {"openid"},
+		"redirect_uri": {slackLinkSlackURI(s)},
+		"state":        {state},
+	}
+	return slackAuthorizeURL + "?" + q.Encode()
+}
+
+// ── leg 2: Slack sign-in callback ───────────────────────────────────────────
+
+func slackLinkSlack(s *cloud.Service[state], c *zip.Ctx) error {
+	slackBridgeReady(s)
+	if !slackLinkConfigured(s) {
+		return zip.Errorf(http.StatusServiceUnavailable, "account linking not configured")
+	}
+	if e := strings.TrimSpace(c.Query("error")); e != "" {
+		clearSlackCookie(s, c, slackInitCookie)
+		return zip.ErrBadRequest("slack authorization declined")
+	}
+	code := strings.TrimSpace(c.Query("code"))
+	state := c.Query("state")
+	if code == "" || state == "" {
+		return zip.ErrBadRequest("missing code or state")
+	}
+	if len(code) > maxCodeLen {
+		return zip.ErrBadRequest("authorization code too large")
+	}
+	subject, _, ok := verifySubject(s.State.stateKey, state, 0)
+	if !ok {
+		clearSlackCookie(s, c, slackInitCookie)
+		return zip.ErrBadRequest("invalid or expired link")
+	}
+	// Browser continuity (transplant defense): the leg-1 init cookie MUST equal the
+	// nonce carried in the slack-signin state's subject. A transplanted link has no
+	// matching init cookie → refuse BEFORE exchanging the code or planting a cookie.
+	if init := readSlackCookie(s, c, slackInitCookie); init == "" || init != subject {
+		clearSlackCookie(s, c, slackInitCookie)
+		return zip.ErrBadRequest("link session mismatch; restart from Slack")
+	}
+	// Single-use: consume the SAME continuity token the gate compared (subject ==
+	// leg-1 init nonce == init cookie value), so the gate token and single-use token
+	// are ONE value that cannot desync.
+	if fresh, err := slackUsedStates.redeem(subject); err != nil {
+		return err
+	} else if !fresh {
+		clearSlackCookie(s, c, slackInitCookie)
+		return zip.ErrBadRequest("link already used")
+	}
+	teamID, slackUser, err := slackExchangeUser(c.Context(), slackCreds(), slackLinkSlackURI(s), code)
+	if err != nil {
+		s.Log.Error("slack: user auth exchange", "err", err)
+		clearSlackCookie(s, c, slackInitCookie)
+		return zip.ErrBadRequest("slack sign-in failed")
+	}
+	if _, ok := OrgForExternalID("slack", teamID); !ok {
+		clearSlackCookie(s, c, slackInitCookie)
+		return zip.ErrBadRequest("workspace not connected")
+	}
+	cookieVal, err := signSlackLink(s.State.stateKey, teamID, slackUser, 0)
+	if err != nil {
+		clearSlackCookie(s, c, slackInitCookie)
+		return zip.Errorf(http.StatusInternalServerError, "link state: %v", err)
+	}
+	// The init cookie has done its job; the link cookie now carries the
+	// Slack-verified (team,user) across the hanzo.id leg.
+	clearSlackCookie(s, c, slackInitCookie)
+	setSlackCookie(s, c, slackLinkCookie, cookieVal)
+	// hanzo.id authorize state == the cookie value (ties this OIDC leg to THIS
+	// browser; leg3 requires state == cookie).
+	return redirect(c, slackOIDCAuthorizeURL(s, cookieVal))
+}
+
+// ── leg 3: hanzo.id OIDC callback (bind Slack↔Hanzo) ────────────────────────
+
+// slackLinkedHTML is the terse success page shown after a user links their account.
+const slackLinkedHTML = `<!doctype html><meta charset="utf-8"><title>Hanzo connected</title>` +
+	`<body style="font-family:system-ui,sans-serif;max-width:32rem;margin:4rem auto;text-align:center">` +
+	`<h1>Hanzo connected</h1><p>Your Hanzo account is linked. Return to Slack and mention <b>@hanzo</b>.</p></body>`
+
+func slackLinkCallback(s *cloud.Service[state], c *zip.Ctx) error {
+	slackBridgeReady(s)
+	if !slackLinkConfigured(s) {
+		return zip.Errorf(http.StatusServiceUnavailable, "account linking not configured")
+	}
+	cookie := readSlackCookie(s, c, slackLinkCookie)
+	if e := strings.TrimSpace(c.Query("error")); e != "" {
+		clearSlackCookie(s, c, slackLinkCookie)
+		return zip.ErrBadRequest("authorization declined")
+	}
+	code := strings.TrimSpace(c.Query("code"))
+	state := c.Query("state")
+	if code == "" {
+		clearSlackCookie(s, c, slackLinkCookie)
+		return zip.ErrBadRequest("missing code")
+	}
+	if len(code) > maxCodeLen {
+		clearSlackCookie(s, c, slackLinkCookie)
+		return zip.ErrBadRequest("authorization code too large")
+	}
+	// The binding subject is the browser-bound cookie (set only after a
+	// Slack-verified sign-in). No cookie → refuse (link-hijack defense).
+	if cookie == "" {
+		return zip.ErrBadRequest("link session missing; restart from Slack")
+	}
+	// state must equal the cookie (OIDC CSRF + browser binding).
+	if state == "" || state != cookie {
+		clearSlackCookie(s, c, slackLinkCookie)
+		return zip.ErrBadRequest("link state mismatch")
+	}
+	teamID, slackUser, nonce, ok := verifySlackLink(s.State.stateKey, cookie, 0)
+	if !ok {
+		clearSlackCookie(s, c, slackLinkCookie)
+		return zip.ErrBadRequest("invalid or expired link")
+	}
+	org, iok := OrgForExternalID("slack", teamID)
+	if !iok {
+		clearSlackCookie(s, c, slackLinkCookie)
+		return zip.ErrBadRequest("workspace not connected")
+	}
+	if !kmsReady(s) {
+		clearSlackCookie(s, c, slackLinkCookie)
+		return zip.Errorf(http.StatusServiceUnavailable, "secret store unavailable")
+	}
+	ctx := c.Context()
+	ts, err := slackOIDCExchange(s, ctx, code)
+	if err != nil {
+		s.Log.Error("slack: link code exchange", "team", teamID, "err", err)
+		clearSlackCookie(s, c, slackLinkCookie)
+		return zip.ErrBadRequest("link failed")
+	}
+	// Consume the single-use nonce AFTER a successful exchange (anti-griefing: a
+	// bogus code cannot burn a valid nonce).
+	if fresh, err := slackUsedStates.redeem(nonce); err != nil {
+		return err
+	} else if !fresh {
+		clearSlackCookie(s, c, slackLinkCookie)
+		return zip.ErrBadRequest("link already used")
+	}
+	if ts.Refresh == "" {
+		clearSlackCookie(s, c, slackLinkCookie)
+		return zip.Errorf(http.StatusInternalServerError, "link incomplete: no refresh token")
+	}
+	sub, userOrg, err := slackOIDCIdentity(s, ctx, ts.Access)
+	if err != nil {
+		s.Log.Error("slack: link identity", "team", teamID, "err", err)
+		clearSlackCookie(s, c, slackLinkCookie)
+		return zip.Errorf(http.StatusInternalServerError, "link identity")
+	}
+	// Seal the binding under the WORKSPACE org's KMS namespace (the same org the
+	// bot token lives under). The (team,user) is the Slack-verified cookie subject;
+	// the refresh token is NEVER a DB column and NEVER logged.
+	if err := putSlackUserLink(s, org, slackUser, slackUserLink{Subject: sub, Org: userOrg, Refresh: ts.Refresh}); err != nil {
+		s.Log.Error("slack: user link save", "team", teamID, "err", err) // never logs the token
+		clearSlackCookie(s, c, slackLinkCookie)
+		return zip.Errorf(http.StatusInternalServerError, "token store failed")
+	}
+	clearSlackCookie(s, c, slackLinkCookie)
+	s.Log.Info("slack: user linked", "team", teamID, "slackUser", slackUser) // no token
+	c.Fiber().Status(http.StatusOK).Type("html")
+	return c.Fiber().SendString(slackLinkedHTML)
+}
+
+// slackLinkURL builds the per-user "connect your Hanzo account" URL: the /link
+// entry carrying a signed, single-use state binding (team,user). The (team,user)
+// is PROVENANCE only — redemption takes the account binding from the Slack-verified
+// sign-in + browser cookie, never from this URL.
+func slackLinkURL(s *cloud.Service[state], teamID, slackUser string) (string, error) {
+	state, err := signSlackLink(s.State.stateKey, teamID, slackUser, 0)
+	if err != nil {
+		return "", err
+	}
+	return "https://" + s.Domain + "/v1/provider/slack/link?state=" + url.QueryEscape(state), nil
+}
+
+// ── per-user Hanzo binding (KMS-custodied, per-org) ─────────────────────────
+
+const (
+	slackUserSecretPrefix = "user:"
+	slackUserSecretSuffix = ":refresh"
+)
+
+// slackUserSecretName is the KMS secret name for a linked Slack user's binding —
+// "user:<slackUser>:refresh" under the org's integrations/slack namespace. Slack
+// user ids are [A-Z0-9] (no '/', NUL, or control chars), so this is a valid KMS
+// segment.
+func slackUserSecretName(slackUser string) string {
+	return slackUserSecretPrefix + slackUser + slackUserSecretSuffix
+}
+
+// slackUserLink is the on-behalf-of binding for a linked Slack user: the Hanzo
+// account subject (what RunOnBehalf attributes the spend to), the account org, and
+// the Hanzo refresh token (sealed for future token minting; the in-process run
+// needs only the subject). Sealed KMS-encrypted; never a DB column, never logged.
+type slackUserLink struct {
+	Subject string `json:"subject"`
+	Org     string `json:"org"`
+	Refresh string `json:"refresh"`
+}
+
+func putSlackUserLink(s *cloud.Service[state], org, slackUser string, link slackUserLink) error {
+	if kms.OrgPath(org) == "" {
+		return fmt.Errorf("slack: org names no store")
+	}
+	blob, err := json.Marshal(link)
+	if err != nil {
+		return err
+	}
+	return kmsPut(s, kmsPath(org, "slack"), slackUserSecretName(slackUser), blob)
+}
+
+// ── Slack sign-in (user_scope) code exchange ────────────────────────────────
+
+// slackUserOAuthResponse is the oauth.v2.access response for the USER sign-in leg:
+// authed_user.id is the Slack-VERIFIED subject; team.id the workspace.
+type slackUserOAuthResponse struct {
+	OK    bool   `json:"ok"`
+	Error string `json:"error"`
+	Team  struct {
+		ID string `json:"id"`
+	} `json:"team"`
+	AuthedUser struct {
+		ID string `json:"id"`
+	} `json:"authed_user"`
+}
+
+// slackExchangeUser trades the Slack sign-in code for the Slack-VERIFIED
+// (team,user). It reuses the OAuth provider's slackPostForm + slackWebAPIBase so
+// there is ONE Slack Web API path. The identity is proven by Slack here, NEVER
+// taken from a client-supplied URL/state param (the account-link-hijack defense).
+func slackExchangeUser(ctx context.Context, creds OAuthConfig, redirectURI, code string) (teamID, slackUser string, err error) {
+	form := url.Values{
+		"client_id":     {creds.ClientID},
+		"client_secret": {creds.ClientSecret},
+		"code":          {code},
+		"redirect_uri":  {redirectURI},
+	}
+	var r slackUserOAuthResponse
+	if err := slackPostForm(ctx, "", slackWebAPIBase+"/oauth.v2.access", form, &r); err != nil {
+		return "", "", err
+	}
+	if !r.OK {
+		return "", "", fmt.Errorf("slack oauth.v2.access error: %s", cmp.Or(r.Error, "unknown_error"))
+	}
+	if r.AuthedUser.ID == "" || r.Team.ID == "" {
+		return "", "", fmt.Errorf("slack oauth: no authenticated user")
+	}
+	return r.Team.ID, r.AuthedUser.ID, nil
+}
+
+// ── hanzo.id OIDC (per-user link, confidential client hanzo-slack) ──────────
+
+// slackTokenSet is the subset of the IAM token response the link flow consumes. A
+// refresh token is REQUIRED (offline_access) so an access token can be minted
+// later without re-prompting the user.
+type slackTokenSet struct {
+	Access  string
+	Refresh string
+	IDToken string
+}
+
+// slackOIDCAuthorizeURL builds the hanzo.id authorize redirect for the link flow.
+func slackOIDCAuthorizeURL(s *cloud.Service[state], state string) string {
+	q := url.Values{
+		"client_id":     {slackIAMClientID()},
+		"redirect_uri":  {slackLinkCallbackURI(s)},
+		"response_type": {"code"},
+		"scope":         {"openid profile email offline_access"},
+		"state":         {state},
+	}
+	return oidcBase() + "/oauth/authorize?" + q.Encode()
+}
+
+// slackOIDCExchange swaps an authorization code for a token set. hanzo-slack is a
+// confidential client (client_secret), so no PKCE.
+func slackOIDCExchange(s *cloud.Service[state], ctx context.Context, code string) (slackTokenSet, error) {
+	return slackOIDCToken(ctx, url.Values{
+		"grant_type":    {"authorization_code"},
+		"code":          {code},
+		"redirect_uri":  {slackLinkCallbackURI(s)},
+		"client_id":     {slackIAMClientID()},
+		"client_secret": {slackIAMClientSecret()},
+	})
+}
+
+// errLinkRejected marks IAM REFUSING the credential itself — a revoked, expired
+// or already-spent grant — as opposed to IAM being unreachable.
+//
+// The two need opposite advice and only one is worth waiting for, so they cannot
+// share an error. Telling someone to try again shortly for a credential that is
+// never coming back is a loop with no exit; telling someone to re-link because a
+// pod could not reach hanzo.id for a second is a lie that costs them a browser
+// round trip. A 4xx or an OAuth `error` is the grant; anything else is the trip.
+var errLinkRejected = errors.New("slack: the linked Hanzo account was refused")
+
+// slackOIDCToken performs an OAuth2 token request. The secrets (code /
+// client_secret) are POST-form only and never logged.
+func slackOIDCToken(ctx context.Context, form url.Values) (slackTokenSet, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, oidcBase()+"/oauth/token",
+		strings.NewReader(form.Encode()))
+	if err != nil {
+		return slackTokenSet{}, err
+	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("Accept", "application/json")
+	resp, err := slackHTTP.Do(req)
+	if err != nil {
+		return slackTokenSet{}, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+	body, _ := io.ReadAll(io.LimitReader(resp.Body, slackMaxBody))
+	if resp.StatusCode != http.StatusOK {
+		if resp.StatusCode < http.StatusInternalServerError {
+			return slackTokenSet{}, fmt.Errorf("%w: IAM token status %d", errLinkRejected, resp.StatusCode)
+		}
+		return slackTokenSet{}, fmt.Errorf("slack: IAM token status %d", resp.StatusCode)
+	}
+	var out struct {
+		AccessToken  string `json:"access_token"`
+		RefreshToken string `json:"refresh_token"`
+		IDToken      string `json:"id_token"`
+		Error        string `json:"error"`
+	}
+	if err := json.Unmarshal(body, &out); err != nil {
+		return slackTokenSet{}, fmt.Errorf("slack: IAM token decode: %w", err)
+	}
+	if out.Error != "" {
+		return slackTokenSet{}, fmt.Errorf("%w: %s", errLinkRejected, out.Error)
+	}
+	if out.AccessToken == "" {
+		return slackTokenSet{}, fmt.Errorf("slack: IAM token: empty access_token")
+	}
+	return slackTokenSet{Access: out.AccessToken, Refresh: out.RefreshToken, IDToken: out.IDToken}, nil
+}
+
+// slackOIDCIdentity resolves the linked account's IAM subject (sub) + org (owner)
+// from the AUTHENTICATED userinfo endpoint only. The org stored on the link is
+// informational (the RUN's org is the workspace org, from OrgForExternalID), so an
+// absent owner yields "" rather than trusting an unverified claim.
+func slackOIDCIdentity(s *cloud.Service[state], ctx context.Context, access string) (sub, org string, err error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, oidcBase()+"/oauth/userinfo", nil)
+	if err != nil {
+		return "", "", err
+	}
+	req.Header.Set("Authorization", "Bearer "+access)
+	req.Header.Set("Accept", "application/json")
+	resp, err := slackHTTP.Do(req)
+	if err != nil {
+		return "", "", err
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		return "", "", fmt.Errorf("slack: IAM userinfo status %d", resp.StatusCode)
+	}
+	var u struct {
+		Sub   string `json:"sub"`
+		Owner string `json:"owner"`
+	}
+	if err := json.NewDecoder(io.LimitReader(resp.Body, slackMaxBody)).Decode(&u); err != nil {
+		return "", "", err
+	}
+	if u.Sub == "" {
+		return "", "", fmt.Errorf("slack: IAM userinfo missing sub")
+	}
+	return u.Sub, u.Owner, nil
+}
+
+// ── config (env, read at call time) ─────────────────────────────────────────
+
+// slackLinkConfigured reports whether the full per-user link (Slack sign-in +
+// hanzo.id OIDC via the dedicated hanzo-slack client) can run.
+func slackLinkConfigured(s *cloud.Service[state]) bool {
+	c := slackCreds() // SLACK_CLIENT_ID / SLACK_CLIENT_SECRET
+	return c.ClientID != "" && c.ClientSecret != "" &&
+		slackIAMClientID() != "" && slackIAMClientSecret() != ""
+}
+
+func slackIAMClientID() string { return env.Or("SLACK_LINK_IAM_CLIENT_ID", "") }
+func slackIAMClientSecret() string {
+	return env.Or("SLACK_LINK_IAM_CLIENT_SECRET", "")
+}
+
+// slackLinkCallbackURI is the hanzo.id OIDC redirect (leg3), spelled as the
+// hanzo-slack client registers it. IAM compares a redirect URI byte for byte, and
+// the registration names the integrations prefix — an address this edge still
+// serves, rewritten onto the provider route (manifest.retired). One env override
+// for a deployment whose client registers another.
+func slackLinkCallbackURI(s *cloud.Service[state]) string {
+	if v := env.Or("SLACK_LINK_REDIRECT_URI", ""); v != "" {
+		return v
+	}
+	return "https://" + s.Domain + "/v1/integrations/slack/link/callback"
+}
+
+// slackLinkSlackURI is the Slack sign-in redirect (leg2).
+func slackLinkSlackURI(s *cloud.Service[state]) string {
+	if v := env.Or("SLACK_LINK_SLACK_REDIRECT_URI", ""); v != "" {
+		return v
+	}
+	return "https://" + s.Domain + "/v1/provider/slack/link/slack"
+}
+
+// slackInstall is the app's Direct install URL — the address Slack's "Add to
+// Slack" / Marketplace Install button points at.
+//
+// It exists because Slack REFUSES a slack.com URL in that field and requires one
+// of OURS that answers 302 to slack.com. That is not an obstacle to work around:
+// it is the point. The field is an ATTRIBUTION hook. Routing the click through
+// our own address is what lets an install be counted, and forcing the 302 is what
+// guarantees the counter cannot become a detour that never reaches consent.
+//
+// So this is a redirector and deliberately nothing more. The destination is the
+// SAME consent URL every time, built by slackAuthorize from the same scopes the
+// console's Connect button uses — one source of truth for what we ask a workspace
+// to grant, whether the click came from the Marketplace or from the console.
+//
+// It carries NO state and binds NO org, and that is correct rather than a gap:
+// the org is resolved where it has always been resolved — the generic
+// /v1/provider/:provider/callback, from the signed state a console connect
+// minted, or OrgForExternalID for a workspace already connected. An install that
+// begins here finishes there under exactly the rules every other install obeys,
+// and the callback's labeled failure already returns the browser to the console
+// rather than a raw JSON dead end. Minting a principal here would be inventing an
+// org for an anonymous click, which is the one thing the isolation bar forbids.
+func slackInstall(s *cloud.Service[state], c *zip.Ctx) error {
+	// SEND THEM TO THE CONSOLE, not to Slack.
+	//
+	// This used to 302 straight to Slack's consent screen carrying NO state, on
+	// the reasoning that the callback would resolve the org another way. It does
+	// not: the callback's first act is `verify(state)` and its own comment says
+	// "the org comes ONLY from the signed, single-use state". So every click from
+	// Slack's directory — the whole point of this route — landed on an
+	// invalid-state failure. A marketplace entry point that cannot complete is
+	// worse than none, because it fails after the person has already approved
+	// the scopes.
+	//
+	// Minting a state here is not the fix either, and that is what the comment
+	// was groping at: a state binds an ORG, and this route is deliberately
+	// ungated because someone arriving from the directory has no Hanzo session.
+	// Inventing an org for an anonymous click is the one thing the isolation bar
+	// forbids.
+	//
+	// So the honest answer is the console: sign in, pick the org, press Connect.
+	// That flow mints the state, and the install completes under exactly the
+	// rules every other install obeys. One connect path, and this is a signpost
+	// to it rather than a second one that dead-ends: the console's deep link to
+	// the Slack card, which it scrolls into view.
+	s.Log.Info("slack install click", "referer", c.Header("Referer"))
+	return redirect(c, s.State.consoleURL+"/connectors/slack")
+}

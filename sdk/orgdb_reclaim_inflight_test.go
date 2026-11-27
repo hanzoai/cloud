@@ -63,9 +63,10 @@ func TestReclaimBoundsTheOpenSetAndLeavesNothingInFlight(t *testing.T) {
 	}
 }
 
-// A failed open must retire its record too, or the namespace it failed on is
-// wedged for the process lifetime — and reclaim will not clean it up, because
-// reclaim reads byNS and this record is not there.
+// The same invariant on the path that used to break it. A failed open must retire
+// its record too, or the namespace it failed on is wedged for the process lifetime
+// — and reclaim will not clean it up, because reclaim reads byNS and this record
+// is not there.
 func TestAFailedOpenLeavesNothingInFlight(t *testing.T) {
 	cond := &recordingStore{objects: map[string]versioned{}}
 	members := tenure.NewMembership("pod-0", tenure.StaticSource(tenure.Member{ID: "pod-0", Addr: "pod-0"}), time.Minute)

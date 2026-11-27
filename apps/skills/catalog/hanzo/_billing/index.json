@@ -1,0 +1,222 @@
+{
+  "$schema": "https://schemas.agentskills.io/discovery/0.2.0/schema.json",
+  "base_url": "https://api.hanzo.ai",
+  "brand": "hanzo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://hanzo.id",
+  "mcp": {
+    "description": "Model Context Protocol over JSON-RPC 2.0 — one POST per message, stateless, protocol revision 2026-07-28. tools/list answers without a credential with one tool per subsystem (its operations in the \"op\" enum) plus \"describe\", which returns one operation's input schema. tools/call names a subsystem tool and carries {\"op\": <operation>, \"input\": <its arguments>}; it takes the same bearer the REST API does, and a call that carries none is answered 401 with a WWW-Authenticate header naming the resource metadata at /.well-known/oauth-protected-resource, which names the authorization server to sign in at. The tool surface is the public contract: the operator's admin product is not offered, and a name that would disclose a secret or mutate an identity is withheld — the list says how many, under _meta.",
+    "method": "POST",
+    "url": "https://api.hanzo.ai/v1/mcp"
+  },
+  "skill_count": 25,
+  "skills": [
+    {
+      "description": "Read billing accounts: Answers the caller's billing accounts: the org itself, its currency, when it was opened, and the caller's own standing in it., Answers one billing account's roster..",
+      "digest": "sha256:d402514583660c5bb5532c340eb81583e19f90b577e56054fbdccd86008b0539",
+      "name": "billing_accounts",
+      "service": "billing",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/billing_accounts/SKILL.md"
+    },
+    {
+      "description": "Read billing alerts: Lists this org's spend caps: the ceiling, its scope, whether it enforces, and how much of it has been spent this period., Answers whether one proposed spend fits inside this org's caps..",
+      "digest": "sha256:26dfc12e688e1c9a826f5d568bc451e13e73cbd0a249b402c260d2f047164b0b",
+      "name": "billing_alerts",
+      "service": "billing",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/billing_alerts/SKILL.md"
+    },
+    {
+      "description": "Read billing balance: Answers the spendable prepaid balance of the wallet this caller bills from — the same wallet the AI prepaid gate reads before admitting a paid request, the edge meter debits, and a top-up or admin grant credits..",
+      "digest": "sha256:4ea6bea45e1814a38f13e08cceee7a4c47797ffbca9b3247c1c70d0ec48346e4",
+      "name": "billing_balance",
+      "service": "billing",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/billing_balance/SKILL.md"
+    },
+    {
+      "description": "Read billing catalog: What is for sale in dollars and how it is paid for.",
+      "digest": "sha256:c93849dca7fe36ed80fc71a8130ee65199c876f17efb918930dfac7c5fde5a32",
+      "name": "billing_catalog",
+      "service": "billing",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/billing_catalog/SKILL.md"
+    },
+    {
+      "description": "Read billing checkouts: Answers where one of the caller's own checkouts stands: open, pending, complete or failed, with the next step while it waits on the buyer and the order once it is complete..",
+      "digest": "sha256:11dc344dc086e1c41c11f5d44bf1d1f7eca53e27a553bdf53caf4f9a728ab85d",
+      "name": "billing_checkouts",
+      "service": "billing",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/billing_checkouts/SKILL.md"
+    },
+    {
+      "description": "Read billing credit balance: Answers what the caller can spend right now, one entry per currency., Answers that same spendable credit split by grant tag, with the earliest expiry under each and the total across all of them..",
+      "digest": "sha256:75518243aa02ebca98b7f903c09dc5d3846ccef8c59adf9cc8f7108e67ed1aad",
+      "name": "billing_credit-balance",
+      "service": "billing",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/billing_credit-balance/SKILL.md"
+    },
+    {
+      "description": "Read billing credits: Lists the caller's credit grants — every one of them, spent and lapsed and voided included..",
+      "digest": "sha256:c5e8db60861c1d53a616e013e4232baaba24ecca4c371b8a4768e80d33c73ade",
+      "name": "billing_credits",
+      "service": "billing",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/billing_credits/SKILL.md"
+    },
+    {
+      "description": "Read billing crypto: Reads one of the caller's own deposit intents back — pending, confirming, or succeeded., Answers the terms to sign a USDC top-up against, for an agent or a person paying from a wallet: the treasury to pay, the networks and USDC contracts, the EIP-712 domain a",
+      "digest": "sha256:f4bf72be1bb73551ab7b80be5abe6cd19ea208608a2c9a62628adfe40da87fc8",
+      "name": "billing_crypto",
+      "service": "billing",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/billing_crypto/SKILL.md"
+    },
+    {
+      "description": "Read billing discovery: Answers where the purchase surface is and what it speaks: its version, the paths of its parts, the checkout's verbs in order, the payment types a checkout completes with, and how a subscription is renewed by an agent..",
+      "digest": "sha256:ca3ee743c22a58ee8fabbdf6433658f95d8c67359eddd782c9330ae68558c0b0",
+      "name": "billing_discovery",
+      "service": "billing",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/billing_discovery/SKILL.md"
+    },
+    {
+      "description": "Read billing invoices: Lists the caller's invoices, newest first, with the count beside them., Is the order invoice a link shows, read on the brand of the host it is asked on: a link read on another brand's host is a miss., Is the order invoice a link shows, as a PDF to print or ",
+      "digest": "sha256:2a584e6c155c591fbb9c257f33a4ef1ca298192b8b7566a8f981c6625951d9e9",
+      "name": "billing_invoices",
+      "service": "billing",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/billing_invoices/SKILL.md",
+      "works": [
+        "operations"
+      ]
+    },
+    {
+      "description": "Read billing ledger: Answers the org's own postings inside `range=`, each as a signed entry: a DEPOSIT CREDITS the wallet (positive, account `credits:<org>`), a HOLD sets money aside for a payment agreed and not yet made (negative, account `held:<org>`) and its return gives it ba",
+      "digest": "sha256:72b8f845d51f5717465f908d2a3359002dd9117901e72213d8563a4a99d84ee2",
+      "name": "billing_ledger",
+      "service": "billing",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/billing_ledger/SKILL.md"
+    },
+    {
+      "description": "Read billing methods: Cards and accounts on file for the caller.",
+      "digest": "sha256:fe89dfafc646968ae03491de7ca6c4c26fcfd94db49a1d8977ba6fea4c5a5f8b",
+      "name": "billing_methods",
+      "service": "billing",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/billing_methods/SKILL.md"
+    },
+    {
+      "description": "Read billing orders: Confirms a completed checkout: the order, what it cost, what the wallet was credited or the subscription it opened, and for a subscription what is left on the token it renews on..",
+      "digest": "sha256:3ac96b1f2e66b0c5a46daa028e998981ece1ee13d66d7cbd2b321b3f20a4bc9e",
+      "name": "billing_orders",
+      "service": "billing",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/billing_orders/SKILL.md"
+    },
+    {
+      "description": "Read billing payouts: Answers the org's outbound payouts, newest first — amount, destination, status, and the failure reason where one applies..",
+      "digest": "sha256:a5f92f08bc5d27b48d3356567846013c36771b4523c9fc490bb12088164229ad",
+      "name": "billing_payouts",
+      "service": "billing",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/billing_payouts/SKILL.md"
+    },
+    {
+      "description": "Read billing plans: The plan catalog, priced with whatever offer is in force.",
+      "digest": "sha256:a85360c018ea750212e25e0b8c46e320a6fdcfaa59d900881839e81a0e75456b",
+      "name": "billing_plans",
+      "service": "billing",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/billing_plans/SKILL.md"
+    },
+    {
+      "description": "Read billing portal: Cards and accounts on file for the caller.",
+      "digest": "sha256:78a13d9a3ce9b8ae73b028c3edf7833f0227f23e4aea1767f929a4e1d485f42c",
+      "name": "billing_portal",
+      "service": "billing",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/billing_portal/SKILL.md"
+    },
+    {
+      "description": "Read billing quote: Answers the price of what the caller is about to buy..",
+      "digest": "sha256:4b25426a138ecc922ec2af6872997c16c2fba6c6881a8239ae8fa8ae82e5cb27",
+      "name": "billing_quote",
+      "service": "billing",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/billing_quote/SKILL.md"
+    },
+    {
+      "description": "Read billing recharge: Reads the auto-reload rule of the wallet the caller pays from — the org's own account, or a person's wallet in the signup org: top that balance up by `amountCents` whenever it falls below `thresholdCents`, charging that payer's card on file off-session, at ",
+      "digest": "sha256:f339c936d2695ea608ec0012281799c44b52e7441a10194404bf757091e96fda",
+      "name": "billing_recharge",
+      "service": "billing",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/billing_recharge/SKILL.md"
+    },
+    {
+      "description": "Read billing settings: Answers the PUBLIC half of this org's processor configuration — the ids a browser needs to tokenize a card, and the environment it must tokenize against..",
+      "digest": "sha256:9010a41aa94a1a486266986b5bef46c264c9b20c5d40647e7f62868b12d0c83b",
+      "name": "billing_settings",
+      "service": "billing",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/billing_settings/SKILL.md"
+    },
+    {
+      "description": "Read billing subscriptions: Lists the plans the caller may see, with the count beside them..",
+      "digest": "sha256:2825e8fe944644bc58be98176f1e904ea5a84df5851b5209d2c4e792310378d4",
+      "name": "billing_subscriptions",
+      "service": "billing",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/billing_subscriptions/SKILL.md"
+    },
+    {
+      "description": "Read billing tier: Answers which tier the caller is on, what it allows, and what is left to spend..",
+      "digest": "sha256:56bf2e8dfdb13c3989c7ac8b5d07b48285df23297d21b304e0581e36212bf6ca",
+      "name": "billing_tier",
+      "service": "billing",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/billing_tier/SKILL.md"
+    },
+    {
+      "description": "Read billing topup: Says where one of the caller's own payments stands..",
+      "digest": "sha256:1e1ea25c0b92fbc6bfdeb509782808d9d7f4eea63dd8d3d4e9188c5f10dacbeb",
+      "name": "billing_topup",
+      "service": "billing",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/billing_topup/SKILL.md"
+    },
+    {
+      "description": "Read billing transactions: Answers one page of the caller's own ledger, newest first: what moved, how much, when, and what it was tagged with., Reads one ledger entry by its id..",
+      "digest": "sha256:15708b4ae672637faa4cb704e6f2a0d6724fa76e482d390c88d25147266b1087",
+      "name": "billing_transactions",
+      "service": "billing",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/billing_transactions/SKILL.md"
+    },
+    {
+      "description": "Read billing usage: Every billed call the caller's org made, attributed to a product, Answers per-account totals for the linked provider accounts the gateway ROUTED this caller's traffic through — requests, prompt and completion tokens, recorded cost — plus their honest sum., Ans",
+      "digest": "sha256:9df8ab4a2f074809ae04d0dbb927dd7ca71955435a578064e9f8a38e4b7fc8cb",
+      "name": "billing_usage",
+      "service": "billing",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/billing_usage/SKILL.md",
+      "works": [
+        "director"
+      ]
+    },
+    {
+      "description": "Read billing wire: Answers where to send a wire top-up: the receiving bank details, with the caller's own payment reference..",
+      "digest": "sha256:2ab8a93c15c544c97180894aa05dad26f1e6091c0b6e4fdee671870d6b09430b",
+      "name": "billing_wire",
+      "service": "billing",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/billing_wire/SKILL.md"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

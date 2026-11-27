@@ -1,0 +1,398 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Hanzo Cloud API",
+    "description": "Package meet is the virtual office: it decides who may join a room and mints the short-lived token that lets them in.",
+    "version": "v1"
+  },
+  "servers": [
+    {
+      "url": "https://api.hanzo.ai"
+    }
+  ],
+  "security": [
+    {
+      "bearer": []
+    }
+  ],
+  "tags": [
+    {
+      "name": "meet"
+    }
+  ],
+  "paths": {
+    "/v1/meet/call": {
+      "get": {
+        "operationId": "meetCall",
+        "summary": "Where a room's call happens",
+        "description": "Answers where a channel's call happens, for a caller who may join it.\n\nIt is the \"resolved at render\" half of HIP-0523 §12: a surface showing a channel\nasks for the channel's call at the moment it draws one, rather than reading a\nmedia room name someone stored on the channel. Nothing here is persisted and nothing is\ncreated — a media room begins existing when the first participant connects and\nstops when the last leaves, so there is no call to create and none to clean up.\n\nAUTHORIZATION IS THE JOIN DECISION, unchanged and shared. It delegates to\nstate.admits, the same function POST /v1/meet/getToken and all three recording\noperations admit on, so a caller who is told where a call is, is a caller who\ncould have joined it. Answering the address to someone who cannot join would make\nthis a space-membership oracle for anyone who can guess a channel id.\n\nIt deliberately does NOT report whether a call is in progress. That is a fact the\nmedia server holds and this binary would have to ask for it over the network,\nwhich is a different decision with a different failure mode — and reporting\n\"nobody is in this call\" when the question could not be asked would be exactly the\nunknown-rendered-as-zero this surface refuses elsewhere.",
+        "tags": [
+          "meet"
+        ],
+        "parameters": [
+          {
+            "name": "space",
+            "in": "query",
+            "required": true,
+            "description": "Space is the space uuid holding the channel, as GET /v1/team/channels\nreports it. It is the segment the caller's membership is checked against.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "channel",
+            "in": "query",
+            "required": true,
+            "description": "Channel is the channel's own id within that space, as GET /v1/team/channels\nreports it. It is opaque here: meet keeps no channels and cannot say whether\none exists, only whether this caller may be seated in the space holding\nit.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/meet.venue"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/meet/getToken": {
+      "post": {
+        "operationId": "post_meet_gettoken",
+        "summary": "Mint a join token for one video room",
+        "description": "Answers with a LiveKit join token for exactly the room named in the body. The body is the RAW token as text/plain — one opaque string, not JSON and not wrapped in an envelope, which is what the office client reads.\n\nThe caller presents its space session as a Bearer. Every clause is a refusal: the session must verify, its SIGNED space claim must equal the room's leading name segment — rooms are named `\u003cspace\u003e_\u003croom\u003e_\u003cid\u003e`, and that prefix is the only thing binding a room to a tenant — and the session must carry a privileged space role, so a guest is refused rather than seated.\n\nThe participant identity is the SESSION'S, never the body's. `_id` is accepted for compatibility with the published client bundle and deliberately ignored: LiveKit treats the identity as unique and ejects a duplicate, so honouring a caller-chosen one would let anyone in a space kick out a colleague and impersonate them. `participantName` is a display name only.\n\nAn unconfigured deployment answers 503 under its own name rather than 404, and the refusal states only that the office is unconfigured — the reason names key material and stays in the boot log.",
+        "tags": [
+          "meet"
+        ],
+        "x-public": true
+      }
+    },
+    "/v1/meet/health": {
+      "get": {
+        "operationId": "get_meet_health",
+        "summary": "Reports whether the office can mint join tokens.",
+        "description": "Reports whether the office can mint join tokens.\n\nIt reports whether this deployment holds the LiveKit key pair it needs:\nready:true with 200 when tokens can be minted, the SAME body with ready:false,\nstatus \"degraded\" and 503 when they cannot — so a probe and a dashboard both\nread the degraded state instead of someone grepping a boot log.\n\nIt takes no credential and is reachable on every public host, so it withholds\nboth the reason and the signing key's name on purpose: ready is the whole\ndashboard fact, and the reason — which names the key file and the Secret — is\nwritten to the boot log where an operator already is.",
+        "tags": [
+          "meet"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/meet.meetHealth"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/meet.meetHealth"
+                }
+              }
+            },
+            "description": "service unavailable"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/meet/record": {
+      "delete": {
+        "operationId": "meetRecordStop",
+        "summary": "Stop a room's recording",
+        "description": "Ends a room's recording — EVERY one of them.\n\nWhoever the room admits may stop it, including someone who did not start it:\na person being recorded has to be able to end it, and a rule that only the\nstarter may stop would deny exactly that. Stopping is free — a caller made to\npay to stop being recorded would be paying for the wrong thing.\n\n200 MEANS THE ROOM IS NOT BEING RECORDED, and that is why this ends all of them\nrather than the first. \"At most one per room\" is an invariant this surface wants\nand cannot impose: reading the list and starting are two calls, and two replicas\nracing through that window both start. When the list comes back holding two, two\nis the truth — and ending one while answering 200 tells the person withdrawing\nconsent that it stopped while a second worker keeps writing. A stop that cannot\nfinish the job says so instead.\n\nStopping a room that is not being recorded is not an error. The answer names the\nroom with no recording on it, which is the state the caller asked for.",
+        "tags": [
+          "meet"
+        ],
+        "parameters": [
+          {
+            "name": "room",
+            "in": "query",
+            "required": true,
+            "description": "Room is the LiveKit room, named the way the office client names one\n(`\u003cspace\u003e_\u003cname\u003e_\u003cid\u003e`). Its leading segment is what binds the room to a\ntenant, and it is the segment the caller's membership is checked against.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/meet.recording"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      },
+      "get": {
+        "operationId": "meetRecordRead",
+        "summary": "What is being recorded in a room, and where the file goes",
+        "description": "Answers what is being recorded in a room, and where the file went.\n\nIt reports the recording that is RUNNING, and once none is, the most recent one\nthe media server still holds — with its final status and its object. That second\ncase is the one that matters for finding a file: the answer to a start is the\nonly other place the location appears, and a client that lost it, or a colleague\nwho was not the one to press record, has nowhere else to look.\n\nIt is behind the same check as starting one: where a recording of a private\nconversation is kept is a fact about that conversation, so it is told to the\npeople the room admits and to nobody else.",
+        "tags": [
+          "meet"
+        ],
+        "parameters": [
+          {
+            "name": "room",
+            "in": "query",
+            "required": true,
+            "description": "Room is the LiveKit room, named the way the office client names one\n(`\u003cspace\u003e_\u003cname\u003e_\u003cid\u003e`). Its leading segment is what binds the room to a\ntenant, and it is the segment the caller's membership is checked against.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/meet.recording"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      },
+      "post": {
+        "operationId": "meetRecordStart",
+        "summary": "Start recording a room, or return the recording already running",
+        "description": "Begins recording a room, or hands back the recording already running.\n\nA recording is a durable artifact of a conversation, so only someone this room\nwould admit may make one: the caller is authorized by the SAME decision\n/v1/meet/getToken makes about the same room, and refused with the same 401.\n\nA SECOND START RETURNS THE FIRST rather than refusing it. There is at most one\nrecording per room and this operation's job is to establish that there is one —\nwhich is already true when a colleague, or the caller's own double-click,\nstarted it a moment ago. The answer is the same shape either way, naming the\nrecording that is actually running, so a client never has to tell the two cases\napart to find the id.\n\nA deployment with no media server address or no object store answers 503 naming\nwhich, because a recording that silently does not happen is worse than one that\nis refused. The reason reaches only a caller this room already admits.",
+        "tags": [
+          "meet"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/meet.recordIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/meet.recording"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/meet/session": {
+      "get": {
+        "operationId": "get_meet_session",
+        "summary": "What this caller may open a room in",
+        "description": "Answers the three facts the native lobby cannot know on its own: the identity a seat would be taken under, the LiveKit address the browser dials, and the spaces this caller may open a room in.\n\nIt is the SAME decision getToken makes, asked before the room exists rather than after it is named. A room is bound to its tenant by its name's leading space segment, and only a space this answer lists will be admitted — so the lobby offers exactly what the mint would grant, and a person is never shown a room they would then be refused. Spaces the caller holds only a guest role in are omitted for that reason.\n\nAn empty list is a real answer, not a fault: an IAM identity with no space has no room to open, and the lobby says so instead of failing.\n\n`ws` is empty when this deployment has not been told where its media plane is (LIVEKIT_WS). Token minting is unaffected — the published office client supplies its own address — so this is a degraded native UI, not a degraded service, and the lobby refuses to dial rather than guessing a host.",
+        "tags": [
+          "meet"
+        ],
+        "x-public": true
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "meet.meetHealth": {
+        "properties": {
+          "ready": {
+            "description": "Ready reports whether this deployment can mint join tokens. False is the 503.",
+            "type": "boolean"
+          },
+          "service": {
+            "description": "Service names the subsystem answering — always \"meet\".",
+            "type": "string"
+          },
+          "status": {
+            "description": "Status is \"ok\" when tokens can be minted and \"degraded\" when they cannot.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "meet.recordIn": {
+        "properties": {
+          "room": {
+            "description": "Room is the LiveKit room, named the way the office client names one\n(`\u003cspace\u003e_\u003cname\u003e_\u003cid\u003e`). Its leading segment is what binds the room to a\ntenant, and it is the segment the caller's membership is checked against.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "room"
+        ],
+        "type": "object"
+      },
+      "meet.recording": {
+        "properties": {
+          "bucket": {
+            "description": "Bucket is the object store bucket the recording is written to. It is stated\nbeside the key rather than folded into one URI so a client reads two facts\ninstead of splitting a string.",
+            "type": "string"
+          },
+          "error": {
+            "description": "Error is the media server's reason when a recording failed, and empty\notherwise.",
+            "type": "string"
+          },
+          "id": {
+            "description": "ID is the media server's egress id — the handle a later read names.",
+            "type": "string"
+          },
+          "object": {
+            "description": "Object is the key inside that bucket. Empty only while the media server has\nnot named a file yet.\n\nIt says WHERE the recording is, not how to fetch it. Reading one back is a\nseparate decision this surface deliberately does not make: a link to a\nprivate conversation needs its own answer about who may follow it and for\nhow long, and inventing a short one here would be worse than not having it.",
+            "type": "string"
+          },
+          "room": {
+            "description": "Room is the room this recording is of.",
+            "type": "string"
+          },
+          "started": {
+            "description": "Started is when the recording began, as the media server reports it: its\nown `started_at`, verbatim and unconverted. LiveKit's egress service sets\nthat field from UnixNano, and a conversion this side cannot check against\nthe running server would be a number that looks right and is wrong by a\nfactor of a billion. 0 means it has not started.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "status": {
+            "description": "Status is the media server's own state name: EGRESS_STARTING, EGRESS_ACTIVE,\nEGRESS_ENDING, EGRESS_COMPLETE, EGRESS_FAILED, EGRESS_ABORTED or\nEGRESS_LIMIT_REACHED. It is passed through rather than folded into a\nvocabulary of ours, so the answer cannot mean something the media server did\nnot say.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "meet.venue": {
+        "properties": {
+          "name": {
+            "description": "Name is the media room to join: the value POST /v1/meet/getToken takes as\nroomName, and the value the media server keys participants on.",
+            "type": "string"
+          },
+          "ready": {
+            "description": "Ready reports that this deployment can mint a join token for this room. It\nis false on a deployment holding no media-server key, where Name is still\ncorrect — the name is a property of the room and the key is a property of\nthe deployment, so a caller learns the room's identity either way and\nlearns not to offer a join button.",
+            "type": "boolean"
+          },
+          "ws": {
+            "description": "WS is where the media plane is — the address a client opens its own\nbrowser-to-server connection to. Empty when this deployment has not been\ntold where its media server lives, which is reported rather than refused:\na surface can say a call is unavailable without a second request.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "problem-details": {
+        "description": "An RFC 9457 problem document.",
+        "properties": {
+          "code": {
+            "description": "A stable token a client can branch on, when the refusal names one.",
+            "type": "string"
+          },
+          "detail": {
+            "description": "What was refused, for a person to read.",
+            "type": "string"
+          },
+          "status": {
+            "description": "The HTTP status.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "title": {
+            "description": "The status's reason phrase.",
+            "type": "string"
+          },
+          "type": {
+            "description": "about:blank",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "status",
+          "detail"
+        ],
+        "type": "object"
+      }
+    },
+    "securitySchemes": {
+      "bearer": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "The caller's credential, sent as `Authorization: Bearer \u003ctoken\u003e`. It is either an access token minted by Hanzo IAM or an API key (pk-/sk-). X-Authorization, and HTTP Basic carrying the token as the password, are accepted spellings of the same header for clients that cannot set Authorization; a browser presents the session cookie instead. Every operation requires it unless it says `security: []`."
+      }
+    }
+  }
+}

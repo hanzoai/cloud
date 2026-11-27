@@ -41,8 +41,8 @@ var internalFaults = []struct {
 	{
 		"in-cluster topology",
 		fmt.Errorf("iam unreachable: %w", errors.New(
-			`Post "http://iam.internal/v1/iam/users/get": dial tcp 192.0.2.7:8000: connect: connection refused`)),
-		[]string{"iam.internal", "192.0.2.7", "connection refused"},
+			`Post "http://iam.hanzo.svc/v1/iam/users/get": dial tcp 10.245.0.7:8000: connect: connection refused`)),
+		[]string{"iam.hanzo.svc", "10.245.0.7", "connection refused"},
 	},
 	{
 		"an unbuilt feature",

@@ -70,8 +70,9 @@ func orgFor(t *testing.T, claims idClaims, selected string) (org string, admin b
 	return org, admin
 }
 
-// TestHomeOrgIsAppIndependent is THE bug in one assertion: one person, two apps
-// in DIFFERENT orgs, one anchor.
+// TestHomeOrgIsAppIndependent is THE bug in one assertion: one person, two apps in
+// DIFFERENT orgs, one anchor. Before the fix the anchor followed whichever app
+// minted the token, so the user chose their own tenant by choosing a login route.
 func TestHomeOrgIsAppIndependent(t *testing.T) {
 	viaHanzo, adminH := orgFor(t, crossAppClaims("hanzo", "hanzo-cloud", "gotham-labs", false), "")
 	viaLux, adminL := orgFor(t, crossAppClaims("lux", "lux-cloud", "gotham-labs", false), "")
@@ -129,6 +130,9 @@ func TestRealAdminOrgMemberStillSuperAdmin(t *testing.T) {
 	}
 }
 
+// TestNonMemberSwitchPinsToResolvedHome: the membership gate must measure a
+// requested switch against the USER's set and fall back to the USER's home — not to
+// the app's org, which is what the fallback used to be.
 func TestNonMemberSwitchPinsToResolvedHome(t *testing.T) {
 	org, _ := orgFor(t, crossAppClaims("lux", "lux-cloud", "gotham-labs", false, "acme"), "victim")
 	if org != "gotham-labs" {

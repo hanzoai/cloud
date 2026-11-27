@@ -1,0 +1,806 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Hanzo Cloud API",
+    "description": "Package transport is one inbox for the chat apps you connect — Discord, Slack, Teams, Telegram.",
+    "version": "v1"
+  },
+  "servers": [
+    {
+      "url": "https://api.hanzo.ai"
+    }
+  ],
+  "security": [
+    {
+      "bearer": []
+    }
+  ],
+  "tags": [
+    {
+      "name": "transport"
+    }
+  ],
+  "paths": {
+    "/v1/transport": {
+      "get": {
+        "operationId": "get_transport",
+        "summary": "Reports every chat transport this org can send through, and whether it can send through it right now.",
+        "description": "Reports every chat transport this org can send through, and whether it can\nsend through it right now.\n\nA transport appears here whether or not it is connected — an empty list would\nleave a caller unable to tell \"this org has no Slack\" from \"Slack is down\",\nwhich are different problems with different fixes. Each entry carries the\nconnection behind it, so the answer to \"why can I not post?\" is in the same\nresponse as the transport that cannot post.",
+        "tags": [
+          "transport"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/transport.chatTransports"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/transport/agent": {
+      "get": {
+        "operationId": "get_transport_agent",
+        "summary": "Returns which agent answers the caller org's transport: the default and every channel bound to another agent.",
+        "description": "Returns which agent answers the caller org's transport: the default and\nevery channel bound to another agent.",
+        "tags": [
+          "transport"
+        ],
+        "parameters": [
+          {
+            "name": "transport",
+            "in": "query",
+            "required": false,
+            "description": "Transport is the transport: discord, github, linear, slack, teams, telegram or whatsapp.\nRequired; an unknown value is a 404.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "channels": {
+                    "C024BE91L": "des"
+                  },
+                  "default": "eng",
+                  "transport": "slack"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/transport.transportAgents"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      },
+      "put": {
+        "operationId": "put_transport_agent",
+        "summary": "Binds agents to the caller org's transport and answers the bindings as GET would.",
+        "description": "Binds agents to the caller org's transport and answers the bindings as\nGET would. It requires ORG ADMIN. The agent is named by its ref — the name an\norg gave it at POST /v1/agent, or a built-in such as dev, des or vi.",
+        "tags": [
+          "transport"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "channels": {
+                  "C024BE91L": "des"
+                },
+                "default": "eng",
+                "transport": "slack",
+                "unbind": [
+                  "C0OLD"
+                ]
+              },
+              "schema": {
+                "$ref": "#/components/schemas/transport.transportAgentsPut"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/transport.transportAgents"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/transport/allowlist": {
+      "get": {
+        "operationId": "get_transport_allowlist",
+        "summary": "Returns the caller org's access policy for one transport: whether DMs are pairing-gated, allowlisted or open, whether group channels are open, allowlisted or disabled, the config-managed DM and group allow entries, the senders approved through PAIRING (read-only here), and the org's named access groups.",
+        "description": "Returns the caller org's access policy for one transport: whether\nDMs are pairing-gated, allowlisted or open, whether group channels are open,\nallowlisted or disabled, the config-managed DM and group allow entries, the\nsenders approved through PAIRING (read-only here), and the org's named access\ngroups. An unknown transport is a 404. The entries name the people the org's\nbots admit, so reading them is an org admin's, as editing them is.",
+        "tags": [
+          "transport"
+        ],
+        "parameters": [
+          {
+            "name": "transport",
+            "in": "query",
+            "required": false,
+            "description": "Transport is the transport to read: discord, github, linear, slack, teams, telegram or whatsapp.\nRequired; an unknown value is a 404.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "slack"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/transport.allowlistView"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      },
+      "put": {
+        "operationId": "put_transport_allowlist",
+        "summary": "Edits the caller org's access policy for one transport and answers the policy as GET would, so both verbs return ONE shape.",
+        "description": "Edits the caller org's access policy for one transport and answers\nthe policy as GET would, so both verbs return ONE shape. It requires ORG ADMIN.\nEvery field but `transport` is optional and applied only when provided: an empty\npolicy string leaves that policy alone, an absent or null list leaves that list\nalone, and an EMPTY list clears it. It writes only CONFIG-sourced allow entries\n— senders approved through pairing belong to the approval flow, so a policy\nedit can never revoke one. An unknown transport is a 404.",
+        "tags": [
+          "transport"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "dm": [
+                  "U024BE7LH"
+                ],
+                "dmPolicy": "allowlist",
+                "transport": "slack"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/transport.allowlistPutIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/transport.allowlistView"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/transport/inbox": {
+      "get": {
+        "operationId": "get_transport_inbox",
+        "summary": "Returns the caller's own messages to the org's connected chat bots — those recorded on the caller's linked account — oldest first, in the portable envelope shape every transport normalises into.",
+        "description": "Returns the caller's own messages to the org's connected chat bots —\nthose recorded on the caller's linked account — oldest first, in the portable\nenvelope shape every transport normalises into. It is a CURSOR feed, not a\nsearch: pass the returned cursor back as `since` to get only what has arrived\nsince. A message is its person's: another member's is never listed, an admin\nof the org reads only their own, and one recorded on no account is listed to a\nSuperAdmin alone.",
+        "tags": [
+          "transport"
+        ],
+        "parameters": [
+          {
+            "name": "since",
+            "in": "query",
+            "required": false,
+            "description": "Since is the exclusive cursor: only messages with a higher row id come\nback. Empty starts at the beginning. Must parse as an integer.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "1042"
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Limit caps how many messages come back. Empty or 0 uses the store's\ndefault page size. Must parse as an integer.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "100"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/transport.inboxPage"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/transport/pairing": {
+      "get": {
+        "operationId": "get_transport_pairing",
+        "summary": "Returns the pairing requests waiting for the caller org to approve — one per person who messaged a connected bot on a transport whose DM policy is \"pairing\" and who is not allowed yet.",
+        "description": "Returns the pairing requests waiting for the caller org to approve\n— one per person who messaged a connected bot on a transport whose DM policy is\n\"pairing\" and who is not allowed yet. Each row carries the CODE an org admin\npasses to POST /v1/transport/pairing/approve. Expired requests are not\nreturned. Codes are capability strings: they are shown here, and never logged.\nReading them is an org admin's, as approving them is.",
+        "tags": [
+          "transport"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/transport.pairingQueue"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/transport/pairing/approve": {
+      "post": {
+        "operationId": "post_transport_pairing_approve",
+        "summary": "Turns one pending pairing code into a standing allow entry, so that person can DM the org's bot on that transport from now on.",
+        "description": "Turns one pending pairing code into a standing allow entry, so\nthat person can DM the org's bot on that transport from now on. It requires ORG\nADMIN, not merely membership. The first approval an org makes on a transport also\nbootstraps that sender as the transport's owner, which the answer reports. An\nunknown or expired code is a 404, and a code always belongs to exactly one\norg, so it can never approve someone into another tenant.",
+        "tags": [
+          "transport"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "code": "PAIR-7Q2M",
+                "transport": "telegram"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/transport.approvePairingIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/transport.pairingApproved"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/transport/{transport}/send": {
+      "post": {
+        "operationId": "post_transport_by_transport_send",
+        "summary": "Send a message from your org's bot to one chat channel",
+        "description": "Delivers text, attachments and actions to one channel on a connected chat transport — discord, github, linear, slack, teams, telegram or whatsapp — and answers that transport's own receipt, the `messageId` it assigned and the Unix second it landed. An unknown transport is a 404.\n\nThe body is the envelope's NARROW outbound projection: `channel`, `text`, `attachments`, `actions`, `replyTo` and `idempotency`, and nothing else. Identity is not a field — the transport is the path segment and the sender is the caller's validated org — so a body carrying `sender`, `account` or `transport` is refused with 400 rather than having it silently dropped. `channel.id` is required, and so is something to say: text, or at least one attachment.\n\nRequires a validated principal; 401 without one. The channel must already belong to the caller's org — each transport verifies the binding itself, so a channel this org has not bound is 403 and a channel whose route the bot has never learned is 409, meaning someone has to message the bot there first. A route learned only so a pairing reply could be delivered lasts exactly as long as that pairing request does, so a channel whose sender was never approved goes back to 409 within the hour. A transport that fails answers 502 carrying status and shape only, never a token.\n\nSending is at-most-once only if you ask for it: pass an `idempotency` string and a replay answers 200 with the PRIOR receipt instead of sending twice, while a send that fails releases the key so the caller can re-attempt. Bodies over 1 MiB are refused. Every transport currently renders text only, so attachments and actions are flattened deterministically to one line each after the text rather than dropped.",
+        "tags": [
+          "transport"
+        ],
+        "parameters": [
+          {
+            "name": "transport",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "x-public": true
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "problem-details": {
+        "description": "An RFC 9457 problem document.",
+        "properties": {
+          "code": {
+            "description": "A stable token a client can branch on, when the refusal names one.",
+            "type": "string"
+          },
+          "detail": {
+            "description": "What was refused, for a person to read.",
+            "type": "string"
+          },
+          "status": {
+            "description": "The HTTP status.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "title": {
+            "description": "The status's reason phrase.",
+            "type": "string"
+          },
+          "type": {
+            "description": "about:blank",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "status",
+          "detail"
+        ],
+        "type": "object"
+      },
+      "transport.allowlistPutIn": {
+        "properties": {
+          "accessGroups": {
+            "additionalProperties": {
+              "additionalProperties": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "type": "object"
+            },
+            "description": "AccessGroups REPLACES the org's named access groups, as\ngroup name -\u003e transport -\u003e entries. Absent or null leaves them alone.",
+            "type": "object"
+          },
+          "dm": {
+            "description": "DM REPLACES the config-managed DM allow entries. Absent or null leaves them\nalone; an empty list clears them. It never touches senders approved through\npairing — a policy edit cannot revoke an approved pairing.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "dmPolicy": {
+            "description": "DMPolicy sets how direct messages are admitted: \"pairing\" (a person must be\napproved first), \"allowlist\" (only listed senders) or \"open\". Empty leaves\nit unchanged.",
+            "type": "string"
+          },
+          "group": {
+            "description": "Group REPLACES the config-managed group allow entries. Absent or null\nleaves them alone; an empty list clears them.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "groupPolicy": {
+            "description": "GroupPolicy sets how group and thread channels are admitted: \"open\",\n\"allowlist\" or \"disabled\". Empty leaves it unchanged.",
+            "type": "string"
+          },
+          "transport": {
+            "description": "Transport is the transport to edit: discord, github, linear, slack, teams, telegram or whatsapp.\nRequired; an unknown value is a 404.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "transport.allowlistView": {
+        "properties": {
+          "accessGroups": {
+            "additionalProperties": {
+              "additionalProperties": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "type": "object"
+            },
+            "description": "AccessGroups is the org's named sender sets, as group name -\u003e transport -\u003e\nmember entries, held once for the whole org. A DM or Group entry written\n`accessGroup:\u003cname\u003e` admits any sender listed under that name for THIS\ntransport, or under the transport `*`, which is how one set covers every\ntransport at once. Replaced wholesale by the PUT.",
+            "type": "object"
+          },
+          "dm": {
+            "description": "DM is the CONFIG-managed DM allow entries — the list PUT\n/v1/transport/allowlist owns and replaces wholesale. An entry matches a sender\neither EXACTLY, as the transport-native id inbox messages carry, or as\n`accessGroup:\u003cname\u003e` resolved through AccessGroups. A bare `*` admits\neveryone, but only while DMPolicy is \"open\": it is gate syntax, not an\nidentity, so under \"allowlist\" it matches nobody.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "dmPolicy": {
+            "description": "DMPolicy decides every inbound DIRECT message, defaulting to \"pairing\" when\nthe org has never set one. \"pairing\": a sender with no entry is sent a\npairing code and the message is DROPPED — it never reaches the inbox — and\nthey are admitted only once an admin approves. \"allowlist\": only DM admits,\nand Paired senders are suspended, since a pairing grant counts under\n\"pairing\" alone. \"open\" is not unconditional either — it still requires `*`\nor a matching entry in DM.",
+            "type": "string"
+          },
+          "group": {
+            "description": "Group is the CONFIG-managed group allow entries, consulted only while\nGroupPolicy is \"allowlist\". Entries match the same two ways as DM, and here a\nbare `*` admits every sender in the channel.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "groupPolicy": {
+            "description": "GroupPolicy decides every inbound GROUP or THREAD message — a thread is a\ngroup surface — defaulting to \"open\". \"open\" admits every sender in the channel.\n\"allowlist\" admits only what Group lists, so an EMPTY Group blocks the\ntransport's group channels outright. \"disabled\" drops all of them.",
+            "type": "string"
+          },
+          "paired": {
+            "description": "Paired is the senders admitted by PAIRING — the entries POST\n/v1/transport/pairing/approve minted, DM scope only. READ-ONLY on this\nendpoint: the PUT writes config entries and can never revoke one of these\n(listing a paired sender under DM instead promotes that entry to config,\nwhich the admin then owns). They admit only while DMPolicy is \"pairing\".",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "transport.approvePairingIn": {
+        "properties": {
+          "code": {
+            "description": "Code is the pairing code from GET /v1/transport/pairing. It is a capability:\nholding it is what authorises the approval, alongside org admin.",
+            "type": "string"
+          },
+          "transport": {
+            "description": "Transport is the transport the request came in on: discord, slack, teams,\ntelegram or whatsapp.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "transport.capabilities": {
+        "properties": {
+          "actions": {
+            "description": "Actions is whether the transport renders an INTERACTIVE control natively, and\nit is the flag to read before composing one. The vocabulary is a closed\nkind-tagged union (envelope.go), exactly four kinds, each carrying only its\nown field plus an optional label:\n\n\tcommand  — a bot command to run (`command`), rendered as a button that\n\t           invokes it.\n\turl      — an external link (`url`), rendered as a link button.\n\tselect   — a menu (`options`, each a label and the value choosing it\n\t           returns), rendered as a picker.\n\tapproval — a reference to an approval request (`approval.id`), rendered as\n\t           approve/deny controls bound to that id.\n\nFalse on every transport, and nothing refuses a send for it:\nactions are accepted, validated per kind, and flattened by renderText to one\nline each after the text — `[label] command`, `[label] url`,\n`[label] opt | opt`, `[label] approval requested: \u003cid\u003e`. So a caller that\nneeds a real control must read this flag and degrade itself; a caller that\nonly needs the choice communicated can send actions and take the text form.",
+            "type": "boolean"
+          },
+          "dm": {
+            "description": "DM is whether the transport carries a DIRECT message at all. True for slack,\nteams, telegram and whatsapp. False for discord, honestly: that ingress is\nguild-scoped slash commands — an interaction without a guild id is refused\nat the endpoint — so nothing ever arrives classified as a DM, no reply route\nis ever learned for one, and a send addressed at a Discord DM is refused 409.",
+            "type": "boolean"
+          },
+          "edit": {
+            "description": "Edit is whether a sent message can be rewritten in place. True for slack\nalone. It is what lets a turn keep ONE message — progress, then the answer —\nand a transport without it shows the answer only.",
+            "type": "boolean"
+          },
+          "group": {
+            "description": "Group is whether the transport carries multi-person channels — a Discord guild\ntransport, a Slack channel, a Teams channel or group chat, a Telegram group or\nsupergroup, a WhatsApp group.",
+            "type": "boolean"
+          },
+          "media": {
+            "description": "Media is whether the transport renders an ATTACHMENT natively. False\neverywhere, and a send is not refused for it: renderText flattens each\nattachment to one `kind: url (mime)` line after the text rather than dropping\nit. A transport whose egress passes the raw text straight through would drop the\nattachment instead, and an attachment-only send would reach the platform\nwith nothing to say — which is why the flag and the flattening are pinned\ntogether.",
+            "type": "boolean"
+          },
+          "thread": {
+            "description": "Thread is whether a reply can be threaded UNDER a specific message. True for\nslack alone: it is the only transport whose ingress reports a thread\n(thread_ts, published as the envelope's replyTo) and whose send posts back\ninto it. Discord's replyTo makes an inline reply rather than a thread,\nTelegram's and WhatsApp's each quote one message, and Teams carries no reply\ntarget at all — a replyTo sent to it is ignored.",
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
+      "transport.chatTransports": {
+        "properties": {
+          "transports": {
+            "description": "Transports is every chat transport this deployment supports, in a fixed\norder, each carrying whether the org has connected it, the account behind\nthe connection, what the transport can do, the org's DM/group access\npolicies for it, and how many pairing requests are waiting.",
+            "items": {
+              "$ref": "#/components/schemas/transport.transportView"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "transport.inboxPage": {
+        "properties": {
+          "cursor": {
+            "description": "Cursor is the row id to pass back as `since` for the next page. It is the\nlast message's id, or the requested cursor when the page is empty.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "messages": {
+            "description": "Messages are the inbound messages, oldest first.",
+            "items": {
+              "$ref": "#/components/schemas/transport.inboxView"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "transport.inboxView": {
+        "properties": {
+          "account": {
+            "description": "Account is the lowercased external id of the org's connected account on that\ntransport: the Discord guild id, the Slack team id, the Teams AAD tenant id,\nor the bound Telegram chat id. Informational only — the gate keys on\n(org, transport), never on the account.",
+            "type": "string"
+          },
+          "channelId": {
+            "description": "ChannelID is the conversation on the ORIGINATING transport, and the value to\nsend back as `channel.id`: a Discord channel snowflake, a Slack conversation id\n(D… IM, C… public channel, G… private or mpim), a Teams conversation id\n(19:…@thread.… for a Teams channel or group chat, a:… for a personal chat), or a\nTelegram chat id in decimal (negative for a group, positive for a DM). It is\nstable for the life of the channel, so every message from one conversation\ncarries the same value.",
+            "type": "string"
+          },
+          "channelKind": {
+            "description": "ChannelKind is how ingest classified the channel: \"dm\", \"group\" or \"thread\". It\ndecides which policy gated the message — dmPolicy for \"dm\", groupPolicy for\nBOTH \"group\" and \"thread\". Only Slack ever reports \"thread\"; Telegram's\nreply-to id becomes ReplyTo instead, and Discord's ingress is guild-scoped\nso its channels are always \"group\".",
+            "type": "string"
+          },
+          "createdAt": {
+            "description": "CreatedAt is Unix SECONDS, stamped by the ingest goroutine when the message\nwas accepted — not the transport's own send time. Rows are dropped 30 days\nafter it.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "id": {
+            "description": "ID is the store's row id, assigned on insert — SERVER-SET, and the cursor:\npass a page's last id back as `since`. It rises with arrival order but is\nnot contiguous, because one sequence is shared by every org in the store and\na caller reads only its own rows.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "replyTo": {
+            "description": "ReplyTo is the transport's reply target for this message: Slack's thread_ts,\nor the Telegram message id it arrived as. Send it back as the body's\n`replyTo` to answer in the SAME thread. Empty means the transport reported\nnone — a top-level Slack message, and every Discord and Teams message, since\nneither carries one — and a reply then lands at the top level of the channel.",
+            "type": "string"
+          },
+          "sender": {
+            "description": "Sender is the TRANSPORT-NATIVE user id of whoever wrote the message — a\nDiscord member.user.id, a Slack U… user id, a Teams aadObjectId (falling\nback to from.id), a Telegram from.id in decimal. Stable per person per\ntransport, and the identity the gate keys on: an allow entry, an access-group\nmember and a pairing approval all name exactly this value.",
+            "type": "string"
+          },
+          "senderUser": {
+            "description": "SenderUser is the HANZO account subject that chat identity is linked to,\nresolved at ingest through the org's user link. Best-effort and omitted when\nabsent: a person who never linked their chat account — or a link store that\ncould not be read — leaves it empty and is never blocked for it.",
+            "type": "string"
+          },
+          "text": {
+            "description": "Text is the body as the transport delivered it, with the bot mention already\nstripped by the ingress adapter (on Discord it is the /hanzo prompt argument,\nsince that ingress is slash commands only), truncated to 8 KiB on store.\nInbound attachments are not stored — this is the whole of what was said.",
+            "type": "string"
+          },
+          "transport": {
+            "description": "Transport is the transport this message arrived on — discord, slack, teams or\ntelegram — and the `:transport` segment to reply through.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "transport.pairingApproved": {
+        "properties": {
+          "ownerBootstrapped": {
+            "description": "OwnerBootstrapped is true when this approval was the org's FIRST on the\ntransport and therefore also made the sender its owner.",
+            "type": "boolean"
+          },
+          "sender": {
+            "description": "Sender is the external chat identity that is now allowed to DM the org's bot.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "transport.pairingQueue": {
+        "properties": {
+          "pending": {
+            "description": "Pending is every unexpired pairing request waiting on an org admin, each\ncarrying the transport, the requesting sender and the code to approve it with.",
+            "items": {
+              "$ref": "#/components/schemas/transport.pairingView"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "transport.pairingView": {
+        "properties": {
+          "code": {
+            "description": "Code is the CAPABILITY that authorises the approval: eight characters from a\n32-symbol uppercase alphabet (A-Z0-9 minus the confusables 0, O, 1 and I),\nminted with crypto/rand and also sent to the requester in chat. An org admin\npasses it with the transport to POST /v1/transport/pairing/approve, which\nCONSUMES it — the request row is deleted, so a code approves once — and which\ntakes org admin as well as the code. It lives ONE HOUR from CreatedAt;\nexpired requests are not listed here, and approving one is a 404. It is shown\non this admin surface and NEVER logged.",
+            "type": "string"
+          },
+          "createdAt": {
+            "description": "CreatedAt is Unix SECONDS of FIRST contact: when the request was minted and\nthe code sent. Expiry is measured from here and from nowhere else.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "lastSeen": {
+            "description": "LastSeen is Unix SECONDS of the MOST RECENT message from this sender while\nthe request has been pending. It moves as they keep writing, which is how an\nadmin tells a live request from an abandoned one — but it does not extend the\nhour and does not re-send the code, since one request sends exactly one chat\nreply.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "sender": {
+            "description": "Sender is the transport-native user id waiting for access — the same\nidentity inbox messages carry. Approving mints a DM allow entry for exactly\nthis value and nothing wider: pairing never grants group access.",
+            "type": "string"
+          },
+          "transport": {
+            "description": "Transport is the transport the request arrived on — discord, slack, teams or\ntelegram — and half of what approval names. The cap of three unapproved\nrequests applies per (org, transport); while it is full no further code is\nminted until one is approved or expires.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "transport.transportAgents": {
+        "properties": {
+          "channels": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "description": "Channels maps a platform channel id to the agent that answers there.",
+            "type": "object"
+          },
+          "default": {
+            "description": "Default is the agent that answers any channel without a binding of its own;\n\"hanzo\" when the org has never set one.",
+            "type": "string"
+          },
+          "transport": {
+            "description": "Transport is the transport these bindings are for.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "transport.transportAgentsPut": {
+        "properties": {
+          "channels": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "description": "Channels binds platform channel ids to agents; channels not named are left alone.",
+            "type": "object"
+          },
+          "default": {
+            "description": "Default sets the agent for channels with no binding of their own; \"hanzo\"\nrestores the built-in. Empty or absent leaves it unchanged.",
+            "type": "string"
+          },
+          "transport": {
+            "description": "Transport is the transport to edit. Required; an unknown value is a 404.",
+            "type": "string"
+          },
+          "unbind": {
+            "description": "Unbind removes the bindings of these channels, so they fall back to Default.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "transport.transportView": {
+        "properties": {
+          "account": {
+            "description": "Account is the id-shaped fact about that connection: the lowercased external\nid integrations custodies for it — a Discord guild id, a Slack team\n(workspace) id, a Teams AAD tenant id, or the Telegram chat the org bound.\nEmpty when not connected. Informational: the access policy keys on\n(org, transport), so exactly one account is representable per pair.",
+            "type": "string"
+          },
+          "accountLabel": {
+            "description": "AccountLabel is the human label of that same account — the Discord guild\nname, the Slack team name, the Teams tenant name (falling back to the tenant\nid), the Telegram chat title. DISPLAY ONLY: never a key, and never swapped\nwith Account, on any surface.",
+            "type": "string"
+          },
+          "capabilities": {
+            "$ref": "#/components/schemas/transport.capabilities",
+            "description": "Capabilities is what this transport renders natively — read it before\ncomposing a message that needs threading, media or interactive actions."
+          },
+          "connected": {
+            "description": "Connected is whether integrations holds a connection for (this org, this\ntransport) — whether someone finished its connect flow. False leaves Account\nand AccountLabel empty, and a send is then refused downstream rather than\nhere: by the transport's own binding check (403 for a Telegram chat this org\nhas not bound, 409 for a Discord or Teams channel with no inbound-learned\nroute), or on Slack by the absent per-org bot token, which surfaces as 502.",
+            "type": "boolean"
+          },
+          "dmPolicy": {
+            "description": "DMPolicy is how this org admits direct messages here: \"pairing\", \"allowlist\"\nor \"open\", defaulting to \"pairing\" when the org has never set one.",
+            "type": "string"
+          },
+          "groupPolicy": {
+            "description": "GroupPolicy is how this org admits group and thread channels here: \"open\",\n\"allowlist\" or \"disabled\", defaulting to \"open\". Both policy fields come\nback EMPTY — rather than the listing failing — when the policy cannot be\nread; GET /v1/transport/allowlist carries the same two with the entries they\nconsult.",
+            "type": "string"
+          },
+          "id": {
+            "description": "ID is the fixed transport identifier — discord, slack, teams, telegram or\nwhatsapp — and the value every route on this surface names a transport by, including the\n`:transport` segment of the send path. The listing is always in that order.",
+            "type": "string"
+          },
+          "pendingPairing": {
+            "description": "PendingPairing counts the org's UNEXPIRED pairing requests on this transport:\nexactly the rows GET /v1/transport/pairing returns for it, one per person\nwaiting on an admin. It never exceeds three — the pending cap per\n(org, transport) — and expired requests are not counted.",
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      }
+    },
+    "securitySchemes": {
+      "bearer": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "The caller's credential, sent as `Authorization: Bearer \u003ctoken\u003e`. It is either an access token minted by Hanzo IAM or an API key (pk-/sk-). X-Authorization, and HTTP Basic carrying the token as the password, are accepted spellings of the same header for clients that cannot set Authorization; a browser presents the session cookie instead. Every operation requires it unless it says `security: []`."
+      }
+    }
+  }
+}

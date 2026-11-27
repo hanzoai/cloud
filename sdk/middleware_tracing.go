@@ -137,9 +137,10 @@ func TracingMiddleware() zip.Handler {
 		// this middleware runs — parsing the caller's when there is one, minting a
 		// sampled one at the edge when there is not — and forwards that same header
 		// on every call it makes to another process. So the id that makes one
-		// request's spans ONE trace is already on the wire at every hop. Reading it here
-		// keeps a span tree continuous across process boundaries, so a webhook and the
-		// agent run it causes are one trace.
+		// request's spans ONE trace is already on the wire at every hop. Nothing
+		// here had ever read it, which is why a span tree stopped dead at each
+		// process boundary: the Slack webhook and the agent run it caused were two
+		// unrelated traces, and no query could join them.
 		//
 		// Extracting collapses the two id spaces into one. A span's trace id now
 		// equals the `trace` field the logger already prints for the same request,
@@ -191,10 +192,16 @@ func TracingMiddleware() zip.Handler {
 			span.SetAttributes(attribute.String("hanzo.org", org))
 		}
 
-		// The METRIC half of the same observation.
+		// The METRIC half of the same observation. It belongs here and nowhere
+		// else: this is the one place every /v1 request already has its path,
+		// its status and its VALIDATED org in hand, and computing them twice in
+		// a second middleware would be the same fact measured two ways.
 		//
-		// It records hanzo_http_requests_total for every request, so a product's error rate is
-		// alertable; a metric nothing calls is not instrumentation.
+		// It had been written (metrics_http.go) and never called, so
+		// hanzo_http_requests_total did not exist in the store — which is why
+		// "/v1/event is 5xx" was unalertable while the Sentry envelope returned
+		// 503 for a day with nobody paged. A metric nothing calls is not
+		// instrumentation, it is a comment.
 		observeRequest(productFromPath(path), org, status, time.Since(start))
 		setServerStatus(span, status, err)
 		return err

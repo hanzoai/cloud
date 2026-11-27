@@ -1,0 +1,434 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Hanzo Cloud API",
+    "description": "Package notify is transactional email and SMS, sent through your org's own provider credential.",
+    "version": "v1"
+  },
+  "servers": [
+    {
+      "url": "https://api.hanzo.ai"
+    }
+  ],
+  "security": [
+    {
+      "bearer": []
+    }
+  ],
+  "tags": [
+    {
+      "name": "notify"
+    }
+  ],
+  "paths": {
+    "/v1/notify/credentials/{provider}/{key}": {
+      "delete": {
+        "operationId": "delete_notify_credentials_by_provider_by_key",
+        "summary": "Removes one of your org's notify provider credentials.",
+        "description": "Removes one of your org's notify provider credentials.\n\nThe value is forgotten in KMS. A provider missing a key it cannot send\nwithout is no longer picked for its channel, and a send that pins it fails\nwith the key it lacks. Removing a key that is not set succeeds, since what was\nasked for is already true. Org admin only.",
+        "tags": [
+          "notify"
+        ],
+        "parameters": [
+          {
+            "name": "provider",
+            "in": "path",
+            "required": true,
+            "description": "Provider is the delivery provider the credential is for.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "key",
+            "in": "path",
+            "required": true,
+            "description": "Key is the credential's name within that provider.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "no content"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      },
+      "put": {
+        "operationId": "put_notify_credentials_by_provider_by_key",
+        "summary": "Sets one of your org's notify provider credentials.",
+        "description": "Sets one of your org's notify provider credentials.\n\nThe value is sealed in KMS under your org and read by notify alone, at the\nmoment it sends; no route answers it back, this one included. Setting a key\nthat is already set replaces it, which is how a credential is rotated, and the\nnext send uses the new value. The key must be one the provider reads — Twilio's\naccount-sid, auth-token and from-number, say — and anything else is a 400\nnaming the keys it does read. An unknown provider is a 404.\n\nOrg admin only: a credential set here is what every message the org sends\ngoes out with.",
+        "tags": [
+          "notify"
+        ],
+        "parameters": [
+          {
+            "name": "provider",
+            "in": "path",
+            "required": true,
+            "description": "Provider is the delivery provider the credential is for: twilio, plivo,\ntwilio_email or mail.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "twilio"
+          },
+          {
+            "name": "key",
+            "in": "path",
+            "required": true,
+            "description": "Key is one of the credentials that provider reads, such as auth-token or\nsmtp-host. A key the provider does not read is refused.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "auth-token"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "key": "auth-token",
+                "provider": "twilio",
+                "value": "…"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/notify.notifyCredential"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/notify.notifyStored"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/notify/health": {
+      "get": {
+        "operationId": "get_notify_health",
+        "summary": "Reports that the notify send surface is mounted.",
+        "description": "Reports that the notify send surface is mounted.\n\nIt is a pure liveness probe: it answers 200 whenever this subsystem is mounted\nand checks nothing downstream, so an \"ok\" here says the routes are reachable, not\nthat any provider credential is configured. The body is notifyd's verbatim, so\nprobes and clients that keyed on the standalone service keep working unchanged.",
+        "tags": [
+          "notify"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/notify.notifyHealth"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/notify/send": {
+      "post": {
+        "operationId": "post_notify_send",
+        "summary": "Delivers one transactional message by email or SMS through the caller org's own provider credential.",
+        "description": "Delivers one transactional message by email or SMS through the caller\norg's own provider credential.\n\nThe channel comes from the body — sms or email — and the provider credential is\nread from KMS at orgs/\u003corg\u003e/notify/\u003cservice\u003e/\u003ckey\u003e, never from the environment.\nThe org is the validated principal's, never a client-supplied value, so a caller\ncan only ever send as their own tenant; an unauthenticated caller gets 401.\nNaming no provider picks the one whose credentials are actually configured\n(Twilio, then Plivo for SMS; Twilio Email, then SMTP for email) and fails closed\nwhen none is. Delivery is synchronous and per recipient: one recipient answers\nthe bare {message_id,status} outcome, several answer the {items:[…]} envelope. A\nterminal provider failure is a 200 whose status is failed with the reason in\nerror, never a transport error. sync=true is REQUIRED — an async dispatch\nanswers 503, because the queue plane that would run it is owned elsewhere. The\nmessage body wins verbatim when present; otherwise template_id (or the event\nname) selects a built-in template rendered against template_vars.",
+        "tags": [
+          "notify"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/notify.notifySend"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/notify/send/email": {
+      "post": {
+        "operationId": "post_notify_send_email",
+        "summary": "Delivers one transactional email through the caller org's own provider credential.",
+        "description": "Delivers one transactional email through the caller org's own\nprovider credential.\n\nIt is the channel-pinned form of the generic send: identical in every respect\nexcept that the channel is fixed to email, OVERRIDING whatever the body names —\nso a body that says sms still goes out as mail. The provider is the org's own\nemail credential from KMS (Twilio Email, then SMTP), resolved for the validated\nprincipal's org; an unauthenticated caller gets 401. Subject is carried on the\nemail channel only.",
+        "tags": [
+          "notify"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/notify.notifySend"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/notify/send/sms": {
+      "post": {
+        "operationId": "post_notify_send_sms",
+        "summary": "Delivers one transactional SMS through the caller org's own provider credential.",
+        "description": "Delivers one transactional SMS through the caller org's own provider\ncredential.\n\nIt is the channel-pinned form of the generic send: identical in every respect\nexcept that the channel is fixed to sms, OVERRIDING whatever the body names —\nso a body that says email still goes out as a text message. The provider is the\norg's own SMS credential from KMS (Twilio, then Plivo), resolved for the\nvalidated principal's org; an unauthenticated caller gets 401.",
+        "tags": [
+          "notify"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/notify.notifySend"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "ok"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/problem-details"
+                }
+              }
+            },
+            "description": "refused"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "notify.notifyCredential": {
+        "properties": {
+          "key": {
+            "description": "Key is one of the credentials that provider reads, such as auth-token or\nsmtp-host. A key the provider does not read is refused.",
+            "type": "string"
+          },
+          "provider": {
+            "description": "Provider is the delivery provider the credential is for: twilio, plivo,\ntwilio_email or mail.",
+            "type": "string"
+          },
+          "value": {
+            "description": "Value is sealed in KMS and never answered, logged or echoed. It is never\nread from a query string, because a URL is logged in more places than a\nbody is.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "notify.notifyHealth": {
+        "properties": {
+          "service": {
+            "description": "Service names the subsystem answering — always \"notify\".",
+            "type": "string"
+          },
+          "status": {
+            "description": "Status is \"ok\"; the route answers 200 whenever the subsystem is mounted.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "notify.notifySend": {
+        "properties": {
+          "body": {
+            "description": "Body is the message text, sent verbatim when present — the no-template path.",
+            "type": "string"
+          },
+          "channel": {
+            "description": "Channel selects the delivery channel, sms or email. The per-channel routes\n(/send/sms, /send/email) pin it, overriding whatever the body names; on the\ngeneric route it is required.",
+            "type": "string"
+          },
+          "event": {
+            "description": "Event is the event name, which doubles as the template id when TemplateID is\nempty — the IAM OTP path sends event=iam.otp_sent and nothing else.",
+            "type": "string"
+          },
+          "provider": {
+            "description": "Provider pins a provider service name (twilio, plivo, twilio_email, mail).\nEmpty picks the one whose org credentials are actually configured in KMS.",
+            "type": "string"
+          },
+          "subject": {
+            "description": "Subject is the message subject, carried on the email channel only.",
+            "type": "string"
+          },
+          "sync": {
+            "description": "Sync must be exactly \"true\": delivery here is synchronous, and anything else\nanswers 503 because the queue plane that would run an async dispatch is owned\nelsewhere. Over REST it rides as ?sync=true (the URL binds over the body); a\nby-name call states it in its arguments.",
+            "type": "string"
+          },
+          "template_id": {
+            "description": "TemplateID selects a built-in template when Body is empty.",
+            "type": "string"
+          },
+          "template_vars": {
+            "description": "TemplateVars carries the values the selected template renders against, as\na raw JSON object. Raw on purpose: the by-name call plane computes an\ninput's layout before reading any payload and refuses a map field\noutright, which would make every typed call to these ops fail — and that\ncall is the reason they are typed at all (IAM's OTP sender). deliver\ndecodes it right before the template renders, so REST bodies decode\nbyte-identically to the map this replaced."
+          },
+          "to": {
+            "description": "To is the destination address per recipient — a phone number for sms, an\nemail address for email. Several recipients fan out into one provider call\neach, and the response shape follows the count (see the items field).",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "notify.notifyStored": {
+        "properties": {
+          "key": {
+            "description": "Key is the credential that was set.",
+            "type": "string"
+          },
+          "provider": {
+            "description": "Provider is the provider the credential was set for.",
+            "type": "string"
+          },
+          "stored": {
+            "description": "Stored is true: the value is sealed and the next send reads it.",
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
+      "problem-details": {
+        "description": "An RFC 9457 problem document.",
+        "properties": {
+          "code": {
+            "description": "A stable token a client can branch on, when the refusal names one.",
+            "type": "string"
+          },
+          "detail": {
+            "description": "What was refused, for a person to read.",
+            "type": "string"
+          },
+          "status": {
+            "description": "The HTTP status.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "title": {
+            "description": "The status's reason phrase.",
+            "type": "string"
+          },
+          "type": {
+            "description": "about:blank",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "status",
+          "detail"
+        ],
+        "type": "object"
+      }
+    },
+    "securitySchemes": {
+      "bearer": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "The caller's credential, sent as `Authorization: Bearer \u003ctoken\u003e`. It is either an access token minted by Hanzo IAM or an API key (pk-/sk-). X-Authorization, and HTTP Basic carrying the token as the password, are accepted spellings of the same header for clients that cannot set Authorization; a browser presents the session cookie instead. Every operation requires it unless it says `security: []`."
+      }
+    }
+  }
+}

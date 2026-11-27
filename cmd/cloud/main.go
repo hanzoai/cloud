@@ -1,54 +1,13 @@
-// cloud is the unified Hanzo Cloud binary per HIP-0106.
+// Command cloud is the Hanzo Cloud light-host router (HIP-0106).
 //
-// One binary. Many subsystems. Configuration determines which subsystems
-// mount at startup; the defaults run a complete local cloud on one machine.
-//
-// The serve body lives in cloud.Serve (one place, shared with the `hanzo`
-// subcommand dispatcher); main() is just its full-surface entrypoint. The
-// subsystem set is defined once in the subsystems bundle.
+// All router, lifecycle, wake, wire, peer, console, and OpenAPI composition
+// logic lives in github.com/hanzoai/cloud/cmd/cloud/host so private or custom
+// distributions can register additional ZAP plugins onto manifest and invoke
+// host.Main() without duplicating the host.
 package main
 
-import (
-	"fmt"
-	"os"
-
-	"github.com/hanzoai/cloud"
-
-	// The subsystem set is defined ONCE in the subsystems bundle (shared with
-	// cmd/hanzo). apps.Wire() returns it in mount order; main threads that
-	// slice into cloud.Serve — the composition root, no init()-registry.
-	"github.com/hanzoai/cloud/apps"
-)
+import "github.com/hanzoai/cloud/cmd/cloud/host"
 
 func main() {
-	if len(os.Args) > 1 {
-		switch os.Args[1] {
-		case "version", "--version", "-V", "-v":
-			fmt.Printf("hanzo-cloud %s\n", cloud.Version)
-			return
-		case "cloud":
-			os.Args = append(os.Args[:1], os.Args[2:]...)
-		default:
-			if !startsWithDash(os.Args[1]) {
-				sub := os.Args[1]
-				os.Args = append(os.Args[:1], os.Args[2:]...)
-				if err := apps.ServeSingle(sub); err != nil {
-					fmt.Fprintf(os.Stderr, "cloud: %v\n", err)
-					os.Exit(1)
-				}
-				return
-			}
-		}
-	}
-	// Telemetry is bootstrapped inside cloud.Serve (one site, every entrypoint —
-	// cmd/cloud AND every `hanzo <svc>`), so main() is just the full-surface
-	// entrypoint. nil ⇒ honor cfg.Enable from flags/env (empty = all subsystems).
-	if err := cloud.Serve(apps.Wire(), nil); err != nil {
-		fmt.Fprintf(os.Stderr, "cloud: %v\n", err)
-		os.Exit(1)
-	}
-}
-
-func startsWithDash(s string) bool {
-	return len(s) > 0 && s[0] == '-'
+	host.Main()
 }

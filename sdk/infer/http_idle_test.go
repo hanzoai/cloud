@@ -64,8 +64,8 @@ func TestAStalledStreamIsHungUpAtTheIdleGap(t *testing.T) {
 // A stream that keeps producing tokens is never cut, however long it runs: each
 // frame re-arms the gap.
 func TestASteadyStreamIsNeverCut(t *testing.T) {
-	idleGap(t, 250*time.Millisecond)
-	url, _ := streaming(t, 20, 40*time.Millisecond) // 800ms, three gaps long
+	idleGap(t, 100*time.Millisecond)
+	url, _ := streaming(t, 20, 40*time.Millisecond) // 800ms, eight gaps long
 	ai := HTTPAt(url, "k", FixedModel("m")).(*httpAI)
 	resp, err := ai.ChatStream(context.Background(), &ChatRequest{Prompt: "q"}, func(string) error { return nil })
 	if err != nil {

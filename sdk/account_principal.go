@@ -22,21 +22,21 @@ import (
 // even though the SAME session got 200 from every /v1/admin/* route. Two session
 // models for one surface; the identity source and the authorization source disagreed.
 //
-// THE DECOMPLECTION. Identity is now the principal: when a VALIDATED principal
-// is present (X-User-Id is set ONLY by IdentityMiddleware from a real
-// credential, never a raw client header — see middleware_identity.go),
-// /v1/get-account reflects it. owner is the HOME org (principal.Owner) so a
-// SuperAdmin org-switched into a tenant stays a SuperAdmin; isAdmin is the
-// validated bit. With NO principal it falls through (c.Next()) to the embedded
-// account surface unchanged — the anonymous sign-in page and any caller still
-// holding one of its sessions are untouched. Additive, fail-open to the old
-// path. MUST be registered AFTER IdentityMiddleware (needs the minted headers)
-// and BEFORE UseAll (so it precedes that surface's own account handler).
+// THE DECOMPLECTION. Identity is now the principal: when a VALIDATED principal is
+// present (X-User-Id is set ONLY by IdentityMiddleware from a real credential, never a
+// raw client header — see middleware_identity.go), /v1/get-account reflects it. owner
+// is the HOME org (principal.Owner) so a SuperAdmin org-switched into a tenant stays a
+// SuperAdmin; isAdmin is the validated bit. With NO principal it falls through
+// (c.Next()) to the embedded account surface unchanged — the anonymous sign-in page
+// and any caller still holding one of its sessions are untouched. Additive, fail-open
+// to the old path. MUST be registered AFTER IdentityMiddleware (needs the minted
+// headers) and BEFORE UseAll (so it precedes that surface's own account handler).
 // accountPath is the account read this middleware fronts. It is a named constant
 // because the interception is a PATH MATCH: when the /v1 surface was namespaced
 // (/v1/get-account → /v1/ai/account) a literal left un-updated here would not
 // error — the middleware would simply stop firing, fall through to the embedded
-// account surface, and hand the SPA the anonymous owner again.
+// account surface, and hand the SPA the anonymous owner again. That is precisely
+// the bug this file exists to fix, silently restored.
 const accountPath = "/v1/ai/account"
 
 func AccountFromPrincipal() zip.Handler {

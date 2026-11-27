@@ -1,0 +1,531 @@
+package books
+
+// store.go — one per-org (HIP-0302 physical-file isolated) SQLite holding the org's
+// books: the seeded chart of accounts, immutable GL Entry rows, the Payment Ledger Entry
+// subledger for AR/AP legs, and the ingestion cursor. A distinct org resolves to a
+// distinct {DataDir}/orgs/{slug}/books.db (sandbox → books-sandbox.db), so one org's
+// ledger can never reach another's rows.
+//
+// IMMUTABILITY. GL Entry rows are append-only: the store has no UPDATE or DELETE of a
+// gl_entry, and every write goes through post() inside one transaction gated by the
+// voucher's idempotency key. A correction is a NEW reversing voucher, never an edit —
+// the ledger of record is the sum of what was posted.
+
+import (
+	"context"
+	"database/sql"
+	"errors"
+	"fmt"
+	"strings"
+	"time"
+
+	"github.com/hanzoai/cloud/sdk/dialect"
+	"github.com/hanzoai/cloud/sdk/tenure"
+	"github.com/hanzoai/namespace"
+)
+
+type store struct {
+	db     *sql.DB
+	d      dialect.Dialect
+	fields *tenure.Fields
+}
+
+// THE COLUMNS THIS STORE SEALS (internal/org, field.go), on both engines, each bound to the
+// org's namespace, the table, the column and the row's natural key. They are the free text
+// of a ledger, which names who was paid and who paid:
+//
+//	voucher.description, gl_entry.remarks     the memo of a posting (the same text on every leg)
+//	bank_txn.description, .merchant, .raw     a bank line as the connector delivered it
+//	bank_question.prompt                      the question put to the founder about one
+//	books_inbox.filename, .extracted          an uploaded document and what was read off it
+//
+// Left plain, and why: the chart of accounts (account.name is the fixed chart, a constant
+// of the code, and party is a type), amounts, dates, ids, statuses, connector names, and
+// books_vendor and scan_identity.vendor, which hold the BUSINESS a bill is from and are
+// read by UNIQUE, PRIMARY KEY and ORDER BY.
+var (
+	voucherKey, voucherSealed   = []string{"source_kind", "source_id"}, []string{"description"}
+	glKey, glSealed             = []string{"source_kind", "source_id", "account"}, []string{"remarks"}
+	bankTxnKey, bankTxnSealed   = []string{"connector", "external_id"}, []string{"description", "merchant", "raw"}
+	questionKey, questionSealed = []string{"connector", "external_id"}, []string{"prompt"}
+	inboxKey, inboxSealed       = []string{"hash"}, []string{"filename", "extracted"}
+)
+
+// openStore is the open func cloud.NewOrgStoreAt calls once per org: it wraps an org DB
+// (already opened by cloud.OrgDB), keys the sealed columns for ns and subsystem, runs the
+// migration and seeds the fixed chart in one transaction under the store's migration lock.
+// With no usable master the store does not open.
+func openStore(master []byte, subsystem string) func(namespace.Namespace, *sql.DB) (*store, error) {
+	return func(ns namespace.Namespace, db *sql.DB) (*store, error) {
+		c, err := tenure.NewCipher(master)
+		if err != nil {
+			_ = db.Close()
+			return nil, fmt.Errorf("books: %w", err)
+		}
+		fields, err := c.Fields(ns, subsystem)
+		if err != nil {
+			_ = db.Close()
+			return nil, fmt.Errorf("books: %w", err)
+		}
+		s := &store{db: db, d: dialect.Of(db), fields: fields}
+		ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+		defer cancel()
+		if err := s.d.Migrate(ctx, db, func(tx *sql.Tx) error {
+			if err := s.migrate(ctx, tx); err != nil {
+				return err
+			}
+			return s.seed(ctx, tx)
+		}); err != nil {
+			_ = db.Close()
+			return nil, err
+		}
+		// A SQLite file from before the columns were sealed holds them in plaintext. Seal
+		// them in place, before any read, so the store never reads a value it did not
+		// write and cmd/sqlmove copies ciphertext. (hanzo-sql tables are born sealed, and
+		// Upgrade leaves them alone.) It is a walk in small transactions of its own
+		// (org.Fields.Upgrade), after the schema has committed, so a large book opens and
+		// an interrupted open resumes.
+		for _, t := range []struct {
+			table       string
+			key, sealed []string
+		}{
+			{"voucher", voucherKey, voucherSealed},
+			{"gl_entry", glKey, glSealed},
+			{"bank_txn", bankTxnKey, bankTxnSealed},
+			{"bank_question", questionKey, questionSealed},
+			{"books_inbox", inboxKey, inboxSealed},
+		} {
+			if _, err := s.fields.Upgrade(context.Background(), db, t.table, t.key, t.sealed); err != nil {
+				_ = db.Close()
+				return nil, fmt.Errorf("books migrate: %w", err)
+			}
+		}
+		return s, nil
+	}
+}
+
+func (s *store) Close() error { return s.db.Close() }
+
+// migrate creates the books' tables, on the transaction Dialect.Migrate holds.
+func (s *store) migrate(ctx context.Context, tx *sql.Tx) error {
+	d := s.d
+	ddl := `
+CREATE TABLE IF NOT EXISTS account (
+  number TEXT ` + d.Bytewise() + ` PRIMARY KEY,
+  name   TEXT NOT NULL,
+  type   TEXT NOT NULL,
+  party  TEXT NOT NULL DEFAULT ''
+);
+CREATE TABLE IF NOT EXISTS voucher (
+  id          ` + d.Identity() + `,
+  source_kind TEXT NOT NULL,
+  source_id   TEXT NOT NULL,
+  posting_at  TEXT NOT NULL ` + d.Bytewise() + `,
+  description TEXT NOT NULL DEFAULT '',
+  UNIQUE(source_kind, source_id)
+);
+CREATE TABLE IF NOT EXISTS gl_entry (
+  id          ` + d.Identity() + `,
+  voucher_id  BIGINT NOT NULL REFERENCES voucher(id),
+  posting_at  TEXT NOT NULL ` + d.Bytewise() + `,
+  account     TEXT NOT NULL ` + d.Bytewise() + ` REFERENCES account(number),
+  debit       BIGINT NOT NULL DEFAULT 0,
+  credit      BIGINT NOT NULL DEFAULT 0,
+  against     TEXT NOT NULL DEFAULT '',
+  source_kind TEXT NOT NULL,
+  source_id   TEXT NOT NULL,
+  remarks     TEXT NOT NULL DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS gl_entry_account ON gl_entry(account);
+CREATE TABLE IF NOT EXISTS payment_ledger_entry (
+  id          ` + d.Identity() + `,
+  voucher_id  BIGINT NOT NULL REFERENCES voucher(id),
+  posting_at  TEXT NOT NULL ` + d.Bytewise() + `,
+  account     TEXT NOT NULL,
+  party_type  TEXT NOT NULL,
+  amount      BIGINT NOT NULL,
+  source_kind TEXT NOT NULL,
+  source_id   TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS cursor (
+  id      BIGINT PRIMARY KEY CHECK (id = 1),
+  last_at TEXT NOT NULL DEFAULT '',
+  last_id TEXT NOT NULL DEFAULT ''
+);
+-- bank_txn is the normalized bank transaction the connectors (OFX/CSV import,
+-- Plaid, Teller) land here. It is UNIQUE per (connector, external_id): re-importing
+-- a statement or re-syncing a connector can never create a second row, which is the
+-- bank-layer half of the idempotency guarantee (the GL voucher UNIQUE key is the
+-- other). raw holds the connector's original JSON for audit; matched_voucher points
+-- at the GL voucher source_id this txn posted/cleared through (empty when none).
+CREATE TABLE IF NOT EXISTS bank_txn (
+  id              ` + d.Identity() + `,
+  connector       TEXT NOT NULL,
+  external_id     TEXT NOT NULL,
+  posted_at       TEXT NOT NULL,
+  amount_cents    BIGINT NOT NULL,
+  currency        TEXT NOT NULL DEFAULT 'usd',
+  direction       TEXT NOT NULL,
+  description     TEXT NOT NULL DEFAULT '',
+  merchant        TEXT NOT NULL DEFAULT '',
+  raw             TEXT NOT NULL DEFAULT '',
+  matched_voucher TEXT NOT NULL DEFAULT '',
+  status          TEXT NOT NULL,
+  UNIQUE(connector, external_id)
+);
+CREATE INDEX IF NOT EXISTS bank_txn_status ON bank_txn(status);
+-- bank_cursor is one connector's per-org pull high-water mark (Plaid/Teller). The
+-- per-org store is already org-scoped, so the connector name alone is the key.
+CREATE TABLE IF NOT EXISTS bank_cursor (
+  connector TEXT PRIMARY KEY,
+  cursor    TEXT NOT NULL DEFAULT ''
+);
+-- bank_question is the clarifying-question ledger: an UNMATCHED bank inflow raises
+-- one here instead of guessing revenue. UNIQUE per (connector, external_id) so a
+-- re-sync never asks the same question twice.
+CREATE TABLE IF NOT EXISTS bank_question (
+  id          ` + d.Identity() + `,
+  connector   TEXT NOT NULL,
+  external_id TEXT NOT NULL,
+  prompt      TEXT NOT NULL,
+  status      TEXT NOT NULL DEFAULT 'open',
+  created_at  TEXT NOT NULL,
+  UNIQUE(connector, external_id)
+);
+-- bank_settlement records which processor CAPTURE (a commerce DEBIT on 1010) a bank inflow
+-- has cleared. It is the per-capture consumed-state that keeps reconciliation honest: each
+-- capture settles to the bank at most ONCE, so a coincidental same-amount inflow can never
+-- pre-consume the capture the real settlement needs, and a second identical settlement finds
+-- no open capture. capture_source_id is the consumed capture's voucher source_id (PK ⇒
+-- consumed once); (connector, external_id) is the inflow that consumed it (UNIQUE ⇒ one
+-- inflow clears one capture, and a re-sync of that inflow is an idempotent no-op).
+CREATE TABLE IF NOT EXISTS bank_settlement (
+  capture_source_id TEXT PRIMARY KEY,
+  connector         TEXT NOT NULL,
+  external_id       TEXT NOT NULL,
+  settled_at        TEXT NOT NULL,
+  UNIQUE(connector, external_id)
+);
+-- bank_payment is the OUTFLOW-side twin of bank_settlement: it records which scanned
+-- VendorPayable (a scan CREDIT on 2001) a bank OUTFLOW has paid down. A scanned bill accrues
+-- Dr expense / Cr 2001; the bank debit that pays it must SETTLE the payable (Dr 2001 / Cr 1000),
+-- not re-book the expense — otherwise the spend is counted twice and the AP dangles forever.
+-- This per-payable consumed-state keeps that honest: payable_source_id is the paid payable's
+-- voucher source_id (PK ⇒ a bill is paid at most once), and (connector, external_id) is the
+-- outflow that paid it (UNIQUE ⇒ one outflow clears one payable, a re-sync is an idempotent
+-- no-op).
+CREATE TABLE IF NOT EXISTS bank_payment (
+  payable_source_id TEXT PRIMARY KEY,
+  connector         TEXT NOT NULL,
+  external_id       TEXT NOT NULL,
+  paid_at           TEXT NOT NULL,
+  UNIQUE(connector, external_id)
+);
+-- books_inbox is the per-org queue of uploaded-but-unbooked documents (scan.go). A
+-- document enters 'unsorted' on upload, moves to 'draft' once the scanner extracts its
+-- fields, and 'booked' once a reviewed voucher posts. hash (sha256 of the file bytes) is
+-- UNIQUE, so re-uploading the same file is an idempotent no-op — one row per document,
+-- never a duplicate in the queue. extracted holds the scanner's JSON summary for the list.
+CREATE TABLE IF NOT EXISTS books_inbox (
+  id         ` + d.Identity() + `,
+  filename   TEXT NOT NULL DEFAULT '',
+  hash       TEXT NOT NULL,
+  status     TEXT NOT NULL,
+  extracted  TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL,
+  UNIQUE(hash)
+);
+CREATE INDEX IF NOT EXISTS books_inbox_status ON books_inbox(status);
+-- books_vendor resolves a raw merchant string (as printed on a receipt) to a canonical
+-- vendor and its default expense category (a COA account number). aliases is a JSON array
+-- of alternate spellings; a scan whose merchant matches the canonical name or any alias
+-- auto-fills the category. canonical is UNIQUE — one row per vendor.
+CREATE TABLE IF NOT EXISTS books_vendor (
+  id               ` + d.Identity() + `,
+  canonical        TEXT NOT NULL ` + d.Bytewise() + `,
+  aliases          TEXT NOT NULL DEFAULT '[]',
+  default_category TEXT NOT NULL DEFAULT '',
+  UNIQUE(canonical)
+);
+-- books_rule is the auto-categorization rule set: a match pattern → a category (COA
+-- account number), highest priority first. A scanned merchant containing a rule's pattern
+-- self-classifies, so once a human sets a rule a known vendor's future bills book
+-- automatically. pattern is UNIQUE — one rule per pattern.
+CREATE TABLE IF NOT EXISTS books_rule (
+  id       ` + d.Identity() + `,
+  pattern  TEXT NOT NULL ` + d.Bytewise() + `,
+  category TEXT NOT NULL,
+  priority BIGINT NOT NULL DEFAULT 0,
+  UNIQUE(pattern)
+);
+-- scan_identity is the ECONOMIC-identity index of booked bills: the natural key
+-- (vendor, total_cents, issued_at) of every scanned bill that posted. The file-hash scanId
+-- makes an exact re-upload idempotent, but a re-print / re-scan at a different DPI / edited
+-- whitespace yields a NEW hash for the SAME real-world bill — which would double-book. This
+-- catches that: a second booking of an identity already here is blocked unless the human
+-- overrides. PK ⇒ one row per economic bill (an override books a duplicate voucher but does
+-- not add a second identity row, so the guard keeps firing for later non-override bookings).
+CREATE TABLE IF NOT EXISTS scan_identity (
+  vendor      TEXT NOT NULL,
+  total_cents BIGINT NOT NULL,
+  issued_at   TEXT NOT NULL,
+  scan_id     TEXT NOT NULL,
+  booked_at   TEXT NOT NULL,
+  PRIMARY KEY (vendor, total_cents, issued_at)
+);`
+	if _, err := tx.ExecContext(ctx, ddl); err != nil {
+		return fmt.Errorf("books migrate: %w", err)
+	}
+	return nil
+}
+
+// seed inserts the fixed chart of accounts, idempotently — a re-open of an existing
+// books.db is a no-op. The chart is a constant, so a row is never updated (an account's
+// meaning is fixed by its number).
+func (s *store) seed(ctx context.Context, tx *sql.Tx) error {
+	for _, a := range chartOfAccounts {
+		if _, err := tx.ExecContext(ctx,
+			`INSERT INTO account (number, name, type, party) VALUES ($1,$2,$3,$4) ON CONFLICT (number) DO NOTHING`,
+			a.Number, a.Name, string(a.Type), string(a.Party)); err != nil {
+			return fmt.Errorf("books seed %s: %w", a.Number, err)
+		}
+	}
+	return nil
+}
+
+// post is the SINGLE ledger-write choke point. It runs the voucher through processGLMap
+// (merge → toggle → round-off → the Σdebit==Σcredit invariant) and, only if it balances,
+// writes the immutable GL Entry rows + a Payment Ledger Entry per AR/AP leg in ONE
+// transaction. It is idempotent by (source_kind, source_id): a voucher already posted
+// returns posted=false and writes nothing (the UNIQUE(voucher) row is the guard, so a
+// re-run of ingestion never double-books).
+func (s *store) post(ctx context.Context, v Voucher, allowance int64) (posted bool, err error) {
+	legs, err := processGLMap(v.Legs, allowance, RoundOff)
+	if err != nil {
+		return false, err
+	}
+
+	if err := dialect.Text(v.SourceKind, v.SourceID, v.PostingAt, v.Description); err != nil {
+		return false, fmt.Errorf("books post voucher: %w", err)
+	}
+	tx, err := s.d.BeginWrite(ctx, s.db)
+	if err != nil {
+		return false, err
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	memo := s.fields.Row("voucher", v.SourceKind, v.SourceID)
+	description := memo.Seal("description", v.Description)
+	if err := memo.Err(); err != nil {
+		return false, fmt.Errorf("books post voucher: %w", err)
+	}
+	var vid int64
+	switch err := tx.QueryRowContext(ctx,
+		`INSERT INTO voucher (source_kind, source_id, posting_at, description)
+		 VALUES ($1,$2,$3,$4) ON CONFLICT(source_kind, source_id) DO NOTHING RETURNING id`,
+		v.SourceKind, v.SourceID, v.PostingAt, description).Scan(&vid); {
+	case errors.Is(err, sql.ErrNoRows):
+		return false, nil // already posted — idempotent skip
+	case err != nil:
+		return false, fmt.Errorf("books post voucher: %w", err)
+	}
+
+	against := counterAccounts(legs)
+	for _, l := range legs {
+		leg := s.fields.Row("gl_entry", v.SourceKind, v.SourceID, l.Account)
+		remarks := leg.Seal("remarks", v.Description)
+		if err := leg.Err(); err != nil {
+			return false, fmt.Errorf("books post gl_entry: %w", err)
+		}
+		if _, err := tx.ExecContext(ctx,
+			`INSERT INTO gl_entry (voucher_id, posting_at, account, debit, credit, against, source_kind, source_id, remarks)
+			 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+			vid, v.PostingAt, l.Account, l.Debit, l.Credit, against[l.Account], v.SourceKind, v.SourceID, remarks); err != nil {
+			return false, fmt.Errorf("books post gl_entry: %w", err)
+		}
+		// AR/AP legs also land in the Payment Ledger Entry subledger (party outstanding).
+		if a, ok := accountByNumber[l.Account]; ok && a.Party != NoParty {
+			if _, err := tx.ExecContext(ctx,
+				`INSERT INTO payment_ledger_entry (voucher_id, posting_at, account, party_type, amount, source_kind, source_id)
+				 VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+				vid, v.PostingAt, l.Account, string(a.Party), l.Debit-l.Credit, v.SourceKind, v.SourceID); err != nil {
+				return false, fmt.Errorf("books post payment_ledger_entry: %w", err)
+			}
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+// counterAccounts returns, per account, a summary of the OTHER accounts in the voucher —
+// the "against" column ERPNext keeps so a single GL row shows what it moved against.
+func counterAccounts(legs []Leg) map[string]string {
+	out := make(map[string]string, len(legs))
+	for _, a := range legs {
+		var s string
+		for _, b := range legs {
+			if b.Account == a.Account {
+				continue
+			}
+			if s != "" {
+				s += ","
+			}
+			s += b.Account
+		}
+		out[a.Account] = s
+	}
+	return out
+}
+
+// GLRow is one persisted GL Entry, as the read API surfaces it.
+type GLRow struct {
+	// ID is the entry's position in the ledger. The ledger is append-only, so ids
+	// ascend with posting order and a higher id is a later entry.
+	ID int64 `json:"id"`
+	// PostingAt is the accounting date this entry belongs to — what the reports
+	// window on, which need not be when the row was written.
+	PostingAt string `json:"postingAt"`
+	// Account is the chart-of-accounts number this leg posts to.
+	Account string `json:"account"`
+	// Debit is the amount debited to that account, in whole cents. Exactly one of
+	// debit and credit is non-zero on a leg; a negative amount is never used to mean
+	// the other side.
+	Debit int64 `json:"debit"`
+	// Credit is the amount credited to that account, in whole cents.
+	Credit int64 `json:"credit"`
+	// Against names the OTHER accounts in the same voucher — the contra side of this
+	// leg — so a single row reads as an entry rather than as half of one.
+	Against string `json:"against,omitempty"`
+	// SourceKind is what caused the posting: a bank line, a scanned document, a
+	// commerce sale. With sourceId it traces the entry back to the thing that
+	// produced it.
+	SourceKind string `json:"sourceKind"`
+	// SourceID identifies that originating record within its kind.
+	SourceID string `json:"sourceId"`
+	// Remarks is the memo carried onto the entry, for a human reading the ledger.
+	Remarks string `json:"remarks,omitempty"`
+}
+
+// listGL returns the most recent GL Entry rows (newest first), capped at limit.
+func (s *store) listGL(ctx context.Context, limit int) ([]GLRow, error) {
+	if limit <= 0 || limit > 5000 {
+		limit = 500
+	}
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT id, posting_at, account, debit, credit, against, source_kind, source_id, remarks
+		 FROM gl_entry ORDER BY id DESC LIMIT $1`, limit)
+	if err != nil {
+		return nil, fmt.Errorf("books listGL: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	out := []GLRow{}
+	for rows.Next() {
+		var r GLRow
+		if err := rows.Scan(&r.ID, &r.PostingAt, &r.Account, &r.Debit, &r.Credit, &r.Against, &r.SourceKind, &r.SourceID, &r.Remarks); err != nil {
+			return nil, err
+		}
+		leg := s.fields.Row("gl_entry", r.SourceKind, r.SourceID, r.Account)
+		r.Remarks = leg.Open("remarks", r.Remarks)
+		if err := leg.Err(); err != nil {
+			return nil, err
+		}
+		out = append(out, r)
+	}
+	return out, rows.Err()
+}
+
+// listAccounts returns the seeded chart of accounts (number-ascending within class,
+// exactly the seed order via id ordering is not guaranteed, so order by number).
+func (s *store) listAccounts(ctx context.Context) ([]Account, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT number, name, type, party FROM account ORDER BY number`)
+	if err != nil {
+		return nil, fmt.Errorf("books listAccounts: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	out := []Account{}
+	for rows.Next() {
+		var a Account
+		var typ, party string
+		if err := rows.Scan(&a.Number, &a.Name, &typ, &party); err != nil {
+			return nil, err
+		}
+		a.Type = AccountType(typ)
+		a.Party = PartyType(party)
+		out = append(out, a)
+	}
+	return out, rows.Err()
+}
+
+// sums is the debit/credit total per account over an optional posting-time window:
+// startExclusive (>) and endInclusive (<=); either "" drops that bound. It is the ONE
+// aggregation the trial balance composes into opening/period/closing.
+type sums map[string][2]int64 // account → {debit, credit}
+
+func (s *store) sums(ctx context.Context, startExclusive, endInclusive string) (sums, error) {
+	var q strings.Builder
+	q.WriteString(`SELECT account, CAST(COALESCE(SUM(debit),0) AS BIGINT), CAST(COALESCE(SUM(credit),0) AS BIGINT) FROM gl_entry`)
+	var args dialect.Args
+	var where []string
+	if startExclusive != "" {
+		where = append(where, "posting_at > "+args.Mark(startExclusive))
+	}
+	if endInclusive != "" {
+		where = append(where, "posting_at <= "+args.Mark(endInclusive))
+	}
+	for i, w := range where {
+		if i == 0 {
+			q.WriteString(" WHERE " + w)
+		} else {
+			q.WriteString(" AND " + w)
+		}
+	}
+	q.WriteString(" GROUP BY account")
+	rows, err := s.db.QueryContext(ctx, q.String(), args.Values()...)
+	if err != nil {
+		return nil, fmt.Errorf("books sums: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	out := sums{}
+	for rows.Next() {
+		var acct string
+		var d, c int64
+		if err := rows.Scan(&acct, &d, &c); err != nil {
+			return nil, err
+		}
+		out[acct] = [2]int64{d, c}
+	}
+	return out, rows.Err()
+}
+
+// cursorState is the ingestion high-water mark for this org's books.
+type cursorState struct {
+	LastAt string
+	LastID string
+}
+
+func (s *store) cursor(ctx context.Context) (cursorState, error) {
+	row := s.db.QueryRowContext(ctx, `SELECT last_at, last_id FROM cursor WHERE id = 1`)
+	var cs cursorState
+	err := row.Scan(&cs.LastAt, &cs.LastID)
+	if err == sql.ErrNoRows {
+		return cursorState{}, nil
+	}
+	if err != nil {
+		return cursorState{}, fmt.Errorf("books cursor: %w", err)
+	}
+	return cs, nil
+}
+
+func (s *store) setCursor(ctx context.Context, cs cursorState) error {
+	_, err := s.db.ExecContext(ctx,
+		`INSERT INTO cursor (id, last_at, last_id) VALUES (1, $1, $2)
+		 ON CONFLICT(id) DO UPDATE SET last_at = excluded.last_at, last_id = excluded.last_id`,
+		cs.LastAt, cs.LastID)
+	if err != nil {
+		return fmt.Errorf("books setCursor: %w", err)
+	}
+	return nil
+}

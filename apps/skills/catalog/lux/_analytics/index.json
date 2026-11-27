@@ -1,0 +1,56 @@
+{
+  "$schema": "https://schemas.agentskills.io/discovery/0.2.0/schema.json",
+  "base_url": "https://api.lux.network",
+  "brand": "lux",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://lux.id",
+  "mcp": {
+    "description": "Model Context Protocol over JSON-RPC 2.0 — one POST per message, stateless, protocol revision 2026-07-28. tools/list answers without a credential with one tool per subsystem (its operations in the \"op\" enum) plus \"describe\", which returns one operation's input schema. tools/call names a subsystem tool and carries {\"op\": <operation>, \"input\": <its arguments>}; it takes the same bearer the REST API does, and a call that carries none is answered 401 with a WWW-Authenticate header naming the resource metadata at /.well-known/oauth-protected-resource, which names the authorization server to sign in at. The tool surface is the public contract: the operator's admin product is not offered, and a name that would disclose a secret or mutate an identity is withheld — the list says how many, under _meta.",
+    "method": "POST",
+    "url": "https://api.lux.network/v1/mcp"
+  },
+  "skill_count": 5,
+  "skills": [
+    {
+      "description": "Read analytics freshness: Reports per-pipeline watermarks, lag_ms, rows processed, and financial reconciliation drift from analytics.watermarks, accelerated by Lux KV with stale-on-outage fallback..",
+      "digest": "sha256:5d956081ee812029cbb0209c74d434f19d9c3731a76398a8fa4b4930dfac1ed3",
+      "name": "analytics_freshness",
+      "service": "analytics",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/analytics_freshness/SKILL.md"
+    },
+    {
+      "description": "Read analytics health: Reports Datastore reachability, active MergeTree parts and merge pressure, Lux KV cache status, bounded query semaphore utilization, and active SSE stream counts..",
+      "digest": "sha256:6a8be4d5392f05f242a0d62c65130a97d11b39ceef9e2a6c800774e3d03ae6d7",
+      "name": "analytics_health",
+      "service": "analytics",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/analytics_health/SKILL.md"
+    },
+    {
+      "description": "Read analytics metrics: Lists all canonical registered metrics, their units, allowed group_by dimensions, upstream sources, freshness targets, accuracy classifications, and backing tables..",
+      "digest": "sha256:9f5a7255b33891600b36cc8f6d9a2dfd6f0c9ab514cd3bc862c77ba0725289fd",
+      "name": "analytics_metrics",
+      "service": "analytics",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/analytics_metrics/SKILL.md"
+    },
+    {
+      "description": "Read analytics overview: Returns constant-cost global (SuperAdmin) or org-scoped executive KPIs directly from analytics.global_overview / analytics.org_overview with zero per-org RPCs, accelerated by Lux KV and degrading gracefully to the last-known KV snapshot if Datastore is un",
+      "digest": "sha256:08e5ff80ca14ad061262ca4ccd2bfc98f750fb07fa13fc0df659fd3d645896d6",
+      "name": "analytics_overview",
+      "service": "analytics",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/analytics_overview/SKILL.md"
+    },
+    {
+      "description": "Read analytics stream: Stream coalesced real-time analytics updates as Server-Sent Events.",
+      "digest": "sha256:4048bb3b71e7c1f4f8f927bd1e02e9dfd6525f00742d49d276d6fe6da18d663a",
+      "name": "analytics_stream",
+      "service": "analytics",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/analytics_stream/SKILL.md"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

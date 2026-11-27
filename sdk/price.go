@@ -3,12 +3,12 @@ package cloud
 // price.go — what a surface costs is part of DECLARING it, not something added to
 // it afterwards.
 //
-// The edge gate answered "what does this path cost?" from a table inside itself
-// whose last line was `return 0` — "metering is opt-in per path so a new route
-// never silently starts billing". The intent was to avoid over-billing. The cost
-// was the opposite asymmetry: over-billing is loud (a customer complains) and
-// under-billing is SILENT and PERMANENT, because free never errors. A route
-// nobody priced was free forever and nothing anywhere said so.
+// THE BUG THIS FILE EXISTS TO CLOSE. The edge gate answered "what does this path
+// cost?" from a table inside itself whose last line was `return 0` — "metering is
+// opt-in per path so a new route never silently starts billing". The intent was to
+// avoid over-billing. The cost was the opposite asymmetry: over-billing is loud (a
+// customer complains) and under-billing is SILENT and PERMANENT, because free never
+// errors. A route nobody priced was free forever and nothing anywhere said so.
 //
 // So the price moved to where the surface is declared: App.Price, one field
 // beside Name in the composition root. Its zero value is Undeclared, which is not a
@@ -86,12 +86,12 @@ func (p Price) Declared() bool { return p != Undeclared }
 // without a per-route table: a surface's cost basis is shared by its writes, and
 // its reads, with the exception below, have no cost basis at all.
 //
-// DefaultPrice priced by PATH alone, so a surface declared at 25¢ charged 25¢
-// for `GET /v1/<surface>/list` — a directory listing billed like the work it
-// lists. That is why no surface in the fleet had ever declared a positive price:
-// the only safe declaration was Free, and 95 of them took it. The read/write
-// distinction is a RULE, not a table, so it belongs in one function rather than
-// in 1100 route declarations nobody can keep true.
+// THE BUG IT CLOSES, MEASURED. DefaultPrice priced by PATH alone, so a surface
+// declared at 25¢ charged 25¢ for `GET /v1/<surface>/list` — a directory listing
+// billed like the work it lists. That is why no surface in the fleet had ever
+// declared a positive price: the only safe declaration was Free, and 95 of them
+// took it. The read/write distinction is a RULE, not a table, so it belongs in
+// one function rather than in 1100 route declarations nobody can keep true.
 //
 // The rule and its justification are not new here — spend.go's Billable has
 // carried them since the standing gate was written: "gating reads already caused
@@ -123,9 +123,18 @@ func Consumes(method, path string) bool {
 // paidReads are the operations whose READ IS the paid unit of work — the whole
 // exception to "a read spends nothing", written where the rule is.
 //
-// What the declaration could NOT say was that the READ spends, so Billable never
-// asked for standing and the meter ran on whatever the caller had. This list is
-// that missing half, and it is the only thing here the method cannot answer.
+// price.go's own answer for this class used to be that such a surface "meters its
+// own units downstream and declares Metered", and that half is right: the edge
+// still charges nothing for them (each declares Metered, so Price.Cents is 0, and
+// an edge charge on top of a downstream meter bills the same work twice). What
+// the declaration could NOT say was that the READ spends, so Billable never asked
+// for standing and the meter ran on whatever the caller had. This list is that
+// missing half, and it is the only thing here the method cannot answer.
+//
+// It is short by construction and it is MEASURED — each entry names the line that
+// moves the money — because a surface that wants to spend on a read has to be
+// written down here, in the file the money rule lives in, rather than acquiring
+// the property by adding a call inside a handler.
 //
 // Each entry is a root and covers everything beneath it, asked through scope.go's
 // `under` so the comparison is the one the ROUTER makes: /V1/S3/... reaches the
@@ -150,19 +159,22 @@ var paidReads = []string{
 
 // DefaultPrice is what ONE invocation of the operation (method, path) costs.
 //
-// IT TAKES TWO STRINGS, AND THAT IS THE WHOLE POINT. Over MCP that path is /mcp;
-// over the ZAP plane it is /.well-known/zip/op/<name>. Neither names a declared
-// surface, so both resolved to Undeclared and both were free, silently and
-// permanently, however the operation inside them was priced. A price is a fact
-// about an operation, and an operation is a method and a path, so those are the
-// arguments. Every client that knows an operation can now ask.
+// IT TAKES TWO STRINGS, AND THAT IS THE WHOLE POINT. It used to take a *zip.Ctx,
+// which made the price a property of an HTTP REQUEST — so the only client that could
+// ask it was HTTP middleware, and middleware reads the path the TRANSPORT carried.
+// Over MCP that path is /mcp; over the ZAP plane it is /.well-known/zip/op/<name>.
+// Neither names a declared surface, so both resolved to Undeclared and both were
+// free, silently and permanently, however the operation inside them was priced.
+// A price is a fact about an operation, and an operation is a method and a path,
+// so those are the arguments. Every client that knows an operation can now ask.
 //
 // It holds NO table: it reads the price the surface DECLARED at the composition
 // root (Plugin.Price → PriceOf), so the number the gate charges and the number a
-// reviewer approved are the same number, in one place. That default is gone: an
-// unpriced surface fails TestPriceDeclared before it can ship. Undeclared still
-// charges nothing HERE (Price.Cents), because a missing declaration must break
-// the build, never a customer's card.
+// reviewer approved are the same number, in one place. It used to be the table,
+// and its last line was `return 0` for anything unlisted — which made a new route
+// free forever. That default is gone: an unpriced surface fails TestPriceDeclared
+// before it can ship. Undeclared still charges nothing HERE (Price.Cents), because
+// a missing declaration must break the build, never a customer's card.
 //
 // Two things it does on its own:
 //

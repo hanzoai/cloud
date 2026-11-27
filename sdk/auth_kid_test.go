@@ -17,8 +17,10 @@ import (
 // A token is verified by the KEY IT NAMED, or not at all — asserted through cloud's
 // own boundary, because this is the boundary that runs in front of production.
 //
-// So a token naming cert-hanzo was accepted on a signature from cert-lux, and a
-// token naming NO key was accepted on any of them.
+// cloud used to hold its own key selection, and it fell back: after the kid-matched
+// key failed it looped over every RSA signing key in the JWKS and accepted the first
+// that verified. So a token naming cert-hanzo was accepted on a signature from
+// cert-lux, and a token naming NO key was accepted on any of them.
 //
 // It was not exploitable by a tenant: IAM publishes only certs owned by a reserved
 // platform org (isSigningCert → store.IsSigningCertOwner), so a customer cannot get a

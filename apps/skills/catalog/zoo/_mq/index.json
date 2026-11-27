@@ -1,0 +1,40 @@
+{
+  "$schema": "https://schemas.agentskills.io/discovery/0.2.0/schema.json",
+  "base_url": "https://api.zoo.ngo",
+  "brand": "zoo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://zoolabs.id",
+  "mcp": {
+    "description": "Model Context Protocol over JSON-RPC 2.0 — one POST per message, stateless, protocol revision 2026-07-28. tools/list answers without a credential with one tool per subsystem (its operations in the \"op\" enum) plus \"describe\", which returns one operation's input schema. tools/call names a subsystem tool and carries {\"op\": <operation>, \"input\": <its arguments>}; it takes the same bearer the REST API does, and a call that carries none is answered 401 with a WWW-Authenticate header naming the resource metadata at /.well-known/oauth-protected-resource, which names the authorization server to sign in at. The tool surface is the public contract: the operator's admin product is not offered, and a name that would disclose a secret or mutate an identity is withheld — the list says how many, under _meta.",
+    "method": "POST",
+    "url": "https://api.zoo.ngo/v1/mcp"
+  },
+  "skill_count": 3,
+  "skills": [
+    {
+      "description": "Read mq health: Reports whether the message plane behind this surface answers..",
+      "digest": "sha256:1deb3030fd454adc5dc8b0f0f5a7da3cacdada34dbb6a04958edede9a44a7f6f",
+      "name": "mq_health",
+      "service": "mq",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/mq_health/SKILL.md"
+    },
+    {
+      "description": "Read mq info: Returns the broker's identity and the org's stream count..",
+      "digest": "sha256:47bb40fc70b08210881fe30d735d36a3443bc61439672624367f63dd3d51168b",
+      "name": "mq_info",
+      "service": "mq",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/mq_info/SKILL.md"
+    },
+    {
+      "description": "Read mq stream: Returns the org's streams, name-ordered, with their live state., Returns one stream's configuration and live state., Reads stored messages without a consumer: by sequence, by newest on a subject, or walking a subject forward from a sequence..",
+      "digest": "sha256:bc73e7927895c353908457c6e560195d8cbb073f63a786106df526a58ba268a6",
+      "name": "mq_stream",
+      "service": "mq",
+      "type": "skill-md",
+      "url": "/.well-known/agent-skills/mq_stream/SKILL.md"
+    }
+  ],
+  "spec_version": "8.0.0"
+}
