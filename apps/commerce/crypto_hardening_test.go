@@ -37,6 +37,45 @@ type multiCustody struct {
 	seq atomic.Int64
 }
 
+func TestKrakenPoolReferenceIsNeverATokenContract(t *testing.T) {
+	const arbitrumUSDC = "0xaf88d065e77c8cc2239327c5edb3a432268e5831"
+	for _, configured := range []string{"pool:kraken:arbitrum:usdc", "kraken:arbitrum:usdc", arbitrumUSDC} {
+		if got := canonicalContract("arbitrum", "usdc", configured); got != arbitrumUSDC {
+			t.Errorf("contract for %q = %q, want %s", configured, got, arbitrumUSDC)
+		}
+	}
+	if got := canonicalContract("unknown", "usdc", "pool:kraken:unknown:usdc"); got != "" {
+		t.Errorf("unknown Kraken asset exposed %q", got)
+	}
+}
+
+type krakenMinimum struct {
+	*multiCustody
+	cents int64
+}
+
+func (krakenMinimum) Type() processor.ProcessorType { return processor.Kraken }
+
+func (k krakenMinimum) MinimumUSDCents(context.Context, string, string) int64 {
+	return k.cents
+}
+
+func TestNativeDepositMinimumIncludesKrakenFundingFloor(t *testing.T) {
+	asset := depositwatch.Asset{Chain: "arbitrum", Token: "usdc"}
+	custody := krakenMinimum{multiCustody: newMultiCustody(), cents: 250}
+	if got, ok := nativeDepositMinimum(context.Background(), asset, custody); !ok || got != 250 {
+		t.Fatalf("Kraken minimum = %d, %v, want 250, true", got, ok)
+	}
+	asset.Terms.FeeCents = 300
+	if got, ok := nativeDepositMinimum(context.Background(), asset, custody); !ok || got != 301 {
+		t.Fatalf("minimum including settlement fee = %d, %v, want 301, true", got, ok)
+	}
+	custody.cents = 0
+	if got, ok := nativeDepositMinimum(context.Background(), asset, custody); ok {
+		t.Fatalf("published %d cents with unknown Kraken minimum", got)
+	}
+}
+
 func newMultiCustody() *multiCustody {
 	b := processor.NewBaseProcessor(processor.MPC, nil)
 	b.SetConfigured(true)

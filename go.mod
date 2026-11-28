@@ -37,7 +37,7 @@ require (
 	github.com/hanzoai/captable v1.0.1
 	github.com/hanzoai/cd/gitops-engine v0.7.3
 	github.com/hanzoai/cek v0.2.11
-	github.com/hanzoai/commerce v1.50.260
+	github.com/hanzoai/commerce v1.50.266
 	github.com/hanzoai/dataroom v1.1.8
 	github.com/hanzoai/dbx v1.17.4
 	github.com/hanzoai/decimal v0.1.2

@@ -363,6 +363,14 @@ became an order) are taken over every match, not the page. The CRM's customer re
 
 ## The agent checkout protocols mount on their operator's file (`agentic.go`, `acp.go`, `ucp.go`, #424)
 
+Agents paying through native custody follow the crypto links in billing discovery:
+read `GET /v1/billing/crypto/options` with the buyer's credential, then
+`POST /v1/billing/crypto/deposit` with the selected chain and token. A plan purchase
+also supplies `planId`. Use the returned deposit address, token contract and any
+required destination tag. Poll `GET /v1/billing/crypto/deposit/{id}` for settlement.
+The deposit status is authoritative for this flow, and options reflect the custody
+and watcher configured in that environment.
+
 ACP (API 2026-04-17) and UCP (2026-08-25) are `hanzoai/commerce` `agentic/acp` and `agentic/ucp` (HIP-1223), served here because their `Commerce` backends call `api/billing` and commerce's datastore in-process: one unit of one catalog item (`credit-<cents>` or a plan slug), USD, paid with a Stripe shared payment token, the same checkout `/v1/billing/checkouts` opens.
 
 - **Off until configured.** `CLOUD_ACP_CONFIG` / `CLOUD_UCP_CONFIG` each name a JSON file (the OSS host's `CLOUD_X402_CONFIG` shape). Unset: no route is registered, so `/v1/commerce/acp/*`, `/v1/commerce/ucp/*`, `/.well-known/acp.json` and `/.well-known/ucp` answer 404, and the purchase discovery (`GET /v1/billing/discovery` links) names neither.

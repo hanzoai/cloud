@@ -241,16 +241,6 @@ func isAssetAmbiguousInList(asset depositwatch.Asset, all []orgIntent, listErr e
 	return false
 }
 
-// isAssetAmbiguous reports whether two distinct subjects still claim the same non-pooled
-// deposit identity across organizations for `asset`.
-func isAssetAmbiguous(_ context.Context, asset depositwatch.Asset) bool {
-	if asset.Pooled() {
-		return false
-	}
-	all, err := listAssetIntentsAllOrgs(asset.Chain, asset.Token)
-	return isAssetAmbiguousInList(asset, all, err)
-}
-
 // healAllWatchedCollisions retires unfunded, expired duplicate Kraken shared-address
 // intents across all currently watched assets so depositledger's RPC scanner never
 // stays wedged behind stale exchange-address rotations.

@@ -56,7 +56,8 @@ var canonicalContracts = map[string]string{
 
 func canonicalContract(chain, token, configured string) string {
 	c := strings.TrimSpace(configured)
-	if c != "" && !strings.HasPrefix(strings.ToLower(c), "kraken:") {
+	normalized := strings.ToLower(c)
+	if c != "" && !strings.HasPrefix(normalized, "kraken:") && !strings.HasPrefix(normalized, "pool:kraken:") {
 		return c
 	}
 	key := strings.ToLower(strings.TrimSpace(chain)) + ":" + strings.ToLower(strings.TrimSpace(token))
@@ -97,6 +98,23 @@ func minimumDepositCents(t depositwatch.Terms) int64 {
 		return t.FeeCents + 1
 	}
 	return ((t.FeeCents+1)*bps + keep - 1) / keep
+}
+
+func nativeDepositMinimum(ctx context.Context, asset depositwatch.Asset, cp processor.CryptoProcessor) (int64, bool) {
+	minimum := minimumDepositCents(asset.Terms)
+	if cp == nil || cp.Type() != processor.Kraken {
+		return minimum, true
+	}
+	funding, ok := cp.(interface {
+		MinimumUSDCents(context.Context, string, string) int64
+	})
+	if !ok {
+		return 0, false
+	}
+	probe, cancel := context.WithTimeout(ctx, 3*time.Second)
+	defer cancel()
+	exchangeMinimum := funding.MinimumUSDCents(probe, asset.Chain, asset.Token)
+	return max(minimum, exchangeMinimum), exchangeMinimum > 0
 }
 
 // grossForNet returns the smallest USD cents deposit whose post-slippage, post-fee net
@@ -225,6 +243,7 @@ func nativeCryptoOptions(ctx context.Context) (*client.CryptoOptions, error) {
 		if seen[key] {
 			continue
 		}
+		var custody processor.CryptoProcessor
 		if a.Pooled() {
 			if strings.TrimSpace(a.PooledAddress) == "" {
 				continue
@@ -242,14 +261,15 @@ func nativeCryptoOptions(ctx context.Context) (*client.CryptoOptions, error) {
 			if !nativeSupportedChain(res.cp, chain) {
 				continue
 			}
-			if !strings.HasPrefix(strings.ToLower(a.Contract), "kraken:") && isAssetAmbiguous(ctx, a) {
-				anyCustodyErr = fmt.Errorf("asset %s:%s has ambiguous custody identities", chain, token)
-				continue
-			}
+			custody = res.cp
+		}
+		minCents, ready := nativeDepositMinimum(ctx, a, custody)
+		if !ready {
+			anyCustodyErr = fmt.Errorf("deposit minimum unavailable for %s", key)
+			continue
 		}
 		seen[key] = true
 		dec := tokenDecimals(a)
-		minCents := minimumDepositCents(a.Terms)
 		assets = append(assets, client.CryptoPair{
 			Chain:              chain,
 			Token:              token,
@@ -455,7 +475,24 @@ func nativeCryptoMint(ctx context.Context, org *organization.Organization, in *c
 		}
 	}
 
-	minCents := minimumDepositCents(asset.Terms)
+	var custody processor.CryptoProcessor
+	if !asset.Pooled() {
+		var err error
+		custody, err = nativeCustodyProcessor(ctx, token)
+		if err != nil {
+			RecordCryptoEvent("unavailable", chain, token)
+			return nil, zip.Errorf(503, "Crypto deposits not configured")
+		}
+		if !nativeSupportedChain(custody, chain) {
+			RecordCryptoEvent("validation_rejected", chain, token)
+			return nil, zip.Errorf(400, "unsupported chain %q", chain)
+		}
+	}
+	minCents, ready := nativeDepositMinimum(ctx, asset, custody)
+	if !ready {
+		RecordCryptoEvent("unavailable", chain, token)
+		return nil, zip.Errorf(503, "The custody provider's minimum deposit is temporarily unavailable for %s on %s", strings.ToUpper(token), chain)
+	}
 	amountCents := in.AmountCents
 	var pq planQuote
 	if hasPlan {
@@ -467,7 +504,7 @@ func nativeCryptoMint(ctx context.Context, org *organization.Organization, in *c
 		}
 		// Include any asset sweep fee and slippage tolerance in the quoted deposit amount
 		// so sending AmountCents always yields net credit >= pq.chargeCents to open the plan.
-		amountCents = grossForNet(pq.chargeCents, asset.Terms)
+		amountCents = max(minCents, grossForNet(pq.chargeCents, asset.Terms))
 	} else if amountCents > 0 && amountCents < minCents {
 		RecordCryptoEvent("validation_rejected", chain, token)
 		return nil, zip.Errorf(400, "amountCents (%d) is below the minimum deposit (%d cents) for %s on %s",
@@ -480,12 +517,25 @@ func nativeCryptoMint(ctx context.Context, org *organization.Organization, in *c
 	// Reuse the caller's own open, unexpired intent for the same (payer, chain, token, planId)
 	// so page refreshes neither spray MPC keygens nor exhaust pooled destination tags.
 	if existing := reusableIntentFor(ctx, db, asset, payer, chain, token, pq.slug, existingAll, existingAllErr); existing != nil {
-		if amountCents > 0 && existing.Amount != amountCents {
+		minimum, _ := existing.Metadata["minimumCents"].(string)
+		minimumChanged := minimum != strconv.FormatInt(minCents, 10)
+		amountChanged := amountCents > 0 && existing.Amount != amountCents
+		if amountChanged {
 			existing.Amount = amountCents
 			if hasPlan {
 				applyPlanMetadata(existing, pq, in.Level)
 			}
-			_ = existing.Update()
+		}
+		if minimumChanged {
+			if existing.Metadata == nil {
+				existing.Metadata = commercetypes.Map{}
+			}
+			existing.Metadata["minimumCents"] = strconv.FormatInt(minCents, 10)
+		}
+		if minimumChanged || amountChanged {
+			if err := existing.Update(); err != nil {
+				return nil, zip.Errorf(503, "could not update crypto deposit terms")
+			}
 		}
 		return intentToClientDeposit(existing, asset, contract), nil
 	}
@@ -505,19 +555,11 @@ func nativeCryptoMint(ctx context.Context, org *organization.Organization, in *c
 		}
 		wallet = processor.Wallet{Address: asset.PooledAddress}
 	} else {
-		cp, err := nativeCustodyProcessor(ctx, token)
-		if err != nil {
-			RecordCryptoEvent("unavailable", chain, token)
-			return nil, zip.Errorf(503, "Crypto deposits not configured")
-		}
-		if !nativeSupportedChain(cp, chain) {
-			RecordCryptoEvent("validation_rejected", chain, token)
-			return nil, zip.Errorf(400, "unsupported chain %q", chain)
-		}
 		mintCtx := processor.WithAddressFree(processor.WithToken(ctx, token), func(addr string) bool {
 			return !addressClaimedInList(existingAll, existingAllErr, asset, addr, org.Name, payer, "")
 		})
-		wallet, err = cp.GenerateAddress(mintCtx, payer, chain)
+		var err error
+		wallet, err = custody.GenerateAddress(mintCtx, payer, chain)
 		if err != nil {
 			RecordCryptoEvent("unavailable", chain, token)
 			return nil, zip.Errorf(503, "Crypto deposits are temporarily unavailable — the custody service is not accepting new addresses. Try again shortly or choose another way to pay.")
@@ -544,9 +586,10 @@ func nativeCryptoMint(ctx context.Context, org *organization.Organization, in *c
 	intent.Status = cryptopaymentintent.Pending
 	intent.ExpiresAt = time.Now().Add(24 * time.Hour)
 	intent.Metadata = commercetypes.Map{
-		"org":      org.Name,
-		"payer":    payer,
-		"contract": contract,
+		"org":          org.Name,
+		"payer":        payer,
+		"contract":     contract,
+		"minimumCents": strconv.FormatInt(minCents, 10),
 	}
 	if hasPlan {
 		applyPlanMetadata(intent, pq, in.Level)
@@ -647,13 +690,7 @@ func nativeCryptoDeposit(ctx context.Context, org *organization.Organization, pa
 	if intent.CustomerRef != payer {
 		return nil, zip.Errorf(404, "deposit not found")
 	}
-	if (intent.Status == cryptopaymentintent.Pending || intent.Status == cryptopaymentintent.Confirming) &&
-		strings.HasPrefix(intent.WalletID, "kraken:") {
-		if svc := depositledger.Default(); svc != nil && svc.Running() {
-			_, _ = svc.SyncOnce(ctx)
-			_ = intent.GetById(id)
-		}
-	}
+	// The background watcher updates this row. Request polling only reads its state.
 	if intent.Status == cryptopaymentintent.Pending && strings.TrimSpace(intent.TxHash) == "" &&
 		intent.SettlementAmount == 0 && intent.IsExpired() {
 		intent.Status = cryptopaymentintent.Expired
@@ -667,8 +704,9 @@ func nativeCryptoDeposit(ctx context.Context, org *organization.Organization, pa
 		contract, _ = intent.Metadata["contract"].(string)
 	}
 	if contract == "" {
-		contract = canonicalContract(string(intent.Chain), intent.Token, asset.Contract)
+		contract = asset.Contract
 	}
+	contract = canonicalContract(string(intent.Chain), intent.Token, contract)
 	if !ok {
 		asset = depositwatch.Asset{Chain: string(intent.Chain), Token: intent.Token}
 	}
@@ -720,8 +758,13 @@ func intentToClientDeposit(i *cryptopaymentintent.CryptoPaymentIntent, asset dep
 	}
 	if _, watched := watchedAssetFor(string(i.Chain), i.Token); watched {
 		d.FeeCents = asset.Terms.FeeCents
-		d.MinimumCents = minimumDepositCents(asset.Terms)
+		if !strings.HasPrefix(i.WalletID, "kraken:") {
+			d.MinimumCents = minimumDepositCents(asset.Terms)
+		}
 	}
+	savedMinimum, _ := i.Metadata["minimumCents"].(string)
+	minimum, _ := strconv.ParseInt(savedMinimum, 10, 64)
+	d.MinimumCents = max(d.MinimumCents, minimum)
 
 	state := string(i.Status)
 	switch {
