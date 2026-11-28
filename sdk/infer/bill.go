@@ -14,9 +14,11 @@ import (
 // It is told, never guessed: a call whose transport reported nothing leaves it
 // untold, and the meter can tell that apart from a call that cost nothing.
 type Bill struct {
-	mu    sync.Mutex
-	nanos int64
-	told  bool
+	mu      sync.Mutex
+	nanos   int64
+	told    bool
+	covered bool
+	cash    bool
 }
 
 type billKey struct{}
@@ -52,4 +54,46 @@ func (b *Bill) Nanos() (int64, bool) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	return b.nanos, b.told
+}
+
+// Cover marks the call as paid by the caller's plan or a free cap, so the meter
+// releases its hold without debiting the wallet or logging an unpriced call.
+func (b *Bill) Cover() {
+	if b == nil {
+		return
+	}
+	b.mu.Lock()
+	b.covered = true
+	b.mu.Unlock()
+}
+
+// Covered reports whether the call was paid by the caller's plan or a free cap.
+func (b *Bill) Covered() bool {
+	if b == nil {
+		return false
+	}
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.covered
+}
+
+// SetCash marks the billed call as prepaid-cash-only (never drawn from granted
+// credit).
+func (b *Bill) SetCash() {
+	if b == nil {
+		return
+	}
+	b.mu.Lock()
+	b.cash = true
+	b.mu.Unlock()
+}
+
+// Cash reports whether only prepaid cash may pay for the billed call.
+func (b *Bill) Cash() bool {
+	if b == nil {
+		return false
+	}
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.cash
 }

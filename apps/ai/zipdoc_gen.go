@@ -124,6 +124,9 @@ func init() {
 	zip.Describe("github.com/hanzoai/cloud/apps/ai POST /ai/media", zip.Doc{
 		Description: "Buys one media call from the model API for the caller and answers\nwith the model API's own status and body. Co-resident zen gets first refusal on\nPOST media routes so Zen creative SKUs (iro, koe, uta, oto, koma, mori) are\nserved in-process on the stated tenant.",
 	})
+	zip.Describe("github.com/hanzoai/cloud/apps/ai POST /ai/plan/covers", zip.Doc{
+		Description: "Answers (read-only) whether a payer's active paid plan currently\ncovers a call to the requested model with remaining allowance. Returns false on\nany error or absent limiter so callers fail closed onto the wallet balance gate.",
+	})
 	zip.Describe("github.com/hanzoai/cloud/apps/ai POST /ai/pool", zip.Doc{
 		Description: "Answers the standing of the pool the Free plan is served from: whether the\nplatform's vendor accounts for free models are available, busy or exhausted,\nand when the pool refills.\n\nIt is what the accounts' own answers said and nothing else: an account is out\nonly after the vendor refused it for its free quota, and back when the vendor\nsaid it would be. It names no key, no key id and no count of accounts, and it\nreads no tenant's data — the pool is one, shared by every free caller — so it\nneeds no org.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
 		Fields: map[string]string{

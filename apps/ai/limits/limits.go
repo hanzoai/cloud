@@ -1332,6 +1332,62 @@ func (l *Limiter) Reserve(ctx context.Context, q Ask) (*Grant, error) {
 		subject: q.Subject, org: q.Org, class: ClassOurs, terms: t}, nil
 }
 
+// Covers reports whether q's active paid plan would currently cover the request
+// (PaysPlan) without mutating any usage counter. Used by the pre-call sibling
+// meter to skip its wallet balance hold when the subscriber's plan pays; the
+// authoritative Admit still runs on the plane before any model is called.
+func (l *Limiter) Covers(ctx context.Context, q Ask) (bool, error) {
+	rs, err := l.policy(ctx, q.Org)
+	if err != nil {
+		return false, err
+	}
+	key, rule, _ := Match(rs, q.Model)
+	class := classOf(q, rule)
+	q, p, err := l.holder(ctx, q)
+	if err != nil || !p.counts() {
+		return false, err
+	}
+	if hit := l.entitle(ctx, q, p, class); hit != nil {
+		return false, nil
+	}
+	if q.Fast && q.Priced {
+		return false, nil
+	}
+	t := l.termsOf(ctx, q.Org, p)
+	now := l.now()
+	if !q.Session {
+		st, err := l.store.read(ctx, q.Org, q.Subject, now, t)
+		if err != nil {
+			return false, err
+		}
+		if t.session > 0 && st.sessionStart != 0 && st.sessionUsed >= t.session {
+			return false, nil
+		}
+		if t.day > 0 && st.dayUsed >= t.day {
+			return false, nil
+		}
+	}
+	if class == ClassFree {
+		return true, nil
+	}
+	a := t.allow[class]
+	if !a.unbounded && a.period <= 0 {
+		return false, nil
+	}
+	c := p.cap(rule, t.seat(class))
+	if full, _, err := l.overShare(ctx, q, key, c, p, t, now); err != nil || full {
+		return false, err
+	}
+	if a.unbounded {
+		return true, nil
+	}
+	rest, err := l.store.remaining(ctx, q.Org, q.Subject, class, now, t)
+	if err != nil {
+		return false, err
+	}
+	return rest > 0, nil
+}
+
 // Settle records what one covered answer used of its plan, in nano-dollars, never
 // past what its class has left. A grant the plan does not pay, or no use, is a no-op.
 func (l *Limiter) Settle(ctx context.Context, g *Grant, nanos int64) error {

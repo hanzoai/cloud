@@ -24,6 +24,7 @@ var Ops = []string{
 	client.AIChatStream,
 	client.AIEmbed,
 	client.AIMedia,
+	client.AIPlanCovers,
 	client.AIPool,
 	client.AIRates,
 	client.AIRerank,
@@ -59,6 +60,13 @@ func AIEmbed(ctx context.Context, in *client.ChatIn) (*client.Chat, error) {
 // Calls client.AIMedia on ai over the peer plane.
 func AIMedia(ctx context.Context, in *client.MediaIn) (*client.Chat, error) {
 	return plane.Call[client.MediaIn, client.Chat](ctx, App, client.AIMedia, in)
+}
+
+// AIPlanCovers whether a payer's active paid plan currently covers a call to a model.
+//
+// Calls client.AIPlanCovers on ai over the peer plane.
+func AIPlanCovers(ctx context.Context, in *client.PlanCoversIn) (*client.PlanCoversOut, error) {
+	return plane.Call[client.PlanCoversIn, client.PlanCoversOut](ctx, App, client.AIPlanCovers, in)
 }
 
 // AIPool the free pool's standing across the platform's vendor accounts.

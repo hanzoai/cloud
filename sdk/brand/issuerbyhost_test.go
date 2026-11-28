@@ -7,7 +7,8 @@ import "testing"
 func TestIssuerByHostCoversEveryBrand(t *testing.T) {
 	m := IssuerByHost()
 	for _, c := range []struct{ host, want string }{
-		{"hanzo.id", "https://hanzo.id"},
+		{"hanzo.ai", "https://hanzo.ai"},
+		{"hanzo.id", "https://hanzo.ai"},
 		{"lux.id", "https://lux.id"},
 		{"zoolabs.id", "https://zoolabs.id"},
 		{"id.zoo.network", "https://zoolabs.id"},
@@ -57,12 +58,12 @@ func TestABrandsIssuersDuringAMove(t *testing.T) {
 			t.Errorf("Trusts(hanzo.id, %q) = %v, want %v", iss, got, want)
 		}
 	}
-	if got := IssuerFor("hanzo"); got != "https://hanzo.id" {
-		t.Errorf("a brand mints under %q: the move never changes what is minted here", got)
+	if got := IssuerFor("hanzo"); got != "https://hanzo.ai" {
+		t.Errorf("IssuerFor(hanzo) = %q, want https://hanzo.ai", got)
 	}
 	for host, iss := range IssuerByHost() {
-		if iss == "https://hanzo.ai" {
-			t.Errorf("%s mints under the new issuer before the move", host)
+		if iss == "https://hanzo.id" {
+			t.Errorf("%s still mints under legacy hanzo.id issuer", host)
 		}
 	}
 }

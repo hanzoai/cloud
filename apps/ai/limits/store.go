@@ -448,6 +448,16 @@ func (s *limitStore) spent(ctx context.Context, org, subject, class string, sinc
 	return spentSince(ctx, s.db, org, subject, class, since)
 }
 
+// remaining reads what a class may still use of its period and short window
+// without opening a write transaction or counting a request.
+func (s *limitStore) remaining(ctx context.Context, org, subject, class string, now time.Time, t terms) (int64, error) {
+	if err := dialect.Text(org, subject, class); err != nil {
+		return 0, err
+	}
+	rest, _, err := left(ctx, s.db, org, subject, class, now, t)
+	return rest, err
+}
+
 // oldestSpent is the earliest settled spend timestamp (unix seconds) for a class
 // at or after since, or 0 when no spend has occurred in the window.
 func (s *limitStore) oldestSpent(ctx context.Context, org, subject, class string, since int64) (int64, error) {
