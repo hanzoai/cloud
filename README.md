@@ -13,6 +13,23 @@ the whole dependency, and every default address is on this machine.
 
 > **Full local / air-gapped stack:** Pair this server with [`hanzoai/engine`](https://github.com/hanzoai/engine) (`:1234`, local open-weight LLM serving + offline `/ui` chat) and optional [`hanzoai/iam`](https://github.com/hanzoai/iam) (`:8000`, OIDC / JWKS). Step-by-step instructions and air-gapped bundle staging live in the **[Self-Hosting & Air-Gapped Guide](https://docs.hanzo.ai/docs/self-hosting)**.
 
+## Canonical §6 Lifecycle Commands
+
+Lifecycle and local cluster management follows the canonical Hanzo CLI contract:
+
+| Target | Command | Behavior |
+|---|---|---|
+| `make up` | `hanzo up` | Bring up local Hanzo Cloud stack |
+| `make down` | `hanzo down` | Tear down local workload while keeping shared k3s runtime warm |
+| `make start` | `hanzo up --no-ui --cloud <image>` | Start this repo's Cloud workload on shared runtime |
+| `make stop` | `kubectl delete ...` | Stop Cloud workload without stopping runtime |
+| `make start-vm` | `hanzo start` | Start local microVM / k3s runtime |
+| `make stop-vm` | `hanzo stop` | Gracefully shut down local microVM / k3s runtime |
+| `make dev` | `hanzo dev` | Launch Hanzo Dev coding session |
+| `make debug` | `hanzo dev --debug` | Launch Hanzo Dev session with debug logging |
+| `make logs` | `kubectl logs ...` | Stream Cloud workload logs |
+| `make clean` | `rm -rf bin dist .compose` | Remove build artifacts only (preserves local data/runtime state) |
+
 ## Run locally
 
 Requires Go 1.27.1 and `openssl`.
