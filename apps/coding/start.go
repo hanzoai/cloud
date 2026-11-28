@@ -72,6 +72,9 @@ type Accepted struct {
 	// task. Note says it in words.
 	Carried, Left, Dropped int
 	Note                   string
+	// Steered and Queued report when `steer: true` redirected or queued the prompt
+	// into an already-active `after` session rather than opening a second run.
+	Steered, Queued bool
 }
 
 // ErrWorkspace is an org's code workspace that could not be read or made right
@@ -335,21 +338,61 @@ func startSession(ctx context.Context, org, subject string, in client.CodingStar
 	// this run's repository is known to be that run's (below). Its session also
 	// says the branch it wrote and where that started, which a follow-up carries on.
 	var earlier agents.Session
+	parallel := in.Parallel
 	if existing != nil {
 		earlier = *existing
 	} else if after := strings.TrimSpace(in.After); after != "" {
 		if x, err := visibleRun(ctx, after); err == nil && x.Kind == kindCoding {
 			earlier = x
 		}
-		// ONE RUN AT A TIME IN ONE SANDBOX. A follow-up works in its earlier run's
-		// sandbox and on its branch, so an earlier run still working — or paused,
-		// its work waiting there to be continued — has both in use: two harnesses
-		// in one tree, two pushes to one branch. It is refused, for every caller;
-		// a run carried on while it works is steered (steer.go), which stops it
-		// first.
+		// ONE RUN AT A TIME IN ONE SANDBOX. When `earlier` is still running or paused:
+		//   - `steer: true` cleanly redirects or queues the prompt into that active
+		//     session via steer.go without failing 409 (falling through to a normal
+		//     follow-up if the session finished while steering).
+		//   - `parallel: true`, a different named branch, or a different repository
+		//     automatically provisions a fresh parallel sandbox on an isolated branch.
+		//   - Otherwise, refuse 409 and point the caller at steer or parallel options.
 		if earlier.Status == agents.StatusRunning || earlier.Status == agents.StatusPaused {
-			return Accepted{}, zip.ErrConflict(fmt.Sprintf(
-				"coding: the run %s is %s; stop it or let it finish before carrying it on", earlier.ID, earlier.Status))
+			if in.Steer && strings.TrimSpace(in.TargetID) == "" {
+				ack, serr := Follow(ctx, org, subject, client.CodingSteerIn{
+					SessionID: earlier.ID,
+					Subject:   subject,
+					Text:      prompt,
+				}, log)
+				if serr == nil {
+					note := "steered active session"
+					if ack.Queued {
+						note = "queued instruction for active session"
+					}
+					return Accepted{
+						SessionID: earlier.ID,
+						Branch:    earlier.Branch,
+						Repo:      earlier.Repo,
+						Steered:   true,
+						Queued:    ack.Queued,
+						Note:      note,
+					}, nil
+				}
+				// If the session finished racing with Follow, re-read its status and
+				// fall through to start a follow-up run; preserve auth/conflict errors.
+				if x, rerr := visibleRun(ctx, after); rerr == nil && x.Kind == kindCoding &&
+					x.Status != agents.StatusRunning && x.Status != agents.StatusPaused {
+					earlier = x
+				} else {
+					return Accepted{}, serr
+				}
+			}
+			if earlier.Status == agents.StatusRunning || earlier.Status == agents.StatusPaused {
+				diffBranch := named != "" && earlier.Branch != "" && named != earlier.Branch
+				diffRepo := isDifferentRepo(earlier.Repo, ws.Owner, direct.owner, direct.name, name)
+				if parallel || diffBranch || diffRepo {
+					parallel = true
+				} else {
+					return Accepted{}, zip.ErrConflict(fmt.Sprintf(
+						"coding: the run %s is %s; pass steer: true (or POST /v1/agent/coding/%s/steer) to redirect it, pass parallel: true or a distinct branch to run in parallel, or stop it before carrying it on",
+						earlier.ID, earlier.Status, earlier.ID))
+				}
+			}
 		}
 	}
 
@@ -632,29 +675,35 @@ func startSession(ctx context.Context, org, subject string, in client.CodingStar
 	// a fresh clone of the repository this run named.
 	//
 	// And it is claimed here, before anything runs: a sandbox is one live run's at a
-	// time (agents TagSession). The earlier run may be over while another works in
-	// its sandbox — the run a steer started there, or another follow-up of it —
-	// and then this one is refused rather than started beside it.
-	if earlier.Box != "" && earlier.Repo == tagRepo && req.TargetID == "" && existing == nil {
+	// time (agents TagSession). If another live run already holds the earlier run's
+	// sandbox — or the caller requested a parallel run/branch — automatically
+	// provision a fresh parallel sandbox (leaving req.Sandbox empty) and isolate
+	// this run onto its own branch instead of failing with a sandbox-busy conflict.
+	boxBusy := false
+	if earlier.Box != "" && earlier.Repo == tagRepo && req.TargetID == "" && existing == nil && !parallel {
 		if err := d.Sessions.Tag(ctx, org, sessionID, Tag{Sandbox: earlier.Box}); err != nil {
-			return refuse("the earlier run's sandbox is in use", subject, zip.ErrConflict(fmt.Sprintf(
-				"coding: another run is still working in the sandbox of %s; stop it or let it finish before carrying it on: %v",
-				earlier.ID, err)))
+			boxBusy = true
+			if log != nil {
+				log("coding: the earlier run's sandbox is in use; provisioning a fresh parallel sandbox",
+					"org", org, "session", sessionID, "after", earlier.ID, "sandbox", earlier.Box, "err", err)
+			}
+		} else {
+			req.Sandbox = earlier.Box
 		}
-		req.Sandbox = earlier.Box
 	}
 
 	// A FOLLOW-UP WRITES THE BRANCH ITS EARLIER RUN WROTE, so one piece of work is
 	// one branch and one pull request however many instructions it takes. The
 	// push never forces, so it only adds to that branch. A branch the caller names
-	// wins, and a run on a machine keeps its own branch: the machine cuts it from
-	// its base, so the earlier branch is its base instead.
+	// wins, a parallel run (fresh sandbox because the earlier run or its sandbox is
+	// busy, or `parallel: true`) isolates onto its own branch, and a run on a
+	// machine keeps its own branch: each cuts from the earlier branch as its base.
 	//
 	// What the proposal targets stays where it was — the earlier run's base — unless
 	// the caller named a base: the branch cannot be proposed into itself.
 	if after := strings.TrimSpace(in.After); after != "" && earlier.Repo == tagRepo && earlier.Branch != "" {
 		switch {
-		case (named == "" || named == earlier.Branch) && req.TargetID == "":
+		case !parallel && !boxBusy && (named == "" || named == earlier.Branch) && req.TargetID == "":
 			branch = earlier.Branch
 			if strings.TrimSpace(in.Base) == "" {
 				base = cmp.Or(earlier.Base, home)
@@ -685,7 +734,8 @@ func startSession(ctx context.Context, org, subject string, in client.CodingStar
 	// starts where the earlier run did: its base, or the repository's default when
 	// that is not there either. A tree the earlier sandbox still holds is worked in
 	// as before (req.Sandbox); its unpushed commits come along in it.
-	if after := strings.TrimSpace(in.After); after != "" && strings.TrimSpace(in.Base) == "" && base == BranchFor(after) &&
+	if after := strings.TrimSpace(in.After); after != "" && strings.TrimSpace(in.Base) == "" &&
+		(base == BranchFor(after) || (earlier.Branch != "" && base == earlier.Branch)) &&
 		req.TargetID == "" {
 		on := func(branch string) bool {
 			if req.Local || repo == "" || d.VerifyRef == nil {

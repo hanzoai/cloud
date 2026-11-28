@@ -6454,6 +6454,13 @@ type CodingStartIn struct {
 	// 422 read_only_unsupported before a session is opened. Absent is today's writable
 	// run. This contains one harness run; it is NOT a promise about the machine itself.
 	ReadOnly bool `json:"readOnly,omitempty"`
+	// Steer redirects or queues this prompt into the session named by After when
+	// that session is still running or paused, instead of failing 409. When After
+	// has already finished, a normal follow-up run starts in its sandbox/branch.
+	Steer bool `json:"steer,omitempty"`
+	// Parallel forces a fresh isolated sandbox and branch even when After names an
+	// active session or a session whose sandbox is occupied by another run.
+	Parallel bool `json:"parallel,omitempty"`
 }
 
 // Issue names the issue a coding run resolves, as a person writes it: a number
@@ -6585,6 +6592,12 @@ type CodingStarted struct {
 	Dropped int `json:"dropped,omitempty"`
 	// Note says what became of the queue in words, when there was one.
 	Note string `json:"note,omitempty"`
+	// Steered is true when `steer: true` redirected or queued this prompt into the
+	// already-active session named by `after` rather than starting a second run.
+	Steered bool `json:"steered,omitempty"`
+	// Queued is true when a steered instruction was queued for the active session
+	// rather than delivered immediately into an open turn.
+	Queued bool `json:"queued,omitempty"`
 }
 
 // ---- a coding run's work, read from the forge --------------------------------

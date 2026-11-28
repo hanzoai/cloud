@@ -666,6 +666,7 @@ func started(acc coding.Accepted) *client.CodingStarted {
 		Routed: acc.Routed, TargetID: acc.TargetID,
 		Pull:    "hanzo pull " + acc.SessionID,
 		Carried: acc.Carried, Left: acc.Left, Dropped: acc.Dropped, Note: acc.Note,
+		Steered: acc.Steered, Queued: acc.Queued,
 	}
 }
 

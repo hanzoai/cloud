@@ -128,11 +128,16 @@ func (d Dispatcher) interrupted(ctx context.Context, org, sessionID, actor strin
 	if errors.Is(cause, agents.ErrPaused) {
 		status = statusPaused
 	}
-	d.mirror(ctx, org, sessionID, actor, kindStatus, map[string]any{
+	st := map[string]any{
 		"status": status, "branch": branch, "changed": run.Changed, "commit": run.CommitSha,
 		"followed": errors.Is(cause, errFollowed), "timeUp": errors.Is(cause, errTimeUp),
 		"unrenewable": errors.Is(cause, errUnrenewable),
-	})
+	}
+	if previews := previewLinks(run.Artifacts); len(previews) > 0 {
+		st["preview"] = previews[0].URL
+		st["previews"] = previews
+	}
+	d.mirror(ctx, org, sessionID, actor, kindStatus, st)
 	if status == statusStopped {
 		_ = d.Sessions.Close(ctx, org, sessionID, statusStopped)
 	}

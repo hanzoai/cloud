@@ -49,6 +49,17 @@ func (f *shelfForge) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			file["content"] = base64.StdEncoding.EncodeToString([]byte("<h1>hi</h1>"))
 		}
 		_ = json.NewEncoder(w).Encode(map[string]any{"file_contents": file})
+	case path == "/repos/acme/site/git/refs/heads":
+		_ = json.NewEncoder(w).Encode([]map[string]any{
+			{"ref": "refs/heads/main", "object": map[string]any{"type": "commit", "sha": "0123456789abcdef0123456789abcdef01234567"}},
+			{"ref": "refs/heads/agent/abc", "object": map[string]any{"type": "commit", "sha": "0b5c830000000000000000000000000000000000"}},
+		})
+	case path == "/repos/acme/site/git/refs/tags":
+		_ = json.NewEncoder(w).Encode([]map[string]any{
+			{"ref": "refs/tags/v1.0.0", "object": map[string]any{"type": "commit", "sha": "0123456789abcdef0123456789abcdef01234567"}},
+		})
+	case path == "/repos/acme/site":
+		_ = json.NewEncoder(w).Encode(map[string]any{"name": "site", "default_branch": "main"})
 	default:
 		w.WriteHeader(http.StatusNotFound)
 	}
@@ -111,7 +122,7 @@ func TestAWorkspaceRepositoryIsBrowsedOnTheForge(t *testing.T) {
 			t.Fatalf("blob = %+v, %v", blob, err)
 		}
 		for _, a := range f.read() {
-			if !strings.HasPrefix(a, "/repos/acme/site/") || !strings.HasSuffix(a, " as ") {
+			if (!strings.HasPrefix(a, "/repos/acme/site/") && !strings.HasPrefix(a, "/repos/acme/site?")) || !strings.HasSuffix(a, " as ") {
 				t.Fatalf("the forge was asked %s", a)
 			}
 		}
@@ -120,6 +131,17 @@ func TestAWorkspaceRepositoryIsBrowsedOnTheForge(t *testing.T) {
 		}
 		if code, _ := do(t, app, http.MethodGet, "/v1/git/repos/site/tree?ref=agent/abc&path=nope", "acme", nil); code != http.StatusNotFound {
 			t.Fatalf("a missing directory answered %d", code)
+		}
+		code, body = do(t, app, http.MethodGet, "/v1/git/repos/site/refs", "acme", nil)
+		if code != http.StatusOK {
+			t.Fatalf("refs: %d %s", code, body)
+		}
+		var refs refsJSON
+		if err := json.Unmarshal(body, &refs); err != nil || refs.Default != "main" || len(refs.Branches) != 2 || len(refs.Tags) != 1 {
+			t.Fatalf("refs = %+v, err=%v", refs, err)
+		}
+		if refs.Branches[1].Name != "agent/abc" || refs.Branches[1].SHA != "0b5c830000000000000000000000000000000000" {
+			t.Fatalf("missing pushed agent branch in refs: %+v", refs.Branches)
 		}
 	})
 }
@@ -203,6 +225,25 @@ func TestAHeldCopyWithoutTheRefYieldsToTheWorkspace(t *testing.T) {
 			}
 		}
 		reads("empty")
+		// An empty placeholder copy (0 local branches) must ALSO yield /refs to the
+		// org's made workspace on the forge so pushed agent branches are visible.
+		if code, body := do(t, app, http.MethodGet, "/v1/git/repos/site/refs", "acme", nil); code != http.StatusOK {
+			t.Fatalf("empty placeholder refs: %d %s", code, body)
+		} else {
+			var refs refsJSON
+			if err := json.Unmarshal(body, &refs); err != nil || len(refs.Branches) != 2 || refs.Branches[1].Name != "agent/abc" {
+				t.Fatalf("empty placeholder refs did not yield to forge: %+v (%v)", refs, err)
+			}
+		}
+		// An org with no made workspace still gets an empty 200 for its empty local repo.
+		if code, body := do(t, app, http.MethodGet, "/v1/git/repos/site/refs", "globex", nil); code != http.StatusOK {
+			t.Fatalf("globex empty refs: %d %s", code, body)
+		} else {
+			var refs refsJSON
+			if err := json.Unmarshal(body, &refs); err != nil || len(refs.Branches) != 0 {
+				t.Fatalf("globex empty refs unexpectedly returned branches: %+v (%v)", refs, err)
+			}
+		}
 		if code, b := do(t, app, http.MethodPost, "/v1/git/repos/site/push", "acme", map[string]any{
 			"files": []map[string]any{{"path": "index.html", "content": "<h1>here</h1>"}},
 		}); code != http.StatusOK {
@@ -210,7 +251,7 @@ func TestAHeldCopyWithoutTheRefYieldsToTheWorkspace(t *testing.T) {
 		}
 		reads("without the branch")
 		for _, a := range f.read() {
-			if !strings.HasPrefix(a, "/repos/acme/site/") || !strings.HasSuffix(a, " as ") {
+			if (!strings.HasPrefix(a, "/repos/acme/site/") && !strings.HasPrefix(a, "/repos/acme/site?")) || !strings.HasSuffix(a, " as ") {
 				t.Fatalf("the forge was asked %s", a)
 			}
 		}

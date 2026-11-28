@@ -101,6 +101,9 @@ func looksLikeHighEntropyToken(s string) bool {
 	if len(s) < highEntropyMinLen {
 		return false
 	}
+	if isPublicResourceID(s) {
+		return false
+	}
 	// Stage 1 — unconditional: a long unbroken run is always a secret.
 	if hasHighEntropyRun(s) {
 		return true
@@ -111,6 +114,37 @@ func looksLikeHighEntropyToken(s string) bool {
 	}
 	// A >=24-length value with separators, not a UUID, not a structured id — e.g.
 	// "sk.live.LONGSECRET…" dotted, or a chunk pattern that is not word-like.
+	return true
+}
+
+// isPublicResourceID reports whether s is a non-secret, platform-minted public
+// resource handle whose fixed prefix + lowercase-hex body would otherwise trip
+// the >=24-char unbroken-run secret detector:
+//   - "sess_<hex>" (8..64 lowercase hex chars): agent/coding session IDs
+//   - "m_<hex>"    (16..32 lowercase hex chars): sandbox machine IDs
+//
+// Strictly requires the entire token to be prefix + lowercase hex so no
+// base64 secret, mixed-case credential, or suffix-glued token can ever match.
+func isPublicResourceID(s string) bool {
+	if rest, ok := strings.CutPrefix(s, "sess_"); ok {
+		return isLowerHexLen(rest, 8, 64)
+	}
+	if rest, ok := strings.CutPrefix(s, "m_"); ok {
+		return isLowerHexLen(rest, 16, 32)
+	}
+	return false
+}
+
+func isLowerHexLen(s string, minLen, maxLen int) bool {
+	if len(s) < minLen || len(s) > maxLen {
+		return false
+	}
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		if !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f')) {
+			return false
+		}
+	}
 	return true
 }
 

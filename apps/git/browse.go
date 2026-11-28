@@ -264,7 +264,13 @@ func (o ops) browseRefs(ctx context.Context, in *repoRef) (*refsJSON, error) {
 	if err != nil {
 		return nil, err
 	}
-	r, found := findRepo(o.s, ctx, t.org, normalizeName(in.Name))
+	norm := normalizeName(in.Name)
+	if m, owner, name, ok, err := made(o.s, ctx, t, norm); err != nil {
+		return nil, err
+	} else if ok {
+		return madeRefs(ctx, m, owner, name, "")
+	}
+	r, found := findRepo(o.s, ctx, t.org, norm)
 	if !found {
 		return nil, zip.ErrNotFound("repo not found")
 	}
@@ -278,6 +284,17 @@ func (o ops) browseRefs(ctx context.Context, in *repoRef) (*refsJSON, error) {
 		defer done()
 		branches, tags, _ := repo.Refs(ctx)
 		out.Branches, out.Tags = refsToJSON(branches), refsToJSON(tags)
+	}
+	// A held copy with no branches (such as the empty placeholder a project's
+	// visibility makes in community.go while coding runs push to the forge)
+	// yields to the org's workspace on the forge, falling back to the empty
+	// local answer when the forge holds no such repository.
+	if len(out.Branches) == 0 {
+		if m, owner, name, ok, ferr := shelved(ctx, t, norm); ferr == nil && ok {
+			if forged, rerr := madeRefs(ctx, m, owner, name, out.Default); rerr == nil {
+				return forged, nil
+			}
+		}
 	}
 	return &out, nil
 }

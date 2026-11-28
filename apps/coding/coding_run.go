@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud/apps/agents"
+	"github.com/hanzoai/cloud/client"
 	"github.com/zap-proto/zip"
 )
 
@@ -396,14 +397,43 @@ func hollow(req Req, r RunResult) string {
 	return ""
 }
 
+// previewLink is one live sandbox preview port included on terminal status events
+// so live stream subscribers (such as /dev's Preview pane) immediately receive
+// updated sandbox preview URLs without polling /artifacts.
+type previewLink struct {
+	URL     string `json:"url"`
+	Port    int    `json:"port,omitempty"`
+	Sandbox string `json:"sandbox,omitempty"`
+}
+
+func previewLinks(arts []client.Artifact) []previewLink {
+	var out []previewLink
+	for _, a := range arts {
+		if a.Kind == kindPreview && a.URL != "" {
+			out = append(out, previewLink{URL: a.URL, Port: a.Port, Sandbox: a.Sandbox})
+		}
+	}
+	return out
+}
+
 // finished is a run's terminal status with what its harness said: its last
-// message, the tokens it used, and how many artifacts it left.
+// message, the tokens it used, how many artifacts it left, and any live preview
+// URLs discovered in its sandbox.
 func finished(r RunResult, status map[string]any) map[string]any {
 	if r.Answer != "" {
 		status["answer"] = r.Answer
 	}
 	if r.Usage != (Usage{}) {
 		status["usage"] = r.Usage
+	}
+	if previews := previewLinks(r.Artifacts); len(previews) > 0 {
+		status["preview"] = previews[0].URL
+		status["previews"] = previews
+	}
+	if r.Live != "" {
+		if _, ok := status["live"]; !ok {
+			status["live"] = r.Live
+		}
 	}
 	status["artifacts"] = len(r.Artifacts)
 	return status
