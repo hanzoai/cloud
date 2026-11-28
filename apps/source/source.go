@@ -159,6 +159,7 @@ func machineRoutes(app cloud.Router, s *service) {
 	m.Post("/:id/heartbeat", o.heartbeat)
 	m.Post("/:id/dispatch", o.dispatch)
 	m.Delete("/:id/dispatch/:lease", o.release)
+	m.Raw(http.MethodPost, "/:id/usage", o.report)
 }
 
 func sourceRoutes(app cloud.Router, s *service) {
