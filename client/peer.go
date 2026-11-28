@@ -633,6 +633,10 @@ const (
 	// prices and the guard live in the ai process, which bills them and records
 	// every call (hanzoai/ai rates.go).
 	AIRates = "ai_rates"
+	// AIPlanCovers answers (read-only) whether a payer's active paid plan currently
+	// covers a call to a model with remaining allowance, so the sibling meter skips
+	// its pre-call wallet balance hold when the plan pays.
+	AIPlanCovers = "ai_plan_covers"
 	// AIRouting answers a model family's routing catalog as the family serves it:
 	// the catalog, the newest applied version, and whether it serves that version.
 	// AIRoutingApply proposes an edited catalog (Dry), answering its diff and why
@@ -3237,13 +3241,37 @@ type ChatIn struct {
 //
 // Billed is what the call cost, in nano-USD, as the model API priced it: the amount
 // the same answer debits any other caller (hanzoai/ai object.Bill). The caller's
-// meter charges exactly this. Nil when nothing priced the call — a refusal, or an
-// answer that filed no usage — which is a different fact from a call priced at
-// nothing, and the pointer is what keeps the two apart on the wire.
+// meter charges exactly this. Nil when nothing priced the call — a refusal, a
+// plan-covered call (Covered), or an answer that filed no usage — which is a
+// different fact from a call priced at nothing, and the pointer is what keeps the
+// two apart on the wire.
+//
+// Covered reports that the payer's plan or a free cap paid for the call and
+// settled it against the usage policy, so the sibling's meter releases its hold
+// without debiting the wallet. Cash reports that only the payer's own cash (never
+// granted credit) may pay for the billed debit.
 type Chat struct {
-	Status int    `json:"status"`
-	Body   []byte `json:"body,omitempty"`
-	Billed *int64 `json:"billed,omitempty"`
+	Status  int    `json:"status"`
+	Body    []byte `json:"body,omitempty"`
+	Billed  *int64 `json:"billed,omitempty"`
+	Covered bool   `json:"covered,omitempty"`
+	Cash    bool   `json:"cash,omitempty"`
+}
+
+// PlanCoversIn asks whether a payer's active paid plan currently covers a call to
+// Model with remaining allowance (read-only: mutates no usage counters).
+type PlanCoversIn struct {
+	Subject string `json:"subject"`
+	Org     string `json:"org"`
+	Actor   string `json:"actor,omitempty"`
+	Model   string `json:"model" validate:"required"`
+	Fast    bool   `json:"fast,omitempty"`
+}
+
+// PlanCoversOut reports whether the payer's plan currently covers the requested
+// model call.
+type PlanCoversOut struct {
+	Covered bool `json:"covered"`
 }
 
 // MediaIn is one media call as the model API reads it: the method and path of a

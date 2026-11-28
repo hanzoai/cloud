@@ -146,3 +146,44 @@ func TestAStreamCutBeforeItsTrailerIsAnError(t *testing.T) {
 		t.Errorf("a cut stream read %v, want ErrUnexpectedEOF", err)
 	}
 }
+
+// EndCovered marks the caller's Bill as Covered without setting a wallet price;
+// EndBilled with cash=true carries both the billed nanos and the cash-only flag.
+func TestStreamTrailerCarriesCoveredAndCashFlags(t *testing.T) {
+	run := func(end func(*StreamWriter)) *Bill {
+		near, far := net.Pipe()
+		go func() {
+			defer func() { _ = far.Close() }()
+			sw := NewStreamWriter(far)
+			sw.Header().Set("Content-Type", "text/event-stream")
+			sse(sw, "ok")
+			_, _ = io.WriteString(sw, "data: [DONE]\n\n")
+			end(sw)
+		}()
+		ctx, bill := WithBill(context.Background())
+		r, _ := http.NewRequestWithContext(ctx, http.MethodPost, "http://ai.plane/v1/chat/completions", nil)
+		resp, err := StreamResponse(near, r)
+		if err != nil {
+			t.Fatal(err)
+		}
+		_, _ = io.ReadAll(resp.Body)
+		_ = resp.Body.Close()
+		return bill
+	}
+
+	cov := run(func(sw *StreamWriter) { _ = sw.EndCovered() })
+	if !cov.Covered() || cov.Cash() {
+		t.Fatalf("EndCovered: covered=%v cash=%v, want true/false", cov.Covered(), cov.Cash())
+	}
+	if n, told := cov.Nanos(); told {
+		t.Fatalf("EndCovered told nanos %d, want untold", n)
+	}
+
+	cash := run(func(sw *StreamWriter) { _ = sw.EndBilled(777, true, true) })
+	if cash.Covered() || !cash.Cash() {
+		t.Fatalf("EndBilled(cash): covered=%v cash=%v, want false/true", cash.Covered(), cash.Cash())
+	}
+	if n, told := cash.Nanos(); !told || n != 777 {
+		t.Fatalf("EndBilled(cash) nanos = %d (%v), want 777 (true)", n, told)
+	}
+}

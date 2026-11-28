@@ -130,16 +130,13 @@ type Info struct {
 // bootnode→id.bootno.de.
 //
 // IAMIssuer MUST equal the `iss` IAM actually stamps AND host the signing JWKS.
-// For hanzo the live .well-known/openid-configuration on BOTH hanzo.id and
-// iam.hanzo.ai reports issuer=https://hanzo.id + jwks_uri=
-// https://hanzo.id/v1/iam/.well-known/jwks (iam.hanzo.ai is a routing alias, not
-// the issuer), and the cloud CLI already defaults to hanzo.id. Pinning
-// iam.hanzo.ai here would fail the issuer check on every real token, anonymizing
-// every principal — SuperAdmin would 403 platform-wide (fail-secure, but
-// broken). lux/zoo/pars already correctly point at their own .id issuers.
+// For hanzo the live .well-known/openid-configuration on hanzo.ai reports
+// issuer=https://hanzo.ai; hanzo.id stays trusted in AlsoIssuers during/after
+// the move so existing tokens minted under https://hanzo.id remain valid.
+// lux/zoo/pars already correctly point at their own .id issuers.
 var brands = map[string]Info{
-	"hanzo": {ID: "hanzo", IAMIssuer: "https://hanzo.id", Discovery: "https://hanzo.ai/.well-known/openid-configuration", AlsoIssuers: []string{"https://hanzo.ai"}, Domain: "hanzo.ai", AltDomains: []string{"hanzo.cloud", "hanzo.app"}, Console: "platform.hanzo.ai",
-		SignIn:    []string{"hanzo.ai"},
+	"hanzo": {ID: "hanzo", IAMIssuer: "https://hanzo.ai", Discovery: "https://hanzo.ai/.well-known/openid-configuration", AlsoIssuers: []string{"https://hanzo.id"}, Domain: "hanzo.ai", AltDomains: []string{"hanzo.cloud", "hanzo.app"}, Console: "platform.hanzo.ai",
+		SignIn:    []string{"hanzo.ai", "hanzo.id"},
 		Published: []string{"hanzo.app"},
 		Sites: []string{"hanzo.id", "hanzo.bot", "hanzo.chat", "hanzo.team", "hanzo.build", "hanzo.market",
 			"hanzo.vote", "hanzo.agency", "hanzo.industries", "hanzo.network", "hanzoskills.com", "intel.hanzo.app"},
@@ -441,8 +438,10 @@ func IssuerByHost() map[string]string {
 		if b.IAMIssuer == "" {
 			continue
 		}
-		if h := issuerHost(b.IAMIssuer); h != "" {
-			out[h] = b.IAMIssuer
+		for _, iss := range b.issuers() {
+			if h := issuerHost(iss); h != "" {
+				out[h] = b.IAMIssuer
+			}
 		}
 		for _, d := range append([]string{b.Domain}, b.AltDomains...) {
 			if d == "" {

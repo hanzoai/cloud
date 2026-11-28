@@ -28,6 +28,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/hanzoai/account"
 	"github.com/zap-proto/zip"
 
 	"github.com/hanzoai/cloud/client"
@@ -64,7 +65,7 @@ type planeAI struct {
 // ChatStream answers over the plane as ChatCompletion does, a delta at a time; the
 // model list stays on the gateway, whose catalog it is.
 func (p *planeAI) ChatStream(ctx context.Context, req *infer.ChatRequest, emit func(delta string) error) (*infer.ChatResponse, error) {
-	resp, err := p.link.(infer.StreamCompleter).ChatStream(stated(ctx, req.Org, req.Project, req.Actor), req, emit)
+	resp, err := p.link.(infer.StreamCompleter).ChatStream(stated(ctx, req.Org, req.Project, req.Actor, req.Payer), req, emit)
 	if errors.Is(err, plane.ErrNoPeer) {
 		return p.gateway.(infer.StreamCompleter).ChatStream(ctx, req, emit)
 	}
@@ -78,7 +79,7 @@ func (p *planeAI) Models(ctx context.Context) ([]string, error) {
 // ChatCompletion answers over the plane: the same request, route walk, span and
 // reading as the gateway's, with the caller stated on the hop.
 func (p *planeAI) ChatCompletion(ctx context.Context, req *infer.ChatRequest) (*infer.ChatResponse, error) {
-	resp, err := p.link.ChatCompletion(stated(ctx, req.Org, req.Project, req.Actor), req)
+	resp, err := p.link.ChatCompletion(stated(ctx, req.Org, req.Project, req.Actor, req.Payer), req)
 	if errors.Is(err, plane.ErrNoPeer) {
 		return p.gateway.ChatCompletion(ctx, req)
 	}
@@ -91,7 +92,7 @@ func (p *planeAI) Embed(ctx context.Context, req *infer.EmbedRequest) ([][]float
 	if req == nil {
 		return p.gateway.Embed(ctx, req)
 	}
-	out, err := p.link.Embed(stated(ctx, req.Org, req.Project, ""), req)
+	out, err := p.link.Embed(stated(ctx, req.Org, req.Project, "", req.Payer), req)
 	if errors.Is(err, plane.ErrNoPeer) {
 		return p.gateway.Embed(ctx, req)
 	}
@@ -104,7 +105,7 @@ func (p *planeAI) Rerank(ctx context.Context, req *infer.RerankRequest) ([]float
 	if req == nil {
 		return p.gateway.Rerank(ctx, req)
 	}
-	out, err := p.link.Rerank(stated(ctx, req.Org, req.Project, ""), req)
+	out, err := p.link.Rerank(stated(ctx, req.Org, req.Project, "", req.Payer), req)
 	if errors.Is(err, plane.ErrNoPeer) {
 		return p.gateway.Rerank(ctx, req)
 	}
@@ -118,7 +119,7 @@ func (p *planeAI) Transcribe(ctx context.Context, req *infer.TranscribeRequest) 
 	if req == nil {
 		return p.gateway.(infer.Transcriber).Transcribe(ctx, req)
 	}
-	out, err := p.link.(infer.Transcriber).Transcribe(stated(ctx, req.Org, req.Project, ""), req)
+	out, err := p.link.(infer.Transcriber).Transcribe(stated(ctx, req.Org, req.Project, "", req.Payer), req)
 	if errors.Is(err, plane.ErrNoPeer) {
 		return p.gateway.(infer.Transcriber).Transcribe(ctx, req)
 	}
@@ -126,13 +127,15 @@ func (p *planeAI) Transcribe(ctx context.Context, req *infer.TranscribeRequest) 
 }
 
 // stated is ctx carrying the caller a model call is for: the request's org and
-// project, and the user its actor ("<org>/<user>") names in that org. A run on a
-// detached context has no request to forward, so this is how its org and person
-// reach `ai`; a caller serving a request forwards the identity the boundary minted
-// instead, because zip prefers that over anything stated. A person and a project
-// never cross into another org's call, and a name and address cross only with the
-// user they belong to.
-func stated(ctx context.Context, org, project, actor string) context.Context {
+// project, the user its actor ("<org>/<user>") names in that org, and the payer's
+// billing-account claim so apps/ai resolves the exact subscription and plan
+// allowance even on detached runs or embeddings/reranks/transcriptions that carry
+// no actor. A run on a detached context has no request to forward, so this is how
+// its org, payer and person reach `ai`; a caller serving a request forwards the
+// identity the boundary minted instead, because zip prefers that over anything
+// stated. A person and a project never cross into another org's call, and a name
+// and address cross only with the user they belong to.
+func stated(ctx context.Context, org, project, actor string, payer account.Account) context.Context {
 	who := zip.CallerOf(ctx)
 	if org != "" && org != who.Org {
 		who.Org, who.User, who.Project = org, "", ""
@@ -145,6 +148,9 @@ func stated(ctx context.Context, org, project, actor string) context.Context {
 	}
 	if who.User != zip.CallerOf(ctx).User {
 		who.Name, who.Email = "", ""
+	}
+	if !payer.Zero() {
+		who.Account = payer.String()
 	}
 	return zip.WithCaller(ctx, who)
 }
@@ -195,8 +201,14 @@ func (planeTrip) RoundTrip(r *http.Request) (*http.Response, error) {
 	if out == nil || out.Status == 0 {
 		return nil, fmt.Errorf("cloud: %s answered nothing for %s", cloud.AIApp, r.URL.Path)
 	}
-	if out.Billed != nil {
-		infer.BillOf(r.Context()).Tell(*out.Billed)
+	if out.Covered {
+		infer.BillOf(r.Context()).Cover()
+	} else if out.Billed != nil {
+		b := infer.BillOf(r.Context())
+		b.Tell(*out.Billed)
+		if out.Cash {
+			b.SetCash()
+		}
 	}
 	return &http.Response{
 		Status:        fmt.Sprintf("%d %s", out.Status, http.StatusText(out.Status)),

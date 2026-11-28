@@ -163,6 +163,16 @@ func init() {
 			}
 			return cloud.ModelPrice{}, false, nil
 		},
+		PlanCovers: func(ctx context.Context, subject, org, actor, model string, fast bool) (bool, error) {
+			out, err := plane.Call[client.PlanCoversIn, client.PlanCoversOut](
+				cloud.For(ctx, org), "ai", client.AIPlanCovers,
+				&client.PlanCoversIn{Subject: subject, Org: org, Actor: actor, Model: model, Fast: fast},
+			)
+			if err != nil {
+				return false, err
+			}
+			return out != nil && out.Covered, nil
+		},
 		FlagHeld: func(ctx context.Context, key string) (bool, error) {
 			held, err := flagpeer.FlagsHold(ctx, &client.FlagIn{Key: key})
 			if err != nil {

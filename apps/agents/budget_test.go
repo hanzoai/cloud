@@ -333,3 +333,42 @@ func TestAFreeRunReportsZeroSpend(t *testing.T) {
 		t.Fatalf("a free run must carry micro_usd 0, got %s", b)
 	}
 }
+
+// A subscriber with a $0 cash wallet whose paid plan covers a Hanzo model
+// (cloud.PlanCovers == true) clears the org-wallet step of afford and runs their
+// agent; an uncovered model (PlanCovers == false) is still refused 402 at $0, and
+// the agent's own cap_micro_usd still enforces either way.
+func TestPlanCoveredModelRunsAgentAtZeroWallet(t *testing.T) {
+	sqltest.Engines(t, func(t *testing.T, _ sqltest.Open) {
+		bs := &billServer{available: 0} // $0 cash wallet
+		ai := &tokenAI{prompt: 10, completion: 10}
+		app := mountBilled(t, bs.start(t), ai)
+
+		cloud.SetPeers(cloud.Peers{
+			PlanCovers: func(_ context.Context, _, _, _, model string, _ bool) (bool, error) {
+				return model == "enso-auto", nil
+			},
+		})
+		t.Cleanup(func() { cloud.SetPeers(cloud.Peers{}) })
+
+		// Plan-covered Hanzo model at $0 wallet succeeds.
+		code, body := do(t, app, http.MethodPost, "/v1/agent", "acme", map[string]any{
+			"name": "plan-agent", "model": "enso-auto", "instructions": "x",
+			"cap_micro_usd": 10_000_000, "max_task_micro_usd": 1_000_000, "period": "month",
+		})
+		if code != http.StatusCreated {
+			t.Fatalf("create plan-agent want 201, got %d (%s)", code, body)
+		}
+		code, body = do(t, app, http.MethodPost, "/v1/agent/plan-agent/run", "acme", map[string]any{"input": "hi"})
+		if code != http.StatusOK {
+			t.Fatalf("plan-covered agent at $0 wallet want 200, got %d (%s)", code, body)
+		}
+
+		// Uncovered third-party model at $0 wallet is refused 402.
+		createBudgeted(t, app, "acme", "prem-agent", 10_000_000, 1_000_000, "month")
+		code, body = do(t, app, http.MethodPost, "/v1/agent/prem-agent/run", "acme", map[string]any{"input": "hi"})
+		if code != http.StatusPaymentRequired {
+			t.Fatalf("uncovered agent at $0 wallet want 402, got %d (%s)", code, body)
+		}
+	})
+}

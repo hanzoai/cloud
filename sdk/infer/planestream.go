@@ -81,7 +81,9 @@ type streamHead struct {
 }
 
 type streamTrail struct {
-	Billed *int64 `json:"billed,omitempty"`
+	Billed  *int64 `json:"billed,omitempty"`
+	Covered bool   `json:"covered,omitempty"`
+	Cash    bool   `json:"cash,omitempty"`
 }
 
 // IsStream reports whether a completion request asks for its answer streamed.
@@ -148,13 +150,30 @@ func (s *StreamWriter) Flush() {}
 
 // End writes the trailer: the price the call was told, when it was told one.
 func (s *StreamWriter) End(nanos int64, told bool) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.head(http.StatusOK)
+	return s.EndBilled(nanos, told, false)
+}
+
+// EndBilled writes the trailer with the billed price and whether only prepaid
+// cash may pay for it.
+func (s *StreamWriter) EndBilled(nanos int64, told, cash bool) error {
 	var t streamTrail
 	if told {
 		t.Billed = &nanos
+		t.Cash = cash
 	}
+	return s.end(t)
+}
+
+// EndCovered writes a trailer marking the streamed call as paid by the caller's
+// plan or a free cap, so the meter releases its hold without debiting the wallet.
+func (s *StreamWriter) EndCovered() error {
+	return s.end(streamTrail{Covered: true})
+}
+
+func (s *StreamWriter) end(t streamTrail) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.head(http.StatusOK)
 	b, _ := json.Marshal(t)
 	s.fail(writeFrame(s.w, frameTrail, b))
 	return s.err
@@ -247,8 +266,15 @@ func (b *streamBody) next() {
 	case kind == frameTrail:
 		b.ended = true
 		var t streamTrail
-		if json.Unmarshal(data, &t) == nil && t.Billed != nil {
-			b.bill.Tell(*t.Billed)
+		if json.Unmarshal(data, &t) == nil {
+			if t.Covered {
+				b.bill.Cover()
+			} else if t.Billed != nil {
+				b.bill.Tell(*t.Billed)
+				if t.Cash {
+					b.bill.SetCash()
+				}
+			}
 		}
 	default:
 		b.err = fmt.Errorf("infer: unexpected plane stream frame %q", kind)

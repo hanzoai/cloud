@@ -3,18 +3,18 @@ package brand
 import "testing"
 
 func TestIssuerFor(t *testing.T) {
-	// hanzo issues at hanzo.id, the live discovery document's iss;
-	// iam.hanzo.ai is a routing alias.
+	// hanzo issues at hanzo.ai, the live discovery document's iss;
+	// hanzo.id remains trusted as a sibling issuer.
 	cases := map[string]string{
-		"hanzo":    "https://hanzo.id",
+		"hanzo":    "https://hanzo.ai",
 		"lux":      "https://lux.id",
 		"zoo":      "https://zoolabs.id",
 		"pars":     "https://pars.id",
 		"bootnode": "https://id.bootno.de",
 		"LUX":      "https://lux.id",     // case-insensitive
 		"  zoo  ":  "https://zoolabs.id", // trimmed
-		"unknown":  "https://hanzo.id",   // falls back to hanzo
-		"":         "https://hanzo.id",   // empty → hanzo default
+		"unknown":  "https://hanzo.ai",   // falls back to hanzo
+		"":         "https://hanzo.ai",   // empty → hanzo default
 	}
 	for id, want := range cases {
 		if got := IssuerFor(id); got != want {

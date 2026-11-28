@@ -23,6 +23,7 @@ package cloud
 // a dev deployment is never blocked.
 
 import (
+	"cmp"
 	"context"
 	"math"
 	"os"
@@ -132,7 +133,7 @@ func (m *meteredAI) complete(ctx context.Context, req *infer.ChatRequest, call f
 	if err != nil {
 		return nil, err
 	}
-	h, err := m.reserve(ctx, payer, req.Project, m.prices.hold(ctx, req.Model, EstTokens(req.Text()), atMost(req)))
+	h, err := m.reserveFor(ctx, payer, req.Org, req.Project, req.Actor, req.Model, false, m.prices.hold(ctx, req.Model, EstTokens(req.Text()), atMost(req)))
 	if err != nil {
 		return nil, err
 	}
@@ -173,7 +174,7 @@ func (m *meteredAI) Embed(ctx context.Context, req *infer.EmbedRequest) ([][]flo
 	if err != nil {
 		return nil, err
 	}
-	h, err := m.reserve(ctx, payer, req.Project, m.prices.hold(ctx, req.Model, toks, 0))
+	h, err := m.reserveFor(ctx, payer, req.Org, req.Project, "", req.Model, false, m.prices.hold(ctx, req.Model, toks, 0))
 	if err != nil {
 		return nil, err
 	}
@@ -199,7 +200,7 @@ func (m *meteredAI) Rerank(ctx context.Context, req *infer.RerankRequest) ([]flo
 	if err != nil {
 		return nil, err
 	}
-	h, err := m.reserve(ctx, payer, req.Project, m.prices.hold(ctx, req.Model, toks, 0))
+	h, err := m.reserveFor(ctx, payer, req.Org, req.Project, "", req.Model, false, m.prices.hold(ctx, req.Model, toks, 0))
 	if err != nil {
 		return nil, err
 	}
@@ -234,7 +235,7 @@ func (m *meteredAI) Transcribe(ctx context.Context, req *infer.TranscribeRequest
 	if err != nil {
 		return "", err
 	}
-	h, err := m.reserve(ctx, payer, req.Project, holdFloorCents)
+	h, err := m.reserveFor(ctx, payer, req.Org, req.Project, "", req.Model, false, holdFloorCents)
 	if err != nil {
 		return "", err
 	}
@@ -298,6 +299,39 @@ func payerOf(payer account.Account, org string) (account.Account, error) {
 		return account.Account{}, ErrNoLedger
 	}
 	return payer, nil
+}
+
+// PlanCovers reports whether payer's active paid plan currently covers a call to
+// model with remaining allowance (read-only: mutates no usage counters). Returns
+// false on any error, empty inputs, or absent peer so callers fail closed onto
+// the wallet balance gate.
+func PlanCovers(ctx context.Context, payer account.Account, org, actor, model string, fast bool) bool {
+	if payer.Zero() || strings.TrimSpace(model) == "" {
+		return false
+	}
+	ask := peersOf().PlanCovers
+	if ask == nil {
+		return false
+	}
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	covered, err := ask(ctx, payer.Subject(), cmp.Or(payer.Org(), strings.TrimSpace(org)), actor, model, fast)
+	return err == nil && covered
+}
+
+// reserveFor skips the wallet balance hold when payer's active paid plan currently
+// covers the call (PlanCovers), so a paid subscriber with a $0 cash wallet is not
+// blocked with 402 before reaching the authoritative plan admission on the ai
+// plane. Any error, absent peer, or uncovered model falls through fail-closed to
+// the normal wallet hold.
+func (m *meteredAI) reserveFor(ctx context.Context, payer account.Account, org, project, actor, model string, fast bool, cents int64) (*meter.Hold, error) {
+	if payer.Zero() {
+		return &meter.Hold{}, nil
+	}
+	if m.meter != nil && m.meter.m != nil && PlanCovers(ctx, payer, org, actor, model, fast) {
+		return &meter.Hold{}, nil
+	}
+	return m.reserve(ctx, payer, project, cents)
 }
 
 // reserve is the pre-call balance/budget/freeze check. It COMMITS the call's
@@ -420,6 +454,10 @@ func maxCompletionTokens() int {
 // gate above weighed the person's wallet as it does at the edge. The hold is given
 // back either way.
 func (m *meteredAI) settle(ctx context.Context, payer account.Account, project, model string, bill *infer.Bill, u meter.Usage, h *meter.Hold) *int64 {
+	if bill.Covered() {
+		h.Release()
+		return nil
+	}
 	nanos, told := bill.Nanos()
 	if !told {
 		h.Release()
@@ -435,6 +473,9 @@ func (m *meteredAI) settle(ctx context.Context, payer account.Account, project, 
 		}
 		return nil
 	}
+	if bill.Cash() {
+		u.Cash = true
+	}
 	m.record(payer, project, model, u, nanos, h)
 	return &nanos
 }
@@ -442,8 +483,13 @@ func (m *meteredAI) settle(ctx context.Context, payer account.Account, project, 
 // failed settles a call that failed here after the model API priced it — an answer
 // with no choices, a tool call this process could not read. The vendor was paid
 // for it and the same call costs any other caller the same, so the told price is
-// charged; a failure nothing priced (a refusal, a dropped connection) is not.
+// charged; a failure nothing priced (a refusal, a dropped connection) or one covered
+// by the plan is not.
 func (m *meteredAI) failed(ctx context.Context, payer account.Account, project, model string, bill *infer.Bill, u meter.Usage, h *meter.Hold) {
+	if bill.Covered() {
+		h.Release()
+		return
+	}
 	if _, told := bill.Nanos(); told {
 		m.settle(ctx, payer, project, model, bill, u, h)
 	}

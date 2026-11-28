@@ -43,6 +43,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync"
 	"sync/atomic"
 
@@ -51,6 +52,7 @@ import (
 	"github.com/hanzoai/cloud/sdk"
 	"github.com/hanzoai/cloud/sdk/iam"
 	aimod "github.com/hanzoai/ai"
+	aictl "github.com/hanzoai/ai/controllers"
 	aiobject "github.com/hanzoai/ai/object"
 	"github.com/zap-proto/zip"
 )
@@ -96,6 +98,38 @@ func exposeChat() {
 	cloud.Plane().Post("/ai/transcribe", planeTranscribe,
 		zip.WithOperationID(client.AITranscribe),
 		zip.WithSummary("The caller's recording put into words, bought for the caller"))
+	cloud.Plane().Post("/ai/plan/covers", planePlanCovers,
+		zip.WithOperationID(client.AIPlanCovers),
+		zip.WithSummary("Whether a payer's active paid plan currently covers a call to a model"))
+}
+
+// planePlanCovers answers (read-only) whether a payer's active paid plan currently
+// covers a call to the requested model with remaining allowance. Returns false on
+// any error or absent limiter so callers fail closed onto the wallet balance gate.
+func planePlanCovers(ctx context.Context, in *client.PlanCoversIn) (*client.PlanCoversOut, error) {
+	if limiter == nil || in == nil {
+		return &client.PlanCoversOut{}, nil
+	}
+	model := strings.TrimSpace(in.Model)
+	subject := strings.TrimSpace(in.Subject)
+	if model == "" || subject == "" {
+		return &client.PlanCoversOut{}, nil
+	}
+	org := cmp.Or(strings.TrimSpace(in.Org), cloud.Who(ctx).Org)
+	covered, err := limiter.Covers(ctx, limits.Ask{
+		Subject: subject,
+		Org:     org,
+		Actor:   strings.TrimSpace(in.Actor),
+		Model:   model,
+		Family:  aictl.FamilyOf(model),
+		Class:   aictl.ClassOf(model),
+		Priced:  !aictl.ModelCostsNothing(model, org),
+		Fast:    in.Fast,
+	})
+	if err != nil {
+		return &client.PlanCoversOut{}, nil
+	}
+	return &client.PlanCoversOut{Covered: covered}, nil
 }
 
 // planeChat buys one chat completion from the model API for the caller and
@@ -149,21 +183,38 @@ func buy(ctx context.Context, path string, in *client.ChatIn) (*client.Chat, err
 	if out := pace(ctx, limiter, path); out != nil {
 		return out, nil
 	}
-	if out := entitled(ctx, limiter, path, in); out != nil {
-		return out, nil
-	}
-	in, refused := screen(ctx, path, in)
+	g, refused := admitPlane(ctx, limiter, path, in)
 	if refused != nil {
+		return refused, nil
+	}
+	in, refused = screen(ctx, path, in)
+	if refused != nil {
+		releasePlane(limiter, g)
 		return refused, nil
 	}
 	bill := &aiobject.Bill{}
 	ctx = context.WithValue(ctx, billKey{}, bill)
 	out, err := answered(ctx, path, in, bill)
 	if err != nil || out == nil {
+		releasePlane(limiter, g)
 		return out, err
+	}
+	if out.Status >= http.StatusBadRequest {
+		releasePlane(limiter, g)
+		return out, nil
+	}
+	if g.Covered() {
+		if n, told := bill.Nanos(); told && n > 0 {
+			settlePlane(limiter, g, n)
+		}
+		out.Covered = true
+		return out, nil
 	}
 	if n, told := bill.Nanos(); told {
 		out.Billed = &n
+		if g != nil && g.Cash {
+			out.Cash = true
+		}
 	}
 	return out, nil
 }

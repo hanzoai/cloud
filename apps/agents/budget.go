@@ -127,6 +127,8 @@ func microsToCentsUp(m int64) int64 {
 type quote struct {
 	Micros    int64
 	Component string
+	Model     string
+	Actor     string
 }
 
 // quoteChat bounds a completion from above: the prompt as it will be sent, plus
@@ -144,7 +146,7 @@ func quoteChat(ctx context.Context, req *infer.ChatRequest) quote {
 	if out <= 0 {
 		out = defaultCompletionCeiling
 	}
-	return quote{Micros: cloud.HoldMicros(ctx, req.Model, prompt, out), Component: cloud.ComponentModel}
+	return quote{Micros: cloud.HoldMicros(ctx, req.Model, prompt, out), Component: cloud.ComponentModel, Model: req.Model, Actor: req.Actor}
 }
 
 // billedMicros is what the model API priced a completion at, in micro-USD rounded
@@ -196,8 +198,10 @@ func isBudgetRefusal(err error) bool {
 func (st *state) afford(ctx context.Context, payer account.Account, sto *Store, a *Agent, run *runTally, sess *Session, q quote) error {
 	// 1. The payer: can this be paid for at all. The meter's Authorize is the gate
 	// the whole platform uses; a quote of zero is a no-op there, exactly as a zero
-	// fee is.
-	if st.bill != nil {
+	// fee is. A model call covered by the payer's active paid plan (cloud.PlanCovers)
+	// skips the wallet check so a subscriber with $0 wallet can use their included
+	// allowance; agent/task/session caps below still enforce.
+	if st.bill != nil && !(q.Component == cloud.ComponentModel && cloud.PlanCovers(ctx, payer, a.Org, q.Actor, q.Model, false)) {
 		if err := st.bill.Authorize(ctx, payer, "", false, meterKind, microsToCentsUp(q.Micros)); err != nil {
 			return err
 		}

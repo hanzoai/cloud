@@ -75,32 +75,47 @@ func streamOn(ctx context.Context, ln net.Listener, in *client.ChatIn) {
 }
 
 // buyStreamed is buy, with the answer written to sw as it is produced and the
-// price written after it.
+// price (or plan-covered marker) written after it.
 func buyStreamed(ctx context.Context, conn net.Conn, in *client.ChatIn) error {
 	const path = "/v1/chat/completions"
 	sw := infer.NewStreamWriter(conn)
-	whole := func(out *client.Chat, nanos int64, told bool) error {
+	whole := func(out *client.Chat, nanos int64, told, covered, cash bool) error {
 		sw.Header().Set("Content-Type", "application/json")
 		sw.WriteHeader(out.Status)
 		_, _ = sw.Write(out.Body)
-		return sw.End(nanos, told)
+		if covered {
+			return sw.EndCovered()
+		}
+		return sw.EndBilled(nanos, told, cash)
 	}
 	if out := pace(ctx, limiter, path); out != nil {
-		return whole(out, 0, false)
+		return whole(out, 0, false, false, false)
 	}
-	if out := entitled(ctx, limiter, path, in); out != nil {
-		return whole(out, 0, false)
-	}
-	in, refused := screen(ctx, path, in)
+	g, refused := admitPlane(ctx, limiter, path, in)
 	if refused != nil {
-		return whole(refused, 0, false)
+		return whole(refused, 0, false, false, false)
+	}
+	in, refused = screen(ctx, path, in)
+	if refused != nil {
+		releasePlane(limiter, g)
+		return whole(refused, 0, false, false, false)
 	}
 	bill := &aiobject.Bill{}
 	ctx = context.WithValue(ctx, billKey{}, bill)
 	if fn := zen.Load(); fn != nil && in.ContentType == "" {
 		if out, ok := (*fn)(ctx, path, in.Request); ok {
+			if out.Status >= http.StatusBadRequest {
+				releasePlane(limiter, g)
+				return whole(out, 0, false, false, false)
+			}
 			n, told := bill.Nanos()
-			return whole(out, n, told)
+			if g.Covered() {
+				if told && n > 0 {
+					settlePlane(limiter, g, n)
+				}
+				return whole(out, 0, false, true, false)
+			}
+			return whole(out, n, told, false, g != nil && g.Cash)
 		}
 	}
 	// A caller reads to the trailer even after its own client hangs up, so a write
@@ -110,25 +125,56 @@ func buyStreamed(ctx context.Context, conn net.Conn, in *client.ChatIn) error {
 	defer cancel()
 	stop := context.AfterFunc(ctx, func() { _ = conn.SetDeadline(time.Now()) })
 	defer stop()
-	if err := enter(ctx, &cancelOnFail{StreamWriter: sw, cancel: cancel}, http.MethodPost, path, in.Request, in.ContentType, bill); err != nil {
+	rw := &cancelOnFail{StreamWriter: sw, cancel: cancel}
+	if err := enter(ctx, rw, http.MethodPost, path, in.Request, in.ContentType, bill); err != nil {
+		releasePlane(limiter, g)
 		body, _ := json.Marshal(map[string]any{"error": map[string]string{"message": err.Error()}})
-		return whole(&client.Chat{Status: http.StatusInternalServerError, Body: body}, 0, false)
+		return whole(&client.Chat{Status: http.StatusInternalServerError, Body: body}, 0, false, false, false)
+	}
+	if rw.statusCode() >= http.StatusBadRequest {
+		releasePlane(limiter, g)
+		return sw.End(0, false)
 	}
 	n, told := bill.Nanos()
-	return sw.End(n, told)
+	if g.Covered() {
+		if told && n > 0 {
+			settlePlane(limiter, g, n)
+		}
+		return sw.EndCovered()
+	}
+	return sw.EndBilled(n, told, g != nil && g.Cash)
 }
 
 // cancelOnFail is a StreamWriter that cancels the request it answers once a write
-// fails: nobody is reading.
+// fails: nobody is reading. It also records the first HTTP status code written so
+// unserved responses (>= 400) release their counted plan slots.
 type cancelOnFail struct {
 	*infer.StreamWriter
 	cancel context.CancelFunc
+	status int
+}
+
+func (c *cancelOnFail) WriteHeader(code int) {
+	if c.status == 0 {
+		c.status = code
+	}
+	c.StreamWriter.WriteHeader(code)
 }
 
 func (c *cancelOnFail) Write(p []byte) (int, error) {
+	if c.status == 0 {
+		c.status = http.StatusOK
+	}
 	n, err := c.StreamWriter.Write(p)
 	if err != nil {
 		c.cancel()
 	}
 	return n, err
+}
+
+func (c *cancelOnFail) statusCode() int {
+	if c.status == 0 {
+		return http.StatusOK
+	}
+	return c.status
 }

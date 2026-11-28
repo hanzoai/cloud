@@ -255,3 +255,45 @@ func TestAStreamOverAClientThatCannotIsTheMeteredCompletion(t *testing.T) {
 		t.Fatalf("want one debit, got %d", fc.usages())
 	}
 }
+
+// coveredAI answers like the plane does for a plan-covered call: marks bill.Cover()
+// without telling a wallet price.
+type coveredAI struct{ recordingAI }
+
+func (c *coveredAI) ChatCompletion(ctx context.Context, req *infer.ChatRequest) (*infer.ChatResponse, error) {
+	c.chatReq = req
+	infer.BillOf(ctx).Cover()
+	return c.resp, nil
+}
+
+// A plan-covered call releases its hold with zero wallet debit, nil resp.Billed,
+// and skips the wallet hold when PlanCovers reports true.
+func TestAPlanCoveredCallSkipsWalletDebitAndHold(t *testing.T) {
+	inner := &coveredAI{recordingAI: recordingAI{resp: &infer.ChatResponse{Content: "hi", TotalTokens: 100}}}
+	fc := &fakeCommerce{balanceBody: `{"available":0}`}
+	srv := fc.server(t)
+	m := &meteredAI{
+		inner: inner,
+		meter: NewMeter(Deps{Metering: mustClient(t, srv.URL)}, AIMeterProvider),
+	}
+
+	prev := peersOf()
+	SetPeers(Peers{PlanCovers: func(_ context.Context, _, _, _, model string, _ bool) (bool, error) {
+		return model == "enso-auto", nil
+	}})
+	t.Cleanup(func() { SetPeers(prev) })
+
+	resp, err := m.ChatCompletion(context.Background(), &infer.ChatRequest{
+		Model: "enso-auto", Prompt: "hello", Org: "acme", Payer: account.Org("acme"),
+	})
+	if err != nil {
+		t.Fatalf("plan-covered call at $0 wallet failed: %v", err)
+	}
+	if resp.Billed != nil {
+		t.Fatalf("plan-covered call reported resp.Billed=%d, want nil", *resp.Billed)
+	}
+	time.Sleep(100 * time.Millisecond)
+	if n := fc.usages(); n != 0 {
+		t.Fatalf("plan-covered call made %d wallet debits, want 0", n)
+	}
+}

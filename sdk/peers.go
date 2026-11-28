@@ -49,6 +49,9 @@ type Peers struct {
 	RateOf func(ctx context.Context, product, meter string) (nano int64, found bool, err error)
 	// ModelPriceOf asks the model API what model lists at.
 	ModelPriceOf func(ctx context.Context, model string) (ModelPrice, bool, error)
+	// PlanCovers asks the ai app (read-only) whether payer's active paid plan
+	// currently covers a call to model with remaining allowance.
+	PlanCovers func(ctx context.Context, subject, org, actor, model string, fast bool) (bool, error)
 	// FlagHeld asks the flags app whether the caller's org holds the flag key.
 	FlagHeld func(ctx context.Context, key string) (bool, error)
 	// BetaOn asks the flags app whether the platform's beta switch is on for the caller.
