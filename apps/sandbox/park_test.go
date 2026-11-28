@@ -15,12 +15,15 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud/client"
-
 	"github.com/hanzoai/cloud/k8s"
 	"github.com/hanzoai/cloud/sdk"
+	"github.com/hanzoai/cloud/sdk/kit"
+	"github.com/hanzoai/cloud/sdk/meter"
 
 	"github.com/hanzoai/cloud/internal/sqltest"
 	"github.com/hanzoai/account"
+	luxlog "github.com/luxfi/log"
+	"github.com/zap-proto/zip"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	k8sruntime "k8s.io/apimachinery/pkg/runtime"
@@ -576,6 +579,68 @@ func TestTheReaperEndsAFreeSandboxThatOwnsItsDisk(t *testing.T) {
 		}
 		if _, err := s.State.rt.dyn.Resource(k8s.Volumes).Namespace(s.State.rt.ns).Get(ctx, free.Volume, metav1.GetOptions{}); err == nil {
 			t.Fatal("an ended free sandbox left its disk behind")
+		}
+	})
+}
+
+// Resuming a parked desktop sandbox must not re-charge the one-shot startup fee
+// (ResourceFee) that was already billed on initial lease creation.
+func TestResumeParkedSandboxDoesNotRebillStartupFee(t *testing.T) {
+	t.Setenv("SANDBOX_FEE_CENTS_DESKTOP", "25")
+	sqltest.Engines(t, func(t *testing.T, _ sqltest.Open) {
+		t.Setenv("CLOUD_RUN_DIR", kit.Sockets(t))
+		cloud.ResetPlane()
+		t.Cleanup(cloud.ResetPlane)
+		var debits []string
+		var mu sync.Mutex
+		cloud.Plane().Post("/finance/record", func(_ context.Context, in *client.RecordIn) (*client.Recorded, error) {
+			mu.Lock()
+			debits = append(debits, in.Amount.Decimal)
+			mu.Unlock()
+			return &client.Recorded{Amount: in.Amount}, nil
+		}, zip.WithOperationID(client.FinanceRecord))
+		stop, err := cloud.ServePlane("commerce", luxlog.NewNoOpLogger())
+		if err != nil {
+			t.Fatalf("serve commerce plane: %v", err)
+		}
+		t.Cleanup(func() { _ = stop() })
+
+		s, _, _ := parking(t)
+		mc, err := meter.New(meter.Config{BaseURL: "http://127.0.0.1:1", Timeout: time.Second})
+		if err != nil {
+			t.Fatal(err)
+		}
+		s.Bill = cloud.NewMeter(cloud.Deps{Metering: mc}, "sandbox")
+		prevAllow := ledgerAllows
+		t.Cleanup(func() { ledgerAllows = prevAllow })
+		ledgerAllows = func(*Service, context.Context, account.Account, int64) error { return nil }
+		ctx := context.Background()
+
+		m, err := Lease(s, ctx, "acme", account.Org("acme"), false, "", Spec{Class: "desktop", Disk: true})
+		if err != nil {
+			t.Fatalf("lease desktop: %v", err)
+		}
+		if _, err := Park(s, ctx, "acme", m.ID); err != nil {
+			t.Fatalf("park desktop: %v", err)
+		}
+		if _, err := Lease(s, ctx, "acme", account.Org("acme"), false, "", Spec{ID: m.ID, Class: "desktop", Disk: true}); err != nil {
+			t.Fatalf("resume desktop: %v", err)
+		}
+		deadline := time.Now().Add(2 * time.Second)
+		for time.Now().Before(deadline) {
+			mu.Lock()
+			n := len(debits)
+			mu.Unlock()
+			if n >= 1 {
+				break
+			}
+			time.Sleep(10 * time.Millisecond)
+		}
+		time.Sleep(50 * time.Millisecond)
+		mu.Lock()
+		defer mu.Unlock()
+		if len(debits) != 1 || debits[0] != "0.25" {
+			t.Fatalf("desktop lease+park+resume recorded startup fee debits %v, want single [0.25]", debits)
 		}
 	})
 }

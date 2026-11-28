@@ -212,15 +212,24 @@ func modelPolicy(caps map[string]int) string {
 }
 
 // Valued is the definition a valued platform switch is stored as: active for
-// everyone, the value as its payload. An integer is stored as a number and a
-// boolean as one.
+// everyone, the value as its payload. A boolean switch turned off is stored
+// inactive so TypeBool and TypeString evaluations both resolve it to false.
 func Valued(value string, boolean bool) (json.RawMessage, error) {
-	var payload any = value
-	if n, err := strconv.ParseInt(value, 10, 64); err == nil && !boolean {
-		payload = n
-	}
 	if boolean {
-		payload = value == "true"
+		if !strings.EqualFold(strings.TrimSpace(value), "true") {
+			return json.Marshal(map[string]any{"active": false})
+		}
+		return json.Marshal(map[string]any{
+			"active": true,
+			"filters": map[string]any{
+				"groups":   []map[string]any{{"properties": []any{}, "rollout_percentage": 100}},
+				"payloads": map[string]any{"true": true},
+			},
+		})
+	}
+	var payload any = value
+	if n, err := strconv.ParseInt(value, 10, 64); err == nil {
+		payload = n
 	}
 	return json.Marshal(map[string]any{
 		"active": true,

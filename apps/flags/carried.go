@@ -41,29 +41,27 @@ type Carried struct {
 // CarriedPlans are the shipped figures, by plan slug: the last defaults, as of
 // the release that stopped reading defaults.
 var CarriedPlans = map[string]Carried{
-	// The personal ladder (@hanzo/plans 1.10.1): each rung includes its multiple of
-	// Go in every figure. Unlimited has no caps: no request window and all of each
-	// class.
-	"go":        {Session: 50, Day: 150, Premium: 500, Ours: 500},
-	"pro-3x":    {Session: 150, Day: 450, Premium: 1500, Ours: 1500},
-	"dev-5x":    {Session: 250, Day: 750, Premium: 2500, Ours: 2500},
-	"max-15x":   {Session: 750, Day: 2250, Premium: 7500, Ours: 7500},
-	"ultra":     {Session: 1250, Day: 3750, Premium: 12500, Ours: 12500},
-	"ultimate":  {Session: 2500, Day: 7500, Premium: 25000, Ours: 25000},
-	"unlimited": {Session: 0, Day: 0, Premium: Unbounded, Ours: Unbounded},
-	// The retired rungs keep their figures for the holders the boot's migration has
-	// not yet moved.
-	"dev":          {Session: 50, Day: 150, Premium: 500, Ours: 500},
-	"max-5x":       {Session: 250, Day: 750, Premium: 2500, Ours: 2500},
-	"max-20x":      {Session: 1000, Day: 3000, Premium: 10000, Ours: 10000},
-	"max-50x":      {Session: 2500, Day: 7500, Premium: 25000, Ours: 25000},
-	"team":         {Session: 50, Day: 150, Premium: 500, Ours: 500},
-	"team-premium": {Session: 250, Day: 750, Premium: 2500, Ours: 2500},
-	"agency":       {Session: 1000, Day: 3000, Premium: 5000, Ours: 5000},
-	"advisory":     {Session: 1000, Day: 3000, Premium: 5000, Ours: 5000},
-	"dedicated":    {Session: 1000, Day: 3000, Premium: 5000, Ours: 5000},
-	"pod":          {Session: 1000, Day: 3000, Premium: 5000, Ours: 5000},
-	"white-label":  {Session: 100, Day: 300, Premium: 500, Ours: 500},
+	// Monthly plans cover Hanzo-hosted models (ours: Enso, Zen, Kai) ONLY.
+	// Third-party models (premium) are prepaid only and never included (0).
+	"go":        {Session: 50, Day: 150, Premium: 0, Ours: 500},
+	"pro-3x":    {Session: 150, Day: 450, Premium: 0, Ours: 1500},
+	"dev-5x":    {Session: 250, Day: 750, Premium: 0, Ours: 2500},
+	"max-15x":   {Session: 750, Day: 2250, Premium: 0, Ours: 7500},
+	"ultra":     {Session: 1250, Day: 3750, Premium: 0, Ours: 12500},
+	"ultimate":  {Session: 3750, Day: 11250, Premium: 0, Ours: 37500},
+	"unlimited": {Session: 0, Day: 0, Premium: 0, Ours: Unbounded},
+	// Retired rungs keep their Hanzo-only figures for existing holders.
+	"dev":          {Session: 50, Day: 150, Premium: 0, Ours: 500},
+	"max-5x":       {Session: 250, Day: 750, Premium: 0, Ours: 2500},
+	"max-20x":      {Session: 1000, Day: 3000, Premium: 0, Ours: 10000},
+	"max-50x":      {Session: 2500, Day: 7500, Premium: 0, Ours: 25000},
+	"team":         {Session: 50, Day: 150, Premium: 0, Ours: 500},
+	"team-premium": {Session: 250, Day: 750, Premium: 0, Ours: 2500},
+	"agency":       {Session: 1000, Day: 3000, Premium: 0, Ours: 5000},
+	"advisory":     {Session: 1000, Day: 3000, Premium: 0, Ours: 5000},
+	"dedicated":    {Session: 1000, Day: 3000, Premium: 0, Ours: 5000},
+	"pod":          {Session: 1000, Day: 3000, Premium: 0, Ours: 5000},
+	"white-label":  {Session: 100, Day: 300, Premium: 0, Ours: 500},
 }
 
 // carriedShare is the share of a plan's premium allowance one costly family took
@@ -82,8 +80,7 @@ func (c Carried) Values() map[string]string {
 }
 
 // CarriedValues is every switch the migration saves where none is held, by key:
-// each carried plan's nine figures and the model policy with each costly family's
-// share of each carried plan.
+// each carried plan's nine figures and the model policy.
 func CarriedValues() map[string]string {
 	out := map[string]string{}
 	caps := map[string]int{}
@@ -91,8 +88,8 @@ func CarriedValues() map[string]string {
 		for field, v := range c.Values() {
 			out[PlanKey(field, plan)] = v
 		}
-		if c.Premium == Unbounded {
-			continue // all of the class is included: no allowance to share out
+		if c.Premium <= 0 || c.Premium == Unbounded {
+			continue // no premium allowance included in monthly plans
 		}
 		caps[plan] = (c.Premium*carriedShare/100 + 5) / 10 * 10
 	}

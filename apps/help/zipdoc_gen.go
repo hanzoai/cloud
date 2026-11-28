@@ -40,6 +40,26 @@ func init() {
 			"helpCategoryList.data":    "Data is the sections that front at least one public article. Empty when the\ncenter publishes none.",
 		},
 	})
+	zip.Describe("github.com/hanzoai/cloud/apps/help POST /v1/help/feedback", zip.Doc{
+		Description: "Accepts user feedback, bug/billing reports, and automatic client\nexception captures from any Hanzo surface. It always emits a structured telemetry\nlog record, files a support ticket into the public help center when installed,\nand attaches a CRM lead when an email is provided. Answers 201 with an opaque ID.",
+		Fields: map[string]string{
+			"helpFeedbackIntake.app":      "App identifies the surface that submitted the report (app, pay, chat, dev, docs, console).",
+			"helpFeedbackIntake.context":  "Context carries optional flat key-value metadata (plan, org, browser, request_id).",
+			"helpFeedbackIntake.email":    "Email is the optional reply-to email of the user submitting feedback.",
+			"helpFeedbackIntake.error":    "Error is the optional exception name or message for client crash reports.",
+			"helpFeedbackIntake.kind":     "Kind classifies the submission: bug, billing, feature, exception, or feedback.",
+			"helpFeedbackIntake.message":  "Message is the user's description or error message. Clipped at 16 KiB.",
+			"helpFeedbackIntake.page":     "Page is the URL or route path where the feedback or exception occurred.",
+			"helpFeedbackIntake.priority": "Priority overrides urgency (Low, Medium, High, Urgent); defaults from Kind.",
+			"helpFeedbackIntake.stack":    "Stack is the optional stack trace for client crash reports, clipped at 8 KiB.",
+			"helpFeedbackIntake.subject":  "Subject is a short one-line summary; derived from Error or Message when omitted.",
+			"helpFeedbackIntake.user":     "User is the optional user or organization identifier of the reporter.",
+			"helpFeedbackIntake.version":  "Version is the optional client build or commit identifier.",
+			"helpFeedbackReceipt.id":      "ID is the opaque reference (tkt_... when filed as a support ticket, or fb_...).",
+			"helpFeedbackReceipt.kind":    "Kind is the normalized submission kind (bug, billing, feature, exception, feedback).",
+			"helpFeedbackReceipt.status":  "Status is always \"received\" once accepted.",
+		},
+	})
 	zip.Describe("github.com/hanzoai/cloud/apps/help POST /v1/help/tickets", zip.Doc{
 		Description: "Files a customer support ticket into the public help center. It\ncreates the ticket (status Open, source portal) with the customer's message on\nthe description, then records that same message as the opening entry of the\nticket's conversation thread; the description carries it regardless, so failing\nto write that entry loses nothing. Answers 201 with an opaque reference.\n\nA deployment with no help center answers 404, one whose center has not installed\nthe Help model answers 503, and a body over 64 KiB answers 413 — in that order,\nwhich is the order the route has always decided them in.",
 		Fields: map[string]string{

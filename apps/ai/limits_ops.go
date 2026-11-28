@@ -43,6 +43,7 @@ func mountLimits(app *zip.App, l *limits.Limiter, trail *audit.Recorder) {
 	o := limitOps{l: l, trail: trail}
 	z := app.Group("/v1/ai")
 	z.Get("/limits", o.read, zip.WithOperationID("aiLimits"))
+	z.Post("/limits/reset", o.reset, zip.WithOperationID("aiResetLimits"))
 	z.Get("/limits/rate", o.rate, zip.WithOperationID("aiRateLimit"))
 	z.Put("/limits/rate", o.setRate, zip.WithOperationID("aiSetRateLimit"))
 }
@@ -141,7 +142,22 @@ type aiLimits struct {
 	// one the plan does not include is refused 402 entitlement_required whatever the
 	// caller holds, so a picker hides or marks it here instead.
 	Entitlements map[string]*aiEntitlement `json:"entitlements,omitempty"`
+	// Reset describes the caller's self-service weekly free usage reset.
+	Reset *aiReset `json:"reset,omitempty"`
 }
+
+// aiReset describes the caller's 1x/week self-service free usage reset status.
+type aiReset struct {
+	// Available is true when the caller can reset their usage counters now.
+	Available bool `json:"available"`
+	// LastAt is when the caller last used their free reset (RFC3339), null if never.
+	LastAt *string `json:"last_at"`
+	// NextAt is when the next free reset unlocks (RFC3339), null when Available is true.
+	NextAt *string `json:"next_at"`
+}
+
+// aiLimitsResetIn takes no fields: the payer comes from the validated principal.
+type aiLimitsResetIn struct{}
 
 // aiEntitlement is one plan entitlement: whether the plan includes it, and the plan
 // that does when it does not.
@@ -195,6 +211,53 @@ func (o limitOps) read(ctx context.Context, _ *aiLimitsQuery) (*aiLimits, error)
 	return view(s, aiobject.PayURL(host, org)), nil
 }
 
+// Resets the caller's active AI usage counters (session, day, rolling window, and
+// period spend) once every 7 days for free. Protected by CSRF verification and
+// recorded on the audit trail when configured. Returns 429 when the caller's
+// weekly free reset has already been used within the last 7 days.
+func (o limitOps) reset(ctx context.Context, _ *aiLimitsResetIn) (*aiLimits, error) {
+	subject, org, err := payerOf(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if err := cloud.CSRF(ctx); err != nil {
+		return nil, err
+	}
+	st, err := o.l.FreeReset(ctx, subject, org)
+	if err != nil {
+		var cool *limits.ResetCooldownError
+		if errors.As(err, &cool) {
+			return nil, zip.Errorf(http.StatusTooManyRequests, "%v", cool)
+		}
+		return nil, zip.Errorf(http.StatusServiceUnavailable, "usage reset is unavailable right now")
+	}
+	if o.trail != nil {
+		who := cloud.Who(ctx)
+		after, _ := json.Marshal(map[string]any{"last_at": st.LastAt.UTC().Format(time.RFC3339), "next_at": st.NextAt.UTC().Format(time.RFC3339)})
+		if _, aerr := o.trail.Append(ctx, audit.Record{
+			Actor:     audit.Actor{Org: org, Sub: who.User, Email: who.Email},
+			Action:    "ai.limits.reset",
+			Resource:  audit.Resource{Type: "limits", ID: org + "/" + subject},
+			Auth:      audit.AuthContext{Method: "attested", IsAdmin: principal.SuperFrom(ctx)},
+			Outcome:   audit.Outcome{Result: "success", Status: http.StatusOK},
+			SourceIP:  who.IP,
+			RequestID: who.RequestID,
+			After:     after,
+		}); aerr != nil {
+			slog.Warn("ai limits reset: audit append failed", "org", org, "subject", subject, "err", aerr)
+		}
+	}
+	s, err := o.l.Read(ctx, subject, org)
+	if err != nil {
+		return nil, zip.Errorf(http.StatusServiceUnavailable, "plan usage is unavailable right now")
+	}
+	host := ""
+	if c, ok := cloud.Request(ctx); ok {
+		host = c.Host()
+	}
+	return view(s, aiobject.PayURL(host, org)), nil
+}
+
 // view projects a standing onto the published shares.
 func view(s limits.Standing, pay string) *aiLimits {
 	out := &aiLimits{Plan: s.Plan, State: "ok", Classes: map[string]*aiClass{}, Upgrade: s.Upgrade.Plan}
@@ -216,15 +279,12 @@ func view(s limits.Standing, pay string) *aiLimits {
 	var limited []string
 	for _, name := range flags.PlanClasses {
 		c, ok := s.Classes[name]
-		if !ok {
+		if !ok || (!c.Unbounded && c.Period.Limit <= 0) {
 			continue
 		}
 		v := &aiClass{Percent: c.Period.Percent(), Paying: cmp.Or(c.Paying, "none"), ResetsAt: stamp(c.Period.ResetsAt)}
-		switch {
-		case c.Unbounded:
+		if c.Unbounded {
 			v.Percent, v.Unbounded = 0, true
-		case c.Period.Limit <= 0:
-			v.Percent = 100 // the plan includes none of it
 		}
 		v.State = classState(c)
 		if c.Window != nil {
@@ -257,6 +317,13 @@ func view(s limits.Standing, pay string) *aiLimits {
 			label = "Upgrade to " + up.Name
 		}
 		out.Actions = append(out.Actions, aiAction{Kind: "upgrade", Label: label, Plan: up.Plan, URL: pay + "/cart?plan=" + url.QueryEscape(up.Plan)})
+	}
+	if s.Reset != nil {
+		out.Reset = &aiReset{
+			Available: s.Reset.Available,
+			LastAt:    stamp(s.Reset.LastAt),
+			NextAt:    stamp(s.Reset.NextAt),
+		}
 	}
 	out.Actions = append(out.Actions, aiAction{Kind: "topup", Label: "Buy usage credits", URL: pay})
 	return out

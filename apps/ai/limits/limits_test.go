@@ -263,7 +263,7 @@ func TestWhichPlansCount(t *testing.T) {
 			{"external:", false},
 		} {
 			w := newWorld(t, "max-20x", 1, c.settled)
-			g, _ := w.priced(premium, ClassPremium)
+			g, _ := w.priced("kai", ClassOurs)
 			if counts := g != nil && g.Pays == PaysPlan; counts != c.counts {
 				t.Errorf("settled %q: plan pays=%v (grant %+v), want %v", c.settled, counts, g, c.counts)
 			}
@@ -283,15 +283,18 @@ func TestACompCountsAtListPrice(t *testing.T) {
 			seed := flags.CarriedPlans[plan]
 			w := newWorld(t, plan, 1, "external:comp")
 			w.rows[0].ChargedCents = 0
-			if g, hit := w.priced(premium, ClassPremium); hit != nil || g == nil || g.Pays != PaysPlan {
-				t.Errorf("a $0 comp of %s, a premium model: grant %+v hit %+v, want the plan", plan, g, hit)
+			if g, hit := w.priced("kai", ClassOurs); hit != nil || g == nil || g.Pays != PaysPlan {
+				t.Errorf("a $0 comp of %s, a Hanzo model: grant %+v hit %+v, want the plan", plan, g, hit)
 				continue
 			}
 			s := w.read()
 			if s.Plan != plan || s.Session.Limit != int64(seed.Session) || s.Day.Limit != int64(seed.Day) ||
-				ours(s).Limit != int64(seed.Ours)*nanosPerCent || s.Classes[ClassPremium].Period.Limit != int64(seed.Premium)*nanosPerCent {
-				t.Errorf("a $0 comp of %s reads plan %q, %d/%d, ours %d¢, premium %d¢; want its full %+v", plan, s.Plan,
-					s.Session.Limit, s.Day.Limit, ours(s).Limit/nanosPerCent, s.Classes[ClassPremium].Period.Limit/nanosPerCent, seed)
+				ours(s).Limit != int64(seed.Ours)*nanosPerCent {
+				t.Errorf("a $0 comp of %s reads plan %q, %d/%d, ours %d¢; want its full %+v", plan, s.Plan,
+					s.Session.Limit, s.Day.Limit, ours(s).Limit/nanosPerCent, seed)
+			}
+			if _, hasPremium := s.Classes[ClassPremium]; hasPremium {
+				t.Errorf("a $0 comp of %s exposes zero-allowance premium class: %+v", plan, s.Classes)
 			}
 		}
 
@@ -325,7 +328,7 @@ func TestAPlanCoversEveryChannel(t *testing.T) {
 	sqltest.Engines(t, func(t *testing.T, _ sqltest.Open) {
 		w := newWorld(t, "max-20x", 1, "card")
 		for _, apps := range [][]string{nil, {"hanzo-app"}, {"hanzo-platform"}} {
-			g, hit := w.admit(Ask{Model: premium, Class: ClassPremium, Priced: true, Apps: apps})
+			g, hit := w.admit(Ask{Model: "kai", Class: ClassOurs, Priced: true, Apps: apps})
 			if hit != nil || g == nil || g.Pays != PaysPlan {
 				t.Errorf("apps %v: grant %+v hit %+v, want the plan", apps, g, hit)
 			}
@@ -333,42 +336,46 @@ func TestAPlanCoversEveryChannel(t *testing.T) {
 	})
 }
 
-// Max under its allowance: a premium request is paid by the plan, settles its list
-// price against premium, and the bar reads the share used, rounded up to five.
+// Max under its allowance: a Hanzo-model request is paid by the plan, settles its list
+// price against ours, and the bar reads the share used, rounded up to five. Third-party
+// (premium) requests require prepaid cash even on a paid plan.
 func TestMaxUnderItsAllowanceIsPaidByThePlan(t *testing.T) {
 	sqltest.Engines(t, func(t *testing.T, _ sqltest.Open) {
 		w := newWorld(t, "max-20x", 1, "card")
-		g, hit := w.priced(premium, ClassPremium)
-		if hit != nil || g == nil || g.Pays != PaysPlan || g.Class != ClassPremium || g.State != "ok" || g.Spend != 100*usd {
-			t.Fatalf("grant %+v hit %+v, want the plan paying premium with $100 left", g, hit)
+		g, hit := w.priced("kai", ClassOurs)
+		if hit != nil || g == nil || g.Pays != PaysPlan || g.Class != ClassOurs || g.State != "ok" || g.Spend != 100*usd {
+			t.Fatalf("grant %+v hit %+v, want the plan paying ours with $100 left", g, hit)
 		}
 		w.use(g, 20*usd)
 		s := w.read()
-		if p := s.Classes[ClassPremium].Period; p.Used != 20*usd || p.Percent() != 20 || s.Classes[ClassPremium].Paying != PaysPlan {
-			t.Fatalf("premium %+v at %d%% paying %q, want $20 used, 20%%, the plan", p, p.Percent(), s.Classes[ClassPremium].Paying)
+		if p := s.Classes[ClassOurs].Period; p.Used != 20*usd || p.Percent() != 20 || s.Classes[ClassOurs].Paying != PaysPlan {
+			t.Fatalf("ours %+v at %d%% paying %q, want $20 used, 20%%, the plan", p, p.Percent(), s.Classes[ClassOurs].Paying)
 		}
-		if ours(s).Used != 0 {
-			t.Fatalf("premium use was counted against ours: %+v", ours(s))
+		if g, hit := w.priced(premium, ClassPremium); g != nil || hit == nil || hit.Code != CodePrepaid {
+			t.Fatalf("third-party on Hanzo-only plan with empty wallet: grant %+v hit %+v, want prepaid_required", g, hit)
 		}
 	})
 }
 
 // Past the allowance with prepaid cash, prepaid pays, with no choice to make: usage
 // credits a paid plan bought pay for the model it asked for. The class reads near and
-// paid by credits, and a premium model, which granted credit never pays for, is
+// paid by credits, and a third-party model, which granted credit never pays for, is
 // debited from cash alone.
 func TestPastTheAllowancePrepaidPays(t *testing.T) {
 	sqltest.Engines(t, func(t *testing.T, _ sqltest.Open) {
 		w := newWorld(t, "max-20x", 1, "card")
-		g, _ := w.priced(premium, ClassPremium)
+		g, _ := w.priced("kai", ClassOurs)
 		w.use(g, 100*usd)
 		w.cash = 3 * usd
-		g, hit := w.priced(premium, ClassPremium)
-		if hit != nil || g == nil || g.Pays != PaysPrepaid || !g.Cash || g.State != "near" {
-			t.Fatalf("grant %+v hit %+v, want prepaid paying, cash only, near", g, hit)
+		g, hit := w.priced("kai", ClassOurs)
+		if hit != nil || g == nil || g.Pays != PaysPrepaid || g.State != "near" {
+			t.Fatalf("grant %+v hit %+v, want prepaid paying, near", g, hit)
 		}
-		if s := w.read(); !s.Funded || s.Classes[ClassPremium].Paying != PaysCredits || s.Classes[ClassPremium].Period.Percent() != 100 {
-			t.Fatalf("reads funded %v premium %+v", s.Funded, s.Classes[ClassPremium])
+		if g, hit := w.priced(premium, ClassPremium); hit != nil || g == nil || g.Pays != PaysPrepaid || !g.Cash {
+			t.Fatalf("third-party with cash: grant %+v hit %+v, want prepaid cash only", g, hit)
+		}
+		if s := w.read(); !s.Funded || s.Classes[ClassOurs].Paying != PaysCredits || s.Classes[ClassOurs].Period.Percent() != 100 || s.Pays[ClassPremium] != PaysPrepaid {
+			t.Fatalf("reads funded %v ours %+v pays %+v", s.Funded, s.Classes[ClassOurs], s.Pays)
 		}
 	})
 }
@@ -379,32 +386,32 @@ func TestPastTheAllowancePrepaidPays(t *testing.T) {
 func TestARequestPastThePlanIsPaidByCashOrRefused(t *testing.T) {
 	sqltest.Engines(t, func(t *testing.T, _ sqltest.Open) {
 		w := newWorld(t, "max-20x", 1, "card")
-		past := Ask{Model: premium, Class: ClassPremium, Priced: true, Spend: true, Past: true}
+		past := Ask{Model: "zen5-pro", Class: ClassOurs, Priced: true, Spend: true, Past: true}
 		g, hit := w.admit(past)
 		if g != nil || hit == nil || hit.Code != CodePlanAllowance || !hit.ResetsAt.Equal(periodStart.AddDate(0, 1, 0)) {
 			t.Fatalf("past the plan with no cash: grant %+v hit %+v, want plan_allowance_used until the period ends", g, hit)
 		}
 		w.cash = usd
-		if g, hit := w.admit(past); hit != nil || g == nil || g.Pays != PaysPrepaid || !g.Cash || g.Counted() {
-			t.Fatalf("past the plan with cash: grant %+v hit %+v, want prepaid, cash only, counting nothing", g, hit)
+		if g, hit := w.admit(past); hit != nil || g == nil || g.Pays != PaysPrepaid || g.Counted() {
+			t.Fatalf("past the plan with cash: grant %+v hit %+v, want prepaid, counting nothing", g, hit)
 		}
-		if s := w.read(); s.Classes[ClassPremium].Period.Used != 0 || s.Day.Used != 0 {
-			t.Fatalf("a request past the plan was counted against it: %+v day %+v", s.Classes[ClassPremium].Period, s.Day)
+		if s := w.read(); s.Classes[ClassOurs].Period.Used != 0 || s.Day.Used != 0 {
+			t.Fatalf("a request past the plan was counted against it: %+v day %+v", s.Classes[ClassOurs].Period, s.Day)
 		}
 	})
 }
 
-// Past the allowance with nothing prepaid: limited mode. A premium request is refused
+// Past the allowance with nothing prepaid: limited mode. A Hanzo-model request is refused
 // plan_allowance_used naming the class and nothing else, and the free model still
-// answers inside the plan's request windows.
+// answers inside the plan's request windows. Granted credit never pays for third-party models.
 func TestPastTheAllowanceWithNoPrepaidIsLimited(t *testing.T) {
 	sqltest.Engines(t, func(t *testing.T, _ sqltest.Open) {
 		w := newWorld(t, "max-20x", 1, "card")
-		g, _ := w.priced(premium, ClassPremium)
+		g, _ := w.priced("zen5-pro", ClassOurs)
 		w.use(g, 100*usd)
-		g, hit := w.priced(premium, ClassPremium)
-		if g != nil || hit == nil || hit.Code != CodePlanAllowance || hit.Class != ClassPremium || !hit.ResetsAt.Equal(periodStart.AddDate(0, 1, 0)) {
-			t.Fatalf("grant %+v hit %+v, want plan_allowance_used on premium until the period ends", g, hit)
+		g, hit := w.priced("zen5-pro", ClassOurs)
+		if g != nil || hit == nil || hit.Code != CodePlanAllowance || hit.Class != ClassOurs || !hit.ResetsAt.Equal(periodStart.AddDate(0, 1, 0)) {
+			t.Fatalf("grant %+v hit %+v, want plan_allowance_used on ours until the period ends", g, hit)
 		}
 		if strings.ContainsAny(hit.Message, "0123456789$") {
 			t.Errorf("the refusal names a figure: %q", hit.Message)
@@ -412,39 +419,30 @@ func TestPastTheAllowanceWithNoPrepaidIsLimited(t *testing.T) {
 		if g, hit := w.freeLane(); hit != nil || g == nil || g.Pays != PaysPlan || g.Class != ClassFree {
 			t.Fatalf("the free model in limited mode: grant %+v hit %+v", g, hit)
 		}
-		// Hanzo's models are their own allowance and still answer.
-		if g, hit := w.priced("kai", ClassOurs); hit != nil || g == nil || g.Pays != PaysPlan || g.Class != ClassOurs {
-			t.Fatalf("kai with ours untouched: grant %+v hit %+v", g, hit)
-		}
-		// Granted credit never pays for a premium model.
+		// Granted credit never pays for a third-party (premium) model.
 		w.credit = usd
-		if g, hit := w.priced(premium, ClassPremium); g != nil || hit == nil || hit.Code != CodePlanAllowance {
-			t.Fatalf("premium on granted credit: grant %+v hit %+v, want plan_allowance_used", g, hit)
+		if g, hit := w.priced(premium, ClassPremium); g != nil || hit == nil || hit.Code != CodePrepaid {
+			t.Fatalf("premium on granted credit: grant %+v hit %+v, want prepaid_required", g, hit)
 		}
 	})
 }
 
-// Granted credit never pays for Jev. A free plan holding only credit is told Jev
-// needs a paid plan or prepaid; a Max plan whose included usage is used is in limited
-// mode; prepaid cash pays and the debit is cash only.
+// Granted credit never pays for Jev, and monthly plans cover Hanzo models only.
+// A free plan holding only credit is refused insufficient_balance; a Max plan holding
+// only credit is refused prepaid_required; prepaid cash pays and the debit is cash only.
 func TestGrantsNeverPayForJev(t *testing.T) {
 	sqltest.Engines(t, func(t *testing.T, _ sqltest.Open) {
 		free := newWorld(t, "", 0, "")
 		free.credit = 100 * usd
 		for _, jev := range []string{"typesafe/jev-1.13", "~typesafe/jev-latest"} {
-			if g, hit := free.priced(jev, ClassOurs); g != nil || hit == nil || hit.Code != CodeInsufficient || !strings.HasPrefix(hit.Message, "Jev is paid from funds you add") {
+			if g, hit := free.priced(jev, ClassOurs); g != nil || hit == nil || hit.Code != CodeInsufficient || !strings.HasPrefix(hit.Message, "Jev is paid from prepaid funds you add") {
 				t.Fatalf("%s on credit alone: grant %+v hit %+v, want insufficient_balance", jev, g, hit)
 			}
 		}
 		max := newWorld(t, "max-20x", 1, "card")
 		max.credit = 100 * usd
-		g, _ := max.priced("typesafe/jev-1.13", ClassOurs)
-		if g == nil || g.Pays != PaysPlan {
-			t.Fatalf("jev on max's included usage: %+v", g)
-		}
-		max.use(g, 100*usd)
-		if g, hit := max.priced("typesafe/jev-1.13", ClassOurs); g != nil || hit == nil || hit.Code != CodePlanAllowance {
-			t.Fatalf("jev past max's included usage on credit alone: grant %+v hit %+v, want plan_allowance_used", g, hit)
+		if g, hit := max.priced("typesafe/jev-1.13", ClassOurs); g != nil || hit == nil || hit.Code != CodePrepaid {
+			t.Fatalf("jev on Hanzo-only max plan with credit alone: grant %+v hit %+v, want prepaid_required", g, hit)
 		}
 		max.cash = usd
 		if g, hit := max.priced("typesafe/jev-1.13", ClassOurs); hit != nil || g == nil || g.Pays != PaysPrepaid || !g.Cash {
@@ -609,7 +607,7 @@ func TestAnUnreadableWalletIsAnError(t *testing.T) {
 		}
 		plan := newWorld(t, "max-20x", 1, "card")
 		plan.fundsErr = errors.New("ledger down")
-		if g, hit := plan.priced(premium, ClassPremium); hit != nil || g == nil || g.Pays != PaysPlan {
+		if g, hit := plan.priced("kai", ClassOurs); hit != nil || g == nil || g.Pays != PaysPlan {
 			t.Fatalf("the plan pays without reading the wallet: grant %+v hit %+v", g, hit)
 		}
 	})
@@ -780,8 +778,11 @@ func TestTeamLimitsArePerSeat(t *testing.T) {
 		if s.Session.Limit != int64(4*seed.Session) || s.Day.Limit != int64(4*seed.Day) {
 			t.Fatalf("limits %d/%d, want 4 seats of %+v", s.Session.Limit, s.Day.Limit, seed)
 		}
-		if ours(s).Limit != int64(4*seed.Ours)*nanosPerCent || s.Classes[ClassPremium].Period.Limit != int64(4*seed.Premium)*nanosPerCent {
+		if ours(s).Limit != int64(4*seed.Ours)*nanosPerCent {
 			t.Fatalf("classes %+v, want four seats of %+v", s.Classes, seed)
+		}
+		if _, hasPremium := s.Classes[ClassPremium]; hasPremium {
+			t.Fatalf("Hanzo-only team plan must omit zero-allowance premium class: %+v", s.Classes)
 		}
 	})
 }
@@ -821,13 +822,13 @@ func TestSettlingNeverPassesTheAllowance(t *testing.T) {
 func TestConcurrentSettlesNeverPassTheAllowance(t *testing.T) {
 	sqltest.Engines(t, func(t *testing.T, _ sqltest.Open) {
 		w := newWorld(t, "dev", 1, "card")
-		allow := int64(flags.CarriedPlans["dev"].Premium) * nanosPerCent
+		allow := int64(flags.CarriedPlans["dev"].Ours) * nanosPerCent
 		var wg sync.WaitGroup
 		for i := 0; i < 40; i++ {
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
-				g, hit, err := w.l.Admit(context.Background(), Ask{Subject: "acme", Org: "acme", Model: premium, Class: ClassPremium, Priced: true})
+				g, hit, err := w.l.Admit(context.Background(), Ask{Subject: "acme", Org: "acme", Model: "kai", Class: ClassOurs, Priced: true})
 				if err != nil || hit != nil || g == nil {
 					return // a request admitted after the class ran out is refused, which is the point
 				}
@@ -837,7 +838,7 @@ func TestConcurrentSettlesNeverPassTheAllowance(t *testing.T) {
 			}()
 		}
 		wg.Wait()
-		used, err := w.l.store.spent(context.Background(), "acme", "acme", ClassPremium, periodStart.Unix())
+		used, err := w.l.store.spent(context.Background(), "acme", "acme", ClassOurs, periodStart.Unix())
 		if err != nil || used != allow {
 			t.Fatalf("recorded %d (%v) across concurrent requests, want exactly %d", used, err, allow)
 		}
@@ -848,9 +849,9 @@ func TestConcurrentSettlesNeverPassTheAllowance(t *testing.T) {
 func TestTheAllowanceIsTheBillingPeriods(t *testing.T) {
 	sqltest.Engines(t, func(t *testing.T, _ sqltest.Open) {
 		w := newWorld(t, "dev", 1, "card")
-		g, _ := w.priced(premium, ClassPremium)
+		g, _ := w.priced("zen5-pro", ClassOurs)
 		w.use(g, 50*usd)
-		if _, hit := w.priced(premium, ClassPremium); hit == nil {
+		if _, hit := w.priced("zen5-pro", ClassOurs); hit == nil {
 			t.Fatal("a used allowance paid again")
 		}
 		next := periodStart.AddDate(0, 1, 0)
@@ -859,7 +860,7 @@ func TestTheAllowanceIsTheBillingPeriods(t *testing.T) {
 		w.l.mu.Lock()
 		clear(w.l.plans)
 		w.l.mu.Unlock()
-		if g, _ := w.priced(premium, ClassPremium); g == nil || g.Pays != PaysPlan {
+		if g, _ := w.priced("zen5-pro", ClassOurs); g == nil || g.Pays != PaysPlan {
 			t.Fatal("the next period paid nothing")
 		}
 	})
@@ -928,13 +929,17 @@ func TestASharedReadsInFives(t *testing.T) {
 	}
 }
 
-// A capped family takes at most its share of the plan's class allowance: Max 20x
-// holds $30 of its $100 of premium for Claude Opus. Past it, Opus is refused
+// A capped family takes at most its share of the plan's class allowance: when a
+// policy grants $100 of premium and caps Claude Opus at $30, past it Opus is refused
 // model_cap naming its glob and Enso, with no figure; another premium model still
 // runs on the plan; and the share comes back with the billing period.
 func TestACappedModelTakesOnlyItsShareOfThePlan(t *testing.T) {
 	sqltest.Engines(t, func(t *testing.T, _ sqltest.Open) {
 		w := newWorld(t, "max-20x", 1, "card")
+		vals := flags.CarriedValues()
+		vals[flags.PlanKey("premium", "max-20x")] = "10000"
+		vals[flags.ModelPolicy] = `{"anthropic/claude-opus*":{"class":"premium","grantsPay":false,"caps":{"max-20x":{"periodCents":3000}}}}`
+		w.l.flag = policy(vals)
 		opus := "anthropic/claude-opus-4.7"
 		g, hit := w.priced(opus, ClassPremium)
 		if hit != nil || g == nil || g.Pays != PaysPlan {
@@ -974,11 +979,11 @@ func TestASpentWindowNamesItselfNotThePlan(t *testing.T) {
 	sqltest.Engines(t, func(t *testing.T, _ sqltest.Open) {
 		w := newWorld(t, "max-20x", 1, "card")
 		for i := 0; i < 1000; i++ { // Max 20x covers 1000 requests a session
-			if g, hit := w.priced(premium, ClassPremium); hit != nil || g == nil {
+			if g, hit := w.priced("kai", ClassOurs); hit != nil || g == nil {
 				t.Fatalf("request %d: grant %+v hit %+v", i, g, hit)
 			}
 		}
-		g, hit := w.priced(premium, ClassPremium)
+		g, hit := w.priced("kai", ClassOurs)
 		if g != nil || hit == nil || hit.Code != CodeUsageCap || hit.Name != "session" || hit.ResetsAt.IsZero() || !hit.ResetsAt.Before(periodStart.AddDate(0, 1, 0)) {
 			t.Fatalf("past the session's requests: grant %+v hit %+v, want usage_cap_exceeded until the session ends", g, hit)
 		}
@@ -1024,6 +1029,10 @@ func TestPastThePlanGrantedCreditPaysNothing(t *testing.T) {
 func TestPastItsShareCashKeepsTheSameModel(t *testing.T) {
 	sqltest.Engines(t, func(t *testing.T, _ sqltest.Open) {
 		w := newWorld(t, "max-20x", 1, "card")
+		vals := flags.CarriedValues()
+		vals[flags.PlanKey("premium", "max-20x")] = "10000"
+		vals[flags.ModelPolicy] = `{"anthropic/claude-opus*":{"class":"premium","grantsPay":false,"caps":{"max-20x":{"periodCents":3000}}}}`
+		w.l.flag = policy(vals)
 		opus := "anthropic/claude-opus-5.5"
 		g, _ := w.priced(opus, ClassPremium)
 		w.use(g, 30*usd)
@@ -1042,6 +1051,9 @@ func TestPastItsShareCashKeepsTheSameModel(t *testing.T) {
 func TestADailyShareRefusesUntilMidnight(t *testing.T) {
 	sqltest.Engines(t, func(t *testing.T, _ sqltest.Open) {
 		w := newWorld(t, "max-20x", 1, "card")
+		vals := flags.CarriedValues()
+		vals[flags.PlanKey("premium", "max-20x")] = "10000"
+		w.l.flag = policy(vals)
 		raw := `{"anthropic/claude-opus*":{"class":"premium","grantsPay":true,"caps":{"max-20x":{"dailyRequests":2}},"fallback":"zen5-pro"}}`
 		rules, err := ParseRules(raw)
 		if err != nil {
@@ -1083,6 +1095,9 @@ func TestTheMostSpecificRuleWins(t *testing.T) {
 func TestUnservedRequestsLeaveEveryWindowUnchanged(t *testing.T) {
 	sqltest.Engines(t, func(t *testing.T, _ sqltest.Open) {
 		w := newWorld(t, "max-20x", 1, "card")
+		vals := flags.CarriedValues()
+		vals[flags.PlanKey("premium", "max-20x")] = "10000"
+		w.l.flag = policy(vals)
 		g, _ := w.priced(premium, ClassPremium) // one served request, so the windows are open
 		w.use(g, usd)
 		before := w.read()
@@ -1130,7 +1145,7 @@ func TestUnservedRequestsLeaveEveryWindowUnchanged(t *testing.T) {
 func TestASessionRequestCountsNothing(t *testing.T) {
 	sqltest.Engines(t, func(t *testing.T, _ sqltest.Open) {
 		w := newWorld(t, "max-20x", 1, "card")
-		g, _ := w.priced(premium, ClassPremium)
+		g, _ := w.priced("kai", ClassOurs)
 		w.use(g, usd)
 		before := w.read()
 		for i := 0; i < 20; i++ {
@@ -1145,25 +1160,27 @@ func TestASessionRequestCountsNothing(t *testing.T) {
 	})
 }
 
-// Jev is premium and Kai is Hanzo's on every path: Jev's router on chat and its
-// decision model, which the catalog reads one each way, both meet the one Jev rule;
+// Jev is premium (prepaid cash only) and Kai is Hanzo's (covered by monthly plan) on
+// every path: Jev's router on chat and its decision model both meet the one Jev rule;
 // Kai under either name meets the Kai rule, whichever class the catalog read.
 func TestJevIsPremiumAndKaiOursOnEveryPath(t *testing.T) {
 	sqltest.Engines(t, func(t *testing.T, _ sqltest.Open) {
 		w := newWorld(t, "max-20x", 1, "card")
+		w.cash = 10 * usd
 		for _, c := range []struct {
 			q    Ask
 			want string
+			pays string
 		}{
-			{Ask{Model: "typesafe/jev-router", Class: ClassPremium, Priced: true, Spend: true}, ClassPremium}, // /v1/chat/completions
-			{Ask{Model: "typesafe/jev-1.13", Class: ClassOurs, Priced: true}, ClassPremium},                   // /v1/decisions
-			{Ask{Model: "~typesafe/jev-latest", Class: ClassOurs, Priced: true}, ClassPremium},
-			{Ask{Model: "kai", Class: ClassOurs, Priced: true}, ClassOurs},                       // /v1/decisions
-			{Ask{Model: "hanzo/kai", Class: ClassPremium, Priced: true, Spend: true}, ClassOurs}, // /v1/chat/completions
+			{Ask{Model: "typesafe/jev-router", Class: ClassPremium, Priced: true, Spend: true}, ClassPremium, PaysPrepaid}, // /v1/chat/completions
+			{Ask{Model: "typesafe/jev-1.13", Class: ClassOurs, Priced: true}, ClassPremium, PaysPrepaid},                   // /v1/decisions
+			{Ask{Model: "~typesafe/jev-latest", Class: ClassOurs, Priced: true}, ClassPremium, PaysPrepaid},
+			{Ask{Model: "kai", Class: ClassOurs, Priced: true}, ClassOurs, PaysPlan},                       // /v1/decisions
+			{Ask{Model: "hanzo/kai", Class: ClassPremium, Priced: true, Spend: true}, ClassOurs, PaysPlan}, // /v1/chat/completions
 		} {
 			g, hit := w.admit(c.q)
-			if hit != nil || g == nil || g.Class != c.want || g.Pays != PaysPlan {
-				t.Fatalf("%s (catalog %s): grant %+v hit %+v, want %s paid by the plan", c.q.Model, c.q.Class, g, hit, c.want)
+			if hit != nil || g == nil || g.Class != c.want || g.Pays != c.pays {
+				t.Fatalf("%s (catalog %s): grant %+v hit %+v, want %s paid by %s", c.q.Model, c.q.Class, g, hit, c.want, c.pays)
 			}
 		}
 		free := newWorld(t, "", 0, "")
@@ -1212,6 +1229,51 @@ func TestFreePlanAdmitsSpeechModels(t *testing.T) {
 			if hit != nil || g == nil || g.Pays != PaysFree || !g.Covered() {
 				t.Fatalf("%s on $0 Free plan: grant %+v hit %+v, want covered by PaysFree", model, g, hit)
 			}
+		}
+	})
+}
+
+// Self-service 1x/week free usage reset clears spend, session, day, and daily cap
+// counters, enforces a 7-day cooldown, and re-enables automatically after 7 days.
+func TestFreeResetClearsUsageAndEnforces7DayCooldown(t *testing.T) {
+	sqltest.Engines(t, func(t *testing.T, _ sqltest.Open) {
+		w := newWorld(t, "dev", 1, "card")
+		ctx := context.Background()
+		g, hit := w.priced("zen5-pro", ClassOurs)
+		if hit != nil || g == nil || g.Pays != PaysPlan {
+			t.Fatalf("admit ours: %+v %+v", g, hit)
+		}
+		w.use(g, 5*usd) // exhaust dev's $5 ours allowance
+		if _, hit := w.priced("zen5-pro", ClassOurs); hit == nil || hit.Code != CodePlanAllowance {
+			t.Fatalf("after exhausting ours: hit=%+v, want plan_allowance_used", hit)
+		}
+		if s := w.read(); s.Reset == nil || !s.Reset.Available {
+			t.Fatalf("before reset: reset=%+v, want available", s.Reset)
+		}
+		st, err := w.l.FreeReset(ctx, "acme", "acme")
+		if err != nil || st.Available || !st.NextAt.Equal(w.now.UTC().Truncate(time.Second).Add(FreeResetCooldown)) {
+			t.Fatalf("first FreeReset: st=%+v err=%v", st, err)
+		}
+		if s := w.read(); ours(s).Used != 0 || s.Session.Used != 0 || s.Reset == nil || s.Reset.Available {
+			t.Fatalf("after reset: ours=%d sess=%d reset=%+v", ours(s).Used, s.Session.Used, s.Reset)
+		}
+		// Plan pays again immediately after reset.
+		if g, hit := w.priced("zen5-pro", ClassOurs); hit != nil || g == nil || g.Pays != PaysPlan {
+			t.Fatalf("after reset admit: %+v %+v, want plan", g, hit)
+		}
+		// Cooldown blocks a second reset 3 days later.
+		w.now = w.now.Add(3 * 24 * time.Hour)
+		var cool *ResetCooldownError
+		if _, err := w.l.FreeReset(ctx, "acme", "acme"); !errors.As(err, &cool) {
+			t.Fatalf("reset at +3d: err=%v, want ResetCooldownError", err)
+		}
+		// After 7 days, free reset is available again.
+		w.now = w.now.Add(4*24*time.Hour + time.Minute)
+		if s := w.read(); s.Reset == nil || !s.Reset.Available {
+			t.Fatalf("at +7d: reset=%+v, want available", s.Reset)
+		}
+		if _, err := w.l.FreeReset(ctx, "acme", "acme"); err != nil {
+			t.Fatalf("second FreeReset after 7d: %v", err)
 		}
 	})
 }

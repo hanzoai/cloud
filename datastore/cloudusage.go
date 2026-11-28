@@ -112,6 +112,14 @@ var cloudUsageColumnMigrations = []string{
 // one expression serves both.
 const Spend = "intDiv(sum(cost_nano) + 5000000, 10000000)"
 
+// Billed is the customer-billed retail amount of a SET of usage rows in whole US
+// cents, rounded once half a cent up just like Spend. Hanzo-hosted models (zen*,
+// enso*, kai) record provider COGS cost_nano = 0 while billing retail billed_nano > 0;
+// legacy rows written before billed_nano existed fall back to cost_nano. Customer
+// usage dashboards, org spend summaries, and billing analytics select Billed;
+// provider-cost / margin burn queries select Spend.
+const Billed = "intDiv(sum(if(billed_nano > 0, billed_nano, cost_nano)) + 5000000, 10000000)"
+
 // Cents renders a nano-USD aggregate expression in whole US cents by the rule Spend
 // states: sum first, round once, half a cent up. Spend is Cents("sum(cost_nano)").
 func Cents(nano string) string { return "intDiv(" + nano + " + 5000000, 10000000)" }

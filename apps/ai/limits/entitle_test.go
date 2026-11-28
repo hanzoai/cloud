@@ -69,16 +69,17 @@ func TestFastModeNeedsAPlanThatIncludesIt(t *testing.T) {
 	})
 }
 
-// A plan that includes them is served both as it was before: Claude Fable 5.2 from
-// its included usage of premium models, by every name, and fast mode from prepaid.
+// A plan that includes them is served both as it was before: Claude Fable 5.2 is
+// admitted on prepaid cash (monthly plans cover Hanzo models only), by every name,
+// and fast mode from prepaid cash as well.
 func TestAPlanThatIncludesThemIsServedAsBefore(t *testing.T) {
 	sqltest.Engines(t, func(t *testing.T, _ sqltest.Open) {
 		w := newWorld(t, "max-20x", 1, "card")
 		w.cash = 5 * usd
 		for _, model := range fable {
 			g, hit := w.priced(model, ClassPremium)
-			if hit != nil || g == nil || g.Pays != PaysPlan || g.Class != ClassPremium {
-				t.Fatalf("Max 20x asking %s: grant %+v hit %+v, want the plan paying, premium", model, g, hit)
+			if hit != nil || g == nil || g.Pays != PaysPrepaid || !g.Cash || g.Class != ClassPremium {
+				t.Fatalf("Max 20x asking %s: grant %+v hit %+v, want prepaid cash, premium", model, g, hit)
 			}
 		}
 		g, hit := w.admit(Ask{Model: fable[0], Class: ClassPremium, Priced: true, Spend: true, Fast: true})
@@ -126,8 +127,8 @@ func TestTheUsagePolicysSwitchDecides(t *testing.T) {
 		w := newWorld(t, "dev", 1, "card")
 		w.cash = 5 * usd
 		w.l.flag = policy(set)
-		if g, hit := w.priced(fable[0], ClassPremium); hit != nil || g == nil || g.Pays != PaysPlan {
-			t.Fatalf("Pro with fable turned on: grant %+v hit %+v, want the plan paying", g, hit)
+		if g, hit := w.priced(fable[0], ClassPremium); hit != nil || g == nil || g.Pays != PaysPrepaid || !g.Cash {
+			t.Fatalf("Pro with fable turned on: grant %+v hit %+v, want prepaid cash", g, hit)
 		}
 		if _, hit := w.admit(Ask{Model: fable[0], Class: ClassPremium, Priced: true, Spend: true, Fast: true}); hit == nil || hit.Name != flags.EntitleFast {
 			t.Fatalf("Pro with fable on and fast off asking both: %+v, want the fast entitlement missing", hit)
@@ -145,16 +146,17 @@ func TestTheUsagePolicysSwitchDecides(t *testing.T) {
 }
 
 // A request nothing bills — no list price — needs no entitlement, and a model no
-// entitlement names is decided as it always was.
+// entitlement names is decided as it always was (prepaid cash for third-party).
 func TestOnlyABilledRequestNeedsAnEntitlement(t *testing.T) {
 	sqltest.Engines(t, func(t *testing.T, _ sqltest.Open) {
 		w := newWorld(t, "dev", 1, "card")
+		w.cash = 5 * usd
 		if _, hit := w.admit(Ask{Model: fable[0], Class: ClassPremium, Spend: true}); hit != nil && hit.Code == CodeEntitlement {
 			t.Fatalf("an unpriced request was refused for an entitlement: %+v", hit)
 		}
 		for _, model := range []string{"anthropic/claude-opus-5.5", "anthropic/claude-fable-5.1", premium} {
-			if g, hit := w.priced(model, ClassPremium); hit != nil || g == nil || g.Pays != PaysPlan {
-				t.Fatalf("Pro asking %s: grant %+v hit %+v, want the plan paying", model, g, hit)
+			if g, hit := w.priced(model, ClassPremium); hit != nil || g == nil || g.Pays != PaysPrepaid || !g.Cash {
+				t.Fatalf("Pro asking %s: grant %+v hit %+v, want prepaid cash", model, g, hit)
 			}
 		}
 	})

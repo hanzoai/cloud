@@ -289,3 +289,34 @@ func TestHoldMintsNoStore(t *testing.T) {
 		}
 	})
 }
+
+// Valued("false", true) must store a disabled bool switch that resolves false,
+// and legacy definitions carrying payloads.true=false must also evaluate false.
+func TestValuedBoolFalseEvaluatesFalse(t *testing.T) {
+	sqltest.Engines(t, func(t *testing.T, _ sqltest.Open) {
+		c := newTestClient(t)
+		def, err := Valued("false", true)
+		if err != nil {
+			t.Fatalf("Valued(false, true): %v", err)
+		}
+		if err := SetPlatformSwitch(CreditKey("premium"), def, "admin@hanzo.ai"); err != nil {
+			t.Fatalf("SetPlatformSwitch: %v", err)
+		}
+		c.invalidate()
+		got, src := c.resolve(Def{Key: CreditKey("premium"), Type: TypeBool, Default: "true"})
+		if got != "false" || src != "flags" {
+			t.Fatalf("Valued(false, true) resolved %q (%s), want false (flags)", got, src)
+		}
+
+		// Legacy shape written before the fix: active:true with payload "true":false.
+		legacy := json.RawMessage(`{"active":true,"filters":{"groups":[{"rollout_percentage":100}],"payloads":{"true":false}}}`)
+		if err := SetPlatformSwitch(CreditKey("premium"), legacy, "admin@hanzo.ai"); err != nil {
+			t.Fatalf("SetPlatformSwitch legacy: %v", err)
+		}
+		c.invalidate()
+		got, src = c.resolve(Def{Key: CreditKey("premium"), Type: TypeBool, Default: "true"})
+		if got != "false" || src != "flags" {
+			t.Fatalf("legacy payload false resolved %q (%s), want false (flags)", got, src)
+		}
+	})
+}

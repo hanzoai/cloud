@@ -214,7 +214,7 @@ func redSeries(ctx context.Context, q metricsQuery, resp *metricsResponse) error
 // is safe because the time predicate bounds the scan.
 func usageSeries(ctx context.Context, org string, rangeSec, stepSec int, resp *metricsResponse) error {
 	sql := "SELECT toStartOfInterval(timestamp, toIntervalSecond(?)) AS bucket, " +
-		"count() AS calls, sum(total_tokens) AS tokens, " + datastore.Spend + " AS cost " +
+		"count() AS calls, sum(total_tokens) AS tokens, " + datastore.Billed + " AS cost " +
 		"FROM hanzo.cloud_usage WHERE organization = ? " +
 		"AND timestamp > now() - toIntervalSecond(?) " +
 		"GROUP BY bucket ORDER BY bucket ASC"

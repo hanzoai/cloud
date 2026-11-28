@@ -137,39 +137,32 @@ put() {
 
 # ---- usage ------------------------------------------------------------------------
 
-# usage SLUG SESSION DAY CENTS — save the rung's usage (premium and ours CENTS each,
-# overage on) and read back all nine figures and that the policy names it. A window
-# of 0 is unbounded, and CENTS -1 (flags.Unbounded) includes all of a class's use.
+# usage SLUG SESSION DAY CENTS — save the rung's Hanzo-only usage (ours CENTS with a
+# weekly 168h rolling window at CENTS/4 for finite plans, premium 0 — third-party models
+# are prepaid-only — and overage on) and read back all nine figures and that the policy
+# names it. A window of 0 is unbounded, and CENTS -1 (flags.Unbounded) includes all of
+# Hanzo's models.
 usage() {
-  local slug=$1 session=$2 day=$3 cents=$4 body
-  body=$(jq -nc --argjson s "$session" --argjson d "$day" --argjson c "$cents" \
-    '{session:$s,day:$d,overage:true,allowances:{premium:{periodCents:$c,windowHours:0,windowCents:0},ours:{periodCents:$c,windowHours:0,windowCents:0}}}')
+  local slug=$1 session=$2 day=$3 cents=$4 wh=0 wc=0 body
+  if (( cents > 0 )); then
+    wh=168
+    wc=$(( cents / 4 ))
+  fi
+  body=$(jq -nc --argjson s "$session" --argjson d "$day" --argjson c "$cents" --argjson wh "$wh" --argjson wc "$wc" \
+    '{session:$s,day:$d,overage:true,allowances:{premium:{periodCents:0,windowHours:0,windowCents:0},ours:{periodCents:$c,windowHours:$wh,windowCents:$wc}}}')
   call PUT "/v1/admin/usage/policy/plans/$slug" "$body" >/dev/null
-  call GET /v1/admin/usage/policy | jq -e --arg p "$slug" --argjson s "$session" --argjson d "$day" --argjson c "$cents" '
+  call GET /v1/admin/usage/policy | jq -e --arg p "$slug" --argjson s "$session" --argjson d "$day" --argjson c "$cents" --argjson wh "$wh" --argjson wc "$wc" '
     .data.plans[] | select(.plan == $p) | .named and .session == $s and .day == $d and .overage
-    and .allowances.premium == {periodCents:$c,windowHours:0,windowCents:0}
-    and .allowances.ours == {periodCents:$c,windowHours:0,windowCents:0}' >/dev/null \
+    and .allowances.premium == {periodCents:0,windowHours:0,windowCents:0}
+    and .allowances.ours == {periodCents:$c,windowHours:$wh,windowCents:$wc}' >/dev/null \
     || { echo "$slug: usage did not read back as saved" >&2; exit 1; }
-  echo "$slug: usage $session/$day/${cents}c named"
+  echo "$slug: usage $session/$day/ours=${cents}c (wk=${wc}c/${wh}h), premium=0 named"
 }
 
-# caps — every premium rule that shares a plan's allowance out (the costliest families
-# and video) gives each rung 30% of its premium allowance, as the seeds give every
-# seeded rung, and a renamed slug its rung's; read back. Unlimited has no allowance to
-# share out, so no rule caps it.
+# caps — monthly plans are Hanzo-only (premium=0), so third-party model rules carry no
+# plan caps and grantsPay=false.
 caps() {
-  local new rules model rule
-  new='{"go":{"periodCents":150},"pro-3x":{"periodCents":450},"dev-5x":{"periodCents":750},"max-15x":{"periodCents":2250},"ultra":{"periodCents":3750},"ultimate":{"periodCents":7500},"pro-2x":{"periodCents":450},"max-10x":{"periodCents":2250}}'
-  rules=$(call GET /v1/admin/usage/policy | jq -c --argjson new "$new" \
-    '[.data.models[] | select(.class == "premium" and ((.caps // {}) | length > 0)) | {model, class, grantsPay, dailyCaps, caps: (.caps + $new), fallback}]')
-  for model in $(jq -r '.[].model | @uri' <<<"$rules"); do
-    rule=$(jq -c --arg m "$model" '.[] | select((.model | @uri) == $m)' <<<"$rules")
-    call PUT "/v1/admin/usage/policy/models/rule?model=$model" "$rule" >/dev/null
-  done
-  call GET /v1/admin/usage/policy | jq -e --argjson new "$new" \
-    '[.data.models[] | select(.class == "premium" and ((.caps // {}) | length > 0)) | (.caps | contains($new))] | all' >/dev/null \
-    || { echo "caps did not read back" >&2; exit 1; }
-  echo "caps: $(jq length <<<"$rules") rules give the new rungs their share"
+  echo "caps: skipped (monthly plans are Hanzo-only; third-party models are prepaid-only)"
 }
 
 # archive SLUG — restate an old rung as it stands, archived, its annual price cleared.

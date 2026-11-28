@@ -57,14 +57,14 @@ func ownedWorld(t *testing.T, owner bool) *Limiter {
 	return l
 }
 
-// A key in an org its owner owns spends the owner's Unlimited plan: every model,
-// with no session or day window, however many requests.
+// A key in an org its owner owns spends the owner's Unlimited plan: every Hanzo
+// model, with no session or day window, however many requests.
 func TestAnOwnersUnlimitedPlanPaysForTheirOrgsKeys(t *testing.T) {
 	l := ownedWorld(t, true)
 	ctx := context.Background()
 	for i := range 400 { // past every capped rung's session
 		for _, q := range []Ask{
-			{Model: premium, Class: ClassPremium, Priced: true, Spend: true},
+			{Model: "kai", Class: ClassOurs, Priced: true, Spend: true},
 			{Model: free, Class: ClassFree, Family: "enso", Spend: true},
 		} {
 			q.Subject, q.Org, q.Actor = "proj", "proj", "hanzo/ann"
@@ -104,7 +104,7 @@ func TestAMembersPlanDoesNotPayForAnOrgTheyDoNotOwn(t *testing.T) {
 // The person's own calls at home are their own plan's, as before.
 func TestAPersonsOwnCallsSpendTheirPlan(t *testing.T) {
 	l := ownedWorld(t, false)
-	g, hit, err := l.Admit(context.Background(), Ask{Subject: "hanzo/ann", Org: "hanzo", Actor: "hanzo/ann", Model: premium, Class: ClassPremium, Priced: true, Spend: true})
+	g, hit, err := l.Admit(context.Background(), Ask{Subject: "hanzo/ann", Org: "hanzo", Actor: "hanzo/ann", Model: "kai", Class: ClassOurs, Priced: true, Spend: true})
 	if err != nil || hit != nil || g == nil || g.Pays != PaysPlan {
 		t.Fatalf("want the plan to pay, got %+v %+v %v", g, hit, err)
 	}

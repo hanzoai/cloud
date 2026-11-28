@@ -465,8 +465,10 @@ func TestTheGateTellsThePolicyAFastRequest(t *testing.T) {
 	app := zip.New(zip.Config{AppName: "ai", DisableStartupMessage: true})
 	app.Use(cloud.Bridge())
 	var got *aiobject.LimitGrant
+	ask := kai
+	ask.Spend = true
 	app.Raw(http.MethodPost, "/v1/chat/completions", func(c *zip.Ctx) error {
-		got, _, _ = limitAsk(cash)(c.Context(), premium)
+		got, _, _ = limitAsk(cash)(c.Context(), ask)
 		return c.Bytes(http.StatusOK, nil)
 	})
 	for name, set := range map[string]func(*http.Request){

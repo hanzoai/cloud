@@ -44,8 +44,8 @@ func TestTheHookRefusesFableToAPlanWithoutIt(t *testing.T) {
 		t.Fatalf("Pro asking Fable 5.2: hit %+v err %v, want entitlement_required naming the model and max-20x", hit, err)
 	}
 	g, hit, err := limitAsk(payer(t, "max-20x", "card", 5*usd, 0))(context.Background(), fable52)
-	if err != nil || hit != nil || g == nil || g.Pays != aiobject.PaysPlan {
-		t.Fatalf("Max 20x asking Fable 5.2: grant %+v hit %+v err %v, want the plan paying", g, hit, err)
+	if err != nil || hit != nil || g == nil || g.Pays != aiobject.PaysPrepaid || !g.Cash {
+		t.Fatalf("Max 20x asking Fable 5.2 with prepaid cash: grant %+v hit %+v err %v, want prepaid (cash only)", g, hit, err)
 	}
 }
 

@@ -351,7 +351,7 @@ func TestARenamedSlugIsServedAsItsRung(t *testing.T) {
 			s := w.read()
 			n := int64(multiple[to])
 			if s.Plan != to || s.Session.Limit != n*int64(goFigures.Session) || s.Day.Limit != n*int64(goFigures.Day) ||
-				s.Classes[ClassPremium].Period.Limit != n*int64(goFigures.Premium)*nanosPerCent {
+				ours(s).Limit != n*int64(goFigures.Ours)*nanosPerCent {
 				t.Errorf("a %s holder reads %+v, want %s: %d times Go's figures", from, s, to, n)
 			}
 		}
@@ -367,7 +367,7 @@ func TestARenamedSlugIsServedAsItsRung(t *testing.T) {
 			w.l.flag = policy(afterCarry(saved(nil, from, old*goFigures.Session, old*goFigures.Day, old*goFigures.Premium, old*goFigures.Ours)))
 			s := w.read()
 			n := int64(multiple[to])
-			if s.Plan != to || s.Session.Limit != n*int64(goFigures.Session) || s.Classes[ClassPremium].Period.Limit != n*int64(goFigures.Premium)*nanosPerCent {
+			if s.Plan != to || s.Session.Limit != n*int64(goFigures.Session) || ours(s).Limit != n*int64(goFigures.Ours)*nanosPerCent {
 				t.Errorf("with only the old slug saved, a %s holder reads %+v, want %s's shipped %d times Go's figures", from, s, to, n)
 			}
 		}

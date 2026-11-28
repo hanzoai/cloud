@@ -43,31 +43,31 @@ func moveTo(w *world, t time.Time) {
 }
 
 // A plan bought by the year includes what the same plan includes by the month,
-// and it renews every month of the term: Max 20x's $100 of premium models is
+// and it renews every month of the term: Max 20x's $100 of Hanzo models is
 // used up in October and whole again in November, with the year still running.
 func TestAYearlyPlanRenewsItsUsageEveryMonth(t *testing.T) {
 	sqltest.Engines(t, func(t *testing.T, _ sqltest.Open) {
 		w := newWorld(t, "max-20x", 1, "card")
 		yearly(w, 200000)
-		allow := int64(flags.CarriedPlans["max-20x"].Premium) * nanosPerCent
+		allow := int64(flags.CarriedPlans["max-20x"].Ours) * nanosPerCent
 
 		s := w.read()
 		firstEnd := periodStart.AddDate(0, 1, 0)
 		if s.Plan != "max-20x" || !s.Start.Equal(periodStart) || !s.End.Equal(firstEnd) {
 			t.Fatalf("first month: plan %q from %v to %v, want max-20x from %v to %v", s.Plan, s.Start, s.End, periodStart, firstEnd)
 		}
-		if got := s.Classes[ClassPremium].Period.Limit; got != allow {
-			t.Fatalf("first month includes %d nanos of premium, want the monthly plan's %d", got, allow)
+		if got := s.Classes[ClassOurs].Period.Limit; got != allow {
+			t.Fatalf("first month includes %d nanos of ours, want the monthly plan's %d", got, allow)
 		}
 
-		g, _ := w.priced(premium, ClassPremium)
+		g, _ := w.priced("kai", ClassOurs)
 		w.use(g, allow)
-		if g, hit := w.priced(premium, ClassPremium); g != nil || hit == nil || hit.Code != CodePlanAllowance || !hit.ResetsAt.Equal(firstEnd) {
-			t.Fatalf("premium used up: grant %+v hit %+v, want plan_allowance_used until %v, not the term's end", g, hit, firstEnd)
+		if g, hit := w.priced("kai", ClassOurs); g != nil || hit == nil || hit.Code != CodePlanAllowance || !hit.ResetsAt.Equal(firstEnd) {
+			t.Fatalf("ours used up: grant %+v hit %+v, want plan_allowance_used until %v, not the term's end", g, hit, firstEnd)
 		}
 
 		moveTo(w, firstEnd.Add(time.Hour))
-		g, hit := w.priced(premium, ClassPremium)
+		g, hit := w.priced("kai", ClassOurs)
 		if hit != nil || g == nil || g.Pays != PaysPlan || g.Spend != allow {
 			t.Fatalf("second month: grant %+v hit %+v, want the plan paying with all %d nanos again", g, hit, allow)
 		}
@@ -142,13 +142,13 @@ func TestAnEndedYearlyTermRenewsNothing(t *testing.T) {
 	sqltest.Engines(t, func(t *testing.T, _ sqltest.Open) {
 		w := newWorld(t, "max-20x", 1, "card")
 		yearly(w, 200000)
-		allow := int64(flags.CarriedPlans["max-20x"].Premium) * nanosPerCent
+		allow := int64(flags.CarriedPlans["max-20x"].Ours) * nanosPerCent
 		moveTo(w, periodStart.AddDate(0, 11, 2))
-		g, _ := w.priced(premium, ClassPremium)
+		g, _ := w.priced("kai", ClassOurs)
 		w.use(g, allow)
 		for _, later := range []time.Time{periodStart.AddDate(1, 0, 1), periodStart.AddDate(1, 6, 0)} {
 			moveTo(w, later)
-			if g, hit := w.priced(premium, ClassPremium); g != nil || hit == nil || hit.Code != CodePlanAllowance {
+			if g, hit := w.priced("kai", ClassOurs); g != nil || hit == nil || hit.Code != CodePlanAllowance {
 				t.Fatalf("at %v, past the term: grant %+v hit %+v, want plan_allowance_used", later, g, hit)
 			}
 		}

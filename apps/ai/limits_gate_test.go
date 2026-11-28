@@ -81,7 +81,9 @@ func TestTheHookSaysWhoPays(t *testing.T) {
 		pays, code          string
 		cash1               bool
 	}{
-		{"max under its allowance: the plan pays premium", "max-20x", "card", 0, 0, premium, aiobject.PaysPlan, "", false},
+		{"max under its allowance: third-party requires prepaid cash", "max-20x", "card", 0, 0, premium, "", limits.CodePrepaid, false},
+		{"max under its allowance: third-party with prepaid cash pays cash only", "max-20x", "card", usd, usd, premium, aiobject.PaysPrepaid, "", true},
+		{"max under its allowance: the plan pays Hanzo models", "max-20x", "card", 0, 0, kai, aiobject.PaysPlan, "", false},
 		{"a comp counts", "max-20x", "external:comp", 0, 0, kai, aiobject.PaysPlan, "", false},
 		{"bought with credit covers nothing", "max-20x", "credit", 0, 0, premium, "", aiobject.CodeInsufficientBalance, false},
 		{"free plan, premium on credit alone", "", "", 0, usd, premium, "", aiobject.CodeInsufficientBalance, false},
@@ -118,14 +120,17 @@ func TestTheHookSaysWhoPays(t *testing.T) {
 func TestACoveredSettleRecordsAgainstItsClass(t *testing.T) {
 	ctx := context.Background()
 	l := payer(t, "max-20x", "card", 0, 0)
-	g, _, _ := limitAsk(l)(ctx, premium)
+	g, _, _ := limitAsk(l)(ctx, kai)
 	g.Settle(2 * usd)
 	s, err := l.Read(ctx, "acme", "acme")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if s.Classes[limits.ClassPremium].Period.Used != 2*usd || s.Classes[limits.ClassOurs].Period.Used != 0 || s.Session.Used != 1 {
-		t.Fatalf("standing after one covered premium request of $2: %+v", s)
+	if s.Classes[limits.ClassOurs].Period.Used != 2*usd || s.Session.Used != 1 {
+		t.Fatalf("standing after one covered Hanzo model request of $2: %+v", s)
+	}
+	if _, hasPremium := s.Classes[limits.ClassPremium]; hasPremium {
+		t.Fatalf("Hanzo-only monthly plan should omit zero-allowance premium class: %+v", s.Classes)
 	}
 }
 
@@ -175,10 +180,8 @@ var figure = regexp.MustCompile(`\$|"(used|limit|cents|amount|usd|tokens|cap|rem
 func TestTheUsageReadCarriesNoFigure(t *testing.T) {
 	ctx := context.Background()
 	l := payer(t, "max-20x", "external:comp", 0, 0)
-	g, _, _ := limitAsk(l)(ctx, premium)
-	g.Settle(100 * usd) // premium used up, nothing prepaid: limited
-	g, _, _ = limitAsk(l)(ctx, kai)
-	g.Settle(4 * usd) // $4 of ours' $100: 5%
+	g, _, _ := limitAsk(l)(ctx, kai)
+	g.Settle(100 * usd) // ours used up, nothing prepaid: limited
 	s, err := l.Read(ctx, "acme", "acme")
 	if err != nil {
 		t.Fatal(err)
@@ -189,9 +192,15 @@ func TestTheUsageReadCarriesNoFigure(t *testing.T) {
 	}
 	var got aiLimits
 	_ = json.Unmarshal(raw, &got)
-	if got.Plan != "max-20x" || got.State != "limited" || got.Classes["premium"].State != "limited" || got.Classes["premium"].Paying != "none" ||
-		got.Classes["ours"].Percent != 5 || got.Classes["ours"].Paying != "plan" || got.Limited == nil || got.Limited.Reason != "plan_allowance_used" {
+	if got.Plan != "max-20x" || got.State != "limited" || got.Classes["ours"].State != "limited" || got.Classes["ours"].Paying != "none" ||
+		got.Classes["ours"].Percent != 100 || got.Limited == nil || got.Limited.Reason != "plan_allowance_used" {
 		t.Fatalf("view %s", raw)
+	}
+	if _, hasPremium := got.Classes["premium"]; hasPremium {
+		t.Fatalf("Hanzo-only plan must not expose zero-allowance premium class: %s", raw)
+	}
+	if got.Pays["premium"] != "none" {
+		t.Fatalf("pays.premium = %q, want none when wallet empty: %s", got.Pays["premium"], raw)
 	}
 	if len(got.Actions) != 2 || got.Actions[0].Kind != "upgrade" || got.Actions[0].Plan != "max-50x" || got.Actions[1].Kind != "topup" {
 		t.Fatalf("actions %+v, want Max 50x, the plan above max-20x, then add prepaid credit", got.Actions)
@@ -232,24 +241,29 @@ func TestAMaxOrgGetsRetrievalAndSpeechFromThePlan(t *testing.T) {
 	}
 }
 
-// A class the plan includes none of reads as used up — paid by credits when the
-// payer holds them, else limited — never as an untouched 0%.
-func TestAClassThePlanOmitsReadsAsUsed(t *testing.T) {
+// A class with zero allowance on the plan (e.g. third-party models on Hanzo-only
+// monthly plans) is omitted from Classes so the plan is never falsely marked limited;
+// Pays still reports who pays for the next request of that class.
+func TestAClassThePlanOmitsIsNotMarkedLimited(t *testing.T) {
 	end := time.Now().Add(72 * time.Hour)
-	s := limits.Standing{Plan: "dev", Start: time.Now(), End: end, Classes: map[string]limits.Class{
-		"premium": {Period: limits.Window{ResetsAt: end}},
-		"ours":    {Period: limits.Window{Used: 1, Limit: 100, ResetsAt: end}, Paying: limits.PaysPlan},
-	}}
-	got := view(s, "https://hanzo.ai/pay")
-	if p := got.Classes["premium"]; p.Percent != 100 || p.State != "limited" || p.Paying != "none" || got.Limited == nil {
-		t.Fatalf("premium omitted by the plan reads %+v (limited %+v)", p, got.Limited)
+	s := limits.Standing{
+		Plan: "dev", Start: time.Now(), End: end,
+		Classes: map[string]limits.Class{
+			"premium": {Period: limits.Window{ResetsAt: end}},
+			"ours":    {Period: limits.Window{Used: 1, Limit: 100, ResetsAt: end}, Paying: limits.PaysPlan},
+		},
+		Pays: map[string]string{"premium": "", "ours": limits.PaysPlan},
 	}
-	s.Funded = true
-	c := s.Classes["premium"]
-	c.Paying = limits.PaysCredits
-	s.Classes["premium"] = c
-	if p := view(s, "https://hanzo.ai/pay").Classes["premium"]; p.Paying != "credits" || p.State != "near" {
-		t.Fatalf("premium on credits reads %+v", p)
+	got := view(s, "https://hanzo.ai/pay")
+	if _, hasPremium := got.Classes["premium"]; hasPremium {
+		t.Fatalf("zero-allowance premium class must be omitted from view.Classes: %+v", got.Classes["premium"])
+	}
+	if got.State != "ok" || got.Limited != nil || got.Pays["premium"] != "none" || got.Classes["ours"].Paying != "plan" {
+		t.Fatalf("Hanzo-only plan view reads %+v", got)
+	}
+	s.Pays["premium"] = limits.PaysPrepaid
+	if got2 := view(s, "https://hanzo.ai/pay"); got2.Pays["premium"] != "prepaid" || got2.State != "ok" {
+		t.Fatalf("Hanzo-only plan with prepaid balance reads %+v", got2)
 	}
 }
 

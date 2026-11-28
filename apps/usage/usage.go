@@ -376,7 +376,7 @@ func buildAnalyticsBlock(s *cloud.Service[state], ctx context.Context, org strin
 	// `, sum(byo_tokens) AS byo_tokens, sum(fee_cents) AS fee_cents` and add the
 	// matching ProviderRow fields — a one-line projection, NOT a second datastore.
 	sql := "SELECT provider, count() AS requests, sum(total_tokens) AS tokens, " +
-		datastore.Spend + " AS cost_cents FROM " + llmTable +
+		datastore.Billed + " AS cost_cents FROM " + llmTable +
 		" WHERE timestamp >= ? AND timestamp < ? AND organization = ? " +
 		"GROUP BY provider ORDER BY tokens DESC"
 	rows, err := warehouseQuery(ctx, sql, tsLiteral(start), tsLiteral(end), org)
@@ -474,7 +474,7 @@ func buildLLMBlock(s *cloud.Service[state], ctx context.Context, org string, sta
 	// and a caller can never read another org's usage.
 	sql := "SELECT count() AS requests, sum(total_tokens) AS tokens, " +
 		"sum(prompt_tokens) AS prompt_tokens, sum(completion_tokens) AS completion_tokens, " +
-		datastore.Spend + " AS cost_cents, uniqExact(model) AS models, " +
+		datastore.Billed + " AS cost_cents, uniqExact(model) AS models, " +
 		"sum(cache_read_tokens) AS cache_read_tokens, sum(cache_write_tokens) AS cache_write_tokens, " +
 		datastore.Cents("sum(cache_saved_nano)") + " AS cache_saved_cents " +
 		"FROM " + llmTable + " WHERE timestamp >= ? AND timestamp < ? AND organization = ?"
@@ -503,7 +503,7 @@ func buildKaiBlock(s *cloud.Service[state], ctx context.Context, org string, sta
 		return buildKai(false, nil)
 	}
 	sql := "SELECT count() AS decisions, sum(prompt_tokens) AS input_tokens, " +
-		datastore.Spend + " AS cost_cents FROM " + llmTable +
+		datastore.Billed + " AS cost_cents FROM " + llmTable +
 		" WHERE timestamp >= ? AND timestamp < ? AND organization = ? AND model = ?"
 	rows, err := warehouseQuery(ctx, sql, tsLiteral(start), tsLiteral(end), org, kaiModel)
 	if err != nil {

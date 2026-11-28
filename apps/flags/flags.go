@@ -207,6 +207,9 @@ func (c *Client) resolve(def Def) (value string, source string) {
 		if present {
 			switch def.Type {
 			case TypeBool:
+				if b, ok := asBool(pv); ok {
+					return strconv.FormatBool(b), "flags"
+				}
 				if b, ok := asBool(fv); ok {
 					return strconv.FormatBool(b), "flags"
 				}
