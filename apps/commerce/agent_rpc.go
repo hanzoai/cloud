@@ -23,6 +23,7 @@ import (
 	commercebilling "github.com/hanzoai/commerce/api/billing"
 	"github.com/hanzoai/commerce/checkout"
 	"github.com/hanzoai/commerce/models/organization"
+	"github.com/hanzoai/commerce/payment/processor"
 	commerceorg "github.com/hanzoai/commerce/pkg/org"
 	"github.com/zap-proto/zip"
 
@@ -101,7 +102,16 @@ func planeCatalog(ctx context.Context, in *client.CatalogIn) (*client.Rendered, 
 	if err != nil {
 		return nil, zip.Errorf(http.StatusServiceUnavailable, "the catalog is unavailable")
 	}
+	out.Links = billingLinks(out.Links)
 	return rendered(out)
+}
+
+func billingLinks(links map[string]string) map[string]string {
+	links = discoveryLinks(links)
+	links["cryptoOptions"] = "/v1/billing/crypto/options"
+	links["cryptoDeposit"] = "/v1/billing/crypto/deposit"
+	links["cryptoDepositStatus"] = "/v1/billing/crypto/deposit/{id}"
+	return links
 }
 
 // Answers where the purchase surface is and what it speaks: its version, the paths of its
@@ -112,11 +122,11 @@ func planeCatalog(ctx context.Context, in *client.CatalogIn) (*client.Rendered, 
 //
 // A named handler, not a closure, so zipdoc can lift this prose into the registry.
 func planeDiscovery(_ context.Context, _ *cloud.Unit) (*client.Rendered, error) {
-	return rendered(commercebilling.Discovery{
+	out := commercebilling.Discovery{
 		Version: "1", Currency: "usd",
 		// The agent checkout protocols this deployment serves, by name, beside its own
 		// paths: none until the operator configures one (agentic.go).
-		Links: discoveryLinks(map[string]string{
+		Links: billingLinks(map[string]string{
 			"catalog":   "/v1/billing/catalog",
 			"discovery": "/v1/billing/discovery",
 			"checkouts": "/v1/billing/checkouts",
@@ -125,7 +135,12 @@ func planeDiscovery(_ context.Context, _ *cloud.Unit) (*client.Rendered, error) 
 		Lifecycle: []string{"POST /v1/billing/checkouts", "PATCH /v1/billing/checkouts/{id}", "POST /v1/billing/checkouts/{id}/complete", "GET /v1/billing/orders/{id}"},
 		Payment:   []string{"shared_payment_token", "stablecoin"},
 		Renewal:   "A subscription renews on a shared payment token whose usage limits carry a recurring interval and a maximum at least the plan's renewal amount. A renewal the token cannot cover leaves the subscription past due and announces renewal.action_required with the path to supply a fresh token: POST /v1/billing/invoices/{id}/agent-token.",
-	})
+	}
+	if processor.DisabledByPolicy(processor.Stripe) {
+		out.Payment = []string{}
+		out.Renewal = ""
+	}
+	return rendered(out)
 }
 
 // itemsOf is the plane's items as commerce's.

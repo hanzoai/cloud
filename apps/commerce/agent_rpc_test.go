@@ -21,6 +21,7 @@ import (
 	commercemod "github.com/hanzoai/commerce"
 	commercebilling "github.com/hanzoai/commerce/api/billing"
 	"github.com/hanzoai/commerce/models/pendingintent"
+	"github.com/hanzoai/commerce/payment/processor"
 	commerceorg "github.com/hanzoai/commerce/pkg/org"
 	"github.com/zap-proto/zip"
 
@@ -163,6 +164,9 @@ func TestTheCatalogIsAnsweredToACallerWithNoOrg(t *testing.T) {
 		if cat.Version != "1" || cat.Currency != "usd" || len(cat.CreditPacks) == 0 || cat.Plans == nil || cat.Payment == nil || cat.Links["checkouts"] != "/v1/billing/checkouts" {
 			t.Errorf("%s: catalog %s", name, got.Body)
 		}
+		if cat.Links["cryptoDeposit"] != "/v1/billing/crypto/deposit" {
+			t.Errorf("%s: catalog does not link to native crypto deposits: %s", name, got.Body)
+		}
 	}
 }
 
@@ -174,8 +178,10 @@ func TestTheCatalogNeedsCommerce(t *testing.T) {
 	}
 }
 
-// THE DISCOVERY IS COMMERCE'S: the plane serves the document commerce's own handler writes.
-func TestTheDiscoveryIsCommerces(t *testing.T) {
+func TestDiscoveryIncludesNativeCryptoAndRespectsProcessorPolicy(t *testing.T) {
+	t.Cleanup(processor.SetChargePolicy(func() map[processor.ProcessorType]bool {
+		return processor.ChargeNames("*")
+	}))
 	app := zip.New(zip.Config{})
 	app.Raw(http.MethodGet, "/d", commercebilling.GetBillingDiscovery)
 	resp, err := app.Test(httptest.NewRequest(http.MethodGet, "/d", nil), zip.TestConfig{Timeout: 10 * time.Second, FailOnTimeout: true})
@@ -188,17 +194,42 @@ func TestTheDiscoveryIsCommerces(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	var a, b any
-	if err := json.Unmarshal(want, &a); err != nil {
+	var expected, discovery commercebilling.Discovery
+	if err := json.Unmarshal(want, &expected); err != nil {
 		t.Fatal(err)
 	}
-	if err := json.Unmarshal(got.Body, &b); err != nil {
+	if err := json.Unmarshal(got.Body, &discovery); err != nil {
 		t.Fatalf("the plane's discovery is not JSON: %v", err)
 	}
-	x, _ := json.Marshal(a)
-	y, _ := json.Marshal(b)
+	for key, path := range map[string]string{
+		"cryptoOptions":       "/v1/billing/crypto/options",
+		"cryptoDeposit":       "/v1/billing/crypto/deposit",
+		"cryptoDepositStatus": "/v1/billing/crypto/deposit/{id}",
+	} {
+		if discovery.Links[key] != path {
+			t.Errorf("discovery link %s = %q, want %q", key, discovery.Links[key], path)
+		}
+		expected.Links[key] = path
+	}
+	x, _ := json.Marshal(expected)
+	y, _ := json.Marshal(discovery)
 	if string(x) != string(y) {
 		t.Fatalf("the plane's discovery is not commerce's:\n plane    %s\n commerce %s", y, x)
+	}
+
+	t.Cleanup(processor.SetChargePolicy(func() map[processor.ProcessorType]bool {
+		return processor.ChargeNames("kraken,mpc")
+	}))
+	got, err = planeDiscovery(context.Background(), &cloud.Unit{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	discovery = commercebilling.Discovery{}
+	if err := json.Unmarshal(got.Body, &discovery); err != nil {
+		t.Fatal(err)
+	}
+	if len(discovery.Payment) != 0 || discovery.Renewal != "" || discovery.Links["cryptoDeposit"] == "" {
+		t.Fatalf("discovery with Stripe disabled = %s", got.Body)
 	}
 }
 

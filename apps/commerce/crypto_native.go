@@ -56,7 +56,8 @@ var canonicalContracts = map[string]string{
 
 func canonicalContract(chain, token, configured string) string {
 	c := strings.TrimSpace(configured)
-	if c != "" && !strings.HasPrefix(strings.ToLower(c), "kraken:") {
+	normalized := strings.ToLower(c)
+	if c != "" && !strings.HasPrefix(normalized, "kraken:") && !strings.HasPrefix(normalized, "pool:kraken:") {
 		return c
 	}
 	key := strings.ToLower(strings.TrimSpace(chain)) + ":" + strings.ToLower(strings.TrimSpace(token))
@@ -667,8 +668,9 @@ func nativeCryptoDeposit(ctx context.Context, org *organization.Organization, pa
 		contract, _ = intent.Metadata["contract"].(string)
 	}
 	if contract == "" {
-		contract = canonicalContract(string(intent.Chain), intent.Token, asset.Contract)
+		contract = asset.Contract
 	}
+	contract = canonicalContract(string(intent.Chain), intent.Token, contract)
 	if !ok {
 		asset = depositwatch.Asset{Chain: string(intent.Chain), Token: intent.Token}
 	}

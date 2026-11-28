@@ -37,6 +37,18 @@ type multiCustody struct {
 	seq atomic.Int64
 }
 
+func TestKrakenPoolReferenceIsNeverATokenContract(t *testing.T) {
+	const arbitrumUSDC = "0xaf88d065e77c8cc2239327c5edb3a432268e5831"
+	for _, configured := range []string{"pool:kraken:arbitrum:usdc", "kraken:arbitrum:usdc", arbitrumUSDC} {
+		if got := canonicalContract("arbitrum", "usdc", configured); got != arbitrumUSDC {
+			t.Errorf("contract for %q = %q, want %s", configured, got, arbitrumUSDC)
+		}
+	}
+	if got := canonicalContract("unknown", "usdc", "pool:kraken:unknown:usdc"); got != "" {
+		t.Errorf("unknown Kraken asset exposed %q", got)
+	}
+}
+
 func newMultiCustody() *multiCustody {
 	b := processor.NewBaseProcessor(processor.MPC, nil)
 	b.SetConfigured(true)
