@@ -30,9 +30,9 @@ func TestEveryVideoFamilyIsCappedPremium(t *testing.T) {
 			continue
 		}
 		for plan, s := range CarriedPlans {
-			if s.Premium == Unbounded {
+			if s.Premium <= 0 || s.Premium == Unbounded {
 				if c, capped := r.Caps[plan]; capped {
-					t.Errorf("%s caps %s, which includes all premium usage, at %d¢", glob, plan, c.PeriodCents)
+					t.Errorf("%s caps %s (premium=%d) at %d¢, want no plan cap", glob, plan, s.Premium, c.PeriodCents)
 				}
 				continue
 			}

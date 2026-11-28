@@ -105,6 +105,12 @@ CREATE TABLE IF NOT EXISTS cap (
   used    BIGINT  NOT NULL,
   PRIMARY KEY (org, subject, model, day)
 );
+CREATE TABLE IF NOT EXISTS free_reset (
+  org      TEXT   NOT NULL,
+  subject  TEXT   NOT NULL,
+  reset_at BIGINT NOT NULL,
+  PRIMARY KEY (org, subject)
+);
 DROP TABLE IF EXISTS covered;
 DROP TABLE IF EXISTS member;
 DROP TABLE IF EXISTS hold;
@@ -531,4 +537,72 @@ func (s *limitStore) release(ctx context.Context, org, subject string, counted b
 		}
 	}
 	return tx.Commit()
+}
+
+// lastFreeReset returns the unix timestamp of the payer's most recent self-service
+// free reset, or 0 if they have never used one.
+func (s *limitStore) lastFreeReset(ctx context.Context, org, subject string) (int64, error) {
+	if err := dialect.Text(org, subject); err != nil {
+		return 0, err
+	}
+	var at int64
+	err := s.db.QueryRowContext(ctx, `SELECT reset_at FROM free_reset WHERE org=$1 AND subject=$2`, org, subject).Scan(&at)
+	if errors.Is(err, sql.ErrNoRows) {
+		return 0, nil
+	}
+	if err != nil {
+		return 0, fmt.Errorf("read free reset: %w", err)
+	}
+	return at, nil
+}
+
+// freeReset clears the payer's active usage counters (requests, session, spend,
+// share, daily caps) in one serialized payer transaction if at least cooldown has
+// elapsed since their last free reset. Returns (lastAt, nextAt, ok, err): when ok
+// is false the payer is still on cooldown until nextAt and nothing was cleared.
+func (s *limitStore) freeReset(ctx context.Context, org, subject string, now time.Time, cooldown time.Duration) (lastAt, nextAt time.Time, ok bool, err error) {
+	if err := dialect.Text(org, subject); err != nil {
+		return time.Time{}, time.Time{}, false, err
+	}
+	tx, err := payer(ctx, s.db, org, subject)
+	if err != nil {
+		return time.Time{}, time.Time{}, false, fmt.Errorf("begin: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	var prev int64
+	qerr := tx.QueryRowContext(ctx, `SELECT reset_at FROM free_reset WHERE org=$1 AND subject=$2`, org, subject).Scan(&prev)
+	if qerr != nil && !errors.Is(qerr, sql.ErrNoRows) {
+		return time.Time{}, time.Time{}, false, fmt.Errorf("read free reset: %w", qerr)
+	}
+	if prev > 0 {
+		prevTime := time.Unix(prev, 0).UTC()
+		unlock := prevTime.Add(cooldown)
+		if now.Before(unlock) {
+			return prevTime, unlock, false, nil
+		}
+	}
+
+	for _, stmt := range []string{
+		`DELETE FROM request WHERE org=$1 AND subject=$2`,
+		`DELETE FROM session WHERE org=$1 AND subject=$2`,
+		`DELETE FROM spend WHERE org=$1 AND subject=$2`,
+		`DELETE FROM share WHERE org=$1 AND subject=$2`,
+		`DELETE FROM cap WHERE org=$1 AND subject=$2`,
+	} {
+		if _, err := tx.ExecContext(ctx, stmt, org, subject); err != nil {
+			return time.Time{}, time.Time{}, false, fmt.Errorf("clear usage: %w", err)
+		}
+	}
+	ts := now.UTC().Truncate(time.Second)
+	if _, err := tx.ExecContext(ctx,
+		`INSERT INTO free_reset (org, subject, reset_at) VALUES ($1,$2,$3)
+		 ON CONFLICT (org, subject) DO UPDATE SET reset_at = excluded.reset_at`,
+		org, subject, ts.Unix()); err != nil {
+		return time.Time{}, time.Time{}, false, fmt.Errorf("record free reset: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return time.Time{}, time.Time{}, false, fmt.Errorf("commit: %w", err)
+	}
+	return ts, ts.Add(cooldown), true, nil
 }

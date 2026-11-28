@@ -68,8 +68,8 @@ func TestACarriedPlanKeepsItsFiguresAcrossTheUpgrade(t *testing.T) {
 		if err := json.Unmarshal([]byte(policy), &rules); err != nil {
 			t.Fatal(err)
 		}
-		if got := rules["anthropic/claude-opus*"].Caps["max-20x"].PeriodCents; got != 3000 {
-			t.Errorf("Max 20x's share of a costly family is %d¢ after the migration, want the 3000¢ it was", got)
+		if got := rules["anthropic/claude-opus*"].Caps["max-20x"].PeriodCents; got != 0 {
+			t.Errorf("Max 20x's share of a third-party family is %d¢ after the migration, want 0 (monthly plans are Hanzo-only)", got)
 		}
 
 		// It is one migration: a second run finds every switch held and writes nothing.

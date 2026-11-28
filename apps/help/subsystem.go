@@ -125,6 +125,7 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 	g.Get("/articles/:slug", o.getArticle)
 	g.Get("/categories", o.listCategories)
 	g.Post("/tickets", o.fileTicket, zip.WithStatus(http.StatusCreated))
+	g.Post("/feedback", o.submitFeedback, zip.WithStatus(http.StatusCreated))
 }
 
 // ---- public knowledge base ----
@@ -458,6 +459,227 @@ func (o ops) fileTicket(ctx context.Context, in *helpTicketIntake) (*helpTicketF
 	}
 	o.fileTicketCRM(org, ref, email, subject, message)
 	return &helpTicketFiled{Ticket: ref, Status: "Open"}, nil
+}
+
+// helpFeedbackIntake is a user feedback, bug report, billing discrepancy, or
+// client exception report submitted from any Hanzo web app, CLI, or settings page.
+type helpFeedbackIntake struct {
+	oversize  bool
+	malformed bool
+
+	// Kind classifies the submission: bug, billing, feature, exception, or feedback.
+	Kind string `json:"kind"`
+	// Subject is a short one-line summary; derived from Error or Message when omitted.
+	Subject string `json:"subject"`
+	// Message is the user's description or error message. Clipped at 16 KiB.
+	Message string `json:"message"`
+	// Email is the optional reply-to email of the user submitting feedback.
+	Email string `json:"email"`
+	// User is the optional user or organization identifier of the reporter.
+	User string `json:"user"`
+	// App identifies the surface that submitted the report (app, pay, chat, dev, docs, console).
+	App string `json:"app"`
+	// Page is the URL or route path where the feedback or exception occurred.
+	Page string `json:"page"`
+	// Version is the optional client build or commit identifier.
+	Version string `json:"version"`
+	// Error is the optional exception name or message for client crash reports.
+	Error string `json:"error"`
+	// Stack is the optional stack trace for client crash reports, clipped at 8 KiB.
+	Stack string `json:"stack"`
+	// Priority overrides urgency (Low, Medium, High, Urgent); defaults from Kind.
+	Priority string `json:"priority"`
+	// Context carries optional flat key-value metadata (plan, org, browser, request_id).
+	Context map[string]string `json:"context"`
+}
+
+// UnmarshalJSON records body size and parse validity so submitFeedback enforces
+// size and schema bounds consistently.
+func (in *helpFeedbackIntake) UnmarshalJSON(b []byte) error {
+	type body helpFeedbackIntake
+	var v body
+	oversize := len(b) > maxIntakeBytes
+	malformed := json.Unmarshal(b, &v) != nil
+	*in = helpFeedbackIntake(v)
+	in.oversize, in.malformed = oversize, malformed
+	return nil
+}
+
+// helpFeedbackReceipt confirms receipt of a feedback or exception report.
+type helpFeedbackReceipt struct {
+	// ID is the opaque reference (tkt_... when filed as a support ticket, or fb_...).
+	ID string `json:"id"`
+	// Status is always "received" once accepted.
+	Status string `json:"status"`
+	// Kind is the normalized submission kind (bug, billing, feature, exception, feedback).
+	Kind string `json:"kind"`
+}
+
+const maxStack = 8 * 1024
+
+// submitFeedback accepts user feedback, bug/billing reports, and automatic client
+// exception captures from any Hanzo surface. It always emits a structured telemetry
+// log record, files a support ticket into the public help center when installed,
+// and attaches a CRM lead when an email is provided. Answers 201 with an opaque ID.
+func (o ops) submitFeedback(ctx context.Context, in *helpFeedbackIntake) (*helpFeedbackReceipt, error) {
+	if in.oversize {
+		return nil, zip.Errorf(http.StatusRequestEntityTooLarge, "request too large")
+	}
+	if in.malformed {
+		return nil, zip.ErrBadRequest("invalid request body")
+	}
+	kind := normalizeFeedbackKind(in.Kind)
+	msg := text.Trim(in.Message, maxMessage)
+	errText := text.Trim(in.Error, maxSubject)
+	subj := text.Trim(in.Subject, maxSubject)
+	if subj == "" {
+		if errText != "" {
+			subj = errText
+		} else if msg != "" {
+			line, _, _ := strings.Cut(msg, "\n")
+			subj = text.Trim(line, maxSubject)
+		}
+	}
+	if subj == "" && msg == "" && errText == "" {
+		return nil, zip.ErrBadRequest("message, subject, or error is required")
+	}
+	email := text.Trim(in.Email, maxSender)
+	user := text.Trim(in.User, maxSender)
+	appName := text.Trim(in.App, 64)
+	page := text.Trim(in.Page, 512)
+	version := text.Trim(in.Version, 64)
+	stack := text.Trim(in.Stack, maxStack)
+	priority := normalizeFeedbackPriority(in.Priority, kind)
+
+	var b strings.Builder
+	if msg != "" {
+		b.WriteString(msg)
+	}
+	meta := make([]string, 0, 8)
+	if kind != "" {
+		meta = append(meta, "kind: "+kind)
+	}
+	if appName != "" {
+		meta = append(meta, "app: "+appName)
+	}
+	if page != "" {
+		meta = append(meta, "page: "+page)
+	}
+	if version != "" {
+		meta = append(meta, "version: "+version)
+	}
+	if user != "" {
+		meta = append(meta, "user: "+user)
+	}
+	if errText != "" {
+		meta = append(meta, "error: "+errText)
+	}
+	if len(in.Context) > 0 {
+		if raw, err := json.Marshal(in.Context); err == nil {
+			meta = append(meta, "context: "+text.Trim(string(raw), 2048))
+		}
+	}
+	if len(meta) > 0 {
+		if b.Len() > 0 {
+			b.WriteString("\n\n---\n")
+		}
+		b.WriteString(strings.Join(meta, "\n"))
+	}
+	if stack != "" {
+		b.WriteString("\n\nstack:\n")
+		b.WriteString(stack)
+	}
+	body := text.Trim(b.String(), maxMessage)
+
+	ref, err := newFeedbackRef()
+	if err != nil {
+		return nil, zip.Errorf(http.StatusInternalServerError, "submit feedback")
+	}
+	customer := email
+	if customer == "" {
+		customer = user
+	}
+	if customer == "" {
+		customer = "anonymous"
+	}
+
+	org := o.s.State.publicOrg
+	if org != "" && framework.Installed(ctx, org, DTTicket) {
+		ticketSubject := text.Trim("["+kind+"] "+subj, maxSubject)
+		if created, cerr := framework.Ingest(ctx, org, DTTicket, map[string]any{
+			"subject":     ticketSubject,
+			"description": body,
+			"customer":    customer,
+			"priority":    priority,
+			"status":      "Open",
+			"source":      "feedback:" + kind,
+		}, ""); cerr == nil {
+			if filed, ferr := framework.Get(ctx, org, DTTicket, created.Name); ferr == nil {
+				if pub, _ := filed.Data["public_ref"].(string); pub != "" {
+					ref = pub
+				}
+			}
+			if body != "" {
+				_, _ = framework.Ingest(ctx, org, DTCommunication, map[string]any{
+					"ticket":      created.Name,
+					"sender":      customer,
+					"sender_type": "customer",
+					"body":        body,
+					"channel":     "feedback:" + kind,
+				}, "")
+			}
+		} else {
+			o.s.Log.Warn("help: feedback ticket ingest failed", "org", org, "kind", kind, "err", cerr)
+		}
+	}
+
+	o.s.Log.Info("help: feedback submitted",
+		"ref", ref,
+		"kind", kind,
+		"priority", priority,
+		"app", appName,
+		"page", page,
+		"version", version,
+		"user", user,
+		"email", email,
+		"subject", subj,
+		"error", errText,
+	)
+	if org != "" && email != "" {
+		o.fileTicketCRM(org, ref, email, "["+kind+"] "+subj, body)
+	}
+	return &helpFeedbackReceipt{ID: ref, Status: "received", Kind: kind}, nil
+}
+
+func normalizeFeedbackKind(k string) string {
+	switch strings.ToLower(strings.TrimSpace(k)) {
+	case "bug", "billing", "feature", "exception":
+		return strings.ToLower(strings.TrimSpace(k))
+	default:
+		return "feedback"
+	}
+}
+
+func normalizeFeedbackPriority(p, kind string) string {
+	if strings.TrimSpace(p) != "" {
+		return normalizePriority(p)
+	}
+	switch kind {
+	case "exception", "billing":
+		return "High"
+	case "bug":
+		return "Medium"
+	default:
+		return "Low"
+	}
+}
+
+func newFeedbackRef() (string, error) {
+	var b [12]byte
+	if _, err := rand.Read(b[:]); err != nil {
+		return "", err
+	}
+	return "fb_" + hex.EncodeToString(b[:]), nil
 }
 
 var crmFiling = make(chan struct{}, 32)

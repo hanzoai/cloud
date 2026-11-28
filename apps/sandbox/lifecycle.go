@@ -319,8 +319,8 @@ func (c clocks) closes(m Sandbox, now time.Time, p purse) (bool, string, string)
 
 // spent is what a lease has cost its payer since it was taken, in cents: the
 // one-shot fee, and its hourly price for the time it has held a pod, rounded UP so
-// the cap is never a cent late. CreatedAt is renewed by a resume, which charges the
-// fee again (unpark), so this is the spend of THIS lease and a cap is per lease.
+// the cap is never a cent late. CreatedAt is renewed by a resume (unpark) without
+// re-billing the one-shot startup fee.
 func spent(m Sandbox, hour int64, now time.Time) int64 {
 	cents := ResourceFee(m.Class)
 	if m.CreatedAt <= 0 || hour <= 0 {

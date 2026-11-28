@@ -397,3 +397,53 @@ func TestPublicKB_NotInstalledIsAnEmptyCenter(t *testing.T) {
 		}
 	}
 }
+
+func TestPublicFeedback_SubmitsBugAndException(t *testing.T) {
+	t.Run("works even before help module is installed", func(t *testing.T) {
+		app := mountPublic(t, "acme")
+		code, raw := anon(t, app, http.MethodPost, "/v1/help/feedback", map[string]any{
+			"kind":  "exception",
+			"app":   "pay",
+			"page":  "https://hanzo.ai/pay",
+			"error": "TypeError: cannot read properties of undefined",
+			"stack": "at Plan (Plan.tsx:42:1)",
+		}, nil)
+		if code != http.StatusCreated {
+			t.Fatalf("POST /v1/help/feedback want 201, got %d (%s)", code, raw)
+		}
+		var out helpFeedbackReceipt
+		if err := json.Unmarshal(raw, &out); err != nil || !strings.HasPrefix(out.ID, "fb_") || out.Status != "received" || out.Kind != "exception" {
+			t.Fatalf("unexpected feedback receipt: %s (%v)", raw, err)
+		}
+	})
+
+	t.Run("files a support ticket when help module is installed", func(t *testing.T) {
+		const org = "acme"
+		app := mountPublic(t, org)
+		call(t, app, http.MethodPost, "/v1/framework/modules/help/install", org, nil)
+
+		code, raw := anon(t, app, http.MethodPost, "/v1/help/feedback", map[string]any{
+			"kind":    "billing",
+			"email":   "user@example.com",
+			"app":     "app",
+			"page":    "/settings/usage",
+			"message": "Usage meter showed unexpected charge",
+			"context": map[string]string{"plan": "pro-3x"},
+		}, nil)
+		if code != http.StatusCreated {
+			t.Fatalf("POST /v1/help/feedback want 201, got %d (%s)", code, raw)
+		}
+		var out helpFeedbackReceipt
+		if err := json.Unmarshal(raw, &out); err != nil || !strings.HasPrefix(out.ID, "tkt_") || out.Status != "received" || out.Kind != "billing" {
+			t.Fatalf("unexpected ticket receipt: %s (%v)", raw, err)
+		}
+	})
+
+	t.Run("rejects empty submission", func(t *testing.T) {
+		app := mountPublic(t, "acme")
+		code, _ := anon(t, app, http.MethodPost, "/v1/help/feedback", map[string]any{"kind": "bug"}, nil)
+		if code != http.StatusBadRequest {
+			t.Fatalf("empty feedback want 400, got %d", code)
+		}
+	})
+}

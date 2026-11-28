@@ -52,10 +52,12 @@ func TestSeatsAreTheOnesThePeriodWasChargedFor(t *testing.T) {
 func TestTwoStandardSeatsAreTwicePros(t *testing.T) {
 	sqltest.Engines(t, func(t *testing.T, _ sqltest.Open) {
 		s := newWorld(t, "team", 2, "card").read()
-		if s.Plan != "team" || s.Session.Limit != 100 || s.Day.Limit != 300 ||
-			ours(s).Limit != 10*usd || s.Classes[ClassPremium].Period.Limit != 10*usd {
-			t.Fatalf("two standard seats read plan %q, %d/%d, ours $%d, premium $%d; want team, 100/300, $10 and $10",
-				s.Plan, s.Session.Limit, s.Day.Limit, ours(s).Limit/usd, s.Classes[ClassPremium].Period.Limit/usd)
+		if s.Plan != "team" || s.Session.Limit != 100 || s.Day.Limit != 300 || ours(s).Limit != 10*usd {
+			t.Fatalf("two standard seats read plan %q, %d/%d, ours $%d; want team, 100/300, $10",
+				s.Plan, s.Session.Limit, s.Day.Limit, ours(s).Limit/usd)
+		}
+		if _, hasPremium := s.Classes[ClassPremium]; hasPremium {
+			t.Fatalf("Hanzo-only team plan must omit zero-allowance premium class: %+v", s.Classes)
 		}
 		p := newWorld(t, "team-premium", 2, "card").read()
 		if p.Plan != "team-premium" || p.Session.Limit != 500 || p.Day.Limit != 1500 || ours(p).Limit != 50*usd {
@@ -82,8 +84,11 @@ func TestAMixedTeamPoolsEachSeatTypesFigures(t *testing.T) {
 		if s.Plan != "team" || s.Session.Limit != 300 || s.Day.Limit != 900 {
 			t.Fatalf("1 standard + 1 premium reads plan %q, %d a session and %d a day; want team, 300 and 900", s.Plan, s.Session.Limit, s.Day.Limit)
 		}
-		if ours(s).Limit != 30*usd || s.Classes[ClassPremium].Period.Limit != 30*usd {
-			t.Fatalf("1 standard + 1 premium includes ours $%d, premium $%d; want $30 each", ours(s).Limit/usd, s.Classes[ClassPremium].Period.Limit/usd)
+		if ours(s).Limit != 30*usd {
+			t.Fatalf("1 standard + 1 premium includes ours $%d; want $30", ours(s).Limit/usd)
+		}
+		if _, hasPremium := s.Classes[ClassPremium]; hasPremium {
+			t.Fatalf("Hanzo-only mixed team must omit zero-allowance premium class: %+v", s.Classes)
 		}
 		// A team sold at half its list price includes half of every figure.
 		h := mixed(t, 6250).read()
@@ -109,7 +114,7 @@ func TestAModelsShareOfAMixedTeamIsEachSeatsShare(t *testing.T) {
 			t.Fatal(err)
 		}
 		t0 := w.l.termsOf(context.Background(), "acme", p)
-		whole := t0.seat(ClassPremium)
+		whole := t0.seat(ClassOurs)
 		rule := Rule{Caps: map[string]Cap{"team": {PeriodCents: 150, DailyRequests: 10}, "team-premium": {PeriodCents: 750, DailyRequests: 50}}}
 		if c := p.cap(rule, whole); c.PeriodCents != 900 || c.DailyRequests != 60 {
 			t.Fatalf("the team's share is %+v, want 900¢ and 60 a day", c)

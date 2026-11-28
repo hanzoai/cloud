@@ -293,7 +293,7 @@ func (t *dsTelemetry) Metrics(ctx context.Context, f MetricsFilter) (Board, erro
 	// Totals.
 	totalsSQL := "SELECT count() AS generations, sum(prompt_tokens) AS prompt_tokens, " +
 		"sum(completion_tokens) AS completion_tokens, sum(total_tokens) AS total_tokens, " +
-		datastore.Spend + " AS cost_cents, " +
+		datastore.Billed + " AS cost_cents, " +
 		"countIf(status != '' AND status != 'success') AS errors, " +
 		"uniqExact(model) AS models, uniqExact(user_id) AS users " +
 		"FROM " + t.table("cloud_usage") + " WHERE " + where
@@ -305,7 +305,7 @@ func (t *dsTelemetry) Metrics(ctx context.Context, f MetricsFilter) (Board, erro
 
 	// Time series (gap-filled in Go). stepSec is bound first, then the WHERE args.
 	seriesSQL := "SELECT toStartOfInterval(timestamp, toIntervalSecond(?)) AS bucket, " +
-		"count() AS generations, " + datastore.Spend + " AS cost_cents, " +
+		"count() AS generations, " + datastore.Billed + " AS cost_cents, " +
 		"sum(total_tokens) AS total_tokens, " +
 		"countIf(status != '' AND status != 'success') AS errors " +
 		"FROM " + t.table("cloud_usage") + " WHERE " + where + " GROUP BY bucket ORDER BY bucket"
@@ -317,7 +317,7 @@ func (t *dsTelemetry) Metrics(ctx context.Context, f MetricsFilter) (Board, erro
 	// By model (bounded to 100 rows; the assembler folds beyond TopN into "other").
 	modelSQL := "SELECT model, any(provider) AS provider, count() AS requests, " +
 		"sum(prompt_tokens) AS prompt_tokens, sum(completion_tokens) AS completion_tokens, " +
-		"sum(total_tokens) AS total_tokens, " + datastore.Spend + " AS cost_cents, " +
+		"sum(total_tokens) AS total_tokens, " + datastore.Billed + " AS cost_cents, " +
 		"countIf(status != '' AND status != 'success') AS errors " +
 		"FROM " + t.table("cloud_usage") + " WHERE " + where +
 		" GROUP BY model ORDER BY cost_cents DESC LIMIT 100"

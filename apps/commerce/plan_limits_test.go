@@ -107,11 +107,17 @@ func TestASquareSaleOfEveryRungIsTheLimitersPlan(t *testing.T) {
 				t.Fatalf("the limiter serves %q for a paid %s; want %s", st.Plan, tc.slug, tc.slug)
 			}
 			whole(t, tc.slug, st)
-			// A priced premium call with an empty wallet is the plan's to pay.
-			g, hit, err := l.Admit(buyer, limits.Ask{Subject: payer, Org: tc.org, Model: "openai/gpt-5.4-mini",
-				Class: limits.ClassPremium, Priced: true, Spend: true})
+			// A priced Hanzo-model (ours) call with an empty wallet is the plan's to pay,
+			// while a third-party (premium) call requires prepaid funds.
+			g, hit, err := l.Admit(buyer, limits.Ask{Subject: payer, Org: tc.org, Model: "zen5",
+				Class: limits.ClassOurs, Priced: true, Spend: true})
 			if err != nil || hit != nil || g == nil || g.Pays != limits.PaysPlan || g.Plan != tc.slug {
-				t.Fatalf("admit = %+v, hit %+v, err %v; want the plan to pay", g, hit, err)
+				t.Fatalf("admit ours = %+v, hit %+v, err %v; want the plan to pay", g, hit, err)
+			}
+			pg, phit, perr := l.Admit(buyer, limits.Ask{Subject: payer, Org: tc.org, Model: "openai/gpt-5.4-mini",
+				Class: limits.ClassPremium, Priced: true, Spend: true})
+			if perr != nil || pg != nil || phit == nil || phit.Code != limits.CodePrepaid {
+				t.Fatalf("admit premium with empty wallet = %+v, hit %+v, err %v; want prepaid_required", pg, phit, perr)
 			}
 		})
 	}
@@ -130,6 +136,12 @@ func whole(t *testing.T, slug string, st limits.Standing) {
 		if cents == flags.Unbounded {
 			if !st.Classes[class].Unbounded {
 				t.Errorf("%s on %s is bounded; the rung includes all of it", class, slug)
+			}
+			continue
+		}
+		if cents == 0 {
+			if _, present := st.Classes[class]; present {
+				t.Errorf("%s on %s has 0 allowance and should be omitted from Classes", class, slug)
 			}
 			continue
 		}

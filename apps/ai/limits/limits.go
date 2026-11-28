@@ -1239,13 +1239,23 @@ func capName(key, model string) string {
 	return strings.ToLower(strings.TrimSpace(model))
 }
 
-// unpaid is the refusal for a request nothing will pay for: a plan whose included
-// usage of the class is used, or, for a payer with no plan, funds it has not added
-// (insufficient_balance, naming the model).
+// unpaid is the refusal for a request nothing will pay for: when the plan does not
+// include the class at all (e.g. third-party models on a Hanzo-only monthly plan),
+// prepaid funds are required (prepaid_required); when the plan's included usage of
+// the class is spent, it waits or adds funds (plan_allowance_used); for a payer with
+// no plan, funds must be added (insufficient_balance).
 func (l *Limiter) unpaid(ctx context.Context, org string, p plan, model, class string, t terms) *Hit {
 	if p.counts() {
+		if t.allow[class].period <= 0 {
+			return &Hit{Code: CodePrepaid, Class: class, Model: model,
+				Message: display(model) + " is paid from prepaid funds you add; monthly plans cover Hanzo models only, and granted credit does not pay for third-party models:"}
+		}
 		return &Hit{Code: CodePlanAllowance, Class: class, ResetsAt: t.end, Upgrade: l.upgrade(ctx, org, p.id).Plan,
 			Message: "Your plan's included usage of " + classNoun(class) + " is used for now. Add funds or upgrade:"}
+	}
+	if class == ClassPremium {
+		return &Hit{Code: CodeInsufficient, Class: class, Model: model,
+			Message: display(model) + " is paid from prepaid funds you add; granted credit does not pay for third-party models:"}
 	}
 	return &Hit{Code: CodeInsufficient, Class: class, Model: model, Upgrade: l.upgrade(ctx, org, "").Plan,
 		Message: display(model) + " is paid from funds you add, or by a paid plan; granted credit does not pay for it:"}
@@ -1279,7 +1289,7 @@ func classNoun(class string) string {
 	if class == ClassOurs {
 		return "Hanzo models"
 	}
-	return "premium models"
+	return "third-party models"
 }
 
 // planName is how a plan is named to a person in a refusal.
@@ -1390,6 +1400,60 @@ type Standing struct {
 	// stands on it: the reading Admit refuses by, so a client can hide what a request
 	// would be refused for.
 	Entitlements map[string]Entitlement
+	// Reset describes the caller's self-service 1x/week free usage reset.
+	Reset *ResetStatus
+}
+
+// FreeResetCooldown is how long a user must wait between self-service free usage resets.
+const FreeResetCooldown = 7 * 24 * time.Hour
+
+// ResetStatus reports whether the caller can trigger a free self-service usage reset now.
+type ResetStatus struct {
+	Available bool
+	LastAt    time.Time
+	NextAt    time.Time
+}
+
+// ResetCooldownError is returned by FreeReset when the caller already used their
+// weekly free reset and must wait until NextAt.
+type ResetCooldownError struct {
+	LastAt time.Time
+	NextAt time.Time
+}
+
+func (e *ResetCooldownError) Error() string {
+	return fmt.Sprintf("free weekly usage reset already used; next reset available at %s", e.NextAt.UTC().Format(time.RFC3339))
+}
+
+// resetStatus reads the caller's current free reset availability at now.
+func (l *Limiter) resetStatus(ctx context.Context, subject, org string, now time.Time) *ResetStatus {
+	last, err := l.store.lastFreeReset(ctx, org, subject)
+	if err != nil {
+		return nil
+	}
+	if last <= 0 {
+		return &ResetStatus{Available: true}
+	}
+	lastAt := time.Unix(last, 0).UTC()
+	nextAt := lastAt.Add(FreeResetCooldown)
+	if !now.Before(nextAt) {
+		return &ResetStatus{Available: true, LastAt: lastAt}
+	}
+	return &ResetStatus{Available: false, LastAt: lastAt, NextAt: nextAt}
+}
+
+// FreeReset clears the caller's active usage windows and spend counters once per
+// FreeResetCooldown (7 days). Returns *ResetCooldownError when still on cooldown.
+func (l *Limiter) FreeReset(ctx context.Context, subject, org string) (ResetStatus, error) {
+	now := l.now()
+	lastAt, nextAt, ok, err := l.store.freeReset(ctx, org, subject, now, FreeResetCooldown)
+	if err != nil {
+		return ResetStatus{}, err
+	}
+	if !ok {
+		return ResetStatus{Available: false, LastAt: lastAt, NextAt: nextAt}, &ResetCooldownError{LastAt: lastAt, NextAt: nextAt}
+	}
+	return ResetStatus{Available: false, LastAt: lastAt, NextAt: nextAt}, nil
 }
 
 // Paused is one capped model (or glob) as a payer reads it: no figure.
@@ -1405,7 +1469,13 @@ func (l *Limiter) Read(ctx context.Context, subject, org string) (Standing, erro
 	if err != nil {
 		return Standing{}, err
 	}
-	out := Standing{Plan: p.id, Upgrade: l.upgrade(ctx, org, p.id), Entitlements: l.entitlements(ctx, org, p)}
+	now := l.now()
+	out := Standing{
+		Plan:         p.id,
+		Upgrade:      l.upgrade(ctx, org, p.id),
+		Entitlements: l.entitlements(ctx, org, p),
+		Reset:        l.resetStatus(ctx, subject, org, now),
+	}
 	if !p.counts() {
 		// No plan: prepaid pays for any class, granted credit for the classes that take
 		// it. A wallet that cannot be read leaves Pays unsaid; the plan's answer never
@@ -1425,7 +1495,6 @@ func (l *Limiter) Read(ctx context.Context, subject, org string) (Standing, erro
 		}
 		return out, nil
 	}
-	now := l.now()
 	t := l.termsOf(ctx, org, p)
 	st, err := l.store.read(ctx, org, subject, now, t)
 	if err != nil {
@@ -1449,6 +1518,7 @@ func (l *Limiter) Read(ctx context.Context, subject, org string) (Standing, erro
 		out.Session.ResetsAt = time.Unix(st.sessionStart, 0).Add(t.block).UTC()
 	}
 	out.Classes = map[string]Class{}
+	out.Pays = map[string]string{}
 	for _, class := range flags.PlanClasses {
 		a := t.allow[class]
 		if a.unbounded {
@@ -1457,15 +1527,21 @@ func (l *Limiter) Read(ctx context.Context, subject, org string) (Standing, erro
 				return Standing{}, err
 			}
 			out.Classes[class] = Class{Period: Window{Used: used, ResetsAt: p.end}, Paying: PaysPlan, Unbounded: true}
+			out.Pays[class] = PaysPlan
 			continue
 		}
 		if a.period <= 0 {
-			// The plan includes none of the class: credits pay for it, else nothing does.
-			c := Class{Period: Window{ResetsAt: p.end}}
-			if past(class) {
-				c.Paying = PaysCredits
+			// The plan includes none of this class (e.g. third-party models on Hanzo-only
+			// monthly plans): omit from out.Classes so the plan is never falsely marked
+			// limited, and report who pays in out.Pays (prepaid, credits, or none).
+			switch {
+			case t.overage && own > 0:
+				out.Pays[class] = PaysPrepaid
+			case past(class):
+				out.Pays[class] = PaysCredits
+			default:
+				out.Pays[class] = ""
 			}
-			out.Classes[class] = c
 			continue
 		}
 		used, err := l.store.spent(ctx, org, subject, class, t.start.Unix())
@@ -1501,9 +1577,6 @@ func (l *Limiter) Read(ctx context.Context, subject, org string) (Standing, erro
 			c.Paying = PaysCredits
 		}
 		out.Classes[class] = c
-	}
-	out.Pays = map[string]string{}
-	for class, c := range out.Classes {
 		out.Pays[class] = c.Paying
 	}
 	rs, err := l.policy(ctx, org)

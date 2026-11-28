@@ -9,7 +9,6 @@ import (
 
 	"github.com/hanzoai/cloud/sdk"
 	"github.com/hanzoai/cloud/sdk/activation"
-	"github.com/hanzoai/cloud/sdk/meter"
 	"github.com/hanzoai/cloud/sdk/principal"
 	"github.com/hanzoai/account"
 	"github.com/zap-proto/zip"
@@ -326,12 +325,9 @@ func unpark(s *Service, ctx context.Context, st *Store, m Sandbox, payer account
 		}
 		return Sandbox{}, zip.Errorf(http.StatusConflict, "sandbox %s was parked or ended while it resumed", m.ID)
 	}
-	if !admitted.payer.Zero() {
-		s.Bill.Record(admitted.payer, "sandbox", meter.Usage{
-			Model:       m.Class + "/" + m.Runtime,
-			AmountCents: ResourceFee(m.Class),
-		})
-	}
+	// ResourceFee is a one-shot creation fee billed on initial lease (api.go).
+	// Resuming a parked sandbox resumes compute metering without re-billing the
+	// creation fee, so crash/restart or park/resume cycles never double-charge.
 	if serr := s.State.rt.signIn(ctx, m, cr.session); serr != nil {
 		s.Log.Warn("the resumed sandbox could not take the owner session", "sandbox", m.ID, "err", serr)
 	}

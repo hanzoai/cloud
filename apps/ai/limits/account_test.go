@@ -29,8 +29,8 @@ func TestAnOrgOnAccountIsAdmittedPastAPlanThatIncludesNothing(t *testing.T) {
 		w.l.funds = walletFunds
 		w.l.flag = policy(saved(nil, "enterprise", 0, 0, 0, 0))
 
-		if g, hit := w.priced(premium, ClassPremium); g != nil || hit == nil || hit.Code != CodePlanAllowance {
-			t.Fatalf("an Enterprise comp with nothing in its account: grant %+v hit %+v, want plan_allowance_used", g, hit)
+		if g, hit := w.priced(premium, ClassPremium); g != nil || hit == nil || hit.Code != CodePrepaid {
+			t.Fatalf("an Enterprise comp with nothing in its account: grant %+v hit %+v, want prepaid_required", g, hit)
 		}
 
 		finance.SetAccount(func(_ context.Context, org string) bool { return org == "acme" })
