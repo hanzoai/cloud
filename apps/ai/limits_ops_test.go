@@ -146,3 +146,30 @@ func TestFreeWeeklyResetClearsUsageAndEnforcesCooldown(t *testing.T) {
 		t.Fatalf("second FreeReset within cooldown: err=%v, want ResetCooldownError", err)
 	}
 }
+
+// Unlimited has no 5-hour session or daily request limit: admitting calls never
+// opens a session timer and GET /v1/ai/limits omits session and day windows.
+func TestUnlimitedHasNoSessionOrDayWindow(t *testing.T) {
+	ctx := context.Background()
+	l := payer(t, "unlimited", "external:comp", 0, 0)
+	g, hit, err := limitAsk(l)(ctx, kai)
+	if err != nil || hit != nil || g == nil {
+		t.Fatalf("admit kai on unlimited: %+v %+v %v", g, hit, err)
+	}
+	g.Settle(10 * usd)
+	s, err := l.Read(ctx, "acme", "acme")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if s.Session != (limits.Window{}) || s.Day != (limits.Window{}) {
+		t.Fatalf("unlimited standing windows: session=%+v day=%+v, want zero", s.Session, s.Day)
+	}
+	v := view(s, "https://hanzo.ai/pay")
+	if v.Session != nil || v.Day != nil {
+		t.Fatalf("unlimited view windows: session=%+v day=%+v, want nil", v.Session, v.Day)
+	}
+	raw, _ := json.Marshal(v)
+	if strings.Contains(string(raw), `"session"`) || strings.Contains(string(raw), `"day"`) {
+		t.Fatalf("unlimited JSON leaks session/day window: %s", raw)
+	}
+}

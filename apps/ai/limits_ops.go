@@ -355,16 +355,17 @@ func worse(a, b string) string {
 }
 
 func window(w limits.Window) *aiWindow {
+	if w.Limit <= 0 {
+		return nil
+	}
 	v := &aiWindow{Percent: w.Percent(), ResetsAt: stamp(w.ResetsAt)}
-	if w.Limit > 0 {
-		switch {
-		case w.Used >= w.Limit:
-			v.State = "limited"
-		case w.Used*5 >= w.Limit*4:
-			v.State = "near"
-		default:
-			v.State = "ok"
-		}
+	switch {
+	case w.Used >= w.Limit:
+		v.State = "limited"
+	case w.Used*5 >= w.Limit*4:
+		v.State = "near"
+	default:
+		v.State = "ok"
 	}
 	return v
 }
