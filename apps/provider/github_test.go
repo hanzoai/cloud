@@ -240,10 +240,10 @@ func TestReposHandlerOrgScope(t *testing.T) {
 			return p
 		}
 
-		// acme's admin sees its installation's repo.
+		// acme's admin sees its installation's repo with connected=true.
 		if p := read(cfReq(t, app, http.MethodGet, "/v1/provider/github/repos", "acme", true, nil)); len(p.Repos) != 1 ||
-			p.Repos[0].Name != "widgets" || p.Repos[0].InstallationID != 777 || p.Connected {
-			t.Fatalf("acme admin should see [widgets] from installation 777, got %+v", p)
+			p.Repos[0].Name != "widgets" || p.Repos[0].InstallationID != 777 || !p.Connected {
+			t.Fatalf("acme admin should see [widgets] from installation 777 with connected=true, got %+v", p)
 		}
 		// acme's member who connected nothing is asked to connect.
 		if p := read(req(t, app, http.MethodGet, "/v1/provider/github/repos", "acme", nil)); len(p.Repos) != 0 || p.Connected {

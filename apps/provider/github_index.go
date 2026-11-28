@@ -574,9 +574,10 @@ type githubReposOut struct {
 	// Unread names the installations that could not be read, so a short list is
 	// distinguishable from a complete one. Absent when the answer is whole.
 	Unread []string `json:"unread,omitempty"`
-	// Connected is whether this answer is the caller's OWN GitHub. False with
-	// repositories is an org admin seeing the org's installations; false with none
-	// is the cue to connect.
+	// Connected is true when the caller has connected their own GitHub account
+	// OR when an org admin's organization holds at least one active connected
+	// GitHub App installation (even if that installation currently has zero
+	// repositories). False is the console's cue to ask the caller to connect.
 	Connected bool `json:"connected"`
 }
 
@@ -585,8 +586,9 @@ type githubReposOut struct {
 //
 // A person who connected their own GitHub sees what their token reaches in this
 // App's installations. An org admin who has not sees every repository in the
-// installations their org holds. Anyone else gets an empty page with
-// connected:false, which is the console's cue to ask them to connect.
+// installations their org holds (with connected:true whenever the org holds an
+// active installation, even with zero repositories). Anyone else gets an empty
+// page with connected:false, which is the console's cue to ask them to connect.
 //
 // Example: {"q": "cloud", "limit": 50}
 // Response: {"repos":[{"owner":"hanzoai","name":"cloud","full_name":"hanzoai/cloud","private":false,"default_branch":"main","pushed_at":"2026-09-24T18:00:00Z","installation_id":62000701}],"next":"","total":1,"connected":true}
@@ -595,10 +597,11 @@ func (o ops) githubRepos(ctx context.Context, in *githubReposIn) (*githubReposOu
 	if err != nil {
 		return nil, err
 	}
-	v, connected, err := view(ctx, o.s, org, factsOf(ctx).user, orgAdmin(ctx))
+	v, personal, err := view(ctx, o.s, org, factsOf(ctx).user, orgAdmin(ctx))
 	if err != nil {
 		return nil, err
 	}
+	connected := personal || len(v.installs) > 0
 	limit := in.Limit
 	if limit <= 0 {
 		limit = defaultPage

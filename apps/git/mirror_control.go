@@ -66,11 +66,16 @@ func (gitMirrorController) EnsureMirror(ctx context.Context, org, project, repo,
 	}
 	switch {
 	case enabled && existing == nil:
-		if err := store.CreateMirror(ctx, MirrorTarget{
+		v := MirrorTarget{
 			ID: mint.ID("mir"), Org: org, Project: project, Repo: name,
 			Host: host, URL: canonical, CreatedAt: time.Now().Unix(),
-		}); err != nil && !errors.Is(err, errConflict) {
-			return err
+		}
+		if err := store.CreateMirror(ctx, v); err != nil {
+			if !errors.Is(err, errConflict) {
+				return err
+			}
+		} else {
+			kickInitialMirror(s, ctx, v)
 		}
 	case !enabled && existing != nil:
 		if _, err := store.DeleteMirror(ctx, org, project, name, existing.ID); err != nil {

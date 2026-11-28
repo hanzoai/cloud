@@ -18,6 +18,7 @@ import (
 	providerpeer "github.com/hanzoai/cloud/client/provider"
 	"github.com/hanzoai/cloud/sdk"
 	"github.com/hanzoai/cloud/sdk/plane"
+	"github.com/zap-proto/zip"
 )
 
 // mirror_out.go is the OUTBOUND half of the mirror: native → GitHub/GitLab. It is
@@ -109,26 +110,11 @@ func mirrorOutbound(s *cloud.Service[state], ctx context.Context, ev cloud.Lifec
 	if len(targets) == 0 {
 		return
 	}
-	bareDir := s.State.storage.absRepoPath(ev.Org, ev.Project, ev.Repo)
-	// A repository kept in the store is written to a throwaway directory, with the one
-	// branch that advanced, for the CLI to push from (export.go).
-	if r, err := store.Get(ctx, ev.Org, ev.Project, ev.Repo); err == nil {
-		if objs, err := s.State.vault.home(ctx, s, r); err != nil {
-			s.Log.Warn("git mirror-out: open repo", "org", ev.Org, "repo", ev.Repo, "err", err)
-			return
-		} else if objs != nil {
-			dir, cleanup, err := exportBranch(ctx, objs.Repo(ctx, r.ID), ev.Branch)
-			if errors.Is(err, errNoBranch) {
-				return // the branch is gone again; nothing to mirror
-			}
-			if err != nil {
-				s.Log.Warn("git mirror-out: export", "org", ev.Org, "repo", ev.Repo, "err", err)
-				return
-			}
-			defer cleanup()
-			bareDir = dir
-		}
+	bareDir, cleanup, ok := mirrorSourceDir(ctx, s, ev.Org, ev.Project, ev.Repo, ev.Branch)
+	if !ok {
+		return
 	}
+	defer cleanup()
 	now := time.Now()
 	for _, t := range targets {
 		// Loop prevention: refs that arrived via an inbound sync FROM this host must
@@ -150,6 +136,119 @@ func mirrorOutbound(s *cloud.Service[state], ctx context.Context, ev cloud.Lifec
 		accepted(t.ID)
 		s.Log.Info("git mirror-out pushed", "org", ev.Org, "repo", ev.Repo, "host", t.Host, "branch", ev.Branch)
 	}
+}
+
+// mirrorSourceDir prepares a bare git directory holding branch for an outbound
+// push: for a vault-backed repository it exports branch to a temporary bare
+// directory, otherwise it returns the on-disk bare path.
+func mirrorSourceDir(ctx context.Context, s *cloud.Service[state], org, project, repo, branch string) (string, func(), bool) {
+	noop := func() {}
+	bareDir := s.State.storage.absRepoPath(org, project, repo)
+	store, err := storeFor(s, org)
+	if err != nil {
+		s.Log.Warn("git mirror-out: open store", "org", org, "err", err)
+		return "", noop, false
+	}
+	if r, err := store.Get(ctx, org, project, repo); err == nil {
+		if objs, err := s.State.vault.home(ctx, s, r); err != nil {
+			s.Log.Warn("git mirror-out: open repo", "org", org, "repo", repo, "err", err)
+			return "", noop, false
+		} else if objs != nil {
+			dir, cleanup, err := exportBranch(ctx, objs.Repo(ctx, r.ID), branch)
+			if errors.Is(err, errNoBranch) {
+				return "", noop, false // the branch is gone again; nothing to mirror
+			}
+			if err != nil {
+				s.Log.Warn("git mirror-out: export", "org", org, "repo", repo, "err", err)
+				return "", noop, false
+			}
+			return dir, cleanup, true
+		}
+	}
+	return bareDir, noop, true
+}
+
+// mirrorDefaultBranch returns the repository's default branch name when that branch
+// currently resolves to an existing commit. Empty or linked repositories return
+// ("", false) so attaching a mirror target does not trigger a pointless push.
+func mirrorDefaultBranch(ctx context.Context, s *cloud.Service[state], org, project, name string) (string, bool) {
+	store, err := storeFor(s, org)
+	if err != nil {
+		return "", false
+	}
+	r, err := store.Get(ctx, org, project, name)
+	if err != nil || r.Origin != "" {
+		return "", false
+	}
+	repo, err := openRepository(ctx, s, r)
+	if err != nil {
+		return "", false
+	}
+	_, branch, err := repo.Resolve(ctx, "")
+	if err != nil || branch == "" || !branchRE.MatchString(branch) {
+		return "", false
+	}
+	return branch, true
+}
+
+// initialMirrorPushHook dispatches the best-effort async initial push when a
+// mirror target is attached to a non-empty repo. Tests may replace it.
+var initialMirrorPushHook = pushTargetAsync
+
+// kickInitialMirror triggers a best-effort async push of the repository's
+// default branch to target when the repository already has commits on it, so a
+// newly linked GitHub mirror receives main immediately instead of waiting for
+// the next commit.
+func kickInitialMirror(s *cloud.Service[state], ctx context.Context, target MirrorTarget) {
+	if s == nil {
+		return
+	}
+	branch, ok := mirrorDefaultBranch(ctx, s, target.Org, target.Project, target.Repo)
+	if !ok {
+		return
+	}
+	accepted(target.ID)
+	initialMirrorPushHook(s, ctx, target, branch)
+}
+
+// pushTargetAsync runs one initial mirror push detached from the request context
+// (bound to the service lifecycle context so Shutdown cancels cleanly) while
+// preserving the caller identity for user-token credential fallback.
+func pushTargetAsync(s *cloud.Service[state], ctx context.Context, target MirrorTarget, branch string) {
+	base := s.State.life
+	if base == nil {
+		base = context.Background()
+	}
+	bg := zip.WithCaller(base, zip.CallerOf(ctx))
+	run := func() {
+		defer func() { _ = recover() }()
+		mirrorSingleTarget(s, bg, target, branch)
+	}
+	if s.State.arriving != nil {
+		s.State.arriving.Go(run)
+		return
+	}
+	go run()
+}
+
+// mirrorSingleTarget pushes one branch of a repository to a single outbound
+// mirror target under mirrorSem.
+func mirrorSingleTarget(s *cloud.Service[state], ctx context.Context, target MirrorTarget, branch string) {
+	bareDir, cleanup, ok := mirrorSourceDir(ctx, s, target.Org, target.Project, target.Repo, branch)
+	if !ok {
+		return
+	}
+	defer cleanup()
+	now := time.Now()
+	if err := pushBranchToMirror(ctx, target.Org, bareDir, target, branch); err != nil {
+		s.Log.Warn("git mirror-out initial push failed",
+			"org", target.Org, "repo", target.Repo, "host", target.Host, "branch", branch,
+			"retry_in", refused(target.ID, now).String(), "err", sanitizeGitErr(err.Error()))
+		return
+	}
+	accepted(target.ID)
+	s.Log.Info("git mirror-out initial pushed",
+		"org", target.Org, "repo", target.Repo, "host", target.Host, "branch", branch)
 }
 
 // pushBranchToMirror force-pushes exactly one branch (refs/heads/<branch>) from the
@@ -264,16 +363,24 @@ const grantCall = 15 * time.Second
 // of an account the caller's org connected; a test stands in for it.
 var askGrant = providerpeer.IntegrationsGitHubGrant
 
+// askRun is the provider process's user-or-admin run mint, used as a fallback
+// when the org has no bound App installation for owner/repo but the caller on
+// ctx has connected their personal GitHub account with push access.
+var askRun = providerpeer.IntegrationsGitHubRun
+
 // mirrorCredential is the basic-auth credential for one push to target t, and
 // what ends it.
 //
 // A target is a URL the org declared, so the push carries the ORG's credential:
 // for a GitHub target, a token reaching that one repository on the org's own
 // installation, minted by the provider process — the one holding the App key —
-// and revoked once the push is done. This app and provider run as separate
-// processes, so the token is asked for over the plane, with the org on the call's
-// caller: the provider mints only on installations that org connected, so a
-// repository mirrors back with its own org's credential and never another's.
+// and revoked once the push is done. When the org holds no installation for that
+// repository and ctx carries an authenticated user, mirrorCredential falls back
+// to IntegrationsGitHubRun so a user who connected their personal GitHub account
+// can push to repositories their account reaches. This app and provider run as
+// separate processes, so the token is asked for over the plane, with the caller
+// on the call's context: the provider mints only on accounts that org or user
+// reaches, so a repository mirrors back with its own credential and never another's.
 //
 // The deployment's credential reaches exactly one kind of target: the org's own
 // community replica (ownReplica), the exact URL this deployment provisioned on
@@ -301,6 +408,15 @@ func mirrorCredential(ctx context.Context, org string, t MirrorTarget) (string, 
 			if err == nil && g != nil && strings.TrimSpace(g.Token) != "" {
 				tok := strings.TrimSpace(g.Token)
 				return basicAuth(host, tok), func() { revokeGrant(ctx, tok) }
+			}
+			if who := zip.CallerOf(ctx); strings.TrimSpace(who.User) != "" {
+				rcall, rcancel := context.WithTimeout(plane.For(ctx, org), grantCall)
+				run, rerr := askRun(rcall, &client.GitHubRunIn{Owner: owner, Repo: repo})
+				rcancel()
+				if rerr == nil && run != nil && strings.TrimSpace(run.Token) != "" {
+					tok := strings.TrimSpace(run.Token)
+					return basicAuth(host, tok), func() { revokeGrant(ctx, tok) }
+				}
 			}
 		}
 	}

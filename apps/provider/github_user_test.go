@@ -745,8 +745,8 @@ func TestReposAreThePersonsOwn(t *testing.T) {
 		if p := listRepos(t, app, "acme", "carol", false, ""); p.Connected || len(p.Repos) != 0 || p.Total != 0 {
 			t.Fatalf("an unconnected member must see nothing, got %+v", p)
 		}
-		if p := listRepos(t, app, "acme", "carol", true, ""); p.Connected || strings.Join(names(p), ",") != "zooai/z000,zooai/z001" {
-			t.Fatalf("an unconnected admin must see the org's installations, got %+v", p)
+		if p := listRepos(t, app, "acme", "carol", true, ""); !p.Connected || strings.Join(names(p), ",") != "zooai/z000,zooai/z001" {
+			t.Fatalf("an unconnected admin whose org holds an installation must see its repos with connected=true, got %+v", p)
 		}
 		// Alice in ANOTHER org is a different custody: her acme connection and its
 		// cached index do not follow her.

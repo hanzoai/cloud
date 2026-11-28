@@ -160,13 +160,18 @@ func (peer) repo(ctx context.Context, owner, name string) (string, string, error
 
 func (peer) read(ctx context.Context, owner, name string) (string, error) {
 	out, err := providerpeer.IntegrationsGitHubGrant(ctx, &client.GitHubGrantIn{Owner: owner, Repo: name, Read: true})
+	if err == nil && out != nil && strings.TrimSpace(out.Token) != "" {
+		return out.Token, nil
+	}
+	if who := zip.CallerOf(ctx); strings.TrimSpace(who.User) != "" {
+		if run, rerr := providerpeer.IntegrationsGitHubRun(ctx, &client.GitHubRunIn{Owner: owner, Repo: name, Read: true}); rerr == nil && run != nil && strings.TrimSpace(run.Token) != "" {
+			return run.Token, nil
+		}
+	}
 	if err != nil {
 		return "", err
 	}
-	if out == nil || strings.TrimSpace(out.Token) == "" {
-		return "", errors.New("github grant: no token in the answer")
-	}
-	return out.Token, nil
+	return "", errors.New("github grant: no token in the answer")
 }
 
 func (peer) write(ctx context.Context, owner, name string) (string, func(), error) {
