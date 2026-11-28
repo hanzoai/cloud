@@ -231,7 +231,7 @@ func TestTheStreamFitsASmallPlane(t *testing.T) {
 	if err != nil {
 		t.Fatalf("info %s: %v", EventStream, err)
 	}
-	if want := bus.Events.Of(store); info.Config.MaxBytes != want {
+	if want := bus.Events.Of(store, 1); info.Config.MaxBytes != want {
 		t.Fatalf("%s holds %d of a %d store, want its share %d", EventStream, info.Config.MaxBytes, store, want)
 	}
 }
@@ -305,7 +305,7 @@ func TestTheStreamSurvivesACarriedOverStore(t *testing.T) {
 	if err := EnsureEventStream(ctx, cl); err != nil {
 		t.Fatalf("ensure with the store to itself: %v", err)
 	}
-	if got, want := held(), bus.Events.Of(350*mib); got != want {
+	if got, want := held(), bus.Events.Of(350*mib, 1); got != want {
 		t.Fatalf("%s holds %d with the store to itself, want its share %d", EventStream, got, want)
 	}
 }

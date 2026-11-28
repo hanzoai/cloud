@@ -54,13 +54,15 @@ func declared() (int64, error) {
 // the limit the same from one boot to the next: without it, a restart that restores
 // last boot's streams would be granted less, and the streams would shrink to match.
 //
-// A store with no room left states nothing: the streams it restored stand, and a
-// new one is refused for the reason that is true, which is a full disk.
-func limit(store, reserved, want int64) int64 {
+// A store with no room left returns zero. When no budget was declared (`want <= 0`),
+// budget leaves the account untouched so restored streams stand and new ones are
+// refused by the server's own store; when a budget WAS declared (`want > 0`), budget
+// fails closed rather than leaving the account unlimited.
+func limit(store, reserved, want int64, replicas int) int64 {
 	if store <= 0 {
 		return 0
 	}
-	if want <= 0 && store >= bus.Need() {
+	if want <= 0 && store >= bus.Need(replicas) {
 		return 0
 	}
 	room := min(store-reserved-1, (store-1)/int64(100+bus.Reserved())*100)
@@ -71,7 +73,9 @@ func limit(store, reserved, want int64) int64 {
 }
 
 // budget states the account's file limit on the running server and returns it; zero
-// means the account was left unlimited.
+// means no budget was declared and the account was left unlimited. When want > 0 and
+// no positive limit can be applied, budget returns an error instead of silently
+// leaving MaxStore unlimited.
 func budget(ns *server.Server, want int64) (int64, error) {
 	cfg := ns.JetStreamConfig()
 	if cfg == nil {
@@ -81,8 +85,11 @@ func budget(ns *server.Server, want int64) (int64, error) {
 	if err != nil {
 		return 0, err
 	}
-	n := limit(cfg.MaxStore, reserved, want)
+	n := limit(cfg.MaxStore, reserved, want, bus.Replicas())
 	if n == 0 {
+		if want > 0 {
+			return 0, fmt.Errorf("declared file store budget of %d bytes cannot fit on a server holding %d bytes (%d reserved)", want, cfg.MaxStore, reserved)
+		}
 		return 0, nil
 	}
 	// Only the file store is stated. Every other limit keeps the value an account

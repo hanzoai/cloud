@@ -39,22 +39,29 @@ var (
 // Reservations is every row above.
 var Reservations = []Reservation{Events, Usage}
 
-// Of is what the stream reserves on a plane whose file store is `store` bytes: its
-// ceiling, or its share of a store too small to hold that. A store that states no
-// limit (zero or negative, which is how JetStream spells "unlimited") leaves the
-// ceiling as it is.
-func (r Reservation) Of(store int64) int64 {
+// Of is what the stream reserves on a plane whose file store is `store` bytes across
+// `replicas` copies: its ceiling, or its share of a store too small to hold that.
+//
+// JetStream charges an un-tiered account's MaxStore as MaxBytes * Replicas when
+// Replicas > 1 (server accountReservation), so the stream's per-replica MaxBytes is
+// its share of `store` divided by max(replicas, 1). A store that states no limit
+// (zero or negative, which is how JetStream spells "unlimited") leaves the ceiling as
+// it is.
+func (r Reservation) Of(store int64, replicas int) int64 {
 	if store <= 0 {
 		return r.Ceiling
 	}
+	rep := int64(max(replicas, 1))
 	// In two parts, so a store of any size divides exactly and never overflows.
 	p := int64(r.Share)
-	return min(r.Ceiling, store/100*p+store%100*p/100)
+	return min(r.Ceiling, (store/100*p+store%100*p/100)/rep)
 }
 
 // Within is Of, held to what the store has left beside the other streams. `reserved`
-// is everything the account has reserved and `own` what this stream already holds
-// of that, so the rest is what the others hold.
+// is AccountInfo.ReservedStore (the sum of single-replica MaxBytes across streams)
+// and `own` what this stream already holds of that, so the rest is what the others
+// hold per replica; on an un-tiered account with `replicas` copies, each replica
+// group consumes MaxBytes * Replicas against `store`.
 //
 // The shares fit together only when every stream holds its share. A store carried
 // over from a build with other sizes, or one whose limit shrank between boots,
@@ -66,12 +73,13 @@ func (r Reservation) Of(store int64) int64 {
 //
 // With nothing left it answers the share, for the bus to refuse: no size it could
 // ask for would be taken, and zero is how JetStream spells "no ceiling".
-func (r Reservation) Within(store, reserved, own int64) int64 {
-	want := r.Of(store)
+func (r Reservation) Within(store, reserved, own int64, replicas int) int64 {
+	want := r.Of(store, replicas)
 	if store <= 0 {
 		return want
 	}
-	if left := store - (reserved - own); left > 0 && left < want {
+	rep := int64(max(replicas, 1))
+	if left := store/rep - (reserved - own); left > 0 && left < want {
 		return left
 	}
 	return want
@@ -82,12 +90,13 @@ func (r Reservation) Within(store, reserved, own int64) int64 {
 // beside the budget, so the two stream owners match one number.
 const StorageRefused = 10047
 
-// Need is the store that holds every ceiling at once: below it, a stream is refused
-// unless the shares apply.
-func Need() int64 {
+// Need is the un-tiered account store that holds every ceiling at once across
+// `replicas` copies: below it, a stream is refused unless the shares apply.
+func Need(replicas int) int64 {
+	rep := int64(max(replicas, 1))
 	var n int64
 	for _, r := range Reservations {
-		n += r.Ceiling
+		n += r.Ceiling * rep
 	}
 	return n
 }

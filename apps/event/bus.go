@@ -300,10 +300,10 @@ func EnsureEventStream(ctx context.Context, cl *infra.PubSubClient) error {
 // It is also held to what the other streams leave (bus.Reservation.Within): a store
 // carried over from another budget has them at other sizes.
 func eventStreamConfig(ctx context.Context, js jetstream.JetStream) jetstream.StreamConfig {
-	cfg := eventStream
+	cfg := withReplicas(eventStream)
 	if acct, err := js.AccountInfo(ctx); err == nil && acct != nil {
 		own, _ := reserved(ctx, js)
-		cfg.MaxBytes = bus.Events.Within(acct.Limits.MaxStore, int64(acct.ReservedStore), own)
+		cfg.MaxBytes = bus.Events.Within(acct.Limits.MaxStore, int64(acct.ReservedStore), own, cfg.Replicas)
 	}
 	return cfg
 }

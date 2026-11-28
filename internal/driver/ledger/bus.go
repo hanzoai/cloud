@@ -70,9 +70,10 @@ var usageStreamConfig = jetstream.StreamConfig{
 // carried over from another budget has them at other sizes.
 func usageStreamFor(ctx context.Context, js jetstream.JetStream) jetstream.StreamConfig {
 	cfg := usageStreamConfig
+	cfg.Replicas = bus.Replicas()
 	if acct, err := js.AccountInfo(ctx); err == nil && acct != nil {
 		own, _ := usageReserved(ctx, js)
-		cfg.MaxBytes = bus.Usage.Within(acct.Limits.MaxStore, int64(acct.ReservedStore), own)
+		cfg.MaxBytes = bus.Usage.Within(acct.Limits.MaxStore, int64(acct.ReservedStore), own, cfg.Replicas)
 	}
 	return cfg
 }
