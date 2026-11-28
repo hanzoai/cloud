@@ -326,6 +326,9 @@ func init() {
 		},
 		Example: json.RawMessage(`{"id":"src_0123456789abcdef0123456789abcdef","at":"2026-11-20T10:00:00Z","version":"1.8.4","zap":"","providers":[{"provider":"claude","instance":"claude-1","kind":"login","state":"ready","plan":"max"}],"busy":0,"sig":"c2lnbmF0dXJl"}`),
 	})
+	zip.Describe("github.com/hanzoai/cloud/apps/source POST /v1/machines/:id/usage", zip.Doc{
+		Description: "usage is the raw handler: the signature covers the exact body bytes and rides in\na header, neither of which a typed op can see.",
+	})
 	zip.Describe("github.com/hanzoai/cloud/apps/source POST /v1/machines/accounts", zip.Doc{
 		Description: "Seals a provider API key into KMS and records a reference to it.\nKMS keeps the value at kms://orgs/<org>/users/<person>/providers/<provider>/<id>;\nthe row keeps that path, the label and a fingerprint, and nothing else. The value\nis in no response, log, trace or audit field, and not even the owner can read it\nback: the gateway resolves it at call time. Only `kind: \"key\"` is accepted, for a\nprovider that takes a key.",
 		Fields: map[string]string{
