@@ -34,6 +34,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/bradleyfalzon/ghinstallation/v2"
@@ -42,6 +43,7 @@ import (
 	"github.com/hanzoai/cloud/forge"
 	"github.com/hanzoai/cloud/sdk"
 	"github.com/hanzoai/cloud/sdk/env"
+	"github.com/hanzoai/cloud/sdk/secret"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 )
 
@@ -90,6 +92,18 @@ func runQueue(s *cloud.Service[state], ctx context.Context) {
 	}
 }
 
+var (
+	forgeDial      = func(ctx context.Context) (*forge.Client, error) { return forge.Dial(ctx, cloud.KMSPeer{}) }
+	forgeAbsentLog atomic.Bool
+)
+
+// forgeUnconfigured reports whether forge.Dial failed because no Forge tracker
+// credential is stored in KMS (normal in standalone/local Cloud) rather than a
+// transient KMS or network failure.
+func forgeUnconfigured(err error) bool {
+	return errors.Is(err, secret.ErrNone) || errors.Is(err, secret.ErrUnconfigured)
+}
+
 // drain fills the free runner slots from the forge's queue, then from GitHub's
 // failed deliveries, then — when github is set — from GitHub's queue counted
 // against its runners, and answers whether it reconciled GitHub's queue. A full
@@ -109,9 +123,16 @@ func drain(s *cloud.Service[state], ctx context.Context, github bool) bool {
 	if free <= 0 {
 		return false
 	}
-	if fc, err := forge.Dial(ctx, cloud.KMSPeer{}); err != nil {
-		s.Log.Warn("runner queue: no forge client", "err", err)
+	if fc, err := forgeDial(ctx); err != nil {
+		if forgeUnconfigured(err) {
+			if forgeAbsentLog.CompareAndSwap(false, true) {
+				s.Log.Info("runner queue: forge token not configured; skipping forge runner drain", "ref", forge.TokenRef)
+			}
+		} else {
+			s.Log.Warn("runner queue: no forge client", "err", err)
+		}
 	} else {
+		forgeAbsentLog.Store(false)
 		free -= queued(s, ctx, fc.Machine())
 	}
 	if free <= 0 {

@@ -1,6 +1,7 @@
 package platform
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -8,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"slices"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -19,6 +21,7 @@ import (
 	"github.com/hanzoai/cloud/sdk"
 	"github.com/hanzoai/cloud/sdk/kit"
 	"github.com/hanzoai/cloud/sdk/plane"
+	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -391,5 +394,69 @@ func TestTheForgeQueueIsServedARepositoryAtATime(t *testing.T) {
 	}
 	if len(fairOrder(nil)) != 0 {
 		t.Fatal("an empty queue is not empty")
+	}
+}
+
+func TestDrainDoesNotSpamWarningsWhenForgeTokenIsUnconfigured(t *testing.T) {
+	t.Setenv("ZIP_RUNTIME_DIR", kit.Sockets(t))
+	t.Setenv("GITHUB_APP_ID", "")
+	t.Setenv("GITHUB_APP_PRIVATE_KEY", "")
+	plane.Unbind()
+	forge.Invalidate()
+	forgeAbsentLog.Store(false)
+	t.Cleanup(func() {
+		forge.Invalidate()
+		forgeAbsentLog.Store(false)
+	})
+
+	var outage sync.Mutex
+	failWithOutage := false
+	kmsApp := zip.New(zip.Config{AppName: "kms"})
+	kmsApp.Post("/kms/get", func(_ context.Context, _ *client.SecretIn) (*client.Secret, error) {
+		outage.Lock()
+		broken := failWithOutage
+		outage.Unlock()
+		if broken {
+			return nil, zip.Errorf(http.StatusInternalServerError, "kms.get: store unavailable")
+		}
+		return nil, zip.ErrNotFound("kms.get: no such secret")
+	}, zip.WithOperationID(client.KMSGet))
+	go func() { _ = kmsApp.Listen(zip.SocketPath("kms")) }()
+	t.Cleanup(func() { _ = kmsApp.Shutdown() })
+	for range 200 {
+		if c, err := net.Dial("unix", zip.SocketPath("kms")); err == nil {
+			_ = c.Close()
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+
+	var buf bytes.Buffer
+	s := jobService(t)
+	s.Log = luxlog.New("test").Output(&buf)
+	s.State.k8s.limits.maxRunners = 4
+	ctx := context.Background()
+
+	// Five ticks with FORGE_TRACKER_TOKEN@prod absent in local KMS: zero warnings, at most one info.
+	for range 5 {
+		drain(s, ctx, false)
+	}
+	logs := buf.String()
+	if strings.Contains(strings.ToLower(logs), `"level":"warn"`) || strings.Contains(logs, "no forge client") {
+		t.Fatalf("missing forge secret emitted warnings:\n%s", logs)
+	}
+	if got := strings.Count(logs, "forge token not configured"); got != 1 {
+		t.Fatalf("expected exactly 1 'forge token not configured' info log across 5 ticks, got %d:\n%s", got, logs)
+	}
+
+	// A genuine transient KMS error must still emit a warning.
+	buf.Reset()
+	outage.Lock()
+	failWithOutage = true
+	outage.Unlock()
+	drain(s, ctx, false)
+	logs = buf.String()
+	if !strings.Contains(logs, "runner queue: no forge client") {
+		t.Fatalf("transient KMS outage must warn 'runner queue: no forge client', got:\n%s", logs)
 	}
 }

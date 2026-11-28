@@ -106,13 +106,6 @@ func gateOpen(ctx context.Context, s *cloud.Service[state], owner, repo string, 
 	if !fullSHA.MatchString(p.Head.SHA) || !refName.MatchString(head) || !refName.MatchString(base) {
 		return nil
 	}
-	tok, err := gateToken(ctx, owner, repo)
-	if err != nil {
-		return err
-	}
-	if p.fork(owner, repo) {
-		return gateWrite(ctx, tok, owner, repo, p.Head.SHA, gateError, "a fork's pull request is not run on the forge", "")
-	}
 	fc, err := gateForge(ctx, s)
 	if err != nil {
 		return err
@@ -120,6 +113,13 @@ func gateOpen(ctx context.Context, s *cloud.Service[state], owner, repo string, 
 	r, err := fc.Repo(ctx, owner, repo)
 	if err != nil || r.Mirror || r.Actions == nil || !*r.Actions {
 		return err
+	}
+	if p.fork(owner, repo) {
+		tok, err := gateToken(ctx, owner, repo)
+		if err != nil {
+			return err
+		}
+		return gateWrite(ctx, tok, owner, repo, p.Head.SHA, gateError, "a fork's pull request is not run on the forge", "")
 	}
 	at, err := fc.Resolve(ctx, owner, repo, head)
 	if errors.Is(err, forge.ErrNotFound) || err == nil && !strings.EqualFold(at, p.Head.SHA) {

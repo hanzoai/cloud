@@ -350,10 +350,12 @@ func TestTheForgeHoldsThePullRequestItWillRun(t *testing.T) {
 		"it proposes again when the held one was closed": {func(w *gateWorld) {
 			w.pulls = []map[string]any{forgePullOf(4, "closed")}
 		}, gateHead, false, 1, ""},
-		"the branch has not landed yet":  {func(w *gateWorld) { w.branch = gateOld }, gateHead, false, 0, ""},
-		"a mirror is nothing to run":     {func(w *gateWorld) { w.mirror = true }, gateHead, false, 0, ""},
-		"a repository without workflows": {func(w *gateWorld) { w.actions = false }, gateHead, false, 0, ""},
-		"a fork is not run":              {func(*gateWorld) {}, gateHead, true, 0, gateError},
+		"the branch has not landed yet":            {func(w *gateWorld) { w.branch = gateOld }, gateHead, false, 0, ""},
+		"a mirror is nothing to run":               {func(w *gateWorld) { w.mirror = true }, gateHead, false, 0, ""},
+		"a repository without workflows":           {func(w *gateWorld) { w.actions = false }, gateHead, false, 0, ""},
+		"a fork is not run":                        {func(*gateWorld) {}, gateHead, true, 0, gateError},
+		"a fork on a mirror writes no status":      {func(w *gateWorld) { w.mirror = true }, gateHead, true, 0, ""},
+		"a fork without workflows writes no status": {func(w *gateWorld) { w.actions = false }, gateHead, true, 0, ""},
 	} {
 		t.Run(name, func(t *testing.T) {
 			w := newGateWorld(t)
@@ -382,8 +384,10 @@ func TestTheForgeHoldsThePullRequestItWillRun(t *testing.T) {
 			case tc.status != "" && (len(w.statuses) != 1 || w.statuses[0]["state"] != tc.status || w.statuses[0]["sha"] != gateHead):
 				t.Fatalf("statuses = %v, want one %s on the head", w.statuses, tc.status)
 			}
-			if tc.fork && w.asks("GET "+forge.API+"/repos/hanzo-inc/cloud") != 0 {
-				t.Fatal("a fork's pull request reached the forge")
+			if tc.fork && (w.asks("GET "+forge.API+"/repos/hanzo-inc/cloud/git/commits/agent-fix") != 0 ||
+				w.asks("GET "+forge.API+"/repos/hanzo-inc/cloud/pulls") != 0 ||
+				w.asks("POST "+forge.API+"/repos/hanzo-inc/cloud/pulls") != 0) {
+				t.Fatal("a fork's branch or proposal reached the forge")
 			}
 		})
 	}
