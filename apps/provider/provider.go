@@ -1224,6 +1224,7 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 	// Bind installations the App already holds to the org the caller acts in.
 	g.Post("/github/claim", o.githubClaim)
 	g.Get("/github/repos", o.githubRepos)
+	g.Post("/github/repos", o.githubCreateRepo, zip.WithStatus(http.StatusCreated))
 	// FIND ONE, AND TAKE A COPY. Search reads GitHub's public index — how you
 	// find a repository to fork, never a way to see inside one. Fork resolves
 	// against the installation's GRANTED set like every other write here.

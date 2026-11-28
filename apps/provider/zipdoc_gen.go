@@ -248,7 +248,7 @@ func init() {
 		Response: json.RawMessage(`{"installations":[{"login":"hanzoai","type":"Organization","connected":true,"htmlUrl":"https://github.com/hanzoai","grant":"all"}],"installUrl":"https://github.com/apps/hanzo/installations/new"}`),
 	})
 	zip.Describe("github.com/hanzoai/cloud/apps/provider GET /v1/provider/github/repos", zip.Doc{
-		Description: "Lists the GitHub repositories the caller may work on, most\nrecently pushed first, searched and paged on the server.\n\nA person who connected their own GitHub sees what their token reaches in this\nApp's installations. An org admin who has not sees every repository in the\ninstallations their org holds. Anyone else gets an empty page with\nconnected:false, which is the console's cue to ask them to connect.",
+		Description: "Lists the GitHub repositories the caller may work on, most\nrecently pushed first, searched and paged on the server.\n\nA person who connected their own GitHub sees what their token reaches in this\nApp's installations. An org admin who has not sees every repository in the\ninstallations their org holds (with connected:true whenever the org holds an\nactive installation, even with zero repositories). Anyone else gets an empty\npage with connected:false, which is the console's cue to ask them to connect.",
 		Fields: map[string]string{
 			"githubRepoItem.codebase":        "Codebase is the name it has in the org's code workspace once brought in\n(POST /v1/provider/github/repos/import): listed by GET /v1/git/repos when\nit is there.",
 			"githubRepoItem.default_branch":  "DefaultBranch is the branch GitHub opens it on.",
@@ -262,7 +262,7 @@ func init() {
 			"githubReposIn.limit":            "Limit is the page size: 1 to 100, and 50 when absent or unreadable.",
 			"githubReposIn.owner":            "Owner keeps one GitHub account's repositories — an org or a user login.",
 			"githubReposIn.q":                "Q keeps repositories whose owner/name contains it, case-insensitively.",
-			"githubReposOut.connected":       "Connected is whether this answer is the caller's OWN GitHub. False with\nrepositories is an org admin seeing the org's installations; false with none\nis the cue to connect.",
+			"githubReposOut.connected":       "Connected is true when the caller has connected their own GitHub account\nOR when an org admin's organization holds at least one active connected\nGitHub App installation (even if that installation currently has zero\nrepositories). False is the console's cue to ask the caller to connect.",
 			"githubReposOut.next":            "Next is the cursor for the page after this one; empty on the last page.",
 			"githubReposOut.repos":           "Repos is this page, most recently pushed first. Never null.",
 			"githubReposOut.total":           "Total is how many repositories match q and owner, across every page.",
@@ -749,18 +749,19 @@ func init() {
 		Response: json.RawMessage(`{"claimed":["hanzoai","luxfi"],"already":["zooai"]}`),
 	})
 	zip.Describe("github.com/hanzoai/cloud/apps/provider POST /v1/provider/github/fork", zip.Doc{
-		Description: "Forks a granted repository.\n\nGitHub's fork is ASYNCHRONOUS: it answers 202 with the target repo and\npopulates it in the background, and it answers the same 202 when the fork\nalready exists. So this reports what GitHub said rather than waiting — a call\nthat blocked until the clone finished would time out on a large repository and\ntell the caller nothing it does not already know.",
+		Description: "Forks either an owner-qualified repository (\"owner/repo\", using the\ncaller's connected personal GitHub OAuth token or a matching installation grant)\nor a bare repository name granted to the org's installation.\n\nGitHub's fork is ASYNCHRONOUS: it answers 202 with the target repo and\npopulates it in the background, and it answers the same 202 when the fork\nalready exists. So this reports what GitHub said rather than waiting — a call\nthat blocked until the clone finished would time out on a large repository and\ntell the caller nothing it does not already know.",
 		Fields: map[string]string{
 			"githubForkOut.clone_url":      "CloneURL is the fork's https git remote. GitHub populates a new fork in the\nbackground, so a clone issued the moment this answers can still find it empty.",
 			"githubForkOut.default_branch": "DefaultBranch is the branch the fork checks out, inherited from upstream.",
 			"githubForkOut.existing":       "Existing reports that the fork was already there. GitHub answers 202 either\nway, so without this a caller cannot tell \"made you one\" from \"you had one\".",
 			"githubForkOut.full_name":      "FullName is the fork's \"owner/repo\". The owner is the account it landed in\n— the request's org, or the installation's own account when none was named.",
 			"githubForkOut.html_url":       "HTMLURL is the fork's page on github.com.",
-			"githubForkReq.org":            "Org is the GitHub account to fork INTO; empty forks to the installation's\nown account, which is the common case.",
-			"githubForkReq.repo":           "Repo is a repository the org's installation was GRANTED, by name.",
+			"githubForkReq.name":           "Name is an optional target repository name for the new fork.",
+			"githubForkReq.org":            "Org is the GitHub account to fork INTO; empty forks to the authenticated\naccount (the connected user's personal account or the installation's own).",
+			"githubForkReq.repo":           "Repo is either a bare repository name granted to the org's installation\n(\"widgets\") or an owner-qualified repository (\"owner/repo\") forked with\nthe caller's connected GitHub account (falling back to an installation grant).",
 		},
-		Example:  json.RawMessage(`{"repo":"widgets"}`),
-		Response: json.RawMessage(`{"full_name":"acme/widgets","html_url":"https://github.com/acme/widgets","clone_url":"https://github.com/acme/widgets.git","default_branch":"main","existing":false}`),
+		Example:  json.RawMessage(`{"repo":"hanzoai/cloud","name":"my-cloud"}`),
+		Response: json.RawMessage(`{"full_name":"acme/my-cloud","html_url":"https://github.com/acme/my-cloud","clone_url":"https://github.com/acme/my-cloud.git","default_branch":"main","existing":false}`),
 	})
 	zip.Describe("github.com/hanzoai/cloud/apps/provider POST /v1/provider/github/issues/backfill", zip.Doc{
 		Description: "Seeds the native todo with the EXISTING issues across the\norg's granted repos (default state=open); the webhook keeps them live thereafter.\nOrg-scoped by the validated principal — a caller only ever backfills its OWN org.\nSynchronous + bounded (a total time budget and an issue cap) so it returns the\ncounts directly; idempotent by ExtRef, so a re-run continues where a truncated\npass left off and never duplicates.",
@@ -776,6 +777,26 @@ func init() {
 		},
 		Example:  json.RawMessage(`{"state":"all","repo":"acme/api"}`),
 		Response: json.RawMessage(`{"repos":12,"issues":430,"created":410,"updated":20,"failed":0}`),
+	})
+	zip.Describe("github.com/hanzoai/cloud/apps/provider POST /v1/provider/github/repos", zip.Doc{
+		Description: "Creates a repository on GitHub under the caller's connected\npersonal GitHub account (when org is omitted) or under a GitHub organization\n(when org is set).\n\nCreating under a personal account uses the caller's connected GitHub user OAuth\ntoken (/v1/provider/github/user/connect). Creating under a GitHub organization\nprefers the caller's connected GitHub user token and falls back to the org's\nbound GitHub App installation token when that installation is an Organization.\nIf a repository with the same name already exists on the target account (422),\nthe existing repository is fetched and returned idempotently with existing:true.\nWhen link_repo is set, the repository's clone URL is also registered as an\noutbound mirror target on that Hanzo Git repository.",
+		Fields: map[string]string{
+			"githubCreateRepoOut.clone_url":      "CloneURL is the repository's https git remote.",
+			"githubCreateRepoOut.default_branch": "DefaultBranch is the repository's default branch (for example \"main\").",
+			"githubCreateRepoOut.existing":       "Existing reports that a repository with this name already existed on the\ntarget account and was returned idempotently rather than newly created.",
+			"githubCreateRepoOut.full_name":      "FullName is the repository's \"owner/repo\" on GitHub.",
+			"githubCreateRepoOut.html_url":       "HTMLURL is the repository's page on github.com.",
+			"githubCreateRepoOut.linked":         "Linked reports whether the repository's clone URL was registered as an\noutbound mirror target on the requested Hanzo Git repository.",
+			"githubCreateRepoOut.private":        "Private is GitHub's visibility flag for the repository.",
+			"githubCreateRepoReq.description":    "Description is an optional short description shown on GitHub.",
+			"githubCreateRepoReq.linkRepo":       "LinkRepoCamel is an optional camelCase alias for link_repo.",
+			"githubCreateRepoReq.link_repo":      "LinkRepo is an optional Hanzo Git repository name in the caller's org;\nwhen set, the new GitHub repository's clone URL is registered as an\noutbound mirror target on that Hanzo Git repository so commits sync immediately.",
+			"githubCreateRepoReq.name":           "Name is the repository name to create on GitHub. Required.",
+			"githubCreateRepoReq.org":            "Org is the GitHub organization login to create the repository under.\nOmit to create under the caller's connected personal GitHub account.",
+			"githubCreateRepoReq.private":        "Private creates a private repository when true; defaults to false (public).",
+		},
+		Example:  json.RawMessage(`{"name":"my-app","description":"Starter app","private":false,"link_repo":"my-app"}`),
+		Response: json.RawMessage(`{"full_name":"octocat/my-app","html_url":"https://github.com/octocat/my-app","clone_url":"https://github.com/octocat/my-app.git","default_branch":"main","private":false,"existing":false,"linked":true}`),
 	})
 	zip.Describe("github.com/hanzoai/cloud/apps/provider POST /v1/provider/github/repos/:repo/pages", zip.Doc{
 		Description: "Creates the repo's Pages site and answers 201 Created with it.\nWith buildType \"workflow\" the site builds via GitHub Actions; otherwise it builds\nfrom a branch source, defaulting to the repo's own default branch when none is\ngiven. Only \"/\" and \"/docs\" are legal source paths (GitHub's rule).",

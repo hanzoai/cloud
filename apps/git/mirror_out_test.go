@@ -11,6 +11,7 @@ import (
 
 	"github.com/hanzoai/cloud/client"
 	"github.com/hanzoai/cloud/internal/gitcred"
+	"github.com/hanzoai/cloud/sdk"
 	"github.com/zap-proto/zip"
 )
 
@@ -175,5 +176,94 @@ func TestOwnReplicaIsAnExactMatch(t *testing.T) {
 	}
 	if !ownReplica("acme", widgets("https://github.com/hanzo-community/acme_widgets.git")) {
 		t.Error("acme's provisioned replica was not recognized")
+	}
+}
+
+// When the org holds no GitHub App installation for the target repository but
+// the caller context carries an authenticated user, mirrorCredential falls back
+// to IntegrationsGitHubRun so a user who connected their personal GitHub account
+// can push to repositories their account reaches, and revokes the minted token
+// once the push completes.
+func TestMirrorCredentialFallsBackToUserRunToken(t *testing.T) {
+	revoked := github(t)
+	grants(t, func(*client.GitHubGrantIn) (*client.GitHubGrant, error) {
+		return nil, errors.New("github grant: no org installation")
+	})
+	var runAsked []string
+	wasRun := askRun
+	askRun = func(ctx context.Context, in *client.GitHubRunIn) (*client.GitHubRun, error) {
+		who := zip.CallerOf(ctx)
+		runAsked = append(runAsked, who.Org+":"+who.User+" "+in.Owner+"/"+in.Repo)
+		return &client.GitHubRun{Token: "ghs_user_scoped", Owner: in.Owner, Repo: in.Repo}, nil
+	}
+	t.Cleanup(func() { askRun = wasRun })
+
+	ctx := zip.WithCaller(context.Background(), zip.Caller{Org: "acme", User: "alice"})
+	hdr, end := mirrorCredential(ctx, "acme", MirrorTarget{
+		Org: "acme", Repo: "widgets", Host: "github.com", URL: "https://github.com/octo-alice/widgets.git",
+	})
+	if hdr != basic("x-access-token", "ghs_user_scoped") {
+		t.Fatalf("header = %q, want user-run fallback token", hdr)
+	}
+	if len(runAsked) != 1 || runAsked[0] != "acme:alice octo-alice/widgets" {
+		t.Fatalf("runAsked = %v, want [acme:alice octo-alice/widgets]", runAsked)
+	}
+	end()
+	if got := revoked(); len(got) != 1 || got[0] != "ghs_user_scoped" {
+		t.Fatalf("revoked = %v, want [ghs_user_scoped]", got)
+	}
+}
+
+// Attaching a GitHub mirror target to a repository that already has commits on
+// its default branch immediately triggers a best-effort initial push (both via
+// POST /v1/git/repos/:name/targets and via EnsureMirror), while attaching to an
+// empty repository does nothing.
+func TestAttachTargetKicksInitialMirrorPushForNonEmptyRepo(t *testing.T) {
+	app := mountApp(t)
+	base := liveServer(t, app)
+
+	type pushed struct {
+		url    string
+		branch string
+		org    string
+	}
+	var calls []pushed
+	wasHook := initialMirrorPushHook
+	initialMirrorPushHook = func(_ *cloud.Service[state], _ context.Context, target MirrorTarget, branch string) {
+		calls = append(calls, pushed{url: target.URL, branch: branch, org: target.Org})
+	}
+	t.Cleanup(func() { initialMirrorPushHook = wasHook })
+
+	// 1. Empty repo: attaching a mirror target must NOT kick off a push.
+	if code, b := do(t, app, http.MethodPost, "/v1/git/repos", "acme", map[string]any{"name": "empty"}); code != 201 {
+		t.Fatalf("create empty: %d %s", code, b)
+	}
+	if code, b := do(t, app, http.MethodPost, "/v1/git/repos/empty/targets", "acme",
+		map[string]any{"url": "https://github.com/acme/empty.git"}); code != 201 {
+		t.Fatalf("attach empty target: %d %s", code, b)
+	}
+	if len(calls) != 0 {
+		t.Fatalf("empty repo must not trigger initial mirror push, got %+v", calls)
+	}
+
+	// 2. Non-empty repo with commits on main: attaching via POST /targets triggers initial push.
+	if code, b := do(t, app, http.MethodPost, "/v1/git/repos", "acme", map[string]any{"name": "seeded"}); code != 201 {
+		t.Fatalf("create seeded: %d %s", code, b)
+	}
+	pushCommit(t, base, "acme", "seeded", "main", "initial commit")
+	if code, b := do(t, app, http.MethodPost, "/v1/git/repos/seeded/targets", "acme",
+		map[string]any{"url": "https://github.com/acme/seeded.git"}); code != 201 {
+		t.Fatalf("attach seeded target: %d %s", code, b)
+	}
+	if len(calls) != 1 || calls[0].url != "https://github.com/acme/seeded.git" || calls[0].branch != "main" || calls[0].org != "acme" {
+		t.Fatalf("POST /targets initial push = %+v, want main -> https://github.com/acme/seeded.git", calls)
+	}
+
+	// 3. EnsureMirror (used by POST /v1/provider/github/repos with link_repo) also triggers initial push.
+	if err := (gitMirrorController{}).EnsureMirror(context.Background(), "acme", "", "seeded", "https://gitlab.com/acme/seeded.git", true); err != nil {
+		t.Fatalf("EnsureMirror: %v", err)
+	}
+	if len(calls) != 2 || calls[1].url != "https://gitlab.com/acme/seeded.git" || calls[1].branch != "main" {
+		t.Fatalf("EnsureMirror initial push = %+v", calls)
 	}
 }

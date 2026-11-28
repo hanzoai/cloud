@@ -271,6 +271,7 @@ func (o ops) addTarget(ctx context.Context, in *mirrorTargetReq) (*mirrorTargetV
 		}
 		return nil, zip.Errorf(http.StatusInternalServerError, "%v", err)
 	}
+	kickInitialMirror(o.s, ctx, v)
 	view := mirrorToView(v)
 	return &view, nil
 }

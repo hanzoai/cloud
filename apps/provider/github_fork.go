@@ -23,11 +23,15 @@ import (
 
 // githubForkReq names the repository to fork.
 type githubForkReq struct {
-	// Repo is a repository the org's installation was GRANTED, by name.
+	// Repo is either a bare repository name granted to the org's installation
+	// ("widgets") or an owner-qualified repository ("owner/repo") forked with
+	// the caller's connected GitHub account (falling back to an installation grant).
 	Repo string `json:"repo"`
-	// Org is the GitHub account to fork INTO; empty forks to the installation's
-	// own account, which is the common case.
+	// Org is the GitHub account to fork INTO; empty forks to the authenticated
+	// account (the connected user's personal account or the installation's own).
 	Org string `json:"org"`
+	// Name is an optional target repository name for the new fork.
+	Name string `json:"name,omitempty"`
 }
 
 // githubForkOut is the fork GitHub created, or the one that already existed.
@@ -47,7 +51,9 @@ type githubForkOut struct {
 	Existing bool `json:"existing"`
 }
 
-// githubFork forks a granted repository.
+// githubFork forks either an owner-qualified repository ("owner/repo", using the
+// caller's connected personal GitHub OAuth token or a matching installation grant)
+// or a bare repository name granted to the org's installation.
 //
 // GitHub's fork is ASYNCHRONOUS: it answers 202 with the target repo and
 // populates it in the background, and it answers the same 202 when the fork
@@ -55,38 +61,99 @@ type githubForkOut struct {
 // that blocked until the clone finished would time out on a large repository and
 // tell the caller nothing it does not already know.
 //
-// Example: {"repo":"widgets"}
-// Response: {"full_name":"acme/widgets","html_url":"https://github.com/acme/widgets","clone_url":"https://github.com/acme/widgets.git","default_branch":"main","existing":false}
+// Example: {"repo":"hanzoai/cloud","name":"my-cloud"}
+// Response: {"full_name":"acme/my-cloud","html_url":"https://github.com/acme/my-cloud","clone_url":"https://github.com/acme/my-cloud.git","default_branch":"main","existing":false}
 func (o ops) githubFork(ctx context.Context, in *githubForkReq) (*githubForkOut, error) {
 	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
 	repo := strings.TrimSpace(in.Repo)
-	if !validRepoName(repo) {
-		return nil, zip.ErrBadRequest("repo must be a valid repository name")
+	target := strings.TrimSpace(in.Org)
+	if target != "" && !validRepoName(target) {
+		return nil, zip.ErrBadRequest("org must be a valid GitHub organization name")
 	}
-	pr, err := resolveGrantedRepo(ctx, org, repo)
-	if err != nil {
-		return nil, err
-	}
-	owner, name, ok := splitFullName(pr.fullName)
-	if !ok {
-		return nil, fmt.Errorf("invalid repository full name")
+	forkName := strings.TrimSpace(in.Name)
+	if forkName != "" && !validRepoName(forkName) {
+		return nil, zip.ErrBadRequest("name must be a valid repository name")
 	}
 
+	var (
+		owner    string
+		name     string
+		tok      string
+		usedUser bool
+	)
+	user := factsOf(ctx).user
+	if strings.Contains(repo, "/") {
+		var ok bool
+		owner, name, ok = splitFullName(repo)
+		if !ok || !validRepoName(owner) || !validRepoName(name) {
+			return nil, zip.ErrBadRequest("repo must be a valid repository name or owner/repo")
+		}
+		if !githubConfigured() {
+			return nil, zip.Errorf(http.StatusServiceUnavailable, "github integration is not configured on this deployment")
+		}
+		userTok, _, hasUser, uerr := personToken(ctx, o.s, org, user)
+		if uerr != nil {
+			return nil, uerr
+		}
+		if hasUser {
+			tok = userTok
+			usedUser = true
+		} else {
+			pr, rerr := resolveGrantedFullName(ctx, org, owner, name)
+			if rerr != nil {
+				return nil, zip.Errorf(http.StatusPreconditionFailed,
+					"Connect your personal GitHub account (/v1/provider/github/user/connect) to fork %s/%s", owner, name)
+			}
+			var ok2 bool
+			owner, name, ok2 = splitFullName(pr.fullName)
+			if !ok2 {
+				return nil, fmt.Errorf("invalid repository full name")
+			}
+			tok = pr.token
+		}
+	} else {
+		if !validRepoName(repo) {
+			return nil, zip.ErrBadRequest("repo must be a valid repository name")
+		}
+		pr, rerr := resolveGrantedRepo(ctx, org, repo)
+		if rerr != nil {
+			return nil, rerr
+		}
+		var ok bool
+		owner, name, ok = splitFullName(pr.fullName)
+		if !ok {
+			return nil, fmt.Errorf("invalid repository full name")
+		}
+		tok = pr.token
+	}
+
+	payload := map[string]string{}
+	if target != "" {
+		payload["organization"] = target
+	}
+	if forkName != "" {
+		payload["name"] = forkName
+	}
 	var body []byte
-	if target := strings.TrimSpace(in.Org); target != "" {
-		body, _ = json.Marshal(map[string]string{"organization": target})
+	if len(payload) > 0 {
+		body, _ = json.Marshal(payload)
 	}
 	endpoint := strings.TrimRight(githubAPIBase, "/") + "/repos/" +
 		url.PathEscape(owner) + "/" + url.PathEscape(name) + "/forks"
-	code, raw, hdr, err := githubCall(ctx, pr.token, http.MethodPost, endpoint, body)
+	code, raw, hdr, err := githubCall(ctx, tok, http.MethodPost, endpoint, body)
 	if err != nil {
 		return nil, err
 	}
+	if code == http.StatusUnauthorized && usedUser {
+		forgetPerson(ctx, o.s, org, user)
+		return nil, zip.Errorf(http.StatusPreconditionFailed,
+			"Connect your personal GitHub account (/v1/provider/github/user/connect) to fork %s/%s", owner, name)
+	}
 	if code < 200 || code > 299 {
-		return nil, pagesErr(code, raw, hdr)
+		return nil, githubRepoErr(code, raw, hdr)
 	}
 	var got struct {
 		FullName      string `json:"full_name"`
@@ -99,6 +166,10 @@ func (o ops) githubFork(ctx context.Context, in *githubForkReq) (*githubForkOut,
 	if jerr := json.Unmarshal(raw, &got); jerr != nil {
 		return nil, fmt.Errorf("github fork: %w", jerr)
 	}
+	repoIndex.forgetOrg(org)
+	if user != "" {
+		repoIndex.forgetUser(org, user)
+	}
 	// A fork GitHub just made has created_at == updated_at; one that already
 	// existed has drifted. It is a heuristic and it is the only signal GitHub
 	// gives, so it is reported as a hint and never used to decide anything.
@@ -107,6 +178,40 @@ func (o ops) githubFork(ctx context.Context, in *githubForkReq) (*githubForkOut,
 		DefaultBranch: got.DefaultBranch,
 		Existing:      got.CreatedAt != "" && got.CreatedAt != got.UpdatedAt,
 	}, nil
+}
+
+// resolveGrantedFullName resolves an owner/repo pair against the org's bound
+// GitHub App installations, returning the installation token and canonical full
+// name when that exact repository is granted.
+func resolveGrantedFullName(ctx context.Context, org, owner, repoName string) (pagesRepo, error) {
+	if !githubConfigured() {
+		return pagesRepo{}, zip.Errorf(http.StatusServiceUnavailable, "github integration is not configured on this deployment")
+	}
+	conns := Connections(org, "github")
+	if len(conns) == 0 {
+		return pagesRepo{}, zip.Errorf(http.StatusConflict, "github is not connected for this organization")
+	}
+	want := strings.ToLower(owner + "/" + repoName)
+	for _, c := range conns {
+		tok, herr := githubTokenFor(ctx, org, c.Label)
+		if herr != nil {
+			continue
+		}
+		instID, herr := installationID(org, c.Label)
+		if herr != nil {
+			continue
+		}
+		repos, err := grantedRepos(ctx, instID, tok)
+		if err != nil {
+			continue
+		}
+		for _, r := range repos {
+			if strings.ToLower(r.FullName) == want {
+				return pagesRepo{token: tok, fullName: r.FullName, defaultBranch: r.DefaultBranch}, nil
+			}
+		}
+	}
+	return pagesRepo{}, zip.Errorf(http.StatusNotFound, "repository is not granted to this organization's installation")
 }
 
 // githubSearchReq is a query against GitHub's public repository index.
