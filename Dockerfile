@@ -39,7 +39,7 @@ RUN --mount=type=cache,id=cloud-oss-gomod,target=/go/pkg/mod \
     GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build -trimpath \
       -tags "sqlite_fts5 sqlite_math_functions" \
       -ldflags="-s -w" \
-      -o /out/ $(printf './plugin/%s ' $spawned); \
+      -o /out/ ./plugin/smoke $(printf './plugin/%s ' $spawned); \
     touch -d @0 /out/*
 
 FROM alpine:3.21
