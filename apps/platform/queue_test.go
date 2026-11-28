@@ -44,7 +44,7 @@ func TestQueuedStartsWhatTheDeliveriesDidNot(t *testing.T) {
 	}{
 		{1, "hanzoai", "gui", "linux-arm64"},     // has its runner
 		{2, "hanzo-apps", "chat", "linux-amd64"}, // started
-		{3, "luxfi", "node", "linux-amd64"},      // a GitHub org name is not a namespace here
+		{3, "lux", "node", "linux-amd64"},        // non-existent brand alias is not a namespace here
 		{4, "hanzoai", "app", "macos-arm64"},     // a host's job, not a pod's
 		{5, "charts", "app", "linux-amd64"},      // started
 		{6, "hanzoai", "web", "linux-amd64"},     // started, and the forge's amd64 half is full

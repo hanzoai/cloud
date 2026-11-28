@@ -81,7 +81,7 @@ func planeGitHubRepo(ctx context.Context, in *client.GitHubRepoIn) (*client.GitH
 		if strings.ToLower(r.FullName) != want {
 			continue
 		}
-		it := item(r)
+		it := item(org, r)
 		return &client.GitHubRepo{
 			Owner: it.Owner, Repo: it.Name, Base: safeBranch(it.DefaultBranch), Private: it.Private,
 			Installation: it.InstallationID, Personal: personal,

@@ -680,10 +680,9 @@ func TestOrg_IsClosedSoAnUnmappedNamespaceIsRefused(t *testing.T) {
 	if got, err := Org("  HANZOAI "); err != nil || got != "hanzo" {
 		t.Fatalf("Org is not normalising: %q, %v", got, err)
 	}
-	// An ordinary tenant, the reserved org, and the shapes an attacker would
-	// reach for. NONE of them may resolve. The estate's own namespaces (hanzo,
-	// hanzo-inc, hanzozt) are declared in [estate] and are not in this list.
-	for _, owner := range []string{"acme", "luxfi", "zooai", "admin", "", "HANZOAI-"} {
+	// An ordinary tenant, the non-existent brand aliases (hanzo, lux, zoo), and
+	// the shapes an attacker would reach for. NONE of them may resolve.
+	for _, owner := range []string{"acme", "hanzo", "lux", "zoo", "admin", "", "HANZOAI-"} {
 		if got, err := Org(owner); err == nil {
 			t.Fatalf("Org(%q) = %q with no error — an unmapped namespace became a tenant", owner, got)
 		} else if !errors.Is(err, ErrNoOrg) {

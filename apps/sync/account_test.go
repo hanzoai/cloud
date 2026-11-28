@@ -146,7 +146,7 @@ func TestNativesReadTheForge(t *testing.T) {
 	if held.Status != "synced" || held.Branch != "main" || held.AdvancedAt == "" {
 		t.Errorf("held = %+v, want synced on main with an advance", held)
 	}
-	wantURL := "/" + forgeOwner + "/" + widgets.flat()
+	wantURL := "/" + upOwner + "/" + repoName
 	if !strings.HasSuffix(held.URL, wantURL) || held.Clone != held.URL+".git" {
 		t.Errorf("held addresses = %q / %q, want …%s and its .git", held.URL, held.Clone, wantURL)
 	}
@@ -160,7 +160,7 @@ func TestNativesReadTheForge(t *testing.T) {
 		t.Error("an account link reported a copy of its own")
 	}
 
-	diverge(t, fg.URL+"/"+forgeOwner+"/"+widgets.flat()+".git", "somebody's work")
+	diverge(t, fg.URL+"/"+upOwner+"/"+repoName+".git", "somebody's work")
 	src.commit("upstream's work")
 	if res := inbound(t, cloneURL); !res.Conflict {
 		t.Fatalf("want conflict, got %+v", res)

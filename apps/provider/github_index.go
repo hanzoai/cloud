@@ -38,7 +38,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/hanzoai/cloud/forge"
 	"github.com/hanzoai/cloud/sdk"
 	"github.com/hanzoai/cloud/sdk/env"
 	"github.com/hanzoai/cloud/sdk/principal"
@@ -636,12 +635,12 @@ func (o ops) githubRepos(ctx context.Context, in *githubReposIn) (*githubReposOu
 			}
 			continue
 		}
-		out.Repos = append(out.Repos, item(r))
+		out.Repos = append(out.Repos, item(org, r))
 	}
 	return out, nil
 }
 
-func item(r githubRepo) githubRepoItem {
+func item(_ string, r githubRepo) githubRepoItem {
 	owner, name, _ := splitFullName(r.FullName)
 	if r.Owner.Login != "" {
 		owner = r.Owner.Login
@@ -652,7 +651,7 @@ func item(r githubRepo) githubRepoItem {
 	return githubRepoItem{
 		Owner: owner, Name: name, FullName: r.FullName, Private: r.Private,
 		DefaultBranch: r.DefaultBranch, PushedAt: r.PushedAt, InstallationID: r.Installation,
-		Codebase: forge.Imported(owner, name),
+		Codebase: strings.ToLower(strings.TrimSpace(owner)) + "/" + strings.ToLower(strings.TrimSpace(name)),
 	}
 }
 

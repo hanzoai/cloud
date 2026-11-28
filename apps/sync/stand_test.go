@@ -241,9 +241,35 @@ type stand struct {
 	*host
 	owner string
 
-	rulesMu sync.Mutex
-	rules   map[string]map[string]any // repo → the last branch rule asked for
-	actions map[string]bool           // repo → has_actions as last set; absent is the forge's default, on
+	rulesMu     sync.Mutex
+	orgs        map[string]string         // org → visibility
+	rules       map[string]map[string]any // repo → the last branch rule asked for
+	actions     map[string]bool           // repo → has_actions as last set; absent is the forge's default, on
+	mirrors     map[string]bool           // owner/repo → true when repository is a pull mirror
+	mirrorSyncs []string                  // owner/repo synced via POST /repos/{owner}/{repo}/mirror-sync
+}
+
+// markMirror marks owner/repo on this stand as a pull mirror (read-only to git
+// pushes and branch edits, refreshed via POST /repos/{owner}/{repo}/mirror-sync).
+func (s *stand) markMirror(owner, name string) {
+	s.rulesMu.Lock()
+	defer s.rulesMu.Unlock()
+	if s.mirrors == nil {
+		s.mirrors = map[string]bool{}
+	}
+	s.mirrors[owner+"/"+name] = true
+}
+
+func (s *stand) isMirror(owner, name string) bool {
+	s.rulesMu.Lock()
+	defer s.rulesMu.Unlock()
+	return s.mirrors[owner+"/"+name]
+}
+
+func (s *stand) syncedMirrors() []string {
+	s.rulesMu.Lock()
+	defer s.rulesMu.Unlock()
+	return append([]string(nil), s.mirrorSyncs...)
 }
 
 // rule returns the branch-protection rule the client asked this stand to write on
@@ -308,6 +334,69 @@ func (s *stand) rest(w http.ResponseWriter, r *http.Request) {
 	}
 	seg := strings.Split(strings.Trim(strings.TrimPrefix(r.URL.Path, "/v1/"), "/"), "/")
 	switch {
+	// POST /v1/orgs — create org.
+	case r.Method == http.MethodPost && len(seg) == 1 && seg[0] == "orgs":
+		var in struct {
+			Username   string `json:"username"`
+			Visibility string `json:"visibility"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&in)
+		s.rulesMu.Lock()
+		if s.orgs == nil {
+			s.orgs = map[string]string{}
+		}
+		if _, taken := s.orgs[in.Username]; taken {
+			s.rulesMu.Unlock()
+			w.WriteHeader(http.StatusUnprocessableEntity)
+			return
+		}
+		vis := in.Visibility
+		if vis == "" {
+			vis = "private"
+		}
+		s.orgs[in.Username] = vis
+		s.rulesMu.Unlock()
+		w.WriteHeader(http.StatusCreated)
+		s.reply(w, map[string]any{"username": in.Username, "visibility": vis})
+	// GET /v1/orgs/{owner} — read org.
+	case r.Method == http.MethodGet && len(seg) == 2 && seg[0] == "orgs":
+		s.rulesMu.Lock()
+		vis, ok := s.orgs[seg[1]]
+		s.rulesMu.Unlock()
+		if !ok {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		s.reply(w, map[string]any{"username": seg[1], "visibility": vis})
+	// POST /v1/repos/{owner}/{repo}/mirror-sync — trigger pull mirror refresh.
+	case r.Method == http.MethodPost && len(seg) == 4 && seg[0] == "repos" && seg[3] == "mirror-sync":
+		dir := s.bare(seg[1], seg[2])
+		if _, err := os.Stat(dir); err != nil {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		if !s.isMirror(seg[1], seg[2]) {
+			http.Error(w, "repository is not a mirror", http.StatusForbidden)
+			return
+		}
+		s.rulesMu.Lock()
+		s.mirrorSyncs = append(s.mirrorSyncs, seg[1]+"/"+seg[2])
+		s.rulesMu.Unlock()
+		w.WriteHeader(http.StatusOK)
+	// GET /v1/repos/{owner}/{repo}/branches/{branch} — read branch tip.
+	case r.Method == http.MethodGet && len(seg) == 5 && seg[0] == "repos" && seg[3] == "branches":
+		dir := s.bare(seg[1], seg[2])
+		if _, err := os.Stat(dir); err != nil {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		branch, _ := url.PathUnescape(seg[4])
+		sha := tip(s.t, dir, "refs/heads/"+branch)
+		if sha == "" {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		s.reply(w, map[string]any{"name": branch, "commit": map[string]any{"id": sha}})
 	// POST /v1/repos/{owner}/{repo}/branch_protections — state a branch rule.
 	//
 	// The rule is REMEMBERED rather than enforced: this stand serves real
@@ -396,6 +485,10 @@ func (s *stand) rest(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if r.Method == http.MethodPatch {
+			if s.isMirror(seg[1], seg[2]) {
+				http.Error(w, "Git Repository is a mirror.", http.StatusForbidden)
+				return
+			}
 			// Like the forge, a PATCH changes only the fields it carries.
 			var in struct {
 				Default *string `json:"default_branch"`
@@ -433,7 +526,7 @@ func (s *stand) repoJSON(owner, name string) map[string]any {
 	}
 	return map[string]any{
 		"name": name, "full_name": owner + "/" + name,
-		"default_branch": head, "private": true,
+		"default_branch": head, "private": true, "mirror": s.isMirror(owner, name),
 		"permissions": map[string]any{"admin": true, "push": true, "pull": true},
 		"ssh_url":     "ssh://git@stand/" + owner + "/" + name + ".git",
 	}

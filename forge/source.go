@@ -368,7 +368,7 @@ var ErrNoOwner = errors.New("forge: this org has no namespace on the forge")
 // for it and recorded under the validated org ([Workspace], workspace.go) —
 // never through its name, and never through anything this table or [estate]
 // names.
-var owners = map[string]string{"hanzo": "hanzoai", "lux": "lux", "zoo": "zoo", "adnexus": "adnexus"}
+var owners = map[string]string{"hanzo": "hanzoai", "lux": "luxfi", "zoo": "zooai", "adnexus": "adnexus"}
 
 // writers declares the write policy for estate orgs: which forge org and team
 // a validated member of the IAM org is admitted to.
@@ -429,7 +429,6 @@ var orgs = func() map[string]string {
 // [owners] is; adding one is a deliberate edit, never a side effect of a name.
 var estate = map[string]string{
 	"charts":          "hanzo",
-	"hanzo":           "hanzo",
 	"hanzo-apps":      "hanzo",
 	"hanzo-community": "hanzo",
 	"hanzo-dart":      "hanzo",
@@ -467,4 +466,176 @@ func Org(owner string) (string, error) {
 		return o, nil
 	}
 	return "", fmt.Errorf("%w: %q", ErrNoOrg, owner)
+}
+
+// estateAccounts is the closed table of verified upstream GitHub accounts that
+// have canonical org namespaces on this forge, mapped to the IAM org that owns
+// them. It mirrors charts/app/files/hanzo/estate/estate.json.
+//
+// Closed for the exact same security reason as [owners] and [estate]: an IAM
+// org may sync directly into <account>/<repo> ONLY when this table (or [orgs])
+// assigns <account> to that exact validated IAM org. Any other account — a
+// third-party upstream, another brand's org, or any customer org — stays
+// flattened inside the org's own workspace via [Imported].
+var estateAccounts = func() map[string]string {
+	m := map[string]string{
+		// hanzo
+		"crowdstart":       "hanzo",
+		"enso-browser":     "hanzo",
+		"hanzo-agency":     "hanzo",
+		"hanzo-app":        "hanzo",
+		"hanzo-apps":       "hanzo",
+		"hanzo-cl":         "hanzo",
+		"hanzo-community":  "hanzo",
+		"hanzo-core":       "hanzo",
+		"hanzo-cpp":        "hanzo",
+		"hanzo-csharp":     "hanzo",
+		"hanzo-dart":       "hanzo",
+		"hanzo-docs":       "hanzo",
+		"hanzo-ds":         "hanzo",
+		"hanzo-ext":        "hanzo",
+		"hanzo-fi":         "hanzo",
+		"hanzo-git":        "hanzo",
+		"hanzo-go":         "hanzo",
+		"hanzo-inc":        "hanzo",
+		"hanzo-industries": "hanzo",
+		"hanzo-io":         "hanzo",
+		"hanzo-java":       "hanzo",
+		"hanzo-js":         "hanzo",
+		"hanzo-kotlin":     "hanzo",
+		"hanzo-kt":         "hanzo",
+		"hanzo-labs":       "hanzo",
+		"hanzo-lm":         "hanzo",
+		"hanzo-ml":         "hanzo",
+		"hanzo-os":         "hanzo",
+		"hanzo-py":         "hanzo",
+		"hanzo-rs":         "hanzo",
+		"hanzo-studio":     "hanzo",
+		"hanzo-swift":      "hanzo",
+		"hanzo-templates":  "hanzo",
+		"hanzoai":          "hanzo",
+		"hanzoapp":         "hanzo",
+		"hanzobot":         "hanzo",
+		"hanzocd":          "hanzo",
+		"hanzochat":        "hanzo",
+		"hanzocr":          "hanzo",
+		"hanzodao":         "hanzo",
+		"hanzodb":          "hanzo",
+		"hanzodns":         "hanzo",
+		"hanzodocdb":       "hanzo",
+		"hanzodocs":        "hanzo",
+		"hanzofn":          "hanzo",
+		"hanzogui":         "hanzo",
+		"hanzohq":          "hanzo",
+		"hanzoiam":         "hanzo",
+		"hanzoid":          "hanzo",
+		"hanzoinsights":    "hanzo",
+		"hanzoio":          "hanzo",
+		"hanzokms":         "hanzo",
+		"hanzokv":          "hanzo",
+		"hanzolm":          "hanzo",
+		"hanzolog":         "hanzo",
+		"hanzometric":      "hanzo",
+		"hanzompc":         "hanzo",
+		"hanzomsg":         "hanzo",
+		"hanzonet":         "hanzo",
+		"hanzonetwork":     "hanzo",
+		"hanzoo11y":        "hanzo",
+		"hanzos3":          "hanzo",
+		"hanzoskill":       "hanzo",
+		"hanzoskills":      "hanzo",
+		"hanzosql":         "hanzo",
+		"hanzoteam":        "hanzo",
+		"hanzoui":          "hanzo",
+		"hanzovm":          "hanzo",
+		"hanzoworks":       "hanzo",
+		"hanzozt":          "hanzo",
+		"zap-proto":        "hanzo",
+		"zap-protocol":     "hanzo",
+		"zenlm":            "hanzo",
+		"zos-apps":         "hanzo",
+		// lux
+		"lux-amm":           "lux",
+		"lux-apps":          "lux",
+		"lux-bridge":        "lux",
+		"lux-cpp":           "lux",
+		"lux-dex":           "lux",
+		"lux-docs":          "lux",
+		"lux-exchange":      "lux",
+		"lux-gpu":           "lux",
+		"lux-js":            "lux",
+		"lux-mpc":           "lux",
+		"lux-nft":           "lux",
+		"lux-private":       "lux",
+		"lux-rs":            "lux",
+		"lux-tel":           "lux",
+		"lux-wallet":        "lux",
+		"luxats":            "lux",
+		"luxaudio":          "lux",
+		"luxbank":           "lux",
+		"luxbd":             "lux",
+		"luxcpp":            "lux",
+		"luxcredit":         "lux",
+		"luxdao":            "lux",
+		"luxdefi":           "lux",
+		"luxexchange":       "lux",
+		"luxfhe":            "lux",
+		"luxfi":             "lux",
+		"luxfinance":        "lux",
+		"luxgpu":            "lux",
+		"luxnext":           "lux",
+		"luxpq":             "lux",
+		"luxstatic":         "lux",
+		"luxwallet":         "lux",
+		"osagedao":          "lux",
+		"osagenet":          "lux",
+		"osagepeople":       "lux",
+		"pars-docs":         "lux",
+		"parsfi":            "lux",
+		"parsis-foundation": "lux",
+		"parsnetwork":       "lux",
+		"torusfhe":          "lux",
+		"torusml":           "lux",
+		// zoo
+		"zen-docs": "zoo",
+		"zoo-apps": "zoo",
+		"zoo-docs": "zoo",
+		"zoo-labs": "zoo",
+		"zooai":    "zoo",
+		"zoogov":   "zoo",
+	}
+	for ns, org := range orgs {
+		if prior, dup := m[ns]; dup && prior != org {
+			panic(fmt.Sprintf("forge: estateAccount %q is claimed by both %q and %q", ns, prior, org))
+		}
+		m[ns] = org
+	}
+	return m
+}()
+
+// SyncTarget returns the canonical 1:1 forge (owner, repo) coordinate for an
+// upstream (account, name) repository under the validated IAM org.
+//
+// Repositories ALWAYS live at <account>/<repo> matching GitHub 1:1 — never
+// flattened into <workspace>/<account>_<repo>. An estate account may only be
+// targeted by the IAM org that owns it in the closed estate table; cross-tenant
+// writes into another org's estate namespace or into reserved brand aliases
+// ("hanzo", "lux", "zoo") are refused.
+func SyncTarget(iamOrg, workspaceOwner, account, name string) (owner, repo string, canonical bool, err error) {
+	org := strings.ToLower(strings.TrimSpace(iamOrg))
+	acct := strings.ToLower(strings.TrimSpace(account))
+	rname := strings.ToLower(strings.TrimSpace(name))
+	if acct == "" {
+		return workspaceOwner, rname, false, nil
+	}
+	if estateOrg, isEstate := estateAccounts[acct]; isEstate {
+		if estateOrg != org {
+			return "", "", false, fmt.Errorf("forge: namespace %q belongs to %s, not %s", acct, estateOrg, org)
+		}
+		return acct, rname, true, nil
+	}
+	if Reserved(acct) {
+		return "", "", false, fmt.Errorf("forge: namespace %q is reserved", acct)
+	}
+	return acct, rname, false, nil
 }
