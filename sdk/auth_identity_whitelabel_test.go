@@ -77,6 +77,11 @@ func TestNewBoundary_EveryBrandByItsOwnDiscovery(t *testing.T) {
 		if _, err := v.validate(sign(p.issuer)); err != nil {
 			t.Errorf("validator must trust the %s issuer: %v", p.issuer, err)
 		}
+		for _, sib := range brand.Siblings(p.issuer) {
+			if _, err := v.validate(sign(sib)); err != nil {
+				t.Errorf("validator must trust sibling AlsoIssuer %s of %s: %v", sib, p.issuer, err)
+			}
+		}
 	}
 	if _, err := v.validate(sign("https://evil.id")); err == nil {
 		t.Error("validator must reject an untrusted issuer")

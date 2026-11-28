@@ -42,5 +42,21 @@ func TestAnUnboundedClassIsNeverUsedUp(t *testing.T) {
 		if g, hit := none.priced(premium, ClassPremium); g != nil && g.Pays == PaysPlan || hit == nil {
 			t.Fatalf("a plan including none: grant %+v hit %+v, want it refused", g, hit)
 		}
+
+		// Customer on Unlimited comp ($0 listed price, external:comp, Hanzo-only unbounded):
+		// mirrors live customer org mvee85560 with Unlimited comp + $0 premium allowance.
+		compOurs := newWorld(t, "unlimited", 1, "external:comp")
+		compOurs.rows[0].ProviderType = "comp"
+		compOurs.rows[0].Plan.Price = 0
+		compOurs.rows[0].ChargedCents = 0
+		compOurs.l.flag = policy(saved(nil, "unlimited", 0, 0, 0, flags.Unbounded))
+		g, hit := compOurs.priced("enso-auto", ClassOurs)
+		if hit != nil || g == nil || g.Pays != PaysPlan || g.Plan != "unlimited" {
+			t.Fatalf("unlimited comp ($0 price) on ours: grant %+v hit %+v, want plan unlimited", g, hit)
+		}
+		sr := compOurs.read()
+		if sr.Plan != "unlimited" || sr.Session.Limit != 0 || sr.Day.Limit != 0 || !sr.Classes[ClassOurs].Unbounded {
+			t.Fatalf("unlimited comp read = %+v, want plan=unlimited with unbounded ours and no request windows", sr)
+		}
 	})
 }
