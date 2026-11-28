@@ -637,6 +637,42 @@ func TestAShortWindowBindsInsideThePeriod(t *testing.T) {
 	})
 }
 
+// A rolling short window's reset time counts down from the oldest spend in the
+// window (oldest + span, capped at period_end), rather than sliding forward to
+// now + span on every read.
+func TestShortWindowResetsFromOldestSpend(t *testing.T) {
+	sqltest.Engines(t, func(t *testing.T, _ sqltest.Open) {
+		w := newWorld(t, "max-20x", 1, "card")
+		vals := flags.CarriedValues()
+		vals[flags.PlanKey("ours_window_hours", "max-20x")] = "168"
+		vals[flags.PlanKey("ours_window", "max-20x")] = "5000"
+		w.l.flag = policy(vals)
+
+		// Before any spend, window ResetsAt is zero (not started).
+		s0 := w.read()
+		if s0.Classes[ClassOurs].Window == nil {
+			t.Fatal("expected short window on ours class")
+		}
+		if !s0.Classes[ClassOurs].Window.ResetsAt.IsZero() {
+			t.Fatalf("idle window ResetsAt = %v, want zero", s0.Classes[ClassOurs].Window.ResetsAt)
+		}
+
+		// Spend at T0, then read at T0+48h: reset must still be T0+168h, NOT T0+48h+168h.
+		spentAt := w.now
+		g, hit := w.priced("enso", ClassOurs)
+		if hit != nil || g == nil {
+			t.Fatalf("admit = %+v / %+v", g, hit)
+		}
+		w.use(g, 10*usd)
+		w.now = spentAt.Add(48 * time.Hour)
+		s1 := w.read()
+		want := spentAt.Add(168 * time.Hour).UTC()
+		if got := s1.Classes[ClassOurs].Window.ResetsAt; !got.Equal(want) {
+			t.Fatalf("window ResetsAt after 48h = %v, want %v (oldest spend + 168h)", got, want)
+		}
+	})
+}
+
 // The free lane counts once in the session and the day for a plan holder, and the
 // bars read what was counted, rounded up to five.
 func TestTheFreeLaneCountsInBothWindows(t *testing.T) {

@@ -1475,11 +1475,23 @@ func (l *Limiter) Read(ctx context.Context, subject, org string) (Standing, erro
 		c := Class{Period: Window{Used: used, Limit: a.period, ResetsAt: p.end}}
 		left := a.period - used
 		if a.span > 0 {
-			wused, err := l.store.spent(ctx, org, subject, class, now.Add(-a.span).Unix())
+			since := now.Add(-a.span).Unix()
+			wused, err := l.store.spent(ctx, org, subject, class, since)
 			if err != nil {
 				return Standing{}, err
 			}
-			c.Window = &Window{Used: wused, Limit: a.window, ResetsAt: now.Add(a.span).UTC()}
+			var resets time.Time
+			if wused > 0 {
+				if oldest, oerr := l.store.oldestSpent(ctx, org, subject, class, since); oerr == nil && oldest > 0 {
+					resets = time.Unix(oldest, 0).Add(a.span).UTC()
+					if !p.end.IsZero() && resets.After(p.end) {
+						resets = p.end
+					}
+				} else {
+					resets = now.Add(a.span).UTC()
+				}
+			}
+			c.Window = &Window{Used: wused, Limit: a.window, ResetsAt: resets}
 			left = min(left, a.window-wused)
 		}
 		switch {

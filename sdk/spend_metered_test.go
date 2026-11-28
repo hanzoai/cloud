@@ -209,6 +209,11 @@ var pricedAtZero = map[string]string{
 	// default is free. CLOUD_S3_FEE_CENTS and CLOUD_SPACE_FEE_CENTS price it.
 	"s3":    "an operation costs less than the cent the knob states; CLOUD_S3_FEE_CENTS prices it",
 	"space": "an operation costs less than the cent the knob states; CLOUD_SPACE_FEE_CENTS prices it",
+	// Agent inference is metered per-token by MeteredAIClient (sdk/metered_ai.go)
+	// and session/bot runtime is metered per-hour by apps/agents/meter.go. The
+	// optional flat per-run surcharge defaults to 0 so runs are not double-billed
+	// $1.00 on top of token spend; CLOUD_AGENT_FEE_CENTS prices an explicit surcharge.
+	"agent": "inference is metered per-token by MeteredAIClient and runtime per-hour by apps/agents/meter.go; CLOUD_AGENT_FEE_CENTS prices an optional flat surcharge",
 }
 
 // meteredByAIWrapper are the surfaces whose spend is INFERENCE, metered once by the

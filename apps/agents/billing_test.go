@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/hanzoai/cloud/client"
 	"github.com/hanzoai/cloud/internal/planetest"
 	"github.com/hanzoai/cloud/internal/sqltest"
 	"github.com/hanzoai/cloud/sdk"
@@ -111,12 +112,37 @@ func TestRunGatesUnfundedOrg(t *testing.T) {
 	})
 }
 
-// TestRunGatesUnderfundedOrg: an org with a POSITIVE balance that is still less
-// than the run fee is refused 402 — the gate enforces available >= fee, not
-// merely available > 0, so a 1-cent balance can't authorize a $1 run and take
-// the ledger negative (Red MEDIUM-1). Default fee is $1.00 (100c).
+// TestRunDefaultFeeIsZeroNoDoubleBill: with CLOUD_AGENT_FEE_CENTS unset, agent
+// runs carry NO flat $1.00 surcharge (inference is metered per-token by
+// MeteredAIClient and runtime per-hour by meter.go). The run is recorded for
+// attribution at 0 cents so runs are never double-billed $1.00.
+func TestRunDefaultFeeIsZeroNoDoubleBill(t *testing.T) {
+	sqltest.Engines(t, func(t *testing.T, _ sqltest.Open) {
+		bs := &billServer{available: 100000}
+		app := mountBilled(t, bs.start(t), &fakeAI{content: "the answer"})
+
+		do(t, app, http.MethodPost, "/v1/agent", "acme",
+			map[string]any{"name": "a", "model": "enso-auto", "instructions": "x", "cap_micro_usd": 1000000, "max_task_micro_usd": 100000, "period": "month"})
+		code, body := do(t, app, http.MethodPost, "/v1/agent/a/run", "acme", map[string]any{"input": "hi"})
+		if code != http.StatusOK {
+			t.Fatalf("funded run with default 0 surcharge want 200, got %d (%s)", code, body)
+		}
+		if !waitForDebit(func() bool { return bs.debits() == 1 }) {
+			t.Fatalf("run attribution row must be recorded once, got %d", bs.debits())
+		}
+		if charged := bs.peer.Charged(); charged != 0 {
+			t.Fatalf("default 0 surcharge charged %dc, want 0 (no $1.00 double-bill)", charged)
+		}
+	})
+}
+
+// TestRunGatesUnderfundedOrg: when an operator configures a flat run fee, an org
+// with a POSITIVE balance that is still less than the run fee is refused 402 —
+// the gate enforces available >= fee, not merely available > 0, so a 1-cent
+// balance can't authorize a $1 run and take the ledger negative (Red MEDIUM-1).
 func TestRunGatesUnderfundedOrg(t *testing.T) {
 	sqltest.Engines(t, func(t *testing.T, _ sqltest.Open) {
+		t.Setenv(client.AgentFeeEnv, "100")
 		bs := &billServer{available: 1} // 1 cent, fee is 100 cents
 		app := mountBilled(t, bs.start(t), &fakeAI{content: "should not run"})
 
@@ -133,11 +159,12 @@ func TestRunGatesUnderfundedOrg(t *testing.T) {
 	})
 }
 
-// TestRunDebitsCallerOrg: a funded run returns the output AND debits the CALLER
-// org (acme, never the client default 'hanzo'), with product=agent + the agent's
-// model on the usage transaction.
+// TestRunDebitsCallerOrg: when a flat run surcharge is configured, a funded run
+// returns the output AND debits the CALLER org (acme, never the client default
+// 'hanzo'), with product=agent + the agent's model on the usage transaction.
 func TestRunDebitsCallerOrg(t *testing.T) {
 	sqltest.Engines(t, func(t *testing.T, _ sqltest.Open) {
+		t.Setenv(client.AgentFeeEnv, "100")
 		bs := &billServer{available: 100000}
 		app := mountBilled(t, bs.start(t), &fakeAI{content: "the answer"})
 
@@ -165,8 +192,8 @@ func TestRunDebitsCallerOrg(t *testing.T) {
 		if u.User != "acme" {
 			t.Fatalf("debit user = %q, want caller org %q", u.User, "acme")
 		}
-		if u.Amount != cloud.DefaultResourceFeeCents {
-			t.Fatalf("debit amount = %d, want default fee %d", u.Amount, cloud.DefaultResourceFeeCents)
+		if u.Amount != 100 {
+			t.Fatalf("debit amount = %d, want configured fee 100", u.Amount)
 		}
 		if u.Provider != meterKind {
 			t.Fatalf("debit provider = %q, want %q (product:agent)", u.Provider, meterKind)
@@ -181,11 +208,13 @@ func TestRunDebitsCallerOrg(t *testing.T) {
 	})
 }
 
-// TestRunByReturnedIDMetersOnce: running an agent addressed by the id create
-// returned debits the caller org EXACTLY ONCE with product=agent — the run path
-// meters identically whether the agent is addressed by id or by name.
+// TestRunByReturnedIDMetersOnce: when a flat run surcharge is configured,
+// running an agent addressed by the id create returned debits the caller org
+// EXACTLY ONCE with product=agent — the run path meters identically whether the
+// agent is addressed by id or by name.
 func TestRunByReturnedIDMetersOnce(t *testing.T) {
 	sqltest.Engines(t, func(t *testing.T, _ sqltest.Open) {
+		t.Setenv(client.AgentFeeEnv, "100")
 		bs := &billServer{available: 100000}
 		app := mountBilled(t, bs.start(t), &fakeAI{content: "the answer"})
 

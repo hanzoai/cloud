@@ -91,6 +91,7 @@ func createAgent(t *testing.T, app *zip.App) {
 // the run fee's x402 terms on PAYMENT-REQUIRED beside it.
 func TestRunRefusalCarriesTheX402Challenge(t *testing.T) {
 	sqltest.Engines(t, func(t *testing.T, _ sqltest.Open) {
+		t.Setenv(client.AgentFeeEnv, "100")
 		bs := &billServer{available: 0}
 		app := mountBilled(t, bs.start(t), &fakeAI{content: "should not run"})
 		createAgent(t, app)
@@ -115,6 +116,7 @@ func TestRunRefusalCarriesTheX402Challenge(t *testing.T) {
 // billed either way: its payment is never settled.
 func TestRunFeeOverX402(t *testing.T) {
 	sqltest.Engines(t, func(t *testing.T, _ sqltest.Open) {
+		t.Setenv(client.AgentFeeEnv, "100")
 		bs := &billServer{available: 100000}
 		ai := &fakeAI{content: "the answer"}
 		app := mountBilled(t, bs.start(t), ai)

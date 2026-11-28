@@ -80,7 +80,12 @@ func meteredTerms(resource string) (terms Terms, metered, priced bool) {
 	if !ok {
 		return Terms{}, true, false
 	}
-	cents := cloud.ResourceFeeCents(f.EnvPrefix, f.Kind)
+	var cents int64
+	if f.DefaultZero {
+		cents = cloud.FeeCents(f.EnvPrefix, f.Kind, 0)
+	} else {
+		cents = cloud.ResourceFeeCents(f.EnvPrefix, f.Kind)
+	}
 	org, wallet := platformPayee()
 	if cents <= 0 || org == "" || wallet == "" {
 		return Terms{}, true, false
