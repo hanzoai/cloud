@@ -1512,10 +1512,14 @@ func (l *Limiter) Read(ctx context.Context, subject, org string) (Standing, erro
 		return t.overage && (own > 0 || credit > 0 && l.credit(ctx, org, class))
 	}
 	out.Start, out.End = p.start, p.end
-	out.Session = Window{Used: st.sessionUsed, Limit: t.session}
-	out.Day = Window{Used: st.dayUsed, Limit: t.day, ResetsAt: midnight(now)}
-	if st.sessionStart != 0 {
-		out.Session.ResetsAt = time.Unix(st.sessionStart, 0).Add(t.block).UTC()
+	if t.session > 0 {
+		out.Session = Window{Used: st.sessionUsed, Limit: t.session}
+		if st.sessionStart != 0 {
+			out.Session.ResetsAt = time.Unix(st.sessionStart, 0).Add(t.block).UTC()
+		}
+	}
+	if t.day > 0 {
+		out.Day = Window{Used: st.dayUsed, Limit: t.day, ResetsAt: midnight(now)}
 	}
 	out.Classes = map[string]Class{}
 	out.Pays = map[string]string{}

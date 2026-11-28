@@ -318,12 +318,12 @@ func (s *limitStore) admit(ctx context.Context, org, subject, class string, now 
 		}
 	}
 
-	if count && (!needLeft || a.spend > 0) {
+	if count && (t.session > 0 || t.day > 0) && (!needLeft || a.spend > 0) {
 		if _, err := tx.ExecContext(ctx, `INSERT INTO request (org, subject, at) VALUES ($1,$2,$3)`, org, subject, now.Unix()); err != nil {
 			return a, fmt.Errorf("count request: %w", err)
 		}
 		a.counted, a.at = true, now.Unix()
-		if start == 0 {
+		if start == 0 && t.session > 0 {
 			// A new session opens at this request; rows older than any window are
 			// dropped as it does.
 			if _, err := tx.ExecContext(ctx,
