@@ -114,7 +114,7 @@ jobs:
           GOOS=linux GOARCH="${{ matrix.arch }}" go build -trimpath \
             -tags "sqlite_fts5 sqlite_math_functions" \
             -ldflags="-s -w" \
-            -o "${OUT}/" $(printf './plugin/%s ' $SPAWNED)
+            -o "${OUT}/" ./plugin/smoke $(printf './plugin/%s ' $SPAWNED)
 
           chmod 0755 "${OUT}"/* 2>/dev/null || true
           chmod 0755 "${OUT}/var/lib/cloud" "${OUT}/var/lib/cloud/run"

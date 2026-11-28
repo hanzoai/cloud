@@ -36,9 +36,8 @@ services:
       - "--iam-issuer=${HANZO_IAM_ISSUER:-https://iam.hanzo.id}"
     volumes:
       - cloud-data:/var/lib/cloud
-    # /smoke, not `wget /health`. The image is distroless: there is no shell for
-    # CMD-SHELL and no busybox wget to run in it. /smoke is the prober this repo
-    # already ships beside /cloud (plugin/smoke), and `-class health` is the narrow
+    # /smoke, not `wget /health`. The published OCI image has no shell or wget.
+    # /smoke is the prober shipped beside /cloud (plugin/smoke), and `-class health` is the narrow
     # question a healthcheck asks — /v1/base/health, /v1/health and /readyz 200,
     # and /v1/health's `degraded` list empty.
     #
