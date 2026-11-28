@@ -155,6 +155,26 @@ func (c *Client) EnsureOrg(ctx context.Context, name string) error {
 	return nil
 }
 
+// EnsurePrivateOrg ensures the organisation NAME exists on the forge, creating
+// it PRIVATE if absent. Idempotent: an org that already exists returns nil.
+func (c *Client) EnsurePrivateOrg(ctx context.Context, name string) error {
+	if !c.machine {
+		return fmt.Errorf("forge: EnsurePrivateOrg is the machine identity's; %q may not create an org", c.actor)
+	}
+	if err := validSegment(name); err != nil {
+		return err
+	}
+	if _, err := c.get(ctx, "/orgs/"+url.PathEscape(name), nil, &struct{}{}); err == nil {
+		return nil
+	} else if !isMissing(err) {
+		return err
+	}
+	if err := c.CreateOrg(ctx, name); err != nil && !errors.Is(err, ErrExists) {
+		return err
+	}
+	return nil
+}
+
 // CreateOrg makes the organisation NAME, PRIVATE, and refuses to adopt one that
 // is there: a name that is taken answers [ErrExists] and nothing is touched.
 //

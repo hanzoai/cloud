@@ -239,6 +239,9 @@ func Reserved(name string) bool {
 	if _, ok := owners[n]; ok {
 		return true
 	}
+	if _, ok := estateAccounts[n]; ok {
+		return true
+	}
 	return kept[n]
 }
 

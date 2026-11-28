@@ -18,7 +18,6 @@ import (
 	"github.com/bradleyfalzon/ghinstallation/v2"
 	"github.com/hanzoai/cloud/client"
 	projectpeer "github.com/hanzoai/cloud/client/project"
-	"github.com/hanzoai/cloud/forge"
 	"github.com/hanzoai/cloud/sdk"
 	"github.com/hanzoai/cloud/sdk/principal"
 	"github.com/zap-proto/zip"
@@ -742,14 +741,15 @@ func (o ops) githubImport(ctx context.Context, in *githubImportIn) (*githubImpor
 	for _, it := range items {
 		names = append(names, it.Name)
 	}
-	return &githubImportOut{Queued: len(items), Repos: names, Codebases: landing(items)}, nil
+	return &githubImportOut{Queued: len(items), Repos: names, Codebases: landing(org, items)}, nil
 }
 
-// landing is the codebase name each item takes in the org's code workspace.
-func landing(items []githubImportItem) []string {
+// landing is the canonical <owner>/<name> codebase coordinate each item takes
+// on the forge, matching GitHub 1:1.
+func landing(_ string, items []githubImportItem) []string {
 	out := make([]string, 0, len(items))
 	for _, it := range items {
-		out = append(out, forge.Imported(it.Owner, it.Name))
+		out = append(out, strings.ToLower(strings.TrimSpace(it.Owner))+"/"+strings.ToLower(strings.TrimSpace(it.Name)))
 	}
 	return out
 }

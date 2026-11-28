@@ -112,11 +112,11 @@ func TestForgeOwner_TranslatesTheIAMOrgAndRefusesTheRest(t *testing.T) {
 	if got, err := forgeOwner("  HANZO "); err != nil || got != "hanzoai" {
 		t.Fatalf("forgeOwner(%q) = %q, %v; want hanzoai", "  HANZO ", got, err)
 	}
-	// lux and zoo are tenants with namespaces of their own name, declared in the
-	// same table — a declared entry, not identity by default.
-	for _, org := range []string{"lux", "zoo"} {
-		if got, err := forgeOwner(org); err != nil || got != org {
-			t.Fatalf("forgeOwner(%q) = %q, %v; want %q", org, got, err, org)
+	// lux and zoo map to their real GitHub/forge orgs (luxfi, zooai) in the
+	// same closed table — never non-existent brand aliases.
+	for org, want := range map[string]string{"lux": "luxfi", "zoo": "zooai"} {
+		if got, err := forgeOwner(org); err != nil || got != want {
+			t.Fatalf("forgeOwner(%q) = %q, %v; want %q", org, got, err, want)
 		}
 	}
 	// REFUSED for everyone else. This used to be identity — "a tenant whose two

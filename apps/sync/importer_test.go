@@ -100,7 +100,7 @@ func TestImportLandsTheRepository(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("import: %v", err)
 	}
-	bare := fg.bare(forgeOwner, widgets.flat())
+	bare := fg.bare(upOwner, repoName)
 	for _, ref := range []string{mainRef, "refs/heads/release/1", "refs/tags/v1"} {
 		if got := tip(t, bare, ref); got != head {
 			t.Errorf("%s = %q, want %q", ref, got, head)
@@ -129,7 +129,7 @@ func TestImportLandsTheRepository(t *testing.T) {
 // the advance is announced with the source host so the echo can be suppressed.
 func TestInboundAdvanceApplies(t *testing.T) {
 	_, fg, src, cloneURL := imported(t)
-	before := tip(t, fg.bare(forgeOwner, widgets.flat()), mainRef)
+	before := tip(t, fg.bare(upOwner, repoName), mainRef)
 
 	after := src.commit("two")
 	landed := make(chan cloud.LifecycleEvent, 4)
@@ -146,7 +146,7 @@ func TestInboundAdvanceApplies(t *testing.T) {
 	if !res.Applied || res.After != after || res.Before != before {
 		t.Fatalf("want applied %s→%s, got %+v", before, after, res)
 	}
-	if now := tip(t, fg.bare(forgeOwner, widgets.flat()), mainRef); now != after {
+	if now := tip(t, fg.bare(upOwner, repoName), mainRef); now != after {
 		t.Fatalf("forge main = %q, want %q", now, after)
 	}
 	select {
@@ -164,9 +164,9 @@ func TestInboundAdvanceApplies(t *testing.T) {
 // which is exactly what makes it safe and exactly why somebody has to remember.
 func TestInboundConflictIsRecorded(t *testing.T) {
 	_, fg, src, cloneURL := imported(t)
-	bare := fg.bare(forgeOwner, widgets.flat())
+	bare := fg.bare(upOwner, repoName)
 
-	forgeTip := diverge(t, fg.URL+"/"+forgeOwner+"/"+widgets.flat()+".git", "somebody's work")
+	forgeTip := diverge(t, fg.URL+"/"+upOwner+"/"+repoName+".git", "somebody's work")
 	src.commit("upstream's work")
 
 	res := inbound(t, cloneURL)
@@ -191,7 +191,7 @@ func TestInboundConflictIsRecorded(t *testing.T) {
 	// Resolving is the same write: the upstream takes the forge's commit on, and
 	// the next advance is a fast-forward that clears the record.
 	dir := t.TempDir()
-	git(t, "", "clone", "--quiet", fg.URL+"/"+forgeOwner+"/"+widgets.flat()+".git", dir)
+	git(t, "", "clone", "--quiet", fg.URL+"/"+upOwner+"/"+repoName+".git", dir)
 	git(t, dir, "push", "--quiet", "--force", cloneURL, "HEAD:"+mainRef)
 	if res := inbound(t, cloneURL); !res.NoOp {
 		t.Fatalf("want a no-op once the two agree, got %+v", res)
@@ -246,7 +246,7 @@ func TestTheMachineNamespaceIsNeverSynced(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("import: %v", err)
 	}
-	if tip(t, fg.bare(forgeOwner, widgets.flat()), agent) != "" {
+	if tip(t, fg.bare(upOwner, repoName), agent) != "" {
 		t.Error("an import carried a machine-namespace branch")
 	}
 }
@@ -255,9 +255,9 @@ func TestTheMachineNamespaceIsNeverSynced(t *testing.T) {
 // recorded; every other branch still lands.
 func TestImportConflictSparesTheOtherBranches(t *testing.T) {
 	_, fg, src, cloneURL := imported(t)
-	bare := fg.bare(forgeOwner, widgets.flat())
+	bare := fg.bare(upOwner, repoName)
 
-	forgeTip := diverge(t, fg.URL+"/"+forgeOwner+"/"+widgets.flat()+".git", "somebody's work")
+	forgeTip := diverge(t, fg.URL+"/"+upOwner+"/"+repoName+".git", "somebody's work")
 	src.commit("upstream's work")
 	side := src.branch("release/2")
 
@@ -291,7 +291,7 @@ func TestStatusReadsBothSides(t *testing.T) {
 		t.Errorf("a repo the forge does not hold = %+v, want zero", st["absent"])
 	}
 
-	diverge(t, fg.URL+"/"+forgeOwner+"/"+widgets.flat()+".git", "somebody's work")
+	diverge(t, fg.URL+"/"+upOwner+"/"+repoName+".git", "somebody's work")
 	src.commit("upstream's work")
 	if res := inbound(t, cloneURL); !res.Conflict {
 		t.Fatalf("want conflict, got %+v", res)
@@ -351,7 +351,7 @@ func TestADeclaredRemoteCarriesOnlyItsOwnCredential(t *testing.T) {
 	if err := st.SetMirror(context.Background(), forgeOrg, widgets, "127.0.0.1", cloneURL); err != nil {
 		t.Fatal(err)
 	}
-	diverge(t, fg.URL+"/"+forgeOwner+"/"+widgets.flat()+".git", "canonical work")
+	diverge(t, fg.URL+"/"+upOwner+"/"+repoName+".git", "canonical work")
 	if err := pushOut(context.Background(), forgeOrg, upOwner, repoName); err != nil {
 		t.Fatalf("push out: %v", err)
 	}
@@ -366,7 +366,7 @@ func TestADeclaredRemoteCarriesOnlyItsOwnCredential(t *testing.T) {
 func TestPushOutIsAlsoFastForwardOnly(t *testing.T) {
 	up, fg, src, cloneURL := imported(t)
 	upBare := up.bare(upOwner, repoName)
-	forgeURL := fg.URL + "/" + forgeOwner + "/" + widgets.flat() + ".git"
+	forgeURL := fg.URL + "/" + upOwner + "/" + repoName + ".git"
 
 	// The target is declared straight into the store: validateMirrorTarget
 	// requires https and an allowlisted host, which the loopback stand is not, and
@@ -469,8 +469,8 @@ func TestTwoAccountsAreTwoRepositories(t *testing.T) {
 		t.Fatalf("the forge holds a repository at the bare name %q, so the account is not in the coordinate", repoName)
 	}
 	for _, r := range []repo{widgets, other} {
-		if got := tip(t, fg.bare(forgeOwner, r.flat()), mainRef); got != base {
-			t.Fatalf("%s main = %q, want %q", r.flat(), got, base)
+		if got := tip(t, fg.bare(r.account, r.name), mainRef); got != base {
+			t.Fatalf("%s/%s main = %q, want %q", r.account, r.name, got, base)
 		}
 	}
 
@@ -481,10 +481,10 @@ func TestTwoAccountsAreTwoRepositories(t *testing.T) {
 	if res := inbound(t, urlA); !res.Applied {
 		t.Fatalf("want applied, got %+v", res)
 	}
-	if got := tip(t, fg.bare(forgeOwner, widgets.flat()), mainRef); got != moved {
+	if got := tip(t, fg.bare(upOwner, repoName), mainRef); got != moved {
 		t.Fatalf("A's forge repo = %q, want %q", got, moved)
 	}
-	if got := tip(t, fg.bare(forgeOwner, other.flat()), mainRef); got != base {
+	if got := tip(t, fg.bare(otherOwner, repoName), mainRef); got != base {
 		t.Fatalf("B's forge repo followed A's push: %q, want %q", got, base)
 	}
 
@@ -530,7 +530,7 @@ func TestAnAccountsRefsStayInItsOwnReplica(t *testing.T) {
 	}
 
 	// A's canonical copy moves ahead, and is pushed out.
-	ahead := diverge(t, fg.URL+"/"+forgeOwner+"/"+widgets.flat()+".git", "A's own work")
+	ahead := diverge(t, fg.URL+"/"+upOwner+"/"+repoName+".git", "A's own work")
 	if err := pushOut(context.Background(), forgeOrg, upOwner, repoName); err != nil {
 		t.Fatalf("push out: %v", err)
 	}
@@ -614,7 +614,7 @@ func TestNestedNamespacesDoNotCollapse(t *testing.T) {
 		}); err != nil {
 		t.Fatalf("a flat group is a coordinate the forge can hold: %v", err)
 	}
-	if got := tip(t, fg.bare(forgeOwner, "group_gadgets"), mainRef); got != git(t, flat.dir, "rev-parse", "HEAD") {
+	if got := tip(t, fg.bare("group", "gadgets"), mainRef); got != git(t, flat.dir, "rev-parse", "HEAD") {
 		t.Errorf("group/gadgets landed at %q on the forge", got)
 	}
 }
@@ -635,9 +635,9 @@ func gitlabSync(src, native string) Sync {
 // console over a repository taking nothing in.
 func TestAnImportThatTookNothingInIsNotASync(t *testing.T) {
 	_, fg, src, cloneURL := imported(t)
-	bare := fg.bare(forgeOwner, widgets.flat())
+	bare := fg.bare(upOwner, repoName)
 
-	forgeTip := diverge(t, fg.URL+"/"+forgeOwner+"/"+widgets.flat()+".git", "somebody's work")
+	forgeTip := diverge(t, fg.URL+"/"+upOwner+"/"+repoName+".git", "somebody's work")
 	src.commit("upstream's work")
 
 	err := (importer{}).ImportRepo(context.Background(), cloud.GitImportReq{
@@ -646,7 +646,7 @@ func TestAnImportThatTookNothingInIsNotASync(t *testing.T) {
 	if err == nil {
 		t.Fatal("an import that took nothing in reported success; the reconcile stamps 'last synced' on that")
 	}
-	if !strings.Contains(err.Error(), widgets.flat()) {
+	if !strings.Contains(err.Error(), upOwner+"/"+repoName) {
 		t.Errorf("the failure does not name the repository: %v", err)
 	}
 	if now := tip(t, bare, mainRef); now != forgeTip {
@@ -677,7 +677,7 @@ func TestAPushWithNoTargetIsNotASync(t *testing.T) {
 func TestSyncedRepositoriesAreBornAdvanceOnly(t *testing.T) {
 	_, fg, _, _ := imported(t)
 
-	rule := fg.rule(widgets.flat())
+	rule := fg.rule(repoName)
 	if rule == nil {
 		t.Fatal("no branch rule was asked for; the repository is only as safe as its clients")
 	}
@@ -698,7 +698,7 @@ func TestSyncedRepositoriesAreBornAdvanceOnly(t *testing.T) {
 func TestSyncedRepositoriesAreBornQuiet(t *testing.T) {
 	_, fg, _, _ := imported(t)
 
-	if fg.hasActions(widgets.flat()) {
+	if fg.hasActions(repoName) {
 		t.Fatal("the synced repository has Actions on; every push the sync makes would start a run")
 	}
 }
@@ -746,7 +746,7 @@ func TestACredentialGoesOnlyToASourceWeMintFor(t *testing.T) {
 func TestADeletedRefDoesNotResolveADivergence(t *testing.T) {
 	up, fg, src, cloneURL := imported(t)
 
-	diverge(t, fg.URL+"/"+forgeOwner+"/"+widgets.flat()+".git", "somebody's work")
+	diverge(t, fg.URL+"/"+upOwner+"/"+repoName+".git", "somebody's work")
 	src.commit("upstream's work")
 	if res := inbound(t, cloneURL); !res.Conflict {
 		t.Fatalf("want a conflict to start from, got %+v", res)
@@ -860,5 +860,123 @@ func TestMirrorSourceRefusesAnInternalHost(t *testing.T) {
 	}
 	if _, err := mirrorSource("https://8.8.8.8/x.git"); err != nil {
 		t.Errorf("a public source was refused: %v", err)
+	}
+}
+
+// TestImportCanonicalEstateRepoDoesNotFlattenOrKillActions proves an estate
+// account owned by the IAM org syncs directly to <account>/<repo> (never
+// hanzoai/<account>_<repo>), and leaves Actions enabled on an existing canonical
+// native repository.
+func TestImportCanonicalEstateRepoDoesNotFlattenOrKillActions(t *testing.T) {
+	up := newHost(t)
+	fg := newStand(t, forgeOwner)
+	mountForge(t)
+
+	// Pre-seed a canonical native repository under hanzo-inc/cloud (Actions on).
+	fg.seed("hanzo-inc", "cloud", "base")
+	src := up.seed("hanzo-inc", "cloud", "base")
+	// Re-base src on the forge's exact base commit so the advance is fast-forward.
+	srcDir := t.TempDir()
+	git(t, "", "clone", "--quiet", fg.URL+"/hanzo-inc/cloud.git", srcDir)
+	if err := os.WriteFile(filepath.Join(srcDir, "next"), []byte("two"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	git(t, srcDir, "add", "-A")
+	git(t, srcDir, "commit", "--quiet", "-m", "next")
+	git(t, srcDir, "push", "--quiet", "--force", up.bare("hanzo-inc", "cloud"), "HEAD:"+mainRef)
+	wantTip := git(t, srcDir, "rev-parse", "HEAD")
+	_ = src
+
+	cloneURL := up.URL + "/hanzo-inc/cloud.git"
+	if err := (importer{}).ImportRepo(context.Background(), cloud.GitImportReq{
+		Org: forgeOrg, Project: "hanzo-inc", Repo: "cloud", CloneURL: cloneURL,
+	}); err != nil {
+		t.Fatalf("canonical import: %v", err)
+	}
+	if got := tip(t, fg.bare("hanzo-inc", "cloud"), mainRef); got != wantTip {
+		t.Fatalf("hanzo-inc/cloud main = %q, want %q", got, wantTip)
+	}
+	if _, err := os.Stat(fg.bare(forgeOwner, "hanzo-inc_cloud")); err == nil {
+		t.Fatal("created duplicate flat repository hanzoai/hanzo-inc_cloud")
+	}
+	if !fg.hasActions("cloud") {
+		t.Fatal("disabled Actions on existing canonical native estate repository")
+	}
+}
+
+// TestImportAndInboundPullMirrorCallsMirrorSync proves a canonical pull mirror
+// on the forge is refreshed via POST /v1/repos/{owner}/{repo}/mirror-sync on
+// both ImportRepo and InboundSync without attempting git pushes, PATCH edits,
+// or creating a flat duplicate.
+func TestImportAndInboundPullMirrorCallsMirrorSync(t *testing.T) {
+	up := newHost(t)
+	fg := newStand(t, forgeOwner)
+	mountForge(t)
+
+	up.seed("hanzo-apps", "hanzo.ai", "one")
+	fg.seed("hanzo-apps", "hanzo.ai", "one")
+	fg.markMirror("hanzo-apps", "hanzo.ai")
+
+	cloneURL := up.URL + "/hanzo-apps/hanzo.ai.git"
+	packsBefore := fg.counts()
+	if err := (importer{}).ImportRepo(context.Background(), cloud.GitImportReq{
+		Org: forgeOrg, Project: "hanzo-apps", Repo: "hanzo.ai", CloneURL: cloneURL,
+	}); err != nil {
+		t.Fatalf("pull-mirror import: %v", err)
+	}
+	res, err := (importer{}).InboundSync(context.Background(), cloud.GitInboundReq{
+		Org: forgeOrg, Project: "hanzo-apps", Repo: "hanzo.ai", Ref: mainRef,
+		CloneURL: cloneURL, Origin: "127.0.0.1",
+	})
+	if err != nil {
+		t.Fatalf("pull-mirror inbound: %v", err)
+	}
+	if !res.Applied || res.After == "" {
+		t.Fatalf("pull-mirror inbound = %+v, want Applied with tip", res)
+	}
+	if got := fg.syncedMirrors(); len(got) != 2 || got[0] != "hanzo-apps/hanzo.ai" || got[1] != "hanzo-apps/hanzo.ai" {
+		t.Fatalf("mirror-sync calls = %v, want 2 calls to hanzo-apps/hanzo.ai", got)
+	}
+	if got := fg.counts(); got != packsBefore {
+		t.Fatalf("git pack transfers to pull mirror = %d, want 0", got-packsBefore)
+	}
+	if _, err := os.Stat(fg.bare(forgeOwner, "hanzo-apps_hanzo.ai")); err == nil {
+		t.Fatal("created duplicate flat repository hanzoai/hanzo-apps_hanzo.ai")
+	}
+}
+
+// TestRepoStatusAndNativesReadCanonicalEstateNamespace proves RepoStatus and
+// natives read canonical estate repositories directly under <account>/<repo>.
+func TestRepoStatusAndNativesReadCanonicalEstateNamespace(t *testing.T) {
+	fg := newStand(t, forgeOwner)
+	mountForge(t)
+
+	fg.seed("hanzo-inc", "cloud", "one")
+	fg.markMirror("hanzo-inc", "cloud")
+
+	statuses, err := (importer{}).RepoStatus(context.Background(), forgeOrg, "hanzo-inc", []string{"cloud", "missing"})
+	if err != nil {
+		t.Fatalf("RepoStatus: %v", err)
+	}
+	if !statuses["cloud"].Imported || statuses["missing"].Imported {
+		t.Fatalf("RepoStatus = %+v, want cloud=imported missing=not-imported", statuses)
+	}
+
+	s := mounted.Load()
+	st, err := storeFor(s, forgeOrg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rows := []Sync{
+		{
+			ID: "canon", Org: forgeOrg, Kind: "git", Direction: dirPull,
+			Source: Endpoint{Provider: provGitHub, Locator: "https://github.com/hanzo-inc/cloud.git"},
+			Target: Endpoint{Provider: provNative, Locator: "cloud"},
+		},
+	}
+	got := natives(context.Background(), s, forgeOrg, st, rows)
+	v := got["canon"]
+	if v == nil || v.Status != "synced" || !strings.HasSuffix(v.URL, "/hanzo-inc/cloud") {
+		t.Fatalf("natives(canonical) = %+v, want synced at …/hanzo-inc/cloud", v)
 	}
 }

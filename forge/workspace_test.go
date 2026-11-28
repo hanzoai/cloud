@@ -765,7 +765,7 @@ func TestProvisionNumbersPastEveryNameTheEstateKeeps(t *testing.T) {
 			t.Fatalf("%q is kept and not reserved", name)
 		}
 	}
-	for _, name := range []string{"acme", "hanzo-labs", "luxury", "zooey"} {
+	for _, name := range []string{"acme", "hanzo-customer", "luxury", "zooey"} {
 		if Reserved(name) {
 			t.Fatalf("%q is reserved and belongs to nobody", name)
 		}

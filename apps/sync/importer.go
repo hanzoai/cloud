@@ -131,6 +131,13 @@ func newRepo(account, name string) (repo, error) {
 // its own rather than a collision with everything.
 func (r repo) flat() string { return forge.Imported(r.account, r.name) }
 
+// target resolves the canonical 1:1 forge (owner, repo) coordinate for r under
+// org — always <account>/<repo>, never a flattened <owner>/<account>_<repo>
+// duplicate. Refuses cross-tenant writes into another org's estate namespace.
+func (r repo) target(org, workspaceOwner string) (owner, name string, canonical bool, err error) {
+	return forge.SyncTarget(org, workspaceOwner, r.account, r.name)
+}
+
 // importer is the registered cloud.GitImporter. It carries no state: every
 // method resolves the mounted service through the package `mounted` var and
 // fails closed when the subsystem is unmounted, exactly like the reconcile func.
@@ -285,10 +292,42 @@ func (importer) ImportRepo(ctx context.Context, req cloud.GitImportReq) error {
 	if err != nil {
 		return err
 	}
-	if err := c.Init(ctx, owner, r.flat(), "synced from "+hostOf(from.URL)); err != nil {
+	targetOwner, targetRepo, canonicalEstate, err := r.target(org, owner)
+	if err != nil {
 		return err
 	}
-	to, err := forgeRemote(c, owner, r.flat())
+	existing, rerr := c.Machine().Repo(ctx, targetOwner, targetRepo)
+	if rerr != nil && !errors.Is(rerr, forge.ErrNotFound) {
+		return fmt.Errorf("read forge repository %s/%s: %w", targetOwner, targetRepo, rerr)
+	}
+	if rerr == nil && existing.Mirror {
+		// Pull mirrors on the forge follow their upstream origin directly; Forgejo
+		// rejects pushes and branch edits on mirrors with 403. Ask the forge to
+		// refresh the mirror instead of duplicating or pushing into it.
+		if err := c.Sync(ctx, targetOwner, targetRepo); err != nil {
+			return fmt.Errorf("sync pull mirror %s/%s: %w", targetOwner, targetRepo, err)
+		}
+		if existing.Branch != "" {
+			if tip, found, err := c.Tip(ctx, targetOwner, targetRepo, existing.Branch); err == nil && found {
+				cloud.EmitLifecycle(context.WithoutCancel(ctx), cloud.LifecycleEvent{
+					Kind: cloud.LifecyclePushLanded, Org: org, Project: r.account, Repo: r.name,
+					Branch: existing.Branch, After: tip, Origin: hostOf(from.URL),
+				})
+			}
+		}
+		return nil
+	}
+	if !canonicalEstate || errors.Is(rerr, forge.ErrNotFound) {
+		if errors.Is(rerr, forge.ErrNotFound) && !canonicalEstate && targetOwner != owner {
+			if err := c.Machine().EnsurePrivateOrg(ctx, targetOwner); err != nil {
+				return err
+			}
+		}
+		if err := c.Init(ctx, targetOwner, targetRepo, "synced from "+hostOf(from.URL)); err != nil {
+			return err
+		}
+	}
+	to, err := forgeRemote(c, targetOwner, targetRepo)
 	if err != nil {
 		return err
 	}
@@ -350,8 +389,11 @@ func (importer) ImportRepo(ctx context.Context, req cloud.GitImportReq) error {
 	// resolves the same default — but only once that branch is actually there,
 	// which is the only moment it is a true statement.
 	if head != "" && landed[head] != "" {
-		if err := c.Default(ctx, owner, r.flat(), strings.TrimPrefix(head, "refs/heads/")); err != nil {
-			s.Log.Warn("sync import: default branch", "org", org, "repo", r.flat(), "branch", head, "err", err)
+		branch := strings.TrimPrefix(head, "refs/heads/")
+		if rerr != nil || existing.Branch != branch {
+			if err := c.Default(ctx, targetOwner, targetRepo, branch); err != nil {
+				s.Log.Warn("sync import: default branch", "org", org, "repo", targetOwner+"/"+targetRepo, "branch", head, "err", err)
+			}
 		}
 	}
 
@@ -387,7 +429,7 @@ func (importer) ImportRepo(ctx context.Context, req cloud.GitImportReq) error {
 	// itself did not happen. An upstream that advertises no ref at all is not
 	// that: there was nothing to take, and the empty repository is the answer.
 	if len(landed) == 0 && len(srcTips) > 0 {
-		return fmt.Errorf("sync: %s took nothing in; every ref was refused", r.flat())
+		return fmt.Errorf("sync: %s/%s took nothing in; every ref was refused", targetOwner, targetRepo)
 	}
 	return nil
 }
@@ -449,13 +491,34 @@ func (importer) InboundSync(ctx context.Context, req cloud.GitInboundReq) (cloud
 	if err != nil {
 		return cloud.GitSyncResult{}, err
 	}
-	if _, err := c.Machine().Repo(ctx, owner, r.flat()); err != nil {
+	targetOwner, targetRepo, _, err := r.target(org, owner)
+	if err != nil {
+		return cloud.GitSyncResult{}, err
+	}
+	existing, err := c.Machine().Repo(ctx, targetOwner, targetRepo)
+	if err != nil {
 		if errors.Is(err, forge.ErrNotFound) {
 			return cloud.GitSyncResult{NoOp: true, Detail: "repo not imported"}, nil
 		}
 		return cloud.GitSyncResult{}, err
 	}
-	to, err := forgeRemote(c, owner, r.flat())
+	if existing.Mirror {
+		if err := c.Sync(ctx, targetOwner, targetRepo); err != nil {
+			return cloud.GitSyncResult{}, fmt.Errorf("sync pull mirror %s/%s: %w", targetOwner, targetRepo, err)
+		}
+		var after string
+		if branch, ok := strings.CutPrefix(req.Ref, "refs/heads/"); ok && branch != "" {
+			if tip, found, err := c.Tip(ctx, targetOwner, targetRepo, branch); err == nil && found {
+				after = tip
+				cloud.EmitLifecycle(ctx, cloud.LifecycleEvent{
+					Kind: cloud.LifecyclePushLanded, Org: org, Project: r.account, Repo: r.name,
+					Branch: req.Ref, After: tip, Origin: req.Origin,
+				})
+			}
+		}
+		return cloud.GitSyncResult{Applied: true, After: after}, nil
+	}
+	to, err := forgeRemote(c, targetOwner, targetRepo)
 	if err != nil {
 		return cloud.GitSyncResult{}, err
 	}
@@ -544,8 +607,12 @@ func (importer) RepoStatus(ctx context.Context, org, account string, names []str
 	if err != nil {
 		return nil, err
 	}
-	repos, err := c.Machine().Repos(ctx, owner)
+	targetOwner, _, _, err := forge.SyncTarget(org, owner, account, "x")
 	if err != nil {
+		return nil, err
+	}
+	repos, err := c.Machine().Repos(ctx, targetOwner)
+	if err != nil && !errors.Is(err, forge.ErrNotFound) {
 		return nil, err
 	}
 	held := make(map[string]bool, len(repos))
@@ -569,8 +636,13 @@ func (importer) RepoStatus(ctx context.Context, org, account string, names []str
 			out[fold(n)] = cloud.GitRepoStatus{}
 			continue
 		}
+		_, targetRepo, _, err := r.target(org, owner)
+		if err != nil {
+			out[r.name] = cloud.GitRepoStatus{}
+			continue
+		}
 		v := cloud.GitRepoStatus{}
-		if held[r.flat()] {
+		if held[targetRepo] {
 			v.Imported = true
 		}
 		if roll, ok := states[r]; ok {
@@ -593,28 +665,49 @@ func (importer) RepoStatus(ctx context.Context, org, account string, names []str
 func natives(ctx context.Context, s *cloud.Service[state], org string, st *store, rows []Sync) map[string]*nativeView {
 	out := make(map[string]*nativeView, len(rows))
 	host, owner := "", ""
-	held := map[string]forge.Repo{}
 	c, o, err := forgeAt(ctx, s, org, false)
 	switch {
 	case errors.Is(err, errNoWorkspace):
+		c = nil
 	case err != nil:
 		s.Log.Warn("sync: read the forge for the console", "org", org, "err", err)
 		return out
 	default:
-		repos, err := c.Machine().Repos(ctx, o)
-		if err != nil {
-			s.Log.Warn("sync: read the forge's repositories", "org", org, "owner", o, "err", err)
-			return out
-		}
-		for _, r := range repos {
-			held[fold(r.Name)] = r
-		}
 		host, owner = c.Host(), o
 	}
 	states, err := st.States(ctx, org)
 	if err != nil {
 		s.Log.Warn("sync: read the outcomes", "org", org, "err", err)
 		return out
+	}
+	heldByOwner := map[string]map[string]forge.Repo{}
+	failedOwner := map[string]bool{}
+	loadOwner := func(ns string) (map[string]forge.Repo, bool) {
+		if c == nil || ns == "" {
+			return nil, true
+		}
+		if failedOwner[ns] {
+			return nil, false
+		}
+		if m, ok := heldByOwner[ns]; ok {
+			return m, true
+		}
+		repos, err := c.Machine().Repos(ctx, ns)
+		if err != nil {
+			if errors.Is(err, forge.ErrNotFound) {
+				heldByOwner[ns] = map[string]forge.Repo{}
+				return heldByOwner[ns], true
+			}
+			s.Log.Warn("sync: read the forge's repositories", "org", org, "owner", ns, "err", err)
+			failedOwner[ns] = true
+			return nil, false
+		}
+		m := make(map[string]forge.Repo, len(repos))
+		for _, r := range repos {
+			m[fold(r.Name)] = r
+		}
+		heldByOwner[ns] = m
+		return m, true
 	}
 	for _, sy := range rows {
 		if sy.Kind != "git" || sy.account() != "" {
@@ -624,13 +717,21 @@ func natives(ctx context.Context, s *cloud.Service[state], org string, st *store
 		if err != nil {
 			continue
 		}
+		targetOwner, targetRepo, _, err := r.target(org, owner)
+		if err != nil {
+			continue
+		}
+		held, ok := loadOwner(targetOwner)
+		if !ok {
+			continue
+		}
 		v := &nativeView{Status: "pending"}
-		if owner != "" {
-			v.URL = "https://" + host + "/" + owner + "/" + r.flat()
+		if host != "" && targetOwner != "" {
+			v.URL = "https://" + host + "/" + targetOwner + "/" + targetRepo
 			v.Clone = v.URL + ".git"
 		}
 		roll, rolled := states[r]
-		if fr, ok := held[r.flat()]; ok {
+		if fr, ok := held[targetRepo]; ok {
 			v.Status, v.SSH, v.Branch, v.SizeBytes = "synced", fr.SSH, fr.Branch, fr.Size*1024
 			if rolled && roll.Conflict {
 				v.Status = "conflict"
@@ -709,7 +810,11 @@ func pushOut(ctx context.Context, org, account, repo string) error {
 	if err != nil {
 		return err
 	}
-	from, err := forgeRemote(c, owner, r.flat())
+	targetOwner, targetRepo, _, err := r.target(org, owner)
+	if err != nil {
+		return err
+	}
+	from, err := forgeRemote(c, targetOwner, targetRepo)
 	if err != nil {
 		return err
 	}
