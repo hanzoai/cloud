@@ -442,6 +442,20 @@ func (s *limitStore) spent(ctx context.Context, org, subject, class string, sinc
 	return spentSince(ctx, s.db, org, subject, class, since)
 }
 
+// oldestSpent is the earliest settled spend timestamp (unix seconds) for a class
+// at or after since, or 0 when no spend has occurred in the window.
+func (s *limitStore) oldestSpent(ctx context.Context, org, subject, class string, since int64) (int64, error) {
+	if err := dialect.Text(org, subject, class); err != nil {
+		return 0, err
+	}
+	n, err := scalar(ctx, s.db, `SELECT CAST(COALESCE(MIN(at),0) AS BIGINT) FROM spend WHERE org=$1 AND subject=$2 AND at>=$3 AND family=$4 AND nanos>0`,
+		org, subject, since, class)
+	if err != nil {
+		return 0, fmt.Errorf("oldest spend: %w", err)
+	}
+	return n, nil
+}
+
 // share is what the models under one capped rule used of the plan since a moment.
 func (s *limitStore) share(ctx context.Context, org, subject, rule string, since int64) (int64, error) {
 	if err := dialect.Text(org, subject, rule); err != nil {

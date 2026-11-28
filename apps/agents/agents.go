@@ -78,14 +78,13 @@ const (
 	maxAvatarSource  = 2048
 	maxAvatarLicence = 128
 
-	// agentFeeEnvPrefix is the operator knob for the flat per-run fee. The
-	// effective fee is cloud.ResourceFeeCents(agentFeeEnvPrefix, meterKind): a
-	// global CLOUD_AGENT_FEE_CENTS override wins over the $1.00 default; set it
-	// to 0 to make agent runs free (and therefore un-gated). This is a per-RUN
-	// fee — the honest, policy-set unit an agent run bills. Token-based pricing
-	// is intentionally NOT used here: the in-process AIClient returns only the
-	// completion content (infer.ChatResponse{Content}), no token counts, so
-	// charging per-token would be fabricated. Duration is recorded on the run.
+	// agentFeeEnvPrefix is the operator knob for an optional flat per-run
+	// surcharge. Inference is already metered per-token by MeteredAIClient
+	// (sdk/metered_ai.go) and runtime per-hour by apps/agents/meter.go, so the
+	// flat per-run surcharge defaults to 0 (cloud.FeeCents(..., 0)) rather than
+	// cloud.DefaultResourceFeeCents ($1.00), which double-billed every agent run
+	// on top of token metering. Operators can still set CLOUD_AGENT_FEE_CENTS to
+	// enable a flat per-run surcharge.
 	//
 	// The knob's name is client.AgentFeeEnv because the payment rail prices the
 	// same fee from it (client.AgentRun, apps/x402 metered.go).
@@ -1554,7 +1553,7 @@ func runAgent(s *cloud.Service[state], ctx context.Context, a Agent, input strin
 		span.SetAttributes(attribute.String("hanzo.user", sub))
 	}
 
-	fee := cloud.ResourceFeeCents(agentFeeEnvPrefix, meterKind)
+	fee := agentRunFee()
 	// Gate the payer — never a caller default, never another tenant. fee<=0 or
 	// unconfigured billing makes this a no-op (allows). The project axis is empty
 	// and unvalidated (soft): a background run has no request principal to bind it.
@@ -1666,6 +1665,11 @@ func runAgent(s *cloud.Service[state], ctx context.Context, a Agent, input strin
 	}
 	return r, nil
 }
+
+// agentRunFee returns the optional flat per-run surcharge in cents. Defaults to
+// 0 because per-token LLM spend is metered by MeteredAIClient and per-hour
+// session/bot runtime is metered by apps/agents/meter.go.
+func agentRunFee() int64 { return cloud.FeeCents(agentFeeEnvPrefix, meterKind, 0) }
 
 // maxAttempts bounds retries of a SINGLE model's completion on a transient
 // upstream failure (429 / 5xx / empty-choices / "Platform overloaded"). Retrying

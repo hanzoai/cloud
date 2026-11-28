@@ -51,9 +51,11 @@ type MeteredFee struct {
 	// Summary says what one payment of the fee buys.
 	Summary string
 	// EnvPrefix and Kind are the fee's operator knob, resolved by
-	// cloud.ResourceFeeCents(EnvPrefix, Kind).
-	EnvPrefix string
-	Kind      string
+	// cloud.ResourceFeeCents(EnvPrefix, Kind) (or cloud.FeeCents(EnvPrefix, Kind, 0)
+	// when DefaultZero is true).
+	EnvPrefix   string
+	Kind        string
+	DefaultZero bool
 }
 
 // Resource is the fee's name as an x402 resource.
@@ -66,11 +68,14 @@ var FunctionInvoke = MeteredFee{
 	EnvPrefix: FunctionFeeEnv, Kind: "invoke",
 }
 
-// AgentRun is the flat fee for one agent run.
+// AgentRun is the optional flat surcharge for one agent run (defaults to 0;
+// inference is metered per-token and runtime per-hour).
 var AgentRun = MeteredFee{
 	Product: "agent.run", Method: "POST", Path: "/v1/agent/{ref}/run",
-	Summary:   "One run of one of your org's agents",
-	EnvPrefix: AgentFeeEnv, Kind: "agent",
+	Summary:     "One run of one of your org's agents",
+	EnvPrefix:   AgentFeeEnv,
+	Kind:        "agent",
+	DefaultZero: true,
 }
 
 // ChatCompletion is the per-request fee for one chat completion paid over x402.

@@ -319,7 +319,7 @@ func a2aSend(s *cloud.Service[state], c *zip.Ctx, raw json.RawMessage, org, acto
 	// before a task exists, rather than handed a task that failed. runAgent asks
 	// again before it spends anything.
 	payer := meter.Payer(c)
-	if err := s.State.bill.Authorize(ctx, payer, "", false, meterKind, cloud.ResourceFeeCents(agentFeeEnvPrefix, meterKind)); err != nil {
+	if err := s.State.bill.Authorize(ctx, payer, "", false, meterKind, agentRunFee()); err != nil {
 		return nil, a2aRefusal(err)
 	}
 
