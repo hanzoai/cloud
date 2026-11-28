@@ -18,6 +18,7 @@ package git
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"encoding/base64"
 	"errors"
@@ -121,6 +122,41 @@ func shelved(ctx context.Context, t tenant, name string) (m *forge.Client, owner
 		return nil, "", "", false, zip.Errorf(http.StatusBadGateway, "the code forge is unreachable: %v", err)
 	}
 	return c.Machine(), ws.Owner, name, true, nil
+}
+
+// madeRefs lists owner/name's branches, tags and default branch on the forge, in
+// the browse shape.
+func madeRefs(ctx context.Context, m *forge.Client, owner, name, fallbackDefault string) (*refsJSON, error) {
+	heads, err := m.Refs(ctx, owner, name, "heads")
+	if err != nil {
+		return nil, madeRefusal(err, "repo not found")
+	}
+	tags, err := m.Refs(ctx, owner, name, "tags")
+	if err != nil {
+		return nil, madeRefusal(err, "repo not found")
+	}
+	dflt := strings.TrimSpace(fallbackDefault)
+	if dflt == "" {
+		if r, rerr := m.Repo(ctx, owner, name); rerr == nil && strings.TrimSpace(r.Branch) != "" {
+			dflt = strings.TrimSpace(r.Branch)
+		}
+	}
+	out := &refsJSON{
+		Branches: make([]refJSON, 0, len(heads)),
+		Tags:     make([]refJSON, 0, len(tags)),
+		Default:  cmp.Or(dflt, defaultBranchName),
+	}
+	for _, r := range heads {
+		if short := strings.TrimPrefix(r.Name, "refs/heads/"); short != "" {
+			out.Branches = append(out.Branches, refJSON{Name: short, SHA: r.SHA})
+		}
+	}
+	for _, r := range tags {
+		if short := strings.TrimPrefix(r.Name, "refs/tags/"); short != "" {
+			out.Tags = append(out.Tags, refJSON{Name: short, SHA: r.SHA})
+		}
+	}
+	return out, nil
 }
 
 // madeTree is one directory of owner/name on the forge, in the browse shape.

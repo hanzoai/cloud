@@ -67,6 +67,22 @@ func TestAnOrdinarySentenceIsUnchanged(t *testing.T) {
 	}
 }
 
+// Public Hanzo session and sandbox IDs must survive ErrorHandler intact so
+// callers receive actionable error messages instead of "[REDACTED-TOKEN]".
+func TestPublicSessionAndSandboxIDsSurviveErrorScrub(t *testing.T) {
+	const msg = "coding: the run sess_077ebdeb5444162f21dfc10b4306db68 is running in m_2a8bb714a84c1c5b95b1a2fa"
+	status, body := renderErr(t, zip.ErrConflict(msg))
+	if status != http.StatusConflict {
+		t.Fatalf("status = %d, want 409 (%s)", status, body)
+	}
+	if !strings.Contains(body, "sess_077ebdeb5444162f21dfc10b4306db68") || !strings.Contains(body, "m_2a8bb714a84c1c5b95b1a2fa") {
+		t.Fatalf("public resource IDs were redacted: %s", body)
+	}
+	if strings.Contains(body, "REDACTED") {
+		t.Fatalf("unexpected redaction in %s", body)
+	}
+}
+
 // An UNDECIDED error still gets the generic fault sentence — the scrub composes
 // over mapError's provenance rule rather than replacing it.
 func TestAnUndecidedErrorStillGetsTheGenericSentence(t *testing.T) {

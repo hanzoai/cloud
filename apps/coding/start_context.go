@@ -83,6 +83,32 @@ func needsRepo(in client.CodingStartIn, named, issue string) string {
 	return ""
 }
 
+// isDifferentRepo reports whether the requested repository is provably different
+// from earlierRepo before full forge resolution completes.
+func isDifferentRepo(earlierRepo, wsOwner, directOwner, directName, name string) bool {
+	earlierRepo = strings.TrimSpace(earlierRepo)
+	if earlierRepo == "" {
+		return false
+	}
+	if directOwner != "" && directName != "" {
+		return !strings.EqualFold(earlierRepo, directOwner+"/"+directName)
+	}
+	if name == "" {
+		// Empty workspace request vs an earlier run on a real repo.
+		return true
+	}
+	if wsOwner != "" {
+		if strings.EqualFold(earlierRepo, wsOwner+"/"+name) {
+			return false
+		}
+		if strings.HasSuffix(strings.ToLower(earlierRepo), "/"+strings.ToLower(name)) {
+			return false
+		}
+		return true
+	}
+	return false
+}
+
 // siteOf is the project a run's pushed work is published to (publish.go): a
 // build on a project whose code is in a workspace the platform made, so the
 // project's own address — what the builder previews — shows it. A run homed on

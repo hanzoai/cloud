@@ -451,37 +451,156 @@ func TestStart_ARunStillWorkingIsNotCarriedOn(t *testing.T) {
 	}
 }
 
-// A SANDBOX IS ONE LIVE RUN'S AT A TIME, whatever the earlier run's own status says.
-// A run that was steered is stopped while the follow-up the steer started works in
-// its sandbox, and a finished run can be carried on twice: a follow-up of either
-// claims the sandbox before anything runs, and is refused 409 when another run
-// holds it — with nothing dispatched into it.
-func TestStart_ASandboxAnotherRunHoldsIsNotCarriedOn(t *testing.T) {
+// WHEN ANOTHER RUN HOLDS THE EARLIER RUN'S SANDBOX, A NEW RUN AUTOMATICALLY
+// PROVISIONS A FRESH PARALLEL SANDBOX AND ISOLATES ONTO ITS OWN BRANCH instead
+// of refusing 409 "another run is still working in that sandbox".
+func TestStart_ABusySandboxProvisionsAFreshParallelSandbox(t *testing.T) {
 	was := visibleRun
 	visibleRun = func(_ context.Context, id string) (agents.Session, error) {
 		return agents.Session{ID: id, Kind: kindCoding, Repo: "hanzo-apps/site", Status: agents.StatusStopped,
-			Branch: "agent/fix-header", Box: "box_a"}, nil
+			Base: "main", Branch: "agent/fix-header", Box: "box_a"}, nil
 	}
 	t.Cleanup(func() { visibleRun = was })
-	r := gitHubRun(t, map[string]string{"agent/fix-header": theSHA})
+	r := gitHubRun(t, map[string]string{"agent/fix-header": theSHA, "main": theSHA})
 	r.sessions.mu.Lock()
 	r.sessions.busy = map[string]bool{"box_a": true}
 	r.sessions.mu.Unlock()
-	_, err := r.startAs(t, asCaller("sub-zoe"), "sub-zoe",
+	acc, err := r.startAs(t, asCaller("sub-zoe"), "sub-zoe",
 		client.CodingStartIn{Repo: "github.com/hanzo-apps/site", After: "sess_a", Prompt: "and the footer"})
-	var he *zip.HTTPError
-	if !errors.As(err, &he) || he.Status != http.StatusConflict {
-		t.Fatalf("carrying on a run whose sandbox another run holds answered %v, want 409", err)
+	if err != nil {
+		t.Fatalf("parallel run after busy sandbox failed: %v", err)
+	}
+	if acc.Branch == "" || acc.Branch == "agent/fix-header" || !strings.HasPrefix(acc.Branch, "agent/") {
+		t.Fatalf("parallel run must isolate onto its own agent branch, got %q", acc.Branch)
 	}
 	r.sessions.mu.Lock()
 	defer r.sessions.mu.Unlock()
 	for _, tg := range r.sessions.tags {
 		if tg.Sandbox == "box_a" {
-			t.Fatalf("the refused follow-up was told it works in box_a: %+v", r.sessions.tags)
+			t.Fatalf("the parallel run must not claim the busy sandbox box_a: %+v", r.sessions.tags)
 		}
 	}
-	if n := len(r.sessions.closes); n != 1 || r.sessions.closes[0].status != statusError {
-		t.Fatalf("the refused follow-up's session was not closed as refused: %+v", r.sessions.closes)
+	r.pod.mu.Lock()
+	leased := append([]client.LeaseIn(nil), r.pod.leased...)
+	r.pod.mu.Unlock()
+	if len(leased) != 1 || leased[0].ID != "" {
+		t.Fatalf("expected one fresh parallel sandbox lease (ID=\"\"), got %+v", leased)
+	}
+}
+
+// A PARALLEL BRANCH, DIFFERENT REPO, OR EXPLICIT `parallel: true` RUNS IN
+// PARALLEL EVEN WHILE `after` IS STILL RUNNING OR PAUSED, provisioning a fresh
+// sandbox and its own isolated branch without failing 409.
+func TestStart_ActiveSessionAllowsParallelBranchRepoOrFlag(t *testing.T) {
+	for name, tc := range map[string]struct {
+		earlierRepo string
+		in          client.CodingStartIn
+		wantBranch  string
+	}{
+		"explicit parallel flag": {
+			earlierRepo: "hanzo-apps/site",
+			in:          client.CodingStartIn{Repo: "github.com/hanzo-apps/site", After: "sess_earlier", Prompt: "parallel task", Parallel: true},
+		},
+		"distinct named branch": {
+			earlierRepo: "hanzo-apps/site",
+			in:          client.CodingStartIn{Repo: "github.com/hanzo-apps/site", After: "sess_earlier", Branch: "other-work", Prompt: "branch task"},
+			wantBranch:  "agent/other-work",
+		},
+		"different repository": {
+			earlierRepo: "hanzo-apps/other",
+			in:          client.CodingStartIn{Repo: "github.com/hanzo-apps/site", After: "sess_earlier", Prompt: "other repo task"},
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			was := visibleRun
+			visibleRun = func(_ context.Context, id string) (agents.Session, error) {
+				return agents.Session{ID: id, Kind: kindCoding, Repo: tc.earlierRepo, Status: agents.StatusRunning,
+					Base: "main", Branch: "agent/fix-header", Box: "box_a"}, nil
+			}
+			t.Cleanup(func() { visibleRun = was })
+			r := gitHubRun(t, map[string]string{"agent/fix-header": theSHA, "main": theSHA})
+			acc, err := r.startAs(t, asCaller("sub-zoe"), "sub-zoe", tc.in)
+			if err != nil {
+				t.Fatalf("parallel start failed: %v", err)
+			}
+			if acc.Branch == "agent/fix-header" {
+				t.Fatalf("parallel run reused active branch %q", acc.Branch)
+			}
+			if tc.wantBranch != "" && acc.Branch != tc.wantBranch {
+				t.Fatalf("branch = %q, want %q", acc.Branch, tc.wantBranch)
+			}
+			r.pod.mu.Lock()
+			leased := append([]client.LeaseIn(nil), r.pod.leased...)
+			r.pod.mu.Unlock()
+			if len(leased) != 1 || leased[0].ID != "" {
+				t.Fatalf("expected fresh sandbox lease (ID=\"\"), got %+v", leased)
+			}
+		})
+	}
+}
+
+// PASSING `steer: true` WITH `after` REDIRECTS OR QUEUES INTO THE ACTIVE
+// SESSION INSTEAD OF FAILING 409.
+func TestStart_SteerFlagRedirectsActiveSession(t *testing.T) {
+	const activeID = "sess_077ebdeb5444162f21dfc10b4306db68"
+	was := visibleRun
+	visibleRun = func(_ context.Context, id string) (agents.Session, error) {
+		return agents.Session{ID: id, Kind: kindCoding, Repo: "hanzo-apps/site", Status: agents.StatusRunning,
+			Base: "main", Branch: "agent/fix-header", Box: "box_a"}, nil
+	}
+	t.Cleanup(func() { visibleRun = was })
+
+	r := gitHubRun(t, map[string]string{"agent/fix-header": theSHA})
+	var steeredText string
+	ctx, stop := context.WithCancelCause(context.Background())
+	t.Cleanup(func() { stop(nil) })
+	f := &flight{
+		org: "hanzo", subject: "sub-zoe", session: activeID, cancel: stop,
+		done: make(chan struct{}), ctx: ctx,
+		in: client.CodingStartIn{Repo: "github.com/hanzo-apps/site", Prompt: "initial task"},
+	}
+	f.setSteerer(func(text string) bool {
+		steeredText = text
+		return true
+	})
+	fly(f)
+	t.Cleanup(func() { f.forget() })
+
+	acc, err := Start(asCaller("sub-zoe"), "hanzo", "sub-zoe",
+		client.CodingStartIn{Repo: "github.com/hanzo-apps/site", After: activeID, Prompt: "also update the header", Steer: true}, nil)
+	if err != nil {
+		t.Fatalf("start with steer=true failed: %v", err)
+	}
+	if !acc.Steered || acc.SessionID != activeID || acc.Branch != "agent/fix-header" {
+		t.Fatalf("unexpected steered acceptance: %+v", acc)
+	}
+	if steeredText != "also update the header" {
+		t.Fatalf("steerer received %q, want %q", steeredText, "also update the header")
+	}
+	r.sessions.mu.Lock()
+	opened := len(r.sessions.opened)
+	r.sessions.mu.Unlock()
+	if opened != 0 {
+		t.Fatalf("steering an active session must not open a second session, opened %d", opened)
+	}
+}
+
+// TERMINAL STATUS EVENTS INCLUDE LIVE SANDBOX PREVIEW URLS so /dev's Preview
+// pane immediately reflects the sandbox's running app without polling artifacts.
+func TestFinishedIncludesPreviewLinks(t *testing.T) {
+	st := finished(RunResult{
+		OK: true,
+		Artifacts: []client.Artifact{
+			{Name: "changes.patch", Kind: kindPatch},
+			{Name: "port 3000", Kind: kindPreview, URL: "https://sandbox-2a8bb714-preview-3000.hanzo.app/", Port: 3000, Sandbox: "m_2a8bb714a84c1c5b95b1a2fa"},
+		},
+	}, map[string]any{"status": "done"})
+	if st["preview"] != "https://sandbox-2a8bb714-preview-3000.hanzo.app/" {
+		t.Fatalf("preview = %v, want sandbox preview url", st["preview"])
+	}
+	previews, ok := st["previews"].([]previewLink)
+	if !ok || len(previews) != 1 || previews[0].Port != 3000 || previews[0].Sandbox != "m_2a8bb714a84c1c5b95b1a2fa" {
+		t.Fatalf("previews = %#v, want 1 port-3000 entry", st["previews"])
 	}
 }
 

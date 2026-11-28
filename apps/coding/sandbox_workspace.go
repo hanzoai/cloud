@@ -320,7 +320,19 @@ func (in sandbox) save(org, base string, out *RunResult, step func(name, msg, st
 	if err != nil {
 		step("artifacts", in.scrub(err.Error()), "error")
 	}
-	out.Artifacts, out.Commits = append(arts, in.previews()...), commits
+	previews := in.previews()
+	if len(previews) > 0 {
+		urls := make([]string, 0, len(previews))
+		for _, p := range previews {
+			if p.URL != "" {
+				urls = append(urls, p.URL)
+			}
+		}
+		if len(urls) > 0 {
+			step("preview", strings.Join(urls, ", "), "ok")
+		}
+	}
+	out.Artifacts, out.Commits = append(arts, previews...), commits
 }
 
 // ── the work leaves the sandbox ──────────────────────────────────────────────
