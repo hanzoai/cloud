@@ -354,6 +354,8 @@ func TestRevokeThenGone(t *testing.T) {
 // untypedByDesign is the closed list of routes that are not typed ops, each with
 // the wire fact that keeps it raw.
 var untypedByDesign = map[string]string{
+	"POST /v1/machines/{id}/usage": "the signature covers the exact body bytes and rides in the " +
+		"x-hanzo-sig header, neither of which a typed op can see.",
 	"POST /v1/sources/{id}/usage": "the signature covers the exact body bytes and rides in the " +
 		"x-hanzo-sig header, neither of which a typed op can see.",
 }
@@ -381,7 +383,7 @@ func TestEveryRouteIsTypedOrNamed(t *testing.T) {
 			}
 		}
 	}
-	if served != 23 {
-		t.Errorf("served %d operations, want 23", served)
+	if served != 24 {
+		t.Errorf("served %d operations, want 24", served)
 	}
 }

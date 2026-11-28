@@ -398,7 +398,7 @@ type UsageRow struct {
 	CostUsd      float64 `json:"costUsd"`
 }
 
-var groupColumn = map[string]string{"source": "source", "provider": "provider", "model": "model", "day": "day", "user": "subject"}
+var groupColumn = map[string]string{"machine": "source", "source": "source", "provider": "provider", "model": "model", "day": "day", "user": "subject"}
 
 // Rows totals the caller's own cost rows between from and to (inclusive days).
 // With all set it totals every person's, which only by=user may ask for.
@@ -458,13 +458,13 @@ type ReportAccepted struct {
 }
 
 func init() {
-	spec.Describe("/v1/sources/{id}/usage", http.MethodPost,
-		"Report a source's usage",
-		"Stores what a linked source reports about its providers: per-day tokens and cost by model, and the latest limit windows, credits and status per provider. "+
-			"The body is the Dev usage model (@hanzodev/usage UsageReport: version 1, deviceId, from, to, cost, snapshots) and nothing else; a payload that breaks a rule is refused whole with 400, never trimmed. "+
-			"`account` must be absent and `error` a short code. The `x-hanzo-sig` header is the source's ed25519 device-key signature, unpadded base64url, over "+
-			"`hanzo-source-usage/1\\n<id>\\n<lowercase hex sha256 of the body>\\n`; a bad one is 401. A resend replaces the same day, provider and model and the same provider snapshot, so it never double counts. "+
-			"At most one report per source per 10 seconds and 1 MiB. A revoked source is 410; another person's source is 404. Answers `{\"accepted\": n}`.")
+	const desc = "Stores what a linked machine reports about its providers: per-day tokens and cost by model, and the latest limit windows, credits and status per provider. " +
+		"The body is the Dev usage model (@hanzodev/usage UsageReport: version 1, deviceId, from, to, cost, snapshots) and nothing else; a payload that breaks a rule is refused whole with 400, never trimmed. " +
+		"`account` must be absent and `error` a short code. The `x-hanzo-sig` header is the machine's ed25519 device-key signature, unpadded base64url, over " +
+		"`hanzo-source-usage/1\\n<id>\\n<lowercase hex sha256 of the body>\\n`; a bad one is 401. A resend replaces the same day, provider and model and the same provider snapshot, so it never double counts. " +
+		"At most one report per machine per 10 seconds and 1 MiB. A revoked machine is 410; another person's machine is 404. Answers `{\"accepted\": n}`."
+	spec.Describe("/v1/machines/{id}/usage", http.MethodPost, "Report a machine's usage", desc)
+	spec.Describe("/v1/sources/{id}/usage", http.MethodPost, "Report a source's usage", desc)
 }
 
 // usage is the raw handler: the signature covers the exact body bytes and rides in
@@ -565,7 +565,7 @@ func (o ops) usage(ctx context.Context, in *UsageQuery) (*UsageView, error) {
 		return nil, err
 	}
 	if _, ok := groupColumn[in.By]; !ok {
-		return nil, zip.ErrBadRequest("by must be source, provider, model, day or user")
+		return nil, zip.ErrBadRequest("by must be machine, source, provider, model, day or user")
 	}
 	from, err := day("from", in.From, "0000-01-01")
 	if err != nil {

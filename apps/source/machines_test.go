@@ -183,3 +183,41 @@ func TestUnifiedMachinesDegradesGracefullyWhenComputePlaneFails(t *testing.T) {
 		t.Fatalf("expected linked machine ra to still appear, got %+v", list.Machines)
 	}
 }
+
+func TestMachinesUsageReportAndQuery(t *testing.T) {
+	sqlite(t, func(t *testing.T) {
+		r := mount(t)
+		d := newDevice(t)
+		code, linkBody := r.as(http.MethodPost, "/v1/machines", "alice", "acme", d.link("ra"))
+		if code != http.StatusCreated {
+			t.Fatalf("POST /v1/machines: status=%d body=%s", code, linkBody)
+		}
+		var linked SourceLinked
+		if err := json.Unmarshal([]byte(linkBody), &linked); err != nil {
+			t.Fatalf("decode link: %v", err)
+		}
+		body := report(linked.ID, nil)
+		code, resp := r.send("/v1/machines/"+linked.ID+"/usage", "alice", "acme", body, d.sign(linked.ID, body))
+		if code != http.StatusOK {
+			t.Fatalf("POST /v1/machines/%s/usage: status=%d body=%s", linked.ID, code, resp)
+		}
+		var acc ReportAccepted
+		if err := json.Unmarshal([]byte(resp), &acc); err != nil || acc.Accepted != 3 {
+			t.Fatalf("unexpected accepted reply: %s (err=%v)", resp, err)
+		}
+		code, resp = r.as(http.MethodGet, "/v1/machines/usage?by=machine&from=2026-11-01&to=2026-11-30", "alice", "acme", nil)
+		if code != http.StatusOK {
+			t.Fatalf("GET /v1/machines/usage?by=machine: status=%d body=%s", code, resp)
+		}
+		var view UsageView
+		if err := json.Unmarshal([]byte(resp), &view); err != nil {
+			t.Fatalf("decode UsageView: %v", err)
+		}
+		if len(view.Rows) != 1 || view.Rows[0].Key != linked.ID || view.Rows[0].InputTokens != 107 {
+			t.Fatalf("unexpected rows for by=machine: %+v", view.Rows)
+		}
+		if len(view.Snapshots) != 1 || *view.Snapshots[0].Provider != "anthropic" {
+			t.Fatalf("unexpected snapshots: %+v", view.Snapshots)
+		}
+	})
+}
