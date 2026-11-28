@@ -29,9 +29,11 @@ import (
 
 	"github.com/hanzoai/cloud/client"
 	projectpeer "github.com/hanzoai/cloud/client/project"
+	providerpeer "github.com/hanzoai/cloud/client/provider"
 	"github.com/hanzoai/cloud/forge"
 	"github.com/hanzoai/cloud/sdk"
 	"github.com/hanzoai/cloud/sdk/plane"
+	"github.com/hanzoai/cloud/sdk/principal"
 	"github.com/zap-proto/zip"
 )
 
@@ -44,6 +46,24 @@ const (
 
 // madeSource reads the forge for this app; a test stands in for it.
 var madeSource = func(ctx context.Context) (*forge.Client, error) { return forge.Dial(ctx, cloud.KMSPeer{}) }
+
+// madeConnected reports whether org holds an active org-level GitHub App
+// installation for account; a test stands in for it. Never admits estate
+// namespaces or reserved brand aliases.
+var madeConnected = func(ctx context.Context, org, account string) bool {
+	if _, err := forge.Org(account); err == nil {
+		return false
+	}
+	if forge.Reserved(account) {
+		return false
+	}
+	callCtx, cancel := context.WithTimeout(plane.For(context.Background(), org), madeCall)
+	defer cancel()
+	stop := context.AfterFunc(ctx, cancel)
+	defer stop()
+	out, err := providerpeer.IntegrationsConnection(callCtx, &client.ConnectionIn{Provider: "github", Account: account})
+	return err == nil && out != nil && out.Connected
+}
 
 // madeWorkspace answers the caller's org's made workspace, making it first when
 // create is set and the org has none; a test stands in for it.
@@ -67,20 +87,54 @@ var madeWorkspace = func(org string, create bool) (forge.Workspace, error) {
 //
 // A name with an owner, hanzo-inc/cloud, is the forge's repository at that
 // coordinate, read as the caller in a namespace the caller's org owns
-// ([forgeFor]). A bare name is one in the workspace the platform made for an org
-// the estate's table does not name, read as the machine.
+// ([forgeFor]). For a non-estate org whose connected GitHub account is owner,
+// it resolves owner/repo directly on the forge and falls back to the org's
+// legacy flattened copy (<workspace>/<owner>_<repo>) when not yet migrated.
+// A bare name is one in the workspace the platform made for an org the
+// estate's table does not name, read as the machine.
 func made(s *cloud.Service[state], ctx context.Context, t tenant, name string) (m *forge.Client, owner, repo string, ok bool, err error) {
 	if owner, repo, at := place(name); at {
-		m, err := forgeFor(ctx, t, owner)
-		if err != nil {
-			return nil, "", "", false, err
+		if owns(t.org, owner) {
+			m, err := forgeFor(ctx, t, owner)
+			if err != nil {
+				return nil, "", "", false, err
+			}
+			return m, owner, repo, true, nil
 		}
-		return m, owner, repo, true, nil
+		if madeConnected(ctx, t.org, owner) {
+			return connectedRepo(ctx, t, owner, repo)
+		}
+		if principal.SuperFrom(ctx) {
+			m, err := forgeFor(ctx, t, owner)
+			if err != nil {
+				return nil, "", "", false, err
+			}
+			return m, owner, repo, true, nil
+		}
+		return nil, "", "", false, zip.ErrForbidden(owner + " is not a forge namespace of your org")
 	}
 	if _, found := findRepo(s, ctx, t.org, name); found {
 		return nil, "", "", false, nil
 	}
 	return shelved(ctx, t, name)
+}
+
+// connectedRepo resolves a non-estate org's synced GitHub repository at its
+// canonical 1:1 coordinate (owner/repo), falling back to the legacy flattened
+// copy (<workspace>/<owner>_<repo>) in the org's made workspace when the 1:1
+// repo does not yet exist on the forge.
+func connectedRepo(ctx context.Context, t tenant, owner, repo string) (m *forge.Client, forgeOwner, forgeRepo string, ok bool, err error) {
+	c, err := madeSource(ctx)
+	if err != nil {
+		return nil, "", "", false, zip.Errorf(http.StatusBadGateway, "the code forge is unreachable: %v", err)
+	}
+	mc := c.Machine()
+	if _, rerr := mc.Repo(ctx, owner, repo); rerr == nil {
+		return mc, owner, repo, true, nil
+	} else if !errors.Is(rerr, forge.ErrNotFound) {
+		return nil, "", "", false, madeRefusal(rerr, "repo not found")
+	}
+	return shelved(ctx, t, forge.Imported(owner, repo))
 }
 
 // yields is the workspace's repository when the copy of a bare name held here

@@ -34,6 +34,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/hanzoai/cloud/sdk/brand"
 	"github.com/hanzoai/cloud/sdk/principal"
 	"github.com/hanzoai/authz"
 	"github.com/hanzoai/authz/edge"
@@ -286,11 +287,18 @@ func newBoundary(urls []string, client *http.Client, ttl time.Duration) (*Bounda
 		if err != nil {
 			return nil, err
 		}
-		if slices.Contains(b.issuers, d.Issuer()) {
+		if slices.ContainsFunc(b.sources, func(s *Discovery) bool { return s.Issuer() == d.Issuer() }) {
 			continue
 		}
 		b.sources = append(b.sources, d)
-		b.issuers = append(b.issuers, d.Issuer())
+		if !slices.Contains(b.issuers, d.Issuer()) {
+			b.issuers = append(b.issuers, d.Issuer())
+		}
+		for _, sib := range brand.Siblings(d.Issuer()) {
+			if !slices.Contains(b.issuers, sib) {
+				b.issuers = append(b.issuers, sib)
+			}
+		}
 	}
 	if len(b.sources) == 0 {
 		return nil, errors.New("identity: no OIDC discovery URL, so no issuer to trust")
@@ -298,15 +306,29 @@ func newBoundary(urls []string, client *http.Client, ttl time.Duration) (*Bounda
 	return b, nil
 }
 
-// verify checks raw against the provider whose issuer it claims. A claim no
-// provider here owns is refused before any key is read; a provider that has never
-// published a document fails closed.
+// verify checks raw against the provider whose issuer it claims, including
+// sibling issuers registered in brand.AlsoIssuers (e.g. https://hanzo.id while
+// https://hanzo.ai is canonical, verified against the brand's same JWKS). A
+// claim no provider here owns is refused before any key is read; a provider
+// that has never published a document fails closed.
 func (v *Boundary) verify(raw string) (*authz.Claims, error) {
 	iss := claimedIssuer(raw)
+	if iss == "" {
+		return nil, fmt.Errorf("identity: issuer %q is not trusted", iss)
+	}
 	var src *Discovery
 	for _, d := range v.sources {
 		if d.Issuer() == iss {
 			src = d
+			break
+		}
+	}
+	if src == nil {
+		for _, d := range v.sources {
+			if brand.Trusts(d.Issuer(), iss) {
+				src = d
+				break
+			}
 		}
 	}
 	if src == nil {

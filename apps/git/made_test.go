@@ -280,3 +280,78 @@ func TestNoRecordIsNotFound(t *testing.T) {
 		}
 	})
 }
+
+// TestConnectedGitHubNamespaceResolvesCanonicalAndLegacyRepos verifies that a
+// non-estate org (e.g. mvee85560 with connected GitHub account cssprod) can
+// address its synced GitHub repositories at <account>/<repo> — hitting the 1:1
+// forge repo when present and seamlessly falling back to the legacy flattened
+// <workspace>/<account>_<repo> copy when not yet migrated — while an unrelated
+// org or an attempt to claim an estate namespace is refused 403.
+func TestConnectedGitHubNamespaceResolvesCanonicalAndLegacyRepos(t *testing.T) {
+	sqltest.Engines(t, func(t *testing.T, _ sqltest.Open) {
+		app := mountApp(t)
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.Header.Get("Authorization") != "token machine" {
+				w.WriteHeader(http.StatusUnauthorized)
+				return
+			}
+			p := strings.TrimPrefix(r.URL.Path, forge.API)
+			switch p {
+			case "/repos/cssprod/siteforge":
+				_ = json.NewEncoder(w).Encode(map[string]any{"name": "siteforge", "full_name": "cssprod/siteforge", "default_branch": "main"})
+			case "/repos/cssprod/siteforge/branches":
+				_ = json.NewEncoder(w).Encode([]map[string]any{{"name": "main"}})
+			case "/repos/mvee85560/cssprod_ios.sr":
+				_ = json.NewEncoder(w).Encode(map[string]any{"name": "cssprod_ios.sr", "full_name": "mvee85560/cssprod_ios.sr", "default_branch": "main"})
+			case "/repos/mvee85560/cssprod_ios.sr/branches":
+				_ = json.NewEncoder(w).Encode([]map[string]any{{"name": "main"}})
+			default:
+				w.WriteHeader(http.StatusNotFound)
+			}
+		}))
+		t.Cleanup(srv.Close)
+
+		wasWS, wasSrc, wasConn := madeWorkspace, madeSource, madeConnected
+		madeWorkspace = func(org string, _ bool) (forge.Workspace, error) {
+			if org == "mvee85560" {
+				return forge.Workspace{Owner: "mvee85560", Made: true}, nil
+			}
+			return forge.Workspace{}, nil
+		}
+		madeSource = func(context.Context) (*forge.Client, error) { return forge.New(srv.URL, "machine") }
+		madeConnected = func(_ context.Context, org, account string) bool {
+			return org == "mvee85560" && strings.EqualFold(account, "cssprod")
+		}
+		t.Cleanup(func() { madeWorkspace, madeSource, madeConnected = wasWS, wasSrc, wasConn })
+
+		// 1. Canonical 1:1 synced repo cssprod/siteforge resolves directly.
+		code, body := do(t, app, http.MethodGet, "/v1/git/repos/"+url.PathEscape("cssprod/siteforge"), "mvee85560", nil)
+		if code != http.StatusOK {
+			t.Fatalf("canonical connected repo: %d %s", code, body)
+		}
+		var v repoView
+		if err := json.Unmarshal(body, &v); err != nil || v.Name != "cssprod/siteforge" {
+			t.Fatalf("canonical connected repo view = %+v (%v)", v, err)
+		}
+
+		// 2. Legacy flattened copy mvee85560/cssprod_ios.sr resolves when addressed as cssprod/ios.sr.
+		code, body = do(t, app, http.MethodGet, "/v1/git/repos/"+url.PathEscape("cssprod/ios.sr"), "mvee85560", nil)
+		if code != http.StatusOK {
+			t.Fatalf("legacy flattened connected repo: %d %s", code, body)
+		}
+		var legacy repoView
+		if err := json.Unmarshal(body, &legacy); err != nil || legacy.DefaultBranch != "main" {
+			t.Fatalf("legacy connected repo view = %+v (%v)", legacy, err)
+		}
+
+		// 3. Another org without cssprod connected is refused 403.
+		if code, body := do(t, app, http.MethodGet, "/v1/git/repos/"+url.PathEscape("cssprod/siteforge"), "other-org", nil); code != http.StatusForbidden {
+			t.Fatalf("unrelated org got %d %s, want 403", code, body)
+		}
+
+		// 4. Estate namespace cannot be accessed by a non-estate org.
+		if code, body := do(t, app, http.MethodGet, "/v1/git/repos/"+url.PathEscape("hanzo-inc/cloud"), "mvee85560", nil); code != http.StatusForbidden {
+			t.Fatalf("non-estate org on estate namespace got %d %s, want 403", code, body)
+		}
+	})
+}

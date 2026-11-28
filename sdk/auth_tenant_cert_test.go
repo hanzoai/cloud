@@ -118,8 +118,9 @@ func TestBothPlatformIssuersAuthenticateAndATenantIssuerDoesNot(t *testing.T) {
 		}
 		return raw
 	}
-	// The platform's issuer is the one its discovery document names: a token under it
-	// authenticates, and one under the issuer it replaced does not.
+	// While the platform issuer moves from https://hanzo.id to https://hanzo.ai,
+	// both platform issuers authenticate against the brand's JWKS (AlsoIssuers),
+	// while tenant issuers and untrusted keys fail closed.
 	*got = captured{}
 	probe(t, app, bearer(sign(platform, "cert-hanzo", "https://hanzo.ai")))
 	if got.org != "acme" {
@@ -130,13 +131,19 @@ func TestBothPlatformIssuersAuthenticateAndATenantIssuerDoesNot(t *testing.T) {
 	}
 	*got = captured{}
 	probe(t, app, bearer(sign(platform, "cert-hanzo", "https://hanzo.id")))
-	if got.org != "" {
-		t.Errorf("a token under an issuer no discovery document names authenticated: %+v", *got)
+	if got.org != "acme" {
+		t.Errorf("a platform-signed token under sibling AlsoIssuer https://hanzo.id did not authenticate: %+v", *got)
+	}
+	if id, ok := brand.ForIssuer("https://hanzo.id"); !ok || id != "hanzo" {
+		t.Errorf("https://hanzo.id does not name the hanzo brand")
 	}
 	for name, tok := range map[string]string{
-		"an organization's issuer, signed by the platform key": sign(platform, "cert-hanzo", "https://hanzo.ai/acme"),
-		"an organization's issuer, signed by its own key":      sign(tenant, "acme-signing", "https://hanzo.ai/acme"),
-		"the new issuer, signed by a tenant key":               sign(tenant, "cert-hanzo", "https://hanzo.ai"),
+		"an organization's issuer, signed by the platform key":        sign(platform, "cert-hanzo", "https://hanzo.ai/acme"),
+		"an organization's legacy issuer, signed by the platform key": sign(platform, "cert-hanzo", "https://hanzo.id/acme"),
+		"an organization's issuer, signed by its own key":             sign(tenant, "acme-signing", "https://hanzo.ai/acme"),
+		"an untrusted third-party issuer, signed by the platform key": sign(platform, "cert-hanzo", "https://evil.id"),
+		"the new issuer, signed by a tenant key":                      sign(tenant, "cert-hanzo", "https://hanzo.ai"),
+		"the sibling issuer, signed by a tenant key":                  sign(tenant, "cert-hanzo", "https://hanzo.id"),
 	} {
 		if _, err := v.validate(tok); err == nil {
 			t.Errorf("SECURITY: %s verified at the boundary", name)
