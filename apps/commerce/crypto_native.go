@@ -262,10 +262,6 @@ func nativeCryptoOptions(ctx context.Context) (*client.CryptoOptions, error) {
 				continue
 			}
 			custody = res.cp
-			if !strings.HasPrefix(strings.ToLower(a.Contract), "kraken:") && isAssetAmbiguous(ctx, a) {
-				anyCustodyErr = fmt.Errorf("asset %s:%s has ambiguous custody identities", chain, token)
-				continue
-			}
 		}
 		minCents, ready := nativeDepositMinimum(ctx, a, custody)
 		if !ready {
