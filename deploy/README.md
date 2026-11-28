@@ -27,6 +27,35 @@ development instance. The Compose Specification manifest remains a reference
 for native Compose support in [Universe #187](https://github.com/hanzo-inc/universe/issues/187).
 For production, use the canonical Universe GitOps deployment.
 
+## Start Compose directly
+
+From the repository root, start the published OSS image and check readiness:
+
+```sh
+docker compose -f deploy/compose.yml config --quiet
+docker compose -f deploy/compose.yml up -d
+curl -fsS http://127.0.0.1:8080/readyz
+```
+
+Compose stores data under `/var/lib/cloud` in the named `cloud-data` volume.
+`docker compose -f deploy/compose.yml restart cloud` reuses that volume.
+
+The Base health endpoint is available by default. To serve the Base data API,
+add the following to a local Compose override and pass it as a second
+`-f` file. Authenticate to the Base data API with a token from the configured
+IAM issuer.
+
+```yaml
+services:
+  cloud:
+    environment:
+      CLOUD_BASE_EMBED: "1"
+```
+
+Base writes also require a reachable admin audit service. The standalone
+OSS image does not include that service, so writes fail closed with HTTP 503
+`audit_unavailable` when it is absent.
+
 ## Environment
 
 Required:
